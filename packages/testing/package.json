@@ -18,6 +18,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "echo lint:testing",
+    "pretest": "pnpm run build",
     "test": "vitest run"
   },
   "dependencies": {
