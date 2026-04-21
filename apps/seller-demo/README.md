@@ -1,5 +1,12 @@
 # `@leash/seller-demo`
 
+> **Headless path.** This is for self-hosted seller endpoints. The hosted
+> browser playground at `apps/web/seller` is a **Payment-Link Builder**: it
+> lets anyone declare a price + response in the UI and the runner serves
+> them back as live `/x/<id>` x402 paywalls — no extra Node server needed.
+> Use this CLI when you want to wire `@leash/seller-kit` into your own
+> Hono / Express / Fastify app.
+
 A minimal Hono server that mounts the real `@leash/seller-kit` middleware
 (real x402 on Solana devnet) on `POST /tag`. Unauthenticated requests get
 `402 + PAYMENT-REQUIRED`. Once a buyer settles via the configured

@@ -1,0 +1,202 @@
+---
+title: Create a payment link
+description: No-code x402 paywalls. Pick an agent, declare a price + response, share a URL.
+---
+
+The Leash playground ships a **Payment-Link Builder** — the closest thing
+to "Stripe Payment Links" for x402 on Solana. You don't need to host a
+Hono server, manage facilitator wiring, or write any code; the runner
+stores your `EndpointV1` descriptors and the Next.js app exposes them at
+`https://<host>/x/<id>` as fully-functional x402 paywalls served by
+`@leash/seller-kit`.
+
+## Walkthrough
+
+1. **Mint an agent** if you don't already have one — `/agents/new` in the
+   playground. The agent's [Asset Signer PDA](/concepts/treasury) becomes
+   the on-chain `payTo` for every payment link you anchor under it.
+2. Open `/seller`. Pick the agent that should receive payments.
+3. Fill in:
+   - **Label** — what the explorer / payer sees.
+   - **Description** (optional) — longer context.
+   - **Method** — `GET` or `POST`.
+   - **Price** — any `@x402/svm`-parseable string (`$0.001`, `0.01 USDC`, `0.5`).
+   - **Custom slug** (optional) — the bit after `/x/`.
+   - **Response body** — JSON returned verbatim after settlement.
+   - **Post-payment hooks** (all optional, see below):
+     - `redirect_url` — 303 redirect after payment (e.g. thank-you page).
+     - `webhook_url` — fire-and-forget POST of `{ payment, response }`.
+     - `wrap_receipt` — embed the receipt envelope in the JSON body.
+4. Click **Create payment link**. The runner stores the descriptor and
+   the live URL appears in the right column. Copy it, share it, embed it.
+
+## Post-payment hooks
+
+Once a buyer pays, the seller has three orthogonal ways to react:
+
+| Hook            | When you'd use it                                                         |
+| --------------- | ------------------------------------------------------------------------- |
+| `redirect_url`  | Funnel the buyer to a thank-you page, gated download, or product page.    |
+| `webhook_url`   | Hand the response to a downstream agent without making the buyer poll.    |
+| `wrap_receipt`  | Caller wants the receipt inline (e.g. autonomous agents chaining calls).  |
+
+### `X-Leash-*` response headers (always set)
+
+Every successful settlement returns these headers — useful even if you
+opt out of all the hooks above:
+
+```text
+X-Leash-Tx-Sig:           <solana tx signature>
+X-Leash-Receipt-Hash:     <canonical receipt hash>
+X-Leash-Agent:            <owner_agent core mint>
+X-Leash-Tx-Explorer:      https://solscan.io/tx/<sig>?cluster=devnet
+X-Leash-Agent-Explorer:   https://yourapp/agents/<mint>
+```
+
+`access-control-expose-headers` is set so browser clients can read them.
+
+### `redirect_url` — 303 to a thank-you page
+
+Set `redirect_url: "https://yoursite.com/thank-you"` on the endpoint and
+the seller will respond with `303 See Other` after settlement, with the
+payment proof appended:
+
+```text
+HTTP/1.1 303 See Other
+Location: https://yoursite.com/thank-you?leash_tx=<sig>&leash_receipt=<hash>&leash_agent=<mint>
+```
+
+The destination page can verify the payment server-side (look up the
+receipt under `/a/<agent>/receipts/<hash>`) before unlocking content.
+
+### `webhook_url` — fire-and-forget agent-to-agent
+
+Set `webhook_url: "https://your-agent.com/leash-callback"` and after
+each settlement the runner will POST:
+
+```jsonc
+{
+  "payment": {
+    "tx_sig": "5J7…",
+    "receipt_hash": "leash:receipt:v1:…",
+    "agent": "33Qv…",
+    "network": "solana:103",
+    "amount": { "amount": "1000", "currency": "USDC" },
+    "facilitator": "https://facilitator.svmacc.tech",
+    "explorer": {
+      "tx": "https://solscan.io/tx/5J7…?cluster=devnet",
+      "agent": "https://yourapp/agents/33Qv…"
+    }
+  },
+  "response": <your endpoint response body>
+}
+```
+
+It's fire-and-forget — webhook outages don't surface as the buyer's
+HTTP error. The receipt feed under `/a/<agent>/receipts` is the canonical
+source of truth.
+
+**Per-call override:** buyers can add an `x-leash-callback: <url>`
+request header to fire one of their own webhooks. This is on top of the
+seller's `webhook_url` (both will be called) — so the seller and buyer
+can each pipe the response into different downstream agents.
+
+### `wrap_receipt` — embed the receipt in the body
+
+Set `wrap_receipt: true` and JSON responses become:
+
+```jsonc
+{
+  "data": <your original response body>,
+  "_leash": {
+    "tx_sig": "5J7…",
+    "receipt_hash": "leash:receipt:v1:…",
+    "agent": "33Qv…",
+    "explorer": {
+      "tx": "https://solscan.io/tx/5J7…?cluster=devnet",
+      "agent": "https://yourapp/agents/33Qv…"
+    }
+  }
+}
+```
+
+Use this when callers (especially autonomous agents) shouldn't have to
+read response headers separately. Ignored when `redirect_url` is set or
+when the response isn't JSON.
+
+The shareable URL is a real x402 paywall:
+
+```bash
+# Probe (no payment) → 402 + PAYMENT-REQUIRED
+curl -i -X POST https://yourapp/x/<id> -d '{"hello":"leash"}'
+
+# Pay → 200 + your response template + a real Solana tx_sig
+# (use @leash/buyer-kit or the autonomous-agent cockpit)
+```
+
+## What the runner stores
+
+```jsonc
+{
+  "v": "0.1",
+  "id": "hello-world",
+  "label": "Hello world echo",
+  "owner_agent": "33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR",
+  "method": "POST",
+  "price": "$0.001",
+  "network": "solana-devnet",
+  "response": {
+    "status": 200,
+    "mimeType": "application/json",
+    "body": { "ok": true, "hello": "leash" }
+  },
+  "redirect_url": "https://yoursite.com/thank-you",   // optional
+  "webhook_url": "https://your-agent.com/cb",         // optional
+  "wrap_receipt": true,                                // optional
+  "created_at": "2026-04-21T11:06:20.906Z",
+  "updated_at": "2026-04-21T11:06:20.906Z"
+}
+```
+
+Schema: [`EndpointV1`](/schemas/endpoint-v1). The runner persists this to
+`./.leash/endpoints.jsonl` (override with `LEASH_RUNNER_DATA`) so the
+links survive restarts.
+
+## Programmatic CRUD
+
+```bash
+# List
+curl http://localhost:8787/endpoints
+curl 'http://localhost:8787/endpoints?owner_agent=<mint>'
+
+# Create
+curl -X POST http://localhost:8787/endpoints \
+  -H 'content-type: application/json' \
+  -d '{"label":"Echo","owner_agent":"<mint>","method":"POST","price":"$0.001",
+       "response":{"status":200,"body":{"ok":true}}}'
+
+# Delete
+curl -X DELETE http://localhost:8787/endpoints/hello-world
+```
+
+The Next.js proxy at `/api/endpoints` forwards these same routes for
+browser callers (CORS-safe).
+
+## Why this is "real" x402
+
+`/x/[id]` mounts `@leash/seller-kit`'s `createSeller` with the
+`EndpointV1` you registered. The middleware:
+
+- Returns `402 PAYMENT REQUIRED` plus a base64
+  [`PAYMENT-REQUIRED`](/standards/x402-on-solana#headers) header on every
+  unpaid request.
+- Resolves the seller `payTo` to your agent's Asset Signer PDA — no extra
+  key, no wallet to fund.
+- Settles via [`facilitator.svmacc.tech`](https://facilitator.svmacc.tech)
+  by default (gas-sponsored on devnet + mainnet).
+- Emits an `earn` `ReceiptV1` to the runner under
+  `/a/<owner_agent>/receipts` — so the agent's profile feed updates in
+  real time.
+
+Anyone with a `@leash/buyer-kit` client (or any `@x402/fetch` consumer)
+can pay it.

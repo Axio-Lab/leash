@@ -1,11 +1,56 @@
 ---
 title: '@leash/runner'
-description: HTTP service that hosts JSONL receipt feeds and the kill switch.
+description: HTTP service that hosts JSONL receipt feeds, payment-link endpoints, and the kill switch.
 ---
 
 - **`leash-runner`** CLI — `node packages/runner/dist/cli.js` boots the Hono server.
-- **`/health`** — `{ ok, paused, source }`.
-- **`/pause`** — same plus `env_kill`.
-- **`/a/:mint/receipts.jsonl`** — append-only feed (in-memory `Map` in v0.1, swap for SQLite later).
 
-Wire on-chain pause via `createHttpServer(store, { resolvePause: createPauseResolver({ fetchOnchainPaused }) })`.
+## Health + pause
+
+- **`GET /health`** — `{ ok, paused, source }`.
+- **`GET /pause`** — same plus `env_kill`.
+
+Wire on-chain pause via
+`createHttpServer(store, { resolvePause: createPauseResolver({ fetchOnchainPaused }) })`.
+
+## Receipt feeds
+
+- **`GET /a/:mint/receipts.jsonl`** — append-only NDJSON feed for one
+  agent (in-memory `Map` in v0.1, swap for SQLite later).
+- **`POST /a/:mint/receipts`** — append a `ReceiptV1`. The runner
+  validates against `ReceiptV1Schema` and rejects payloads where
+  `receipt.agent !== :mint`.
+
+## Payment-link endpoints
+
+The runner stores `EndpointV1` descriptors that back the playground's
+shareable `/x/<id>` x402 paywalls (see the
+[Create a payment link](/guides/create-an-endpoint) guide).
+
+- **`GET /endpoints`** — list every endpoint. Filter with `?owner_agent=<mint>`.
+- **`GET /endpoints/:id`** — fetch one endpoint by id.
+- **`POST /endpoints`** — create or update. Body is an
+  [`EndpointV1`](/schemas/endpoint-v1) without `v` / `created_at` /
+  `updated_at`. The runner generates an `id` if you don't supply one.
+- **`DELETE /endpoints/:id`** — remove. Returns `204` on success.
+
+`EndpointV1` accepts three optional post-payment hooks that the
+`/x/<id>` route honours automatically — **`redirect_url`** (303 to a
+thank-you page), **`webhook_url`** (fire-and-forget POST of
+`{ payment, response }`), and **`wrap_receipt`** (embed the receipt
+envelope in JSON responses). See
+[Create a payment link](/guides/create-an-endpoint#post-payment-hooks)
+for the full payload reference.
+
+Persistence is an append-only JSONL file at
+`./.leash/endpoints.jsonl` (override with `LEASH_RUNNER_DATA`); set to an
+empty string to disable. Lines are either an `EndpointV1` (upsert) or
+`{"$delete": "<id>"}` (remove).
+
+```ts
+import { createHttpServer, createMemoryStore, createEndpointStore } from '@leash/runner';
+
+const app = createHttpServer(createMemoryStore(), {
+  endpoints: createEndpointStore({ persistPath: '/var/lib/leash/endpoints.jsonl' }),
+});
+```

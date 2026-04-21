@@ -17,10 +17,13 @@ description: Pinata uploads, BYO URI resolution, leash-block helpers.
 
 ### Execute (delegation)
 
-- `registerExecutive(umi)` — one-time `registerExecutiveV1` for `umi.identity`.
+Mirrors the Metaplex [Run an Agent](https://www.metaplex.com/docs/agents/run-an-agent) guide step-for-step. The web playground signs all three calls with the connected **Privy embedded wallet** — there is no server-side signer in the user flow.
+
+- `registerExecutive(umi, { payer?, authority? })` — one-time `registerExecutiveV1`. Defaults `payer = umi.payer` (matches the docs snippet). Override `authority` when a different signer than `umi.identity` should own the executive profile (multisig, hardware wallet).
 - `hasExecutiveProfile(umi, authority)` — does an `ExecutiveProfileV1` exist for that wallet?
-- `delegateExecution(umi, { agentAsset, executiveAuthority })` — `delegateExecutionV1`. The signer must be the asset owner.
-- `isExecutionDelegated(umi, { agentAsset, executiveAuthority })` — checks for the `ExecutionDelegateRecordV1` PDA.
+- `delegateExecution(umi, { agentAsset, executiveAuthority, payer?, authority? })` — `delegateExecutionV1`. The `authority` (default `umi.identity`) **must be the asset owner** — the program rejects the tx otherwise.
+- `verifyDelegation(umi, { agentAsset, executiveAuthority })` → `{ delegateRecord, exists }`. Derives the `ExecutionDelegateRecordV1` PDA and runs the docs' `umi.rpc.getAccount(...).exists` check.
+- `isExecutionDelegated(umi, { agentAsset, executiveAuthority })` — boolean shortcut around `verifyDelegation`.
 
 ### Off-chain hosting
 

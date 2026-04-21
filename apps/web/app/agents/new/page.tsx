@@ -18,6 +18,7 @@ import {
   Info,
 } from 'lucide-react';
 import { createAgent, type CreateAgentInput } from '@leash/registry-utils';
+import type { RulesV1 } from '@leash/schemas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,15 +29,8 @@ import { JsonViewer } from '@/components/json-viewer';
 import { usePrivyUmi } from '@/lib/privy-umi';
 import { PRIVY_APP_ID } from '@/lib/env';
 import { transactionExplorerUrl } from '@/lib/solscan';
+import { saveAgent } from '@/lib/agent-storage';
 
-type SavedAgent = {
-  mint: string;
-  label?: string;
-  capability?: 'buyer' | 'seller' | 'both';
-  createdAt: string;
-};
-
-const STORAGE_KEY = 'leash:web:agents';
 const NETWORKS = [
   'solana-devnet',
   'solana-mainnet',
@@ -99,15 +93,9 @@ type CreateOk = {
   owner: string;
   uri: string;
   uriSource: UriMode;
+  /** Whether rules were attached (false = limitless). */
+  hasRules: boolean;
 };
-
-function persistAgent(saved: SavedAgent) {
-  if (typeof window === 'undefined') return;
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  const list: SavedAgent[] = raw ? (JSON.parse(raw) as SavedAgent[]) : [];
-  const next = [saved, ...list.filter((a) => a.mint !== saved.mint)];
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-}
 
 function shorten(addr: string): string {
   return addr.length > 10 ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : addr;
@@ -133,8 +121,16 @@ export default function NewAgentPage() {
   });
   const [trustCustomDraft, setTrustCustomDraft] = React.useState('');
   const [trustCustom, setTrustCustom] = React.useState<string[]>([]);
+
+  // ---- Behaviour rules (RulesV1). Default = limitless (no policy gate). ----
+  const [rulesEnabled, setRulesEnabled] = React.useState(false);
+  const [dailyBudget, setDailyBudget] = React.useState('1.00');
+  const [perCallCap, setPerCallCap] = React.useState('0.01');
+  const [allowedHostsRaw, setAllowedHostsRaw] = React.useState('');
+  const [intervalSeconds, setIntervalSeconds] = React.useState(30);
+
   const [busy, setBusy] = React.useState(false);
-  const [busyStep, setBusyStep] = React.useState<'pinning' | 'minting' | null>(null);
+  const [busyStep, setBusyStep] = React.useState<'pinning' | 'minting' | 'persisting' | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<CreateOk | null>(null);
 
@@ -176,17 +172,10 @@ export default function NewAgentPage() {
     return () => URL.revokeObjectURL(url);
   }, [imageFile]);
 
-  /** After mint, redirect to Solscan (or Explorer fallback) to inspect the tx. */
-  const explorerRedirected = React.useRef(false);
-  React.useEffect(() => {
-    if (!result?.signature || explorerRedirected.current) return;
-    explorerRedirected.current = true;
-    const href = transactionExplorerUrl(result.network, result.signature);
-    const t = window.setTimeout(() => {
-      window.location.assign(href);
-    }, 400);
-    return () => window.clearTimeout(t);
-  }, [result]);
+  // We deliberately do NOT auto-redirect after a successful mint anymore:
+  // the user has to see the operator pubkey (and ideally back it up) on
+  // the success card before navigating away. A button on the card opens
+  // the explorer in a new tab.
 
   function handleImageFile(file: File | null) {
     setImageError(null);
@@ -257,6 +246,20 @@ export default function NewAgentPage() {
     return json.gatewayUrl;
   }
 
+  function buildRules(): RulesV1 | null {
+    if (!rulesEnabled) return null;
+    const hosts = allowedHostsRaw
+      .split(/[\s,]+/)
+      .map((h) => h.trim())
+      .filter(Boolean);
+    return {
+      v: '0.1',
+      budget: { daily: dailyBudget, perCall: perCallCap, currency: 'USDC' },
+      hosts: hosts.length ? { allow: hosts } : {},
+      triggers: intervalSeconds > 0 ? [{ type: 'interval', seconds: intervalSeconds }] : [],
+    };
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!umi || !wallet) {
@@ -266,8 +269,13 @@ export default function NewAgentPage() {
     setBusy(true);
     setError(null);
     setResult(null);
+
     try {
+      // 1. Pin metadata (or use BYO URI).
       const finalUri = uriMode === 'pinata' ? await pinMetadata() : uri.trim();
+
+      // 2. Mint the Core asset + Agent Identity in one tx via the Metaplex
+      //    Agent API. The connected Privy wallet becomes the asset owner.
       setBusyStep('minting');
       const filteredServices = services.filter((s) => s.name.trim() && s.endpoint.trim());
       const input: CreateAgentInput = {
@@ -280,19 +288,29 @@ export default function NewAgentPage() {
         supportedTrust,
       };
       const res = await createAgent(umi, input);
-      const ok: CreateOk = {
+
+      // 3. Persist a local pointer (label + behaviour rules) so the
+      //    buyer cockpit can find it. No private keys are stored — every
+      //    on-behalf-of-agent action is signed by the connected Privy
+      //    wallet acting as the agent's registered Executive (per the
+      //    Metaplex "Run an Agent" docs).
+      setBusyStep('persisting');
+      const rules = buildRules();
+      saveAgent({
+        mint: res.assetAddress,
+        label: name.trim(),
+        network: res.network,
+        owner: wallet.address,
+        rules,
+      });
+
+      setResult({
         ok: true,
         ...res,
         owner: wallet.address,
         uri: finalUri,
         uriSource: uriMode,
-      };
-      setResult(ok);
-      persistAgent({
-        mint: res.assetAddress,
-        label: name.trim(),
-        capability: 'both',
-        createdAt: new Date().toISOString(),
+        hasRules: rules !== null,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -680,6 +698,105 @@ export default function NewAgentPage() {
                 )}
               </div>
 
+              {/* Behaviour rules — set ONCE at agent creation. The buyer
+                  cockpit reads these directly from agent storage, so the
+                  agent is autonomous: no per-call rules form. */}
+              <div className="flex flex-col gap-3 rounded-md border border-border bg-bg-elev/40 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col">
+                    <Label className="flex items-center gap-2">
+                      Behaviour rules
+                      <span
+                        className="inline-flex items-center text-fg-subtle"
+                        title="Policy gate evaluated on every x402 call the agent makes. Limitless = no gate (devnet playground default)."
+                      >
+                        <Info className="size-3.5" />
+                      </span>
+                    </Label>
+                    <span className="text-[11px] text-fg-subtle">
+                      Stored alongside the operator key. The buyer cockpit enforces them on every
+                      call the agent makes.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRulesEnabled((v) => !v)}
+                    className={
+                      'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ' +
+                      (rulesEnabled ? 'bg-brand' : 'bg-bg-elev-2')
+                    }
+                    aria-pressed={rulesEnabled}
+                    aria-label="Toggle behaviour rules"
+                  >
+                    <span
+                      className={
+                        'inline-block size-4 rounded-full bg-white transition ' +
+                        (rulesEnabled ? 'translate-x-6' : 'translate-x-1')
+                      }
+                    />
+                  </button>
+                </div>
+                {!rulesEnabled ? (
+                  <div className="flex items-center gap-2 text-[11px] text-fg-muted">
+                    <Badge variant="outline">limitless</Badge>
+                    No budget caps · all hosts allowed · no scheduled triggers.
+                  </div>
+                ) : (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="dailyBudget" className="text-xs">
+                        Daily budget (USDC)
+                      </Label>
+                      <Input
+                        id="dailyBudget"
+                        value={dailyBudget}
+                        onChange={(e) => setDailyBudget(e.target.value)}
+                        inputMode="decimal"
+                        className="font-mono"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="perCallCap" className="text-xs">
+                        Per-call cap (USDC)
+                      </Label>
+                      <Input
+                        id="perCallCap"
+                        value={perCallCap}
+                        onChange={(e) => setPerCallCap(e.target.value)}
+                        inputMode="decimal"
+                        className="font-mono"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5 md:col-span-2">
+                      <Label htmlFor="allowedHosts" className="text-xs">
+                        Allowed hosts <span className="text-fg-subtle">(blank = any)</span>
+                      </Label>
+                      <Input
+                        id="allowedHosts"
+                        value={allowedHostsRaw}
+                        onChange={(e) => setAllowedHostsRaw(e.target.value)}
+                        placeholder="api.example.com, weather.io"
+                        className="font-mono text-xs"
+                        spellCheck={false}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="intervalSeconds" className="text-xs">
+                        Trigger interval (seconds, 0 = none)
+                      </Label>
+                      <Input
+                        id="intervalSeconds"
+                        type="number"
+                        min={0}
+                        value={intervalSeconds}
+                        onChange={(e) => setIntervalSeconds(Number(e.target.value) || 0)}
+                        className="font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center gap-3">
                 <Button type="submit" disabled={!canSubmit}>
                   <Sparkles className="size-4" />{' '}
@@ -687,7 +804,9 @@ export default function NewAgentPage() {
                     ? 'Pinning…'
                     : busyStep === 'minting'
                       ? 'Minting…'
-                      : 'Create agent'}
+                      : busyStep === 'persisting'
+                        ? 'Saving…'
+                        : 'Create agent'}
                 </Button>
                 {!ready && <span className="text-sm text-fg-muted">Loading wallet…</span>}
                 {ready && !wallet && (
@@ -719,12 +838,24 @@ export default function NewAgentPage() {
               ) : ready && wallet ? (
                 <>
                   <span>
-                    Signing with the connected Privy wallet. This wallet pays for the transaction
-                    and <strong>becomes the agent owner</strong>.
+                    Privy signs the <strong>mint transaction</strong> and becomes the agent
+                    <strong> owner</strong>. After mint, you&apos;ll register this same wallet as
+                    the agent&apos;s <strong>Executive</strong> (per Metaplex&apos;s{' '}
+                    <a
+                      href="https://www.metaplex.com/docs/agents/run-an-agent"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-brand hover:underline"
+                    >
+                      Run an Agent
+                    </a>{' '}
+                    docs) so it can sign Core <code className="font-mono">Execute</code>{' '}
+                    instructions on the agent&apos;s behalf — no separate operator keypair is stored
+                    anywhere.
                   </span>
                   <code className="font-mono text-[11px] break-all text-fg">{wallet.address}</code>
                   <Badge variant="brand" className="self-start">
-                    {shorten(wallet.address)}
+                    owner · {shorten(wallet.address)}
                   </Badge>
                 </>
               ) : (
@@ -741,23 +872,34 @@ export default function NewAgentPage() {
           </Card>
 
           {result && (
-            <Card>
+            <Card className="border-brand/40">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <Bot className="size-4 text-brand" /> Mint succeeded
+                  <Bot className="size-4 text-brand" /> Agent minted
                 </CardTitle>
                 <CardDescription>
-                  Opening Solscan (or Solana Explorer for unsupported clusters) to inspect this
-                  transaction…
+                  Next: open the agent profile, register your wallet as an{' '}
+                  <strong>Executive</strong>, and delegate execution. After that the agent can pay
+                  and earn over x402 with your wallet signing on its behalf.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
-                    Asset address
+                    Asset address (agent identity)
                   </span>
                   <code className="font-mono text-[11px] break-all">{result.assetAddress}</code>
                 </div>
+
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
+                    Behaviour rules
+                  </span>
+                  <Badge variant={result.hasRules ? 'brand' : 'outline'} className="self-start">
+                    {result.hasRules ? 'custom rules attached' : 'limitless'}
+                  </Badge>
+                </div>
+
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
                     Metadata URI{' '}
@@ -778,15 +920,30 @@ export default function NewAgentPage() {
                   <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
                     Tx signature
                   </span>
-                  <code className="font-mono text-[11px] break-all">{result.signature}</code>
+                  <a
+                    href={transactionExplorerUrl(result.network, result.signature)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-[11px] break-all text-brand hover:underline"
+                  >
+                    {result.signature}
+                  </a>
                 </div>
                 <Badge variant="brand">{result.network}</Badge>
-                <Button
-                  variant="secondary"
-                  onClick={() => router.push(`/agents/${result.assetAddress}`)}
-                >
-                  Open agent profile
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => router.push(`/agents/${result.assetAddress}`)}>
+                    Open profile + delegate execution
+                  </Button>
+                  <Button variant="ghost" asChild>
+                    <a
+                      href={transactionExplorerUrl(result.network, result.signature)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Inspect tx on explorer
+                    </a>
+                  </Button>
+                </div>
                 <JsonViewer data={result} maxHeight="14rem" />
               </CardContent>
             </Card>

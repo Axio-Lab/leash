@@ -38,6 +38,7 @@
             "group": "Guides",
             "pages": [
               "guides/create-an-agent",
+              "guides/create-an-endpoint",
               "guides/build-a-seller",
               "guides/build-a-buyer",
               "guides/build-a-merged-agent",
@@ -62,7 +63,8 @@
               "schemas/receipt-v1",
               "schemas/rules-v1",
               "schemas/leash-block-v1",
-              "schemas/registration-v1"
+              "schemas/registration-v1",
+              "schemas/endpoint-v1"
             ]
           },
           {

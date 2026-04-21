@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import {
+  EndpointV1Schema,
   LeashBlockV1Schema,
   ReceiptV1Schema,
   RegistrationV1Schema,
@@ -19,6 +20,7 @@ const specs = [
   ['rules-v1', RulesV1Schema],
   ['leash-block-v1', LeashBlockV1Schema],
   ['registration-v1', RegistrationV1Schema],
+  ['endpoint-v1', EndpointV1Schema],
 ];
 
 for (const [name, schema] of specs) {

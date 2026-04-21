@@ -2,70 +2,58 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Plus, Bot, Trash2, ExternalLink, Sparkles } from 'lucide-react';
+import { Plus, Bot, Trash2, ExternalLink, Sparkles, Shield } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { PageHeader } from '@/components/page-header';
-
-type SavedAgent = {
-  mint: string;
-  label?: string;
-  capability?: 'buyer' | 'seller' | 'both';
-  createdAt: string;
-};
-
-const STORAGE_KEY = 'leash:web:agents';
-
-function loadAgents(): SavedAgent[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as SavedAgent[];
-  } catch {
-    return [];
-  }
-}
-
-function saveAgents(agents: SavedAgent[]) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(agents));
-}
+import {
+  listAgents,
+  loadAgent,
+  saveAgent,
+  deleteAgent,
+  type StoredAgent,
+} from '@/lib/agent-storage';
 
 export default function AgentsPage() {
-  const [agents, setAgents] = React.useState<SavedAgent[]>([]);
+  const [agents, setAgents] = React.useState<
+    Array<Pick<StoredAgent, 'mint' | 'label' | 'network' | 'createdAt'>>
+  >([]);
+  const [details, setDetails] = React.useState<Record<string, StoredAgent | null>>({});
   const [mint, setMint] = React.useState('');
   const [label, setLabel] = React.useState('');
-  const [capability, setCapability] = React.useState<SavedAgent['capability']>('both');
+
+  const refresh = React.useCallback(() => {
+    const next = listAgents();
+    setAgents(next);
+    const map: Record<string, StoredAgent | null> = {};
+    for (const a of next) map[a.mint] = loadAgent(a.mint);
+    setDetails(map);
+  }, []);
 
   React.useEffect(() => {
-    setAgents(loadAgents());
-  }, []);
+    refresh();
+  }, [refresh]);
 
   function add() {
     const trimmed = mint.trim();
     if (!trimmed) return;
-    const next = [
-      {
-        mint: trimmed,
-        label: label.trim() || undefined,
-        capability,
-        createdAt: new Date().toISOString(),
-      },
-      ...agents.filter((a) => a.mint !== trimmed),
-    ];
-    setAgents(next);
-    saveAgents(next);
+    saveAgent({
+      mint: trimmed,
+      label: label.trim() || undefined,
+      network: 'solana-devnet',
+      rules: null,
+    });
     setMint('');
     setLabel('');
+    refresh();
   }
 
   function remove(m: string) {
-    const next = agents.filter((a) => a.mint !== m);
-    setAgents(next);
-    saveAgents(next);
+    deleteAgent(m);
+    refresh();
   }
 
   return (
@@ -73,7 +61,7 @@ export default function AgentsPage() {
       <PageHeader
         eyebrow="@leash/registry-utils"
         title="Agents"
-        description="Mint a fresh Agent Identity (MIP-104) or paste an existing Core asset mint to track it. Stored locally — no server state. Open one to see its profile, treasury, and receipt feed."
+        description="Each agent is a Metaplex Core asset (its identity). Operate it by registering your wallet as its Executive and delegating execution — every on-behalf-of-agent signature comes from your connected Privy wallet (no keys are stored in the browser)."
         actions={
           <Button asChild>
             <Link href="/agents/new">
@@ -89,15 +77,16 @@ export default function AgentsPage() {
             <Plus className="size-4 text-brand" /> Track an existing agent
           </CardTitle>
           <CardDescription>
-            Already have a Core asset mint? Paste it to add it to your list. To mint a brand-new
-            agent, use{' '}
+            Already have a Core asset mint? Paste it to add it to your list — you can still inspect
+            its profile, treasury, and receipts. To mint a brand-new agent and configure its
+            behaviour rules, use{' '}
             <Link href="/agents/new" className="text-brand hover:underline">
               Create agent
             </Link>
             .
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-[1fr_1fr_auto_auto] md:items-end">
+        <CardContent className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="mint">Asset mint</Label>
             <Input
@@ -118,19 +107,6 @@ export default function AgentsPage() {
               placeholder="e.g. weather-bot"
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="cap">Capability</Label>
-            <select
-              id="cap"
-              value={capability}
-              onChange={(e) => setCapability(e.target.value as SavedAgent['capability'])}
-              className="h-9 rounded-md border border-border bg-bg-elev px-3 text-sm text-fg"
-            >
-              <option value="buyer">buyer</option>
-              <option value="seller">seller</option>
-              <option value="both">both</option>
-            </select>
-          </div>
           <Button onClick={add} disabled={!mint.trim()}>
             <Plus /> Add
           </Button>
@@ -150,34 +126,49 @@ export default function AgentsPage() {
             </div>
           ) : (
             <ul className="flex flex-col divide-y divide-border">
-              {agents.map((a) => (
-                <li key={a.mint} className="flex items-center gap-3 py-3">
-                  <Link
-                    href={`/agents/${a.mint}`}
-                    className="flex flex-1 items-center gap-3 min-w-0 hover:text-brand"
-                  >
-                    <span className="grid size-9 shrink-0 place-items-center rounded-md bg-bg-elev-2 text-fg-muted">
-                      <Bot className="size-4" />
-                    </span>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-sm font-medium truncate">{a.label ?? '—'}</span>
-                      <code className="text-[11px] text-fg-subtle truncate font-mono">
-                        {a.mint}
-                      </code>
+              {agents.map((a) => {
+                const detail = details[a.mint];
+                const hasRules = !!detail?.rules;
+                return (
+                  <li key={a.mint} className="flex items-center gap-3 py-3">
+                    <Link
+                      href={`/agents/${a.mint}`}
+                      className="flex flex-1 items-center gap-3 min-w-0 hover:text-brand"
+                    >
+                      <span className="grid size-9 shrink-0 place-items-center rounded-md bg-bg-elev-2 text-fg-muted">
+                        <Bot className="size-4" />
+                      </span>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm font-medium truncate">{a.label ?? '—'}</span>
+                        <code className="text-[11px] text-fg-subtle truncate font-mono">
+                          {a.mint}
+                        </code>
+                      </div>
+                    </Link>
+                    <div className="hidden md:flex items-center gap-1">
+                      {hasRules ? (
+                        <Badge variant="brand" className="gap-1">
+                          <Shield className="size-3" /> rules
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="gap-1">
+                          <Shield className="size-3" /> limitless
+                        </Badge>
+                      )}
                     </div>
-                  </Link>
-                  <Badge variant="brand">{a.capability}</Badge>
-                  <Link
-                    href={`/agents/${a.mint}`}
-                    className="text-fg-muted hover:text-fg inline-flex items-center gap-1 text-xs"
-                  >
-                    open <ExternalLink className="size-3" />
-                  </Link>
-                  <Button variant="ghost" size="icon" onClick={() => remove(a.mint)}>
-                    <Trash2 className="size-4" />
-                  </Button>
-                </li>
-              ))}
+                    <Badge variant="outline">{a.network ?? 'solana-devnet'}</Badge>
+                    <Link
+                      href={`/agents/${a.mint}`}
+                      className="text-fg-muted hover:text-fg inline-flex items-center gap-1 text-xs"
+                    >
+                      open <ExternalLink className="size-3" />
+                    </Link>
+                    <Button variant="ghost" size="icon" onClick={() => remove(a.mint)}>
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </CardContent>

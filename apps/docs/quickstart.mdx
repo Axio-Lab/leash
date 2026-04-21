@@ -37,3 +37,17 @@ A single agent that both sells (`POST /echo`) and buys (interval-driven calls ba
 ```bash
 SELLER_URL=http://localhost:3001 pnpm exec tsx scripts/e2e-demo.ts
 ```
+
+## Hosted playground at a glance
+
+Once the web app is up at [http://localhost:3000](http://localhost:3000):
+
+| Surface                 | What it is                                                                                                    | Signing model                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `/agents/new`           | Mint a Core asset + Agent Identity. Capture the agent's behaviour rules (or pick "limitless").                | Privy embedded wallet (asset owner).                                         |
+| `/agents/[mint]`        | Inspect identity, behaviour rules, treasury balances. Register the wallet as Executive + delegate execution.  | Privy embedded wallet.                                                       |
+| `/seller`               | **Payment-Link Builder.** Pick an agent → declare price + response → get a shareable `/x/<id>` x402 paywall.  | Runner stores descriptors; `/x/<id>` settles via `facilitator.svmacc.tech`.  |
+| `/buyer`                | **Autonomous-agent cockpit.** Pick an agent → fire any x402 URL with that agent's stored behaviour rules.     | Privy wallet signs as the agent's registered Executive (no keys in browser). |
+
+See [Create a payment link](/guides/create-an-endpoint) and
+[Build a buyer](/guides/build-a-buyer) for end-to-end walkthroughs.

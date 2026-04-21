@@ -107,8 +107,8 @@ playground always shows the resolved CAIP-2 id in the receipt.
 
 Buyers need devnet SOL **and** devnet USDC. Two faucets we recommend:
 
-- SOL: <https://faucet.solana.com>
-- USDC: <https://faucet.circle.com> (mint
+- SOL: [faucet.solana.com](https://faucet.solana.com)
+- USDC: [faucet.circle.com](https://faucet.circle.com) (mint
   `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` to your buyer pubkey)
 
 The buyer playground in the web app surfaces the connected wallet's
@@ -118,18 +118,18 @@ balance and links to both faucets when it sees zero.
 
 ```
 Buyer           Seller (createSeller)         Facilitator
-  |   POST /tag  ───────────────────────►       |
-  |   ◄────────  402 + PAYMENT-REQUIRED         |
-  |                                              |
-  |   build + sign SPL transfer                  |
-  |                                              |
-  |   POST /tag (PAYMENT-SIGNATURE)  ────────►   |
+  |   POST /tag  ───────────────────────►         |
+  |   ◄────────  402 + PAYMENT-REQUIRED           |
+  |                                               |
+  |   build + sign SPL transfer                   |
+  |                                               |
+  |   POST /tag (PAYMENT-SIGNATURE)  ────────►    |
   |               middleware → settle ──────────► broadcasts tx
-  |               ◄────────────── tx_sig         |
-  |   ◄──── 200 + body + PAYMENT-RESPONSE        |
-  |                                              |
-  | finalizeReceipt → spend ReceiptV1            |
-  | (onAfterSettle on seller → earn ReceiptV1)   |
+  |               ◄────────────── tx_sig          |
+  |   ◄──── 200 + body + PAYMENT-RESPONSE         |
+  |                                               |
+  | finalizeReceipt → spend ReceiptV1             |
+  | (onAfterSettle on seller → earn ReceiptV1)    |
 ```
 
 Both receipts are deterministic (SHA-256 chained, identical hash inputs

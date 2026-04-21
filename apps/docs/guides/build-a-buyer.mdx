@@ -56,3 +56,19 @@ the wire-level header walkthrough.
 In a browser, supply any `@solana/kit` `TransactionPartialSigner`. The web
 playground (`apps/web/lib/privy-svm-signer.ts`) adapts a Privy embedded
 wallet to this interface — copy that file as a starting point.
+
+## Hosted: the autonomous-agent cockpit
+
+The web playground at `apps/web/buyer` ships this exact flow as a UI:
+
+1. The user signs in with Privy (email / Google).
+2. The user picks one of their agents from the dropdown.
+3. The Privy wallet acts as the agent's registered **Executive** — per
+   Metaplex's [Run an Agent](https://www.metaplex.com/docs/agents/run-an-agent)
+   docs — and signs every x402 SPL transfer on the agent's behalf.
+4. Behaviour rules captured at agent creation are fed straight into
+   `createBuyer({ rules })`, so the policy gate enforces them before
+   every call.
+
+No private keys ever leave the browser, and the same `BuyerKit` API
+backs both the headless CLI and the browser cockpit.

@@ -2,285 +2,477 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Send, ShoppingBag, ExternalLink, Receipt, Trash2 } from 'lucide-react';
+import useSWR, { mutate } from 'swr';
+import {
+  Bot,
+  Copy,
+  ExternalLink,
+  Globe2,
+  Link as LinkIcon,
+  Loader2,
+  Plus,
+  Receipt,
+  Trash2,
+} from 'lucide-react';
+import type { EndpointV1 } from '@leash/schemas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { JsonViewer } from '@/components/json-viewer';
 import { PageHeader } from '@/components/page-header';
 import { InlineCode } from '@/components/ui/code';
+import { listAgents, type StoredAgent } from '@/lib/agent-storage';
 
-type SellerCall = {
-  status: number;
-  body: unknown;
-  asset: string;
-  ts: string;
-  accepts?: unknown[];
-  paymentRequired?: string | null;
+type Method = 'GET' | 'POST';
+
+const ENDPOINTS_KEY = '/api/endpoints';
+const fetcher = async (url: string) => {
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`${url} → ${res.status}`);
+  return res.json();
 };
 
-type SavedAgent = { mint: string; label?: string };
-const SAVED_AGENTS_KEY = 'leash:web:agents';
-const PLACEHOLDER_ASSET = '11111111111111111111111111111111';
-
-function loadSavedAgents(): SavedAgent[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(SAVED_AGENTS_KEY);
-    return raw ? (JSON.parse(raw) as SavedAgent[]) : [];
-  } catch {
-    return [];
-  }
-}
-
+/**
+ * Seller payment-link builder.
+ *
+ * The "Stripe Payment Links" surface for x402 on Solana. Pick one of your
+ * agents, declare a method + path + price, define the response template,
+ * save it. The runner persists the descriptor and `/x/<id>` becomes a
+ * live x402 paywall served by `@leash/seller-kit`.
+ */
 export default function SellerPage() {
-  const [body, setBody] = React.useState('{"hello":"leash"}');
-  const [asset, setAsset] = React.useState<string>(PLACEHOLDER_ASSET);
-  const [savedAgents, setSavedAgents] = React.useState<SavedAgent[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [result, setResult] = React.useState<SellerCall | null>(null);
-  const [history, setHistory] = React.useState<SellerCall[]>([]);
+  const [agents, setAgents] = React.useState<
+    Array<Pick<StoredAgent, 'mint' | 'label' | 'network'>>
+  >([]);
+  const [ownerAgent, setOwnerAgent] = React.useState('');
+  const [label, setLabel] = React.useState('Premium echo');
+  const [description, setDescription] = React.useState(
+    'Echoes the request body back to paying agents.',
+  );
+  const [method, setMethod] = React.useState<Method>('POST');
+  const [price, setPrice] = React.useState('$0.001');
+  const [bodyJson, setBodyJson] = React.useState('{"ok":true,"hello":"leash"}');
+  const [customId, setCustomId] = React.useState('');
+  const [redirectUrl, setRedirectUrl] = React.useState('');
+  const [webhookUrl, setWebhookUrl] = React.useState('');
+  const [wrapReceipt, setWrapReceipt] = React.useState(true);
+  const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [origin, setOrigin] = React.useState('');
 
   React.useEffect(() => {
-    const agents = loadSavedAgents();
-    setSavedAgents(agents);
-    if (agents[0]?.mint) setAsset(agents[0].mint);
-  }, []);
+    const a = listAgents();
+    setAgents(a);
+    if (a[0]?.mint && !ownerAgent) setOwnerAgent(a[0].mint);
+    if (typeof window !== 'undefined') setOrigin(window.location.origin);
+  }, [ownerAgent]);
 
-  /**
-   * Probe the seller without paying. The real x402 middleware returns 402
-   * + a base64-encoded `PAYMENT-REQUIRED` header carrying the `accepts[]`
-   * a buyer would have to satisfy. We decode it so devs can inspect the
-   * exact USDC mint, payTo PDA, and amount before firing the buyer.
-   */
-  async function probe() {
-    setLoading(true);
+  const ownerEndpointsKey = ownerAgent
+    ? `${ENDPOINTS_KEY}?owner_agent=${encodeURIComponent(ownerAgent)}`
+    : null;
+  const { data, error: listError } = useSWR<{ endpoints: EndpointV1[] }>(
+    ownerEndpointsKey,
+    fetcher,
+    { refreshInterval: 5000 },
+  );
+  const links = data?.endpoints ?? [];
+
+  async function createLink(e: React.FormEvent) {
+    e.preventDefault();
     setError(null);
-    setResult(null);
+    if (!ownerAgent) {
+      setError('Pick an agent to receive payments.');
+      return;
+    }
+    let parsedBody: unknown;
     try {
-      const url = `/api/seller/echo?asset=${encodeURIComponent(asset.trim() || PLACEHOLDER_ASSET)}`;
-      const res = await fetch(url, {
+      parsedBody = bodyJson.trim() ? JSON.parse(bodyJson) : { ok: true };
+    } catch (err) {
+      setError(`Response body must be valid JSON: ${(err as Error).message}`);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const idCandidate = customId.trim().toLowerCase();
+      const ownerStored = agents.find((a) => a.mint === ownerAgent);
+      const network =
+        ownerStored?.network === 'solana-mainnet' ? 'solana-mainnet' : 'solana-devnet';
+      const res = await fetch(ENDPOINTS_KEY, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body,
+        body: JSON.stringify({
+          ...(idCandidate ? { id: idCandidate } : {}),
+          label: label.trim(),
+          description: description.trim() || undefined,
+          owner_agent: ownerAgent,
+          method,
+          price: price.trim(),
+          network,
+          response: {
+            status: 200,
+            mimeType: 'application/json',
+            body: parsedBody,
+          },
+          redirect_url: redirectUrl.trim() || undefined,
+          webhook_url: webhookUrl.trim() || undefined,
+          wrap_receipt: wrapReceipt,
+        }),
       });
-      const text = await res.text();
-      let parsed: unknown = text;
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        /* leave as text */
+      const json = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        endpoint?: EndpointV1;
+        error?: string;
+        detail?: string;
+      } | null;
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.detail ?? json?.error ?? `runner returned ${res.status}`);
       }
-      const required = res.headers.get('PAYMENT-REQUIRED');
-      let accepts: unknown[] | undefined;
-      if (required) {
-        try {
-          const decoded = JSON.parse(atob(required)) as { accepts?: unknown[] };
-          accepts = decoded.accepts;
-        } catch {
-          /* leave undefined */
-        }
-      }
-      const call: SellerCall = {
-        status: res.status,
-        body: parsed,
-        asset: asset.trim() || PLACEHOLDER_ASSET,
-        ts: new Date().toISOString(),
-        accepts,
-        paymentRequired: required,
-      };
-      setResult(call);
-      setHistory((h) => [call, ...h].slice(0, 25));
+      setCustomId('');
+      setRedirectUrl('');
+      setWebhookUrl('');
+      await mutate(ownerEndpointsKey);
     } catch (err) {
       setError((err as Error).message);
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
-  const isPlaceholder = asset.trim() === PLACEHOLDER_ASSET;
-  const explorerHref = `/agents/${encodeURIComponent(asset.trim() || PLACEHOLDER_ASSET)}`;
+  async function removeLink(id: string) {
+    if (!confirm(`Delete payment link "${id}"? Existing buyers will get 404.`)) return;
+    await fetch(`${ENDPOINTS_KEY}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    await mutate(ownerEndpointsKey);
+  }
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow="@leash/seller-kit"
-        title="Seller playground"
-        description="Hits the built-in echo seller wired with the real `createSeller` from `@leash/seller-kit`. The middleware is real x402 on Solana devnet — `PAYMENT-REQUIRED` 402 unless a fully-signed SPL transfer accompanies the request. Use this page to inspect the offer; use the Buyer playground to actually settle it."
+        title="Payment-link builder"
+        description="Mint shareable x402 payment links. Pick one of your agents, declare a price + response, and the runner gives you back a public URL — anything that speaks x402 (including @leash/buyer-kit) can pay it."
       />
 
       <section className="grid gap-4 md:grid-cols-4">
-        <InfoCard label="Route" value="POST /api/seller/echo" />
+        <InfoCard label="Surface" value="POST/GET /x/<id>" />
         <InfoCard label="Network" value="solana-devnet" />
         <InfoCard label="Facilitator" value="facilitator.svmacc.tech" />
-        <InfoCard label="Header required" value="PAYMENT-SIGNATURE" />
+        <InfoCard label="Receives at" value="Asset Signer PDA (auto)" />
       </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ShoppingBag className="size-4 text-brand" /> Probe the seller
-          </CardTitle>
-          <CardDescription>
-            Sending without a payment header returns <InlineCode>402 Payment Required</InlineCode>{' '}
-            with a base64 <InlineCode>PAYMENT-REQUIRED</InlineCode> header that lists the seller's{' '}
-            <InlineCode>accepts[]</InlineCode> (asset mint, payTo PDA, amount, facilitator fee
-            payer). To actually settle, fire from the{' '}
-            <Link href="/buyer" className="text-brand underline">
-              Buyer playground
-            </Link>{' '}
-            so your Privy wallet signs the SPL transfer.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="asset">Seller agent (Core asset mint)</Label>
-            <div className="flex flex-col gap-1">
-              <Input
-                id="asset"
-                value={asset}
-                onChange={(e) => setAsset(e.target.value)}
-                className="font-mono"
-                placeholder={PLACEHOLDER_ASSET}
-                spellCheck={false}
-              />
-              {savedAgents.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {savedAgents.slice(0, 6).map((a) => (
-                    <button
-                      key={a.mint}
-                      type="button"
-                      onClick={() => setAsset(a.mint)}
-                      className="text-[11px] rounded border border-border bg-bg-elev px-2 py-0.5 hover:border-border-strong text-fg-muted hover:text-fg"
-                      title={a.mint}
-                    >
-                      {a.label ?? `${a.mint.slice(0, 4)}…${a.mint.slice(-4)}`}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {isPlaceholder && (
-                <p className="text-[11px] text-warning">
-                  Using the placeholder mint. Pick or paste a real agent so receipts attribute
-                  correctly.{' '}
-                  <Link href="/agents/new" className="underline">
-                    Create one →
-                  </Link>
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="body">Request body (JSON)</Label>
-            <Textarea
-              id="body"
-              value={body}
-              spellCheck={false}
-              onChange={(e) => setBody(e.target.value)}
-              className="min-h-[100px]"
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button onClick={probe} disabled={loading}>
-              <Send /> {loading ? 'Probing…' : 'Probe (no payment)'}
-            </Button>
-            <Link
-              href="/buyer"
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-bg-elev px-3 h-9 text-xs hover:border-border-strong"
-            >
-              Settle from Buyer playground →
-            </Link>
-          </div>
-
-          {error && <p className="text-sm text-danger">{error}</p>}
-
-          {result && (
-            <div className="flex flex-col gap-3 rounded-md border border-border bg-bg-elev/40 p-3">
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                Status:{' '}
-                <Badge
-                  variant={
-                    result.status === 402 ? 'brand' : result.status < 400 ? 'success' : 'warning'
-                  }
-                >
-                  {result.status}
-                </Badge>
-                {result.status === 402 && <Badge variant="default">payment required</Badge>}
-                {result.status === 200 && (
-                  <Badge variant="success" className="gap-1">
-                    <Receipt className="size-3" /> earn receipt emitted
-                  </Badge>
-                )}
-              </div>
-
-              <Link
-                href={explorerHref}
-                className="inline-flex items-center gap-1.5 text-xs text-brand hover:underline w-fit"
-              >
-                <ExternalLink className="size-3" /> View receipts for{' '}
-                <span className="font-mono">
-                  {result.asset.slice(0, 4)}…{result.asset.slice(-4)}
-                </span>{' '}
-                in the explorer
+      {agents.length === 0 ? (
+        <Card className="border-warning/40 bg-warning/5">
+          <CardContent className="flex flex-col gap-3 py-4">
+            <p className="text-sm">
+              You don&apos;t have any agents on this device yet. Mint one — the agent&apos;s Asset
+              Signer PDA becomes the <code className="font-mono">payTo</code> for every payment link
+              you create.
+            </p>
+            <Button asChild className="w-fit">
+              <Link href="/agents/new">
+                <Plus className="size-4" /> Create agent
               </Link>
-
-              {result.accepts && result.accepts.length > 0 && (
-                <div>
-                  <Label className="mb-1 block">Decoded accepts[] (offer)</Label>
-                  <JsonViewer data={result.accepts} />
-                </div>
-              )}
-
-              <div>
-                <Label className="mb-1 block">Response body</Label>
-                <JsonViewer data={result.body} />
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {history.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              Session history
-              <Button variant="ghost" size="sm" onClick={() => setHistory([])}>
-                <Trash2 className="size-3.5" /> Clear
-              </Button>
-            </CardTitle>
-            <CardDescription>
-              Calls fired this session. Receipts are appended to the runner's in-memory store under{' '}
-              <InlineCode>/a/&#123;asset&#125;/receipts</InlineCode>.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-1.5">
-            {history.map((c, i) => (
-              <div
-                key={`${c.ts}-${i}`}
-                className="flex items-center gap-2 text-xs font-mono text-fg-muted"
-              >
-                <Badge
-                  variant={c.status === 402 ? 'brand' : c.status < 400 ? 'success' : 'warning'}
-                >
-                  {c.status}
-                </Badge>
-                <span className="truncate">
-                  probe → {c.asset.slice(0, 4)}…{c.asset.slice(-4)}
-                </span>
-                <span className="ml-auto text-fg-subtle">
-                  {new Date(c.ts).toLocaleTimeString()}
-                </span>
-              </div>
-            ))}
+            </Button>
           </CardContent>
         </Card>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <LinkIcon className="size-4 text-brand" /> New payment link
+              </CardTitle>
+              <CardDescription>
+                The runner stores the descriptor; <InlineCode>/x/&lt;id&gt;</InlineCode> serves it
+                with the real <InlineCode>@leash/seller-kit</InlineCode> middleware.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form className="flex flex-col gap-4" onSubmit={createLink}>
+                <Field label="Agent (receives payments)">
+                  <select
+                    value={ownerAgent}
+                    onChange={(e) => setOwnerAgent(e.target.value)}
+                    className="h-9 rounded-md border border-border bg-bg-elev px-3 text-sm"
+                  >
+                    {agents.map((a) => (
+                      <option key={a.mint} value={a.mint}>
+                        {a.label ?? `${a.mint.slice(0, 4)}…${a.mint.slice(-4)}`} · {a.network}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Label">
+                  <Input
+                    value={label}
+                    onChange={(e) => setLabel(e.target.value)}
+                    placeholder="Premium echo"
+                  />
+                </Field>
+
+                <Field label="Description (optional)">
+                  <Textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={2}
+                  />
+                </Field>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Method">
+                    <select
+                      value={method}
+                      onChange={(e) => setMethod(e.target.value as Method)}
+                      className="h-9 rounded-md border border-border bg-bg-elev px-3 text-sm"
+                    >
+                      <option value="POST">POST</option>
+                      <option value="GET">GET</option>
+                    </select>
+                  </Field>
+                  <Field label="Price (USDC)">
+                    <Input
+                      value={price}
+                      onChange={(e) => setPrice(e.target.value)}
+                      className="font-mono"
+                      placeholder="$0.001"
+                    />
+                  </Field>
+                </div>
+
+                <Field label="Custom slug (optional)">
+                  <Input
+                    value={customId}
+                    onChange={(e) => setCustomId(e.target.value)}
+                    placeholder="auto-generated if empty"
+                    className="font-mono lowercase"
+                  />
+                </Field>
+
+                <Field label="Response body (JSON)">
+                  <Textarea
+                    value={bodyJson}
+                    onChange={(e) => setBodyJson(e.target.value)}
+                    rows={5}
+                    className="font-mono text-xs"
+                    spellCheck={false}
+                  />
+                </Field>
+
+                <Separator />
+
+                <h3 className="text-xs font-medium uppercase tracking-widest text-fg-subtle">
+                  Post-payment hooks (all optional)
+                </h3>
+
+                <Field label="Redirect URL (303 after payment)">
+                  <Input
+                    value={redirectUrl}
+                    onChange={(e) => setRedirectUrl(e.target.value)}
+                    placeholder="https://yoursite.com/thank-you"
+                    type="url"
+                    className="font-mono text-xs"
+                  />
+                  <span className="text-[11px] text-fg-subtle">
+                    Receives <InlineCode>?leash_tx</InlineCode>,{' '}
+                    <InlineCode>?leash_receipt</InlineCode>, <InlineCode>?leash_agent</InlineCode>{' '}
+                    appended automatically.
+                  </span>
+                </Field>
+
+                <Field label="Webhook URL (fire-and-forget POST)">
+                  <Input
+                    value={webhookUrl}
+                    onChange={(e) => setWebhookUrl(e.target.value)}
+                    placeholder="https://your-agent.com/leash-callback"
+                    type="url"
+                    className="font-mono text-xs"
+                  />
+                  <span className="text-[11px] text-fg-subtle">
+                    Receives <InlineCode>{'{ payment, response }'}</InlineCode> JSON. Buyers can add
+                    a per-call <InlineCode>x-leash-callback</InlineCode> header to fire one of their
+                    own.
+                  </span>
+                </Field>
+
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={wrapReceipt}
+                    onChange={(e) => setWrapReceipt(e.target.checked)}
+                    className="mt-1 size-3.5"
+                  />
+                  <span>
+                    <span className="block">Embed receipt in JSON response</span>
+                    <span className="block text-[11px] text-fg-subtle">
+                      Wraps the body as{' '}
+                      <InlineCode>
+                        {'{ data: <body>, _leash: { tx_sig, receipt_hash, explorer, … } }'}
+                      </InlineCode>{' '}
+                      so callers get the proof inline. Ignored when <strong>Redirect URL</strong> is
+                      set.
+                    </span>
+                  </span>
+                </label>
+
+                {error && <p className="text-sm text-danger">{error}</p>}
+
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" /> Creating…
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="size-4" /> Create payment link
+                    </>
+                  )}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <div className="flex flex-col gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Globe2 className="size-4 text-brand" /> Your payment links
+                </CardTitle>
+                <CardDescription>
+                  Live URLs you can share. Each one is a real x402 paywall — probing returns 402 +{' '}
+                  <InlineCode>PAYMENT-REQUIRED</InlineCode>; paying triggers a real SPL USDC
+                  transfer + earn receipt.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                {listError && (
+                  <p className="text-sm text-danger">
+                    Couldn&apos;t reach the runner: {(listError as Error).message}
+                  </p>
+                )}
+                {!listError && links.length === 0 && (
+                  <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-fg-muted">
+                    No payment links yet for this agent.
+                  </p>
+                )}
+                {links.map((ep) => (
+                  <PaymentLinkRow
+                    key={ep.id}
+                    endpoint={ep}
+                    origin={origin}
+                    onDelete={() => removeLink(ep.id)}
+                  />
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Receipt className="size-4 text-brand" /> Receipts feed
+                </CardTitle>
+                <CardDescription>
+                  Every settlement on a link emits an <InlineCode>earn</InlineCode>{' '}
+                  <InlineCode>ReceiptV1</InlineCode> back to the runner under{' '}
+                  <InlineCode>/a/&lt;agent&gt;/receipts</InlineCode>.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {ownerAgent ? (
+                  <Link
+                    href={`/agents/${ownerAgent}`}
+                    className="inline-flex items-center gap-2 text-sm text-brand hover:underline"
+                  >
+                    <Bot className="size-4" /> Open agent profile · view earn receipts
+                    <ExternalLink className="size-3" />
+                  </Link>
+                ) : (
+                  <span className="text-sm text-fg-muted">Pick an agent first.</span>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       )}
+    </div>
+  );
+}
+
+function PaymentLinkRow({
+  endpoint,
+  origin,
+  onDelete,
+}: {
+  endpoint: EndpointV1;
+  origin: string;
+  onDelete: () => void;
+}) {
+  const url = `${origin || ''}/x/${endpoint.id}`;
+  const [copied, setCopied] = React.useState(false);
+  async function copy() {
+    if (typeof navigator === 'undefined') return;
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+  return (
+    <div className="rounded-md border border-border bg-bg-elev/40 p-3 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Badge variant="brand">{endpoint.method}</Badge>
+          <code className="font-mono text-xs">{endpoint.id}</code>
+          <Badge variant="success">{endpoint.price}</Badge>
+        </div>
+        <Button variant="ghost" size="sm" onClick={onDelete}>
+          <Trash2 className="size-3.5" />
+        </Button>
+      </div>
+      <div className="text-sm">{endpoint.label}</div>
+      {endpoint.description && <div className="text-xs text-fg-muted">{endpoint.description}</div>}
+      <div className="flex flex-wrap gap-1 text-[10px]">
+        {endpoint.wrap_receipt && <Badge variant="outline">embeds receipt</Badge>}
+        {endpoint.redirect_url && (
+          <Badge variant="outline" title={endpoint.redirect_url}>
+            ↳ redirect
+          </Badge>
+        )}
+        {endpoint.webhook_url && (
+          <Badge variant="outline" title={endpoint.webhook_url}>
+            ⇉ webhook
+          </Badge>
+        )}
+      </div>
+      <Separator />
+      <div className="flex items-center gap-2">
+        <code className="flex-1 break-all rounded border border-border bg-bg px-2 py-1 text-[11px] font-mono">
+          {url}
+        </code>
+        <Button variant="secondary" size="sm" onClick={copy}>
+          <Copy className="size-3.5" /> {copied ? 'Copied' : 'Copy'}
+        </Button>
+        <Button variant="ghost" size="sm" asChild>
+          <a href={url} target="_blank" rel="noreferrer">
+            <ExternalLink className="size-3.5" /> Open
+          </a>
+        </Button>
+      </div>
+      <details className="text-[11px] text-fg-subtle">
+        <summary className="cursor-pointer hover:text-fg">EndpointV1</summary>
+        <div className="pt-2">
+          <JsonViewer data={endpoint} maxHeight="14rem" />
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label>{label}</Label>
+      {children}
     </div>
   );
 }

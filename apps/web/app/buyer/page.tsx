@@ -2,9 +2,21 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Send, Trash2, ExternalLink, Receipt, Wallet } from 'lucide-react';
+import useSWR from 'swr';
+import {
+  Bot,
+  ExternalLink,
+  Globe2,
+  Plus,
+  Receipt,
+  Send,
+  Shield,
+  ShieldOff,
+  Trash2,
+  Wallet,
+} from 'lucide-react';
 import { createBuyer, type BuyerCallResult } from '@leash/buyer-kit';
-import type { ReceiptV1, RulesV1 } from '@leash/schemas';
+import type { EndpointV1, ReceiptV1, RulesV1 } from '@leash/schemas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,58 +30,87 @@ import { usePrivySvmSigner } from '@/lib/privy-svm-signer';
 import { transactionExplorerUrl } from '@/lib/solscan';
 import { SOLANA_RPC } from '@/lib/env';
 import { WalletBalanceBadge } from '@/components/wallet-balance-badge';
+import {
+  effectiveRules,
+  isLimitless,
+  listAgents,
+  loadAgent,
+  type StoredAgent,
+} from '@/lib/agent-storage';
 
 type FireResult =
-  | { ok: true; receipt: ReceiptV1; response: { status: number; body: unknown } }
+  | {
+      ok: true;
+      receipt: ReceiptV1;
+      response: {
+        status: number;
+        body: unknown;
+        leash: {
+          tx_sig: string | null;
+          receipt_hash: string | null;
+          agent: string | null;
+          tx_explorer: string | null;
+          agent_explorer: string | null;
+          redirected_to: string | null;
+        };
+      };
+    }
   | { ok: false; error: string };
 
-const DEFAULT_AGENT = '11111111111111111111111111111111';
+const fetcher = async (url: string) => {
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`${url} → ${res.status}`);
+  return res.json();
+};
 
 /**
- * Browser-side x402 buyer playground.
+ * Autonomous-agent cockpit.
  *
- * The flow now mirrors the SDK exactly:
- *   1. The Privy embedded wallet is exposed as a `@solana/kit`
- *      `TransactionPartialSigner` via `usePrivySvmSigner`.
- *   2. `createBuyer({ signer, ... })` is constructed in the browser; its
- *      internal `paidFetch` is the real `@x402/fetch` + `ExactSvmScheme`
- *      pair pointed at devnet.
- *   3. A `Fire` click invokes `buyer.fetch(url)`. On 402, x402 builds the
- *      USDC SPL transfer, hands it to Privy to sign, posts it through to
- *      the seller, and we get a 200 with a real `tx_sig` plus a chained
- *      spend `ReceiptV1`.
- *   4. The receipt is shipped to the runner via `/api/receipts/:mint`
- *      (CORS-safe proxy) so the explorer feed updates in real time.
+ * The user picks one of their agents (the "operator"). The Privy embedded
+ * wallet acts as that agent's registered Executive (per Metaplex's Run an
+ * Agent docs) and signs every x402 SPL transfer on the agent's behalf.
+ * Behaviour rules captured at agent creation are enforced before each
+ * call by `@leash/buyer-kit`'s policy gate.
  */
 export default function BuyerPage() {
   const { signer, wallet, ready } = usePrivySvmSigner();
 
-  const [agent, setAgent] = React.useState(DEFAULT_AGENT);
-  const [url, setUrl] = React.useState('/api/seller/echo');
+  const [agents, setAgents] = React.useState<
+    Array<Pick<StoredAgent, 'mint' | 'label' | 'network'>>
+  >([]);
+  const [selectedAgent, setSelectedAgent] = React.useState<string>('');
+  const [agentRecord, setAgentRecord] = React.useState<StoredAgent | null>(null);
+
+  const [url, setUrl] = React.useState('/x/');
   const [method, setMethod] = React.useState<'GET' | 'POST'>('POST');
   const [body, setBody] = React.useState('{"hello":"leash"}');
-  const [perCall, setPerCall] = React.useState('0.01');
-  const [daily, setDaily] = React.useState('1.00');
-  const [hostsRaw, setHostsRaw] = React.useState('localhost,127.0.0.1');
-  const [intervalSeconds, setIntervalSeconds] = React.useState(20);
+  const [callbackUrl, setCallbackUrl] = React.useState('');
+
   const [loading, setLoading] = React.useState(false);
   const [result, setResult] = React.useState<FireResult | null>(null);
   const [history, setHistory] = React.useState<ReceiptV1[]>([]);
 
+  React.useEffect(() => {
+    const a = listAgents();
+    setAgents(a);
+    if (a[0]?.mint && !selectedAgent) setSelectedAgent(a[0].mint);
+  }, [selectedAgent]);
+
+  React.useEffect(() => {
+    if (!selectedAgent) return;
+    setAgentRecord(loadAgent(selectedAgent));
+  }, [selectedAgent]);
+
+  const { data: linksData } = useSWR<{ endpoints: EndpointV1[] }>(`/api/endpoints`, fetcher, {
+    refreshInterval: 8000,
+  });
+  const allLinks = linksData?.endpoints ?? [];
+
   const rules: RulesV1 = React.useMemo(
-    () => ({
-      v: '0.1',
-      budget: { daily, perCall, currency: 'USDC' },
-      hosts: {
-        allow: hostsRaw
-          .split(',')
-          .map((h) => h.trim())
-          .filter(Boolean),
-      },
-      triggers: [{ type: 'interval', seconds: intervalSeconds }],
-    }),
-    [daily, perCall, hostsRaw, intervalSeconds],
+    () => (selectedAgent ? effectiveRules(selectedAgent) : effectiveRules('')),
+    [selectedAgent],
   );
+  const isLimitlessAgent = isLimitless(agentRecord?.rules ?? null);
 
   async function shipReceipt(receipt: ReceiptV1): Promise<void> {
     try {
@@ -79,7 +120,7 @@ export default function BuyerPage() {
         body: JSON.stringify(receipt),
       });
     } catch {
-      /* swallow — runner outage must not surface as a buyer-side error */
+      /* runner outage is silent on this side */
     }
   }
 
@@ -88,45 +129,52 @@ export default function BuyerPage() {
       setResult({ ok: false, error: 'Connect a Solana wallet first.' });
       return;
     }
+    if (!selectedAgent) {
+      setResult({ ok: false, error: 'Pick an agent first.' });
+      return;
+    }
     setLoading(true);
     setResult(null);
     try {
-      // Resolve relative URLs and force the seller to attribute its earn
-      // receipt to the same agent the buyer is spending from, so the
-      // explorer shows both sides.
-      const u = new URL(url, window.location.origin);
-      if (u.pathname === '/api/seller/echo' && !u.searchParams.has('asset')) {
-        u.searchParams.set('asset', agent);
-      }
-      const targetUrl = u.toString();
-
+      const target = new URL(url, window.location.origin).toString();
       const buyer = createBuyer({
-        agent,
+        agent: selectedAgent,
         rules,
         signer,
         networks: ['solana-devnet'],
         rpcUrl: SOLANA_RPC,
         onReceipt: shipReceipt,
       });
-
-      const init: RequestInit = { method };
-      if (method === 'POST' && body) {
-        init.body = body;
-        init.headers = { 'content-type': 'application/json' };
-      }
-      const callResult: BuyerCallResult = await buyer.fetch(targetUrl, init);
-
-      let parsedBody: unknown = null;
+      const headers: Record<string, string> = {};
+      if (method === 'POST' && body) headers['content-type'] = 'application/json';
+      if (callbackUrl.trim()) headers['x-leash-callback'] = callbackUrl.trim();
+      const init: RequestInit = { method, redirect: 'manual' };
+      if (Object.keys(headers).length > 0) init.headers = headers;
+      if (method === 'POST' && body) init.body = body;
+      const callResult: BuyerCallResult = await buyer.fetch(target, init);
       const text = await callResult.response.text();
+      let parsed: unknown = text;
       try {
-        parsedBody = JSON.parse(text);
+        parsed = JSON.parse(text);
       } catch {
-        parsedBody = text;
+        /* leave as text */
       }
+      const h = callResult.response.headers;
       setResult({
         ok: true,
         receipt: callResult.receipt,
-        response: { status: callResult.response.status, body: parsedBody },
+        response: {
+          status: callResult.response.status,
+          body: parsed,
+          leash: {
+            tx_sig: h.get('x-leash-tx-sig') || null,
+            receipt_hash: h.get('x-leash-receipt-hash') || null,
+            agent: h.get('x-leash-agent') || null,
+            tx_explorer: h.get('x-leash-tx-explorer') || null,
+            agent_explorer: h.get('x-leash-agent-explorer') || null,
+            redirected_to: callResult.response.status === 303 ? h.get('location') : null,
+          },
+        },
       });
       setHistory((h) => [callResult.receipt, ...h].slice(0, 25));
     } catch (err) {
@@ -138,13 +186,16 @@ export default function BuyerPage() {
 
   const owner = wallet?.address;
   const ownerShort = owner ? `${owner.slice(0, 4)}…${owner.slice(-4)}` : null;
+  const agentShort = selectedAgent
+    ? `${selectedAgent.slice(0, 4)}…${selectedAgent.slice(-4)}`
+    : null;
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow="@leash/buyer-kit"
-        title="Buyer playground"
-        description="Build a `RulesV1` policy, fire a real x402 SPL-USDC payment from your Privy wallet, and watch the spend receipt land in the explorer."
+        title="Autonomous-agent cockpit"
+        description="Pick one of your agents, point it at any x402 URL on the open internet, and your Privy wallet will sign on its behalf as the registered Executive. Behaviour rules captured at agent creation gate every call."
       />
 
       <Card className="border-warning/40 bg-warning/5">
@@ -161,252 +212,340 @@ export default function BuyerPage() {
             <div className="flex flex-col gap-2 w-full">
               <div className="flex flex-wrap items-center gap-2">
                 <span>
-                  Owner signer <span className="font-mono text-fg">{ownerShort}</span> will sign on
+                  Executive <span className="font-mono text-fg">{ownerShort}</span> signing on
                   behalf of agent{' '}
-                  <span className="font-mono text-fg">
-                    {agent.slice(0, 4)}…{agent.slice(-4)}
-                  </span>
+                  {agentShort ? (
+                    <span className="font-mono text-fg">{agentShort}</span>
+                  ) : (
+                    <em>(none selected)</em>
+                  )}
                   .
                 </span>
                 <Badge variant="brand">solana-devnet</Badge>
                 <Badge variant="success">facilitator.svmacc.tech</Badge>
               </div>
-              <WalletBalanceBadge owner={owner} label="Owner" />
+              <WalletBalanceBadge owner={owner} label="Executive (Privy)" />
+              <span className="text-[11px] text-fg-subtle">
+                Per Metaplex&apos;s{' '}
+                <a
+                  href="https://www.metaplex.com/docs/agents/run-an-agent"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline"
+                >
+                  Run an Agent
+                </a>{' '}
+                docs, your wallet is registered as the agent&apos;s Executive and authorised via an
+                on-chain delegation record. No private keys ever leave the browser.
+              </span>
             </div>
           )}
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Request</CardTitle>
-            <CardDescription>
-              Default targets the built-in <InlineCode>/api/seller/echo</InlineCode> seller — a real{' '}
-              <InlineCode>@leash/seller-kit</InlineCode> middleware that gates with x402 on devnet
-              USDC.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            <Field label="Agent (Core asset mint)">
-              <Input
-                value={agent}
-                onChange={(e) => setAgent(e.target.value)}
-                className="font-mono"
-              />
-            </Field>
-            <Field label="URL">
-              <Input value={url} onChange={(e) => setUrl(e.target.value)} className="font-mono" />
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
+      {agents.length === 0 ? (
+        <Card className="border-warning/40 bg-warning/5">
+          <CardContent className="flex flex-col gap-3 py-4">
+            <p className="text-sm">You don&apos;t have any agents on this device yet.</p>
+            <Button asChild className="w-fit">
+              <Link href="/agents/new">
+                <Plus className="size-4" /> Create agent
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle>Fire an x402 request</CardTitle>
+              <CardDescription>
+                Defaults to the in-app payment-link surface (<InlineCode>/x/&lt;id&gt;</InlineCode>
+                ), but you can paste any x402 URL the agent has budget for.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <Field label="Agent (operator)">
+                <select
+                  value={selectedAgent}
+                  onChange={(e) => setSelectedAgent(e.target.value)}
+                  className="h-9 rounded-md border border-border bg-bg-elev px-3 text-sm"
+                >
+                  {agents.map((a) => (
+                    <option key={a.mint} value={a.mint}>
+                      {a.label ?? `${a.mint.slice(0, 4)}…${a.mint.slice(-4)}`} · {a.network}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="URL">
+                <Input
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  className="font-mono"
+                  placeholder="/x/<id> or https://example.com/x402-route"
+                />
+              </Field>
+
               <Field label="Method">
                 <select
                   value={method}
                   onChange={(e) => setMethod(e.target.value as 'GET' | 'POST')}
-                  className="h-9 rounded-md border border-border bg-bg-elev px-3 text-sm"
+                  className="h-9 rounded-md border border-border bg-bg-elev px-3 text-sm w-32"
                 >
                   <option value="GET">GET</option>
                   <option value="POST">POST</option>
                 </select>
               </Field>
-              <Field label="Per-call ceiling (USDC)">
+
+              {method === 'POST' && (
+                <Field label="Body">
+                  <Textarea value={body} onChange={(e) => setBody(e.target.value)} />
+                </Field>
+              )}
+
+              <Field label="Forward response to (optional)">
                 <Input
-                  value={perCall}
-                  onChange={(e) => setPerCall(e.target.value)}
-                  className="font-mono"
+                  value={callbackUrl}
+                  onChange={(e) => setCallbackUrl(e.target.value)}
+                  type="url"
+                  className="font-mono text-xs"
+                  placeholder="https://your-agent.com/leash-callback"
                 />
+                <span className="text-[11px] text-fg-subtle">
+                  Sent as <InlineCode>x-leash-callback</InlineCode>. After settlement the seller
+                  fires <InlineCode>{'{ payment, response }'}</InlineCode> to this URL — useful for
+                  chaining one agent&rsquo;s output into another.
+                </span>
               </Field>
-            </div>
-            {method === 'POST' && (
-              <Field label="Body">
-                <Textarea value={body} onChange={(e) => setBody(e.target.value)} />
-              </Field>
-            )}
 
-            <Separator />
-
-            <h3 className="text-xs font-medium uppercase tracking-widest text-fg-subtle">
-              RulesV1
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Daily budget (USDC)">
-                <Input
-                  value={daily}
-                  onChange={(e) => setDaily(e.target.value)}
-                  className="font-mono"
-                />
-              </Field>
-              <Field label="Trigger interval (sec)">
-                <Input
-                  type="number"
-                  value={intervalSeconds}
-                  min={1}
-                  onChange={(e) => setIntervalSeconds(Number(e.target.value))}
-                />
-              </Field>
-            </div>
-            <Field label="Allowed hosts (comma-separated)">
-              <Input value={hostsRaw} onChange={(e) => setHostsRaw(e.target.value)} />
-            </Field>
-
-            <Button onClick={fire} disabled={loading || !signer} size="lg">
-              <Send /> {loading ? 'Signing & paying…' : 'Fire request'}
-            </Button>
-          </CardContent>
-        </Card>
-
-        <div className="flex flex-col gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>RulesV1 (live preview)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <JsonViewer data={rules} maxHeight="14rem" />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Latest result</CardTitle>
-              <CardDescription>
-                In the browser we run{' '}
-                <InlineCode>createBuyer({'{ agent, rules, signer }'}).fetch(url)</InlineCode>. The
-                Privy wallet signs the SPL transfer; the seller settles via{' '}
-                <InlineCode>facilitator.svmacc.tech</InlineCode>.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              {!result && (
-                <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-fg-muted">
-                  Fire a request to see a receipt.
+              {allLinks.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <Label>Quick-pick saved payment links</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {allLinks.slice(0, 8).map((ep) => (
+                      <button
+                        key={ep.id}
+                        type="button"
+                        onClick={() => {
+                          setUrl(`/x/${ep.id}`);
+                          setMethod(ep.method);
+                        }}
+                        className="text-[11px] rounded border border-border bg-bg-elev px-2 py-0.5 hover:border-border-strong text-fg-muted hover:text-fg"
+                        title={`${ep.method} /x/${ep.id} · ${ep.price}`}
+                      >
+                        {ep.label} · {ep.price}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
-              {result && !result.ok && <p className="text-sm text-danger">{result.error}</p>}
-              {result && result.ok && (
-                <>
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    Response status:{' '}
-                    <Badge variant={result.response.status < 400 ? 'success' : 'warning'}>
-                      {result.response.status}
-                    </Badge>
-                    <Badge variant={result.receipt.decision === 'allow' ? 'brand' : 'danger'}>
-                      {result.receipt.decision}
-                    </Badge>
-                    <Badge variant="success" className="gap-1">
-                      <Receipt className="size-3" /> spend receipt shipped
-                    </Badge>
-                  </div>
-                  {result.receipt.tx_sig && result.receipt.price?.network && (
-                    <a
-                      href={transactionExplorerUrl(
-                        result.receipt.price.network,
-                        result.receipt.tx_sig,
-                      )}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs text-brand hover:underline w-fit font-mono"
-                    >
-                      <ExternalLink className="size-3" />
-                      Inspect tx {result.receipt.tx_sig.slice(0, 8)}… on Solscan
-                    </a>
+
+              <Separator />
+
+              <div className="flex items-center gap-2">
+                {isLimitlessAgent ? (
+                  <Badge variant="outline" className="gap-1">
+                    <ShieldOff className="size-3" /> limitless
+                  </Badge>
+                ) : (
+                  <Badge variant="brand" className="gap-1">
+                    <Shield className="size-3" /> rules enforced
+                  </Badge>
+                )}
+                <span className="text-[11px] text-fg-muted">
+                  Rules are read from this agent&apos;s record (set at creation).{' '}
+                  {selectedAgent && (
+                    <Link href={`/agents/${selectedAgent}`} className="underline hover:text-fg">
+                      Edit on profile →
+                    </Link>
                   )}
-                  {result.receipt.kind === 'spend' && result.receipt.price && (
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-md border border-border bg-bg-elev/40 px-3 py-2 text-[11px] font-mono">
-                      <SettlementCell label="Amount">
-                        {result.receipt.price.amount} {result.receipt.price.currency}
-                      </SettlementCell>
-                      {result.receipt.price.network && (
-                        <SettlementCell label="Network">
-                          {result.receipt.price.network}
-                        </SettlementCell>
-                      )}
-                      {result.receipt.price.asset && (
-                        <SettlementCell label="Asset">
-                          {result.receipt.price.asset.slice(0, 6)}…
-                          {result.receipt.price.asset.slice(-4)}
-                        </SettlementCell>
-                      )}
-                      {result.receipt.facilitator && (
-                        <SettlementCell label="Facilitator">
-                          {String(result.receipt.facilitator)}
-                        </SettlementCell>
-                      )}
-                      {result.receipt.payment_requirements_hash && (
-                        <SettlementCell label="Reqs hash" colSpan>
-                          {result.receipt.payment_requirements_hash.slice(0, 12)}…
-                        </SettlementCell>
-                      )}
-                    </div>
-                  )}
-                  <Link
-                    href={`/agents/${encodeURIComponent(result.receipt.agent)}`}
-                    className="inline-flex items-center gap-1.5 text-xs text-brand hover:underline w-fit"
-                  >
-                    <ExternalLink className="size-3" /> View receipts for{' '}
-                    <span className="font-mono">
-                      {result.receipt.agent.slice(0, 4)}…{result.receipt.agent.slice(-4)}
-                    </span>{' '}
-                    in the explorer
-                  </Link>
-                  <div>
-                    <Label className="mb-1 block">Receipt</Label>
-                    <JsonViewer data={result.receipt} maxHeight="22rem" />
-                  </div>
-                  <div>
-                    <Label className="mb-1 block">Response body</Label>
-                    <JsonViewer data={result.response.body} maxHeight="14rem" />
-                  </div>
-                </>
-              )}
+                </span>
+              </div>
+
+              <Button onClick={fire} disabled={loading || !signer || !selectedAgent} size="lg">
+                <Send /> {loading ? 'Signing & paying…' : 'Fire request'}
+              </Button>
             </CardContent>
           </Card>
 
-          {history.length > 0 && (
+          <div className="flex flex-col gap-4">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  Session history
-                  <Button variant="ghost" size="sm" onClick={() => setHistory([])}>
-                    <Trash2 className="size-3.5" /> Clear
-                  </Button>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="size-4 text-brand" /> Active RulesV1
                 </CardTitle>
                 <CardDescription>
-                  Receipts from this browser session. Each one was also shipped to the runner via
-                  <InlineCode>onReceipt</InlineCode> (so the explorer feed for the agent fills in
-                  real time).
+                  Effective rules for the selected agent (limitless agents get a wide-open allow-all
+                  preset).
                 </CardDescription>
               </CardHeader>
-              <CardContent className="flex flex-col gap-2">
-                {history.map((r) => (
-                  <div
-                    key={r.receipt_hash}
-                    className="flex items-center gap-2 text-xs font-mono text-fg-muted"
-                  >
-                    <Badge variant={r.decision === 'allow' ? 'success' : 'danger'}>
-                      {r.decision}
-                    </Badge>
-                    <span className="truncate">
-                      {r.request.method} {r.request.url}
-                    </span>
-                    {r.tx_sig && r.price?.network && (
-                      <a
-                        href={transactionExplorerUrl(r.price.network, r.tx_sig)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-brand hover:underline"
-                      >
-                        {r.tx_sig.slice(0, 6)}…
-                      </a>
-                    )}
-                    <span className="ml-auto text-fg-subtle">#{r.nonce}</span>
-                  </div>
-                ))}
+              <CardContent>
+                <JsonViewer data={rules} maxHeight="14rem" />
               </CardContent>
             </Card>
-          )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Latest result</CardTitle>
+                <CardDescription>
+                  Browser-side <InlineCode>createBuyer().fetch(url)</InlineCode>. Privy signs the
+                  SPL transfer; <InlineCode>facilitator.svmacc.tech</InlineCode> settles.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                {!result && (
+                  <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-fg-muted">
+                    Fire a request to see a receipt.
+                  </div>
+                )}
+                {result && !result.ok && <p className="text-sm text-danger">{result.error}</p>}
+                {result && result.ok && <ResultPanel result={result} />}
+              </CardContent>
+            </Card>
+
+            {history.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    Session history
+                    <Button variant="ghost" size="sm" onClick={() => setHistory([])}>
+                      <Trash2 className="size-3.5" /> Clear
+                    </Button>
+                  </CardTitle>
+                  <CardDescription>
+                    Receipts from this browser session, also shipped to the runner via{' '}
+                    <InlineCode>onReceipt</InlineCode>.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-2">
+                  {history.map((r) => (
+                    <div
+                      key={r.receipt_hash}
+                      className="flex items-center gap-2 text-xs font-mono text-fg-muted"
+                    >
+                      <Badge variant={r.decision === 'allow' ? 'success' : 'danger'}>
+                        {r.decision}
+                      </Badge>
+                      <span className="truncate">
+                        {r.request.method} {r.request.url}
+                      </span>
+                      {r.tx_sig && r.price?.network && (
+                        <a
+                          href={transactionExplorerUrl(r.price.network, r.tx_sig)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-brand hover:underline"
+                        >
+                          {r.tx_sig.slice(0, 6)}…
+                        </a>
+                      )}
+                      <span className="ml-auto text-fg-subtle">#{r.nonce}</span>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {allLinks.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe2 className="size-4 text-brand" /> All discoverable payment links
+            </CardTitle>
+            <CardDescription>
+              Every payment link the runner knows about. Pick one above to load it into the
+              firing-line.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {allLinks.map((ep) => (
+              <Link
+                key={ep.id}
+                href={`/x/${ep.id}`}
+                target="_blank"
+                className="rounded border border-border bg-bg-elev px-2 py-1 text-xs hover:border-border-strong"
+              >
+                <Badge variant="brand" className="mr-1">
+                  {ep.method}
+                </Badge>
+                <span className="font-mono">/x/{ep.id}</span> · {ep.price}{' '}
+                <ExternalLink className="size-3 inline" />
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
+  );
+}
+
+function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) {
+  const leash = result.response.leash;
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        Response status:{' '}
+        <Badge variant={result.response.status < 400 ? 'success' : 'warning'}>
+          {result.response.status}
+        </Badge>
+        <Badge variant={result.receipt.decision === 'allow' ? 'brand' : 'danger'}>
+          {result.receipt.decision}
+        </Badge>
+        <Badge variant="success" className="gap-1">
+          <Receipt className="size-3" /> spend receipt shipped
+        </Badge>
+        {leash.redirected_to && (
+          <Badge variant="outline" className="gap-1" title={leash.redirected_to}>
+            ↳ redirected
+          </Badge>
+        )}
+      </div>
+      {result.receipt.tx_sig && result.receipt.price?.network && (
+        <a
+          href={transactionExplorerUrl(result.receipt.price.network, result.receipt.tx_sig)}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs text-brand hover:underline w-fit font-mono"
+        >
+          <ExternalLink className="size-3" />
+          Inspect tx {result.receipt.tx_sig.slice(0, 8)}… on Solscan
+        </a>
+      )}
+      {leash.redirected_to && (
+        <a
+          href={leash.redirected_to}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs text-brand hover:underline w-fit font-mono"
+          title={leash.redirected_to}
+        >
+          <ExternalLink className="size-3" /> Follow seller redirect →
+        </a>
+      )}
+      <Link
+        href={`/agents/${encodeURIComponent(result.receipt.agent)}`}
+        className="inline-flex items-center gap-1.5 text-xs text-brand hover:underline w-fit"
+      >
+        <Bot className="size-3" /> View receipts for this agent
+      </Link>
+      <div>
+        <Label className="mb-1 block">Leash response headers (X-Leash-*)</Label>
+        <JsonViewer data={leash} maxHeight="10rem" />
+      </div>
+      <div>
+        <Label className="mb-1 block">Receipt</Label>
+        <JsonViewer data={result.receipt} maxHeight="22rem" />
+      </div>
+      <div>
+        <Label className="mb-1 block">Response body</Label>
+        <JsonViewer data={result.response.body} maxHeight="14rem" />
+      </div>
+    </>
   );
 }
 
@@ -415,23 +554,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="flex flex-col gap-1.5">
       <Label>{label}</Label>
       {children}
-    </div>
-  );
-}
-
-function SettlementCell({
-  label,
-  children,
-  colSpan,
-}: {
-  label: string;
-  children: React.ReactNode;
-  colSpan?: boolean;
-}) {
-  return (
-    <div className={colSpan ? 'col-span-2' : undefined}>
-      <span className="text-fg-subtle">{label}: </span>
-      <span className="text-fg">{children}</span>
     </div>
   );
 }

@@ -1,5 +1,12 @@
 # `@leash/buyer-demo`
 
+> **Headless path.** This CLI is for unattended runners (TEEs, server
+> workers, GitHub-Actions cron). The hosted browser playground at
+> `apps/web/buyer` does the same thing but signs through the user's Privy
+> embedded wallet acting as the agent's registered Executive (per
+> Metaplex's [Run an Agent docs](https://www.metaplex.com/docs/agents/run-an-agent)),
+> so no private key ever leaves the browser.
+
 A small Node CLI that loops a real x402 buyer against a seller endpoint
 (`POST /tag` by default) on **Solana devnet**. Each tick:
 

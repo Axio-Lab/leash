@@ -32,6 +32,7 @@ import { jsonFetcher } from '@/lib/fetcher';
 import { usePrivyUmi } from '@/lib/privy-umi';
 import { delegateExecution, registerExecutive } from '@leash/registry-utils';
 import { transactionExplorerUrl } from '@/lib/solscan';
+import { loadAgent, type StoredAgent } from '@/lib/agent-storage';
 
 type FeedRes = {
   mint: string;
@@ -43,6 +44,10 @@ export default function AgentPage() {
   const params = useParams<{ mint: string }>();
   const mint = decodeURIComponent(params.mint);
   const [registryUri, setRegistryUri] = React.useState('');
+  const [localRecord, setLocalRecord] = React.useState<StoredAgent | null>(null);
+  React.useEffect(() => {
+    if (mint) setLocalRecord(loadAgent(mint));
+  }, [mint]);
 
   const { data: feed } = useSWR<FeedRes>(mint ? `/api/receipts/${mint}` : null, jsonFetcher, {
     refreshInterval: 4000,
@@ -369,6 +374,81 @@ export default function AgentPage() {
         </CardContent>
       </Card>
 
+      {localRecord && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShieldCheck className="size-4 text-brand" /> Behaviour rules
+            </CardTitle>
+            <CardDescription>
+              The buyer cockpit enforces these rules every time this agent makes an x402 call. Set
+              at agent creation and persisted on this device alongside the agent label.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {localRecord.rules === null ? (
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">limitless</Badge>
+                <span className="text-sm text-fg-muted">
+                  No budget caps · all hosts allowed · no scheduled triggers.
+                </span>
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-md border border-border bg-bg-elev/40 p-3">
+                  <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
+                    Daily budget
+                  </span>
+                  <div className="font-mono text-sm">
+                    {localRecord.rules.budget.daily} {localRecord.rules.budget.currency}
+                  </div>
+                </div>
+                <div className="rounded-md border border-border bg-bg-elev/40 p-3">
+                  <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
+                    Per-call cap
+                  </span>
+                  <div className="font-mono text-sm">
+                    {localRecord.rules.budget.perCall} {localRecord.rules.budget.currency}
+                  </div>
+                </div>
+                <div className="rounded-md border border-border bg-bg-elev/40 p-3 md:col-span-2">
+                  <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
+                    Allowed hosts
+                  </span>
+                  <div className="font-mono text-xs break-all">
+                    {localRecord.rules.hosts.allow?.length
+                      ? localRecord.rules.hosts.allow.join(', ')
+                      : 'any'}
+                  </div>
+                </div>
+                {localRecord.rules.triggers.length > 0 && (
+                  <div className="rounded-md border border-border bg-bg-elev/40 p-3 md:col-span-2">
+                    <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
+                      Triggers
+                    </span>
+                    <JsonViewer data={localRecord.rules.triggers} maxHeight="8rem" />
+                  </div>
+                )}
+              </div>
+            )}
+            <span className="text-[11px] text-fg-subtle">
+              The Privy wallet you used to mint this agent is its <strong>owner</strong>. To make it
+              act, register that wallet as an Executive and delegate execution in the{' '}
+              <em>Execute (delegation)</em> tab below — see Metaplex&apos;s{' '}
+              <a
+                href="https://www.metaplex.com/docs/agents/run-an-agent"
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand hover:underline"
+              >
+                Run an Agent
+              </a>{' '}
+              docs.
+            </span>
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs defaultValue="receipts">
         <TabsList>
           <TabsTrigger value="receipts">Receipts</TabsTrigger>
@@ -476,12 +556,22 @@ export default function AgentPage() {
                 <KeyRound className="size-4 text-brand" /> Executive delegation
               </CardTitle>
               <CardDescription>
-                Per the Metaplex docs, an asset's built-in wallet (Asset Signer PDA) can only act
-                via Core's <code className="font-mono">Execute</code> hook. The asset owner
-                delegates execution to a registered <strong>executive</strong>; that executive's
-                wallet then signs <code className="font-mono">Execute</code> instructions on the
-                agent's behalf. Both calls below are signed by{' '}
-                <strong>your connected Privy wallet</strong>.
+                Per the{' '}
+                <a
+                  href="https://www.metaplex.com/docs/agents/run-an-agent"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-brand hover:underline"
+                >
+                  Metaplex Run-an-Agent guide
+                </a>
+                , an asset's built-in wallet (Asset Signer PDA) can only act via Core's{' '}
+                <code className="font-mono">Execute</code> hook. The asset owner delegates execution
+                to a registered <strong>executive</strong>; that executive's wallet then signs{' '}
+                <code className="font-mono">Execute</code> instructions on the agent's behalf. Both
+                calls below are signed in your browser by your{' '}
+                <strong>Privy embedded wallet</strong> — the secret never leaves the device and the
+                playground server never holds a key for your account.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
@@ -575,10 +665,15 @@ export default function AgentPage() {
                 </div>
               )}
               <p className="text-xs text-fg-subtle leading-relaxed">
-                What's <em>not</em> here yet: composing the actual{' '}
-                <code className="font-mono">mpl-core Execute</code> instruction (e.g. SPL{' '}
-                <code className="font-mono">transferChecked</code> from the treasury). That ships in
-                the next patch as <code className="font-mono">@leash/core/treasury/withdraw</code>.
+                <strong>SDK status</strong> —{' '}
+                <code className="font-mono">@leash/registry-utils</code> mirrors the Metaplex
+                guide's `registerExecutiveV1`, `delegateExecutionV1`, and{' '}
+                <code className="font-mono">verifyDelegation</code> snippets one-for-one. Once
+                delegation lands, the executive can sign Core{' '}
+                <code className="font-mono">Execute</code> ixs on the agent's behalf. The actual
+                <code className="font-mono"> mpl-core Execute</code> composition (e.g. SPL{' '}
+                <code className="font-mono">transferChecked</code> from the treasury) ships next as{' '}
+                <code className="font-mono">@leash/core/treasury/withdraw</code>.
               </p>
             </CardContent>
           </Card>
