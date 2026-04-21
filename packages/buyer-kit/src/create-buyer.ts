@@ -1,4 +1,4 @@
-import type { RulesV1 } from '@leash/schemas';
+import type { ReceiptV1, RulesV1 } from '@leash/schemas';
 import { evaluate, finalizeReceipt, x402Fetch, requestHash, type PolicyState } from '@leash/core';
 
 export type BuyerConfig = {
@@ -6,6 +6,13 @@ export type BuyerConfig = {
   rules: RulesV1;
   /** Initial spent today (decimal string). */
   spentToday?: string;
+  /**
+   * Called with every finalized receipt (allowed and denied). Use this to
+   * ship receipts to the Leash runner — e.g.
+   * `onReceipt: (r) => fetch(`${RUNNER}/a/${r.agent}/receipts`, { method: 'POST', body: JSON.stringify(r) })`.
+   * Errors thrown here are swallowed so a runner outage never breaks a buyer call.
+   */
+  onReceipt?: (receipt: ReceiptV1) => void | Promise<void>;
 };
 
 export type Buyer = {
@@ -50,6 +57,7 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
           prev_receipt_hash: null,
         };
         const receipt = finalizeReceipt(draft);
+        await emitReceipt(cfg.onReceipt, receipt);
         return {
           response: new Response(JSON.stringify({ error: pol.reason }), { status: 403 }),
           receipt,
@@ -76,7 +84,17 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
         prev_receipt_hash: null,
       };
       const receipt = finalizeReceipt(draft);
+      await emitReceipt(cfg.onReceipt, receipt);
       return { response: result.response, receipt };
     },
   };
+}
+
+async function emitReceipt(onReceipt: BuyerConfig['onReceipt'], receipt: ReceiptV1): Promise<void> {
+  if (!onReceipt) return;
+  try {
+    await onReceipt(receipt);
+  } catch {
+    // Intentionally swallowed: a runner outage must not surface as a buyer-side error.
+  }
 }

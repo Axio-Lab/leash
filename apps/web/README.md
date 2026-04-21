@@ -28,7 +28,8 @@ the UI calls the runner from the **Next server**, which still defaults to port *
 | `/`                        | Dashboard: runner kill-switch state, env, jump links.                                       |
 | `/runner`                  | Live tail of `receipts.jsonl` for any agent mint, with poll interval.                       |
 | `/agents`                  | Track Core asset mints locally; click into a profile.                                       |
-| `/agents/[mint]`           | Treasury PDA, earn/spend totals, receipt feed, registration document.                       |
+| `/agents/new`              | Mint + register a new agent in one tx, signed by the connected Privy wallet.                |
+| `/agents/[mint]`           | Identity, treasury (SOL + SPL tokens), earn/spend totals, receipt feed, exec delegation.    |
 | `/seller`                  | Hits a built-in `simpleX402Gate`-shaped echo route; toggle `x-payment` to see 402 vs allow. |
 | `/buyer`                   | Build a `RulesV1` doc, fire `createBuyer().fetch(...)`, render the resulting receipt.       |
 | `/schemas`                 | Live Zod validator for `ReceiptV1`, `RulesV1`, `RegistrationV1`, `LeashBlockV1`.            |
@@ -46,12 +47,23 @@ All wrap the SDK packages so the browser never touches Node-only code.
 - `GET /api/seller/payTo?asset=…` → `resolveSellerPayTo` (Asset Signer PDA)
 - `GET /api/registry/resolve?uri=…` → `@leash/registry-utils` `resolveByoUri`
 - `POST /api/schemas/validate` → live Zod schemas from `@leash/schemas`
+- `GET /api/agents/identity?asset=…` → MIP-104 status, owner, AgentIdentity URI
+- `GET /api/agents/balance?asset=…` → SOL + SPL (Token + Token-2022) for the Asset Signer PDA
+- `GET /api/agents/executive?asset=…&authority=…` → executive registration + delegation status (read-only)
+- `POST /api/agents/create`, `POST /api/agents/executive` → **server-side fallback only**, requires `LEASH_DEV_PAYER_SECRET_KEY`. The browser playground signs both flows directly with the Privy wallet via `lib/privy-umi.ts`.
 
-## Auth
+## Auth & signing
 
 Wallet auth is via [Privy](https://privy.io) (Solana embedded wallet + external
 wallet support). When `NEXT_PUBLIC_PRIVY_APP_ID` is unset the app still loads,
 but the topbar shows a "Privy not configured" badge.
+
+The Privy `ConnectedSolanaWallet` is also the **on-chain signer** for every
+playground action (`createAgent`, `registerExecutiveV1`, `delegateExecutionV1`).
+The bridge lives in `lib/privy-umi.ts` — `usePrivyUmi()` returns a Umi instance
+whose `identity` is the connected wallet (via Metaplex's `walletAdapterIdentity`
+plugin). Fund the embedded wallet on devnet (`solana airdrop 1 <pubkey> --url devnet`)
+before minting.
 
 ### Email login not working
 

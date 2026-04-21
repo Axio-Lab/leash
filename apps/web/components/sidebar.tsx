@@ -11,6 +11,7 @@ import {
   Send,
   FileJson2,
   ExternalLink,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
@@ -18,6 +19,7 @@ const NAV: Array<{ href: string; label: string; icon: React.ElementType; group: 
   { href: '/', label: 'Dashboard', icon: LayoutDashboard, group: 'Overview' },
   { href: '/runner', label: 'Runner', icon: Activity, group: 'Overview' },
   { href: '/agents', label: 'Agents', icon: Bot, group: 'Build' },
+  { href: '/agents/new', label: 'Create agent', icon: Sparkles, group: 'Build' },
   { href: '/seller', label: 'Seller playground', icon: ShoppingBag, group: 'Build' },
   { href: '/buyer', label: 'Buyer playground', icon: Send, group: 'Build' },
   { href: '/schemas', label: 'Schemas', icon: FileJson2, group: 'Tools' },
@@ -47,7 +49,16 @@ export function Sidebar() {
             </span>
             {NAV.filter((item) => item.group === group).map((item) => {
               const Icon = item.icon;
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const hasMoreSpecific = NAV.some(
+                (other) =>
+                  other.href !== item.href &&
+                  other.href.startsWith(`${item.href}/`) &&
+                  (pathname === other.href || pathname.startsWith(`${other.href}/`)),
+              );
+              const active =
+                !hasMoreSpecific &&
+                (pathname === item.href ||
+                  (item.href !== '/' && pathname.startsWith(`${item.href}/`)));
               return (
                 <Link
                   key={item.href}

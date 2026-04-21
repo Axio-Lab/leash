@@ -37,6 +37,7 @@
           {
             "group": "Guides",
             "pages": [
+              "guides/create-an-agent",
               "guides/build-a-seller",
               "guides/build-a-buyer",
               "guides/build-a-merged-agent",

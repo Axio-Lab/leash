@@ -1,7 +1,9 @@
 import { createBuyer } from '@leash/buyer-kit';
+import type { ReceiptV1 } from '@leash/schemas';
 
 const sellerUrl = process.env.SELLER_URL ?? 'http://localhost:3001';
-const agent = process.env.AGENT_ASSET ?? 'BuyerDemoAgent1111111111111111111111';
+const runnerUrl = process.env.RUNNER_URL ?? 'http://localhost:8787';
+const agent = process.env.AGENT_ASSET ?? '11111111111111111111111111111111';
 const intervalMs = Number(process.env.POLL_MS ?? 30_000);
 
 const rules = {
@@ -13,16 +15,24 @@ const rules = {
   triggers: [{ type: 'interval' as const, seconds: intervalMs / 1000 }],
 };
 
-const buyer = createBuyer({ agent, rules });
+async function postReceipt(r: ReceiptV1): Promise<void> {
+  await fetch(`${runnerUrl}/a/${r.agent}/receipts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(r),
+  });
+}
+
+const buyer = createBuyer({ agent, rules, onReceipt: postReceipt });
 
 async function tick(): Promise<void> {
-  const { response } = await buyer.fetch(`${sellerUrl}/tag`, {
+  const { response, receipt } = await buyer.fetch(`${sellerUrl}/tag`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ts: Date.now() }),
   });
   // eslint-disable-next-line no-console
-  console.log('buyer tick', response.status);
+  console.log('buyer tick', response.status, receipt.decision, receipt.receipt_hash.slice(0, 8));
 }
 
 void tick();

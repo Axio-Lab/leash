@@ -1,6 +1,28 @@
 import { describe, expect, it } from 'vitest';
-import { appendLine, createMemoryStore } from '../src/storage/memory.js';
+import { finalizeReceipt } from '@leash/core';
+import { appendLine, createMemoryStore, listLines } from '../src/storage/memory.js';
 import { createHttpServer } from '../src/http/server.js';
+
+const MINT = '11111111111111111111111111111111';
+
+function sampleReceipt() {
+  return finalizeReceipt({
+    v: '0.1',
+    kind: 'spend',
+    agent: MINT,
+    nonce: 0,
+    ts: '2025-01-01T00:00:00.000Z',
+    policy_v: '0.1',
+    request: { method: 'POST', url: 'http://localhost/echo', body_hash: null },
+    decision: 'allow',
+    reason: null,
+    price: { amount: '0.01', currency: 'USDC' },
+    facilitator: 'local',
+    tx_sig: null,
+    response: { status: 200, body_hash: null },
+    prev_receipt_hash: null,
+  });
+}
 
 describe('runner http', () => {
   it('serves jsonl', async () => {
@@ -26,5 +48,49 @@ describe('runner http', () => {
     const h = (await health.json()) as { ok: boolean; paused: boolean };
     expect(h.paused).toBe(true);
     expect(h.ok).toBe(false);
+  });
+
+  it('accepts a valid ReceiptV1 via POST and exposes it on the jsonl feed', async () => {
+    const store = createMemoryStore();
+    const app = createHttpServer(store);
+    const receipt = sampleReceipt();
+
+    const post = await app.request(`http://localhost/a/${MINT}/receipts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(receipt),
+    });
+    expect(post.status).toBe(200);
+    const body = (await post.json()) as { ok: boolean; receipt_hash: string };
+    expect(body.ok).toBe(true);
+    expect(body.receipt_hash).toBe(receipt.receipt_hash);
+
+    expect(listLines(store, MINT)).toHaveLength(1);
+
+    const get = await app.request(`http://localhost/a/${MINT}/receipts.jsonl`);
+    const text = await get.text();
+    expect(text).toContain(receipt.receipt_hash);
+  });
+
+  it('rejects a receipt with invalid shape', async () => {
+    const app = createHttpServer(createMemoryStore());
+    const post = await app.request(`http://localhost/a/${MINT}/receipts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ not: 'a receipt' }),
+    });
+    expect(post.status).toBe(422);
+  });
+
+  it('rejects a receipt whose agent does not match the URL mint', async () => {
+    const app = createHttpServer(createMemoryStore());
+    const receipt = sampleReceipt(); // agent = MINT
+    const otherMint = '22222222222222222222222222222222';
+    const post = await app.request(`http://localhost/a/${otherMint}/receipts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(receipt),
+    });
+    expect(post.status).toBe(422);
   });
 });

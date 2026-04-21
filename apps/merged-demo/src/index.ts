@@ -4,10 +4,12 @@ import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
 import { createSeller } from '@leash/seller-kit';
 import { createBuyer } from '@leash/buyer-kit';
+import type { ReceiptV1 } from '@leash/schemas';
 
 const port = Number(process.env.PORT ?? 3003);
 const rpc = process.env.SOLANA_RPC ?? 'https://api.devnet.solana.com';
 const asset = process.env.AGENT_ASSET ?? '11111111111111111111111111111111';
+const runnerUrl = process.env.RUNNER_URL ?? 'http://localhost:8787';
 
 const umi = createUmi(rpc).use(mplCore());
 const app = new Hono();
@@ -16,9 +18,18 @@ createSeller(app, {
   umi,
   sellerAgent: { asset },
   routes: { 'POST /echo': { price: '$0.001', description: 'Echo' } },
+  onReceipt: postReceipt,
 });
 
 app.post('/echo', (c) => c.json({ echo: true }));
+
+async function postReceipt(r: ReceiptV1): Promise<void> {
+  await fetch(`${runnerUrl}/a/${r.agent}/receipts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(r),
+  });
+}
 
 const buyer = createBuyer({
   agent: asset,
@@ -28,6 +39,7 @@ const buyer = createBuyer({
     hosts: { allow: ['127.0.0.1', 'localhost'] },
     triggers: [{ type: 'interval', seconds: 20 }],
   },
+  onReceipt: postReceipt,
 });
 
 setInterval(() => {

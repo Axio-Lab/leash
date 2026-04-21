@@ -1,10 +1,21 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { RulesV1Schema } from '@leash/schemas';
+import { RulesV1Schema, type ReceiptV1 } from '@leash/schemas';
 import { createBuyer } from '@leash/buyer-kit';
+import { RUNNER_URL } from '@/lib/env';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+async function shipReceipt(receipt: ReceiptV1): Promise<void> {
+  // Ship to the runner so the explorer feed picks it up. Fire-and-forget;
+  // failures are intentionally swallowed inside `createBuyer`.
+  await fetch(`${RUNNER_URL}/a/${receipt.agent}/receipts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(receipt),
+  });
+}
 
 const Body = z.object({
   agent: z.string().min(1),
@@ -29,7 +40,11 @@ export async function POST(req: Request) {
   }
 
   try {
-    const buyer = createBuyer({ agent: payload.agent, rules: payload.rules });
+    const buyer = createBuyer({
+      agent: payload.agent,
+      rules: payload.rules,
+      onReceipt: shipReceipt,
+    });
     const init: RequestInit = { method: payload.method };
     if (payload.body && payload.method !== 'GET') {
       init.body = payload.body;

@@ -3,6 +3,16 @@ title: Agent
 description: One MPL Core asset. One Asset Signer treasury. Two capabilities.
 ---
 
-A Leash agent is a **single MPL Core asset**. Its identity (registration JSON), treasury (Asset Signer PDA), and policy (`leash` block + `RulesV1` doc) all hang off that one mint. Buyer and seller are _capabilities_ layered on top of the same asset; an agent can do either, both, or neither at any time.
+A Leash agent is a **single MPL Core asset** that follows Metaplex's [MIP-104 / Agent Identity](https://www.metaplex.com/docs/agents/mint-agent) standard. Its identity (registration JSON), treasury (Asset Signer PDA), and policy (`leash` block + `RulesV1` doc) all hang off that one mint. Buyer and seller are _capabilities_ layered on top of the same asset; an agent can do either, both, or neither at any time.
 
-See `@leash/core` `Agent` and `treasuryPda` for the runtime surface.
+## Lifecycle
+
+1. **Create** — mint a Core asset and attach an `AgentIdentity` plugin in one tx. Use `createAgent` from `@leash/registry-utils` (see [Create an agent](/guides/create-an-agent)) or the BYO equivalent (`createCollection` → `create` → `registerAgentIdentity`).
+2. **Read** — `getAgentIdentityStatus(umi, asset)` returns whether the identity is registered and the agent's treasury PDA. The on-chain registration URI lives on the `AgentIdentity` plugin and points to off-chain JSON.
+3. **Run** — to let an executive submit transactions for the agent, call `registerExecutive` once per wallet, then `delegateExecution` per asset. The executive then signs Core `Execute` instructions on the agent's behalf.
+
+## Runtime surface
+
+- `@leash/core` — `Agent`, `treasuryPda`, policy + receipt machinery.
+- `@leash/registry-utils` — `createAgent`, `getAgentIdentityStatus`, `registerExecutive`, `delegateExecution`, plus Pinata + ERC-8004 helpers.
+- `@leash/seller-kit` / `@leash/buyer-kit` — capability layers over the same asset.

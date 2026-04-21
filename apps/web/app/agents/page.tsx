@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Plus, Bot, Trash2, ExternalLink } from 'lucide-react';
+import { Plus, Bot, Trash2, ExternalLink, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -73,15 +73,29 @@ export default function AgentsPage() {
       <PageHeader
         eyebrow="@leash/registry-utils"
         title="Agents"
-        description="Track Core asset mints you're working with. Stored locally — no server state. Open one to see its profile and receipt feed."
+        description="Mint a fresh Agent Identity (MIP-104) or paste an existing Core asset mint to track it. Stored locally — no server state. Open one to see its profile, treasury, and receipt feed."
+        actions={
+          <Button asChild>
+            <Link href="/agents/new">
+              <Sparkles /> Create agent
+            </Link>
+          </Button>
+        }
       />
 
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Plus className="size-4 text-brand" /> Track an agent
+            <Plus className="size-4 text-brand" /> Track an existing agent
           </CardTitle>
-          <CardDescription>Paste a Core asset mint to add it to your list.</CardDescription>
+          <CardDescription>
+            Already have a Core asset mint? Paste it to add it to your list. To mint a brand-new
+            agent, use{' '}
+            <Link href="/agents/new" className="text-brand hover:underline">
+              Create agent
+            </Link>
+            .
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-[1fr_1fr_auto_auto] md:items-end">
           <div className="flex flex-col gap-1.5">

@@ -51,13 +51,27 @@ export default function BuyerPage() {
     setLoading(true);
     setResult(null);
     try {
+      // When firing at the built-in seller, attribute the seller's earn
+      // receipt to the same agent the user is exploring so /agents/[mint]
+      // shows both spend + earn sides of the trade.
+      let targetUrl = url;
+      try {
+        const u = new URL(url, window.location.origin);
+        if (u.pathname === '/api/seller/echo' && !u.searchParams.has('asset')) {
+          u.searchParams.set('asset', agent);
+          targetUrl = u.toString();
+        }
+      } catch {
+        /* invalid URL — let the server reject it */
+      }
+
       const res = await fetch('/api/buyer/fire', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           agent,
           rules,
-          url,
+          url: targetUrl,
           method,
           body: method === 'POST' ? body : undefined,
         }),

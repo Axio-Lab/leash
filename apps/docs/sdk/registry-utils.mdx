@@ -3,8 +3,29 @@ title: '@leash/registry-utils'
 description: Pinata uploads, BYO URI resolution, leash-block helpers.
 ---
 
+### Create / register
+
+- `createAgent(umi, input, config?)` — one-shot mint: calls Metaplex's `mintAndSubmitAgent`. Creates a Core asset and registers its Agent Identity in a single transaction. See the [Create an agent](/guides/create-an-agent) guide.
+- `prepareAgentMint(umi, input, config?)` / `sendPreparedAgentMint(umi, prepared)` — two-step variant for priority fees, hardware wallets, custom retries.
+- `registerAgentIdentity(umi, { asset, collection, agentRegistrationUri })` — BYO flow: attaches an Agent Identity plugin to a Core asset you already minted.
+
+### Read
+
+- `getAgentIdentityStatus(umi, asset)` — returns `{ registered, treasury, account? }`. Uses `safeFetchAgentIdentityV1FromSeeds` so unregistered assets return `registered: false` instead of throwing.
+- `getAgentTreasury(context, asset)` — derives the Asset Signer PDA (the agent's built-in wallet).
+- `loadAgentRegistration(uri)` / `loadRegistrationDocument(uri)` — fetch + Zod-validate `RegistrationV1`.
+
+### Execute (delegation)
+
+- `registerExecutive(umi)` — one-time `registerExecutiveV1` for `umi.identity`.
+- `hasExecutiveProfile(umi, authority)` — does an `ExecutiveProfileV1` exist for that wallet?
+- `delegateExecution(umi, { agentAsset, executiveAuthority })` — `delegateExecutionV1`. The signer must be the asset owner.
+- `isExecutionDelegated(umi, { agentAsset, executiveAuthority })` — checks for the `ExecutionDelegateRecordV1` PDA.
+
+### Off-chain hosting
+
 - `pinJson(json, opts?)` — uploads to Pinata; `PINATA_JWT` from env.
 - `resolveByoUri(uri)` — fetches + validates `RegistrationV1`.
 - `resolveOrUpload({ uri | json })` — combined entrypoint.
 - `verifyGatewayCid(gatewayUrl)` — HTTP 200 smoke check (full CIDv1 verify lands in v0.2).
-- `loadRegistrationDocument`, `registerAgentIdentity` — registration JSON helpers.
+- `parseLeashBlock(input)` — Zod parse helper for `LeashBlockV1`.
