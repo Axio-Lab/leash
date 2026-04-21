@@ -33,6 +33,7 @@ import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { keypairIdentity, publicKey, type Umi } from '@metaplex-foundation/umi';
 import { base58 } from '@metaplex-foundation/umi/serializers';
 import { mplCore } from '@metaplex-foundation/mpl-core';
+import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
 import {
   setSpendDelegation,
   revokeSpendDelegation,
@@ -60,7 +61,7 @@ describeOrSkip('SPL spend delegation (devnet)', () => {
   const agentAsset = process.env.LEASH_TEST_AGENT_ASSET as string;
 
   beforeAll(() => {
-    umi = createUmi(RPC).use(mplCore());
+    umi = createUmi(RPC).use(mplCore()).use(mplToolbox());
     const secret = decodeSecretKey(process.env.LEASH_TEST_PAYER_SECRET_KEY as string);
     const kp = umi.eddsa.createKeypairFromSecretKey(secret);
     umi.use(keypairIdentity(kp));

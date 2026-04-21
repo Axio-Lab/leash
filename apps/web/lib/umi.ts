@@ -5,6 +5,7 @@ import { keypairIdentity, publicKey, type PublicKey, type Umi } from '@metaplex-
 import { base58 } from '@metaplex-foundation/umi/serializers';
 import { mplAgentIdentity, mplAgentTools } from '@metaplex-foundation/mpl-agent-registry';
 import { mplCore } from '@metaplex-foundation/mpl-core';
+import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
 import { SOLANA_RPC } from './env';
 
 /**
@@ -38,7 +39,11 @@ export function getServerUmi(): Umi {
     );
   }
   const secretKey = decodeSecretKey(secret);
-  const umi = createUmi(SOLANA_RPC).use(mplCore()).use(mplAgentIdentity()).use(mplAgentTools());
+  const umi = createUmi(SOLANA_RPC)
+    .use(mplCore())
+    .use(mplToolbox())
+    .use(mplAgentIdentity())
+    .use(mplAgentTools());
   const keypair = umi.eddsa.createKeypairFromSecretKey(secretKey);
   umi.use(keypairIdentity(keypair));
   return umi;
@@ -46,7 +51,11 @@ export function getServerUmi(): Umi {
 
 /** Read-only Umi (no identity) for fetching accounts. */
 export function getReadOnlyUmi(): Umi {
-  return createUmi(SOLANA_RPC).use(mplCore()).use(mplAgentIdentity()).use(mplAgentTools());
+  return createUmi(SOLANA_RPC)
+    .use(mplCore())
+    .use(mplToolbox())
+    .use(mplAgentIdentity())
+    .use(mplAgentTools());
 }
 
 export function asPublicKey(s: string): PublicKey {

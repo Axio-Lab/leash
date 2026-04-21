@@ -7,6 +7,7 @@ import { walletAdapterIdentity } from '@metaplex-foundation/umi-signer-wallet-ad
 import type { Umi } from '@metaplex-foundation/umi';
 import { mplCore } from '@metaplex-foundation/mpl-core';
 import { mplAgentIdentity, mplAgentTools } from '@metaplex-foundation/mpl-agent-registry';
+import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
 import { PublicKey } from '@solana/web3.js';
 import { SOLANA_RPC } from './env';
 
@@ -40,6 +41,7 @@ export function usePrivyUmi(): {
     };
     return createUmi(SOLANA_RPC)
       .use(mplCore())
+      .use(mplToolbox())
       .use(mplAgentIdentity())
       .use(mplAgentTools())
       .use(walletAdapterIdentity(adapter));

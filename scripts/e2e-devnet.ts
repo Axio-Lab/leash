@@ -55,6 +55,7 @@ import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { keypairIdentity } from '@metaplex-foundation/umi';
 import { base58 } from '@metaplex-foundation/umi/serializers';
 import { mplCore } from '@metaplex-foundation/mpl-core';
+import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
 
 import { createBuyer } from '@leash/buyer-kit';
 import { createSeller } from '@leash/seller-kit';
@@ -94,7 +95,7 @@ async function main(): Promise<void> {
   const signer = await createKeyPairSignerFromBytes(secret);
   const executive = String(signer.address);
 
-  const umi = createUmi(RPC).use(mplCore());
+  const umi = createUmi(RPC).use(mplCore()).use(mplToolbox());
   umi.use(keypairIdentity(umi.eddsa.createKeypairFromSecretKey(secret)));
 
   console.log('───── leash devnet e2e ─────');
@@ -139,7 +140,7 @@ async function main(): Promise<void> {
   }
 
   // ---- In-process seller ----
-  const sellerUmi = createUmi(RPC).use(mplCore());
+  const sellerUmi = createUmi(RPC).use(mplCore()).use(mplToolbox());
   const app = new Hono();
   createSeller(app, {
     umi: sellerUmi,

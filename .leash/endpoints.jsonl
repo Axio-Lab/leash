@@ -12,3 +12,6 @@
 {"$delete":"zboyp3715"}
 {"v":"0.1","id":"xv89log36","label":"Premium Plan","description":"Echoes the request body back to paying agents.","owner_agent":"33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR","method":"POST","price":"5","network":"solana-devnet","response":{"status":200,"mimeType":"application/json","body":{}},"redirect_url":"https://verxio.xyz","webhook_url":"https://google.com","wrap_receipt":true,"created_at":"2026-04-21T16:22:28.038Z","updated_at":"2026-04-21T16:22:28.038Z"}
 {"v":"0.1","id":"4jixwzmnd","label":"Echo chamber","description":"Echoes the request body back to paying agents.","owner_agent":"33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR","method":"POST","price":"$0.001","network":"solana-devnet","response":{"status":200,"mimeType":"application/json","body":{}},"wrap_receipt":true,"created_at":"2026-04-21T19:14:00.047Z","updated_at":"2026-04-21T19:14:00.047Z"}
+{"$delete":"4jixwzmnd"}
+{"$delete":"xv89log36"}
+{"v":"0.1","id":"4oup6onz4","label":"Premium echo","description":"Echoes the request body back to paying agents.","owner_agent":"33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR","method":"POST","price":"4","network":"solana-devnet","response":{"status":200,"mimeType":"application/json","body":{}},"wrap_receipt":true,"created_at":"2026-04-21T23:36:49.191Z","updated_at":"2026-04-21T23:36:49.191Z"}
