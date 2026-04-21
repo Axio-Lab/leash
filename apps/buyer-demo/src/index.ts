@@ -1,10 +1,21 @@
 import { createBuyer } from '@leash/buyer-kit';
 import type { ReceiptV1 } from '@leash/schemas';
+import { createKeyPairSignerFromBytes } from '@solana/kit';
 
 const sellerUrl = process.env.SELLER_URL ?? 'http://localhost:3001';
 const runnerUrl = process.env.RUNNER_URL ?? 'http://localhost:8787';
+const rpcUrl = process.env.SOLANA_RPC ?? 'https://api.devnet.solana.com';
 const agent = process.env.AGENT_ASSET ?? '11111111111111111111111111111111';
 const intervalMs = Number(process.env.POLL_MS ?? 30_000);
+const buyerSecret = process.env.LEASH_BUYER_SECRET_KEY;
+
+if (!buyerSecret) {
+  // eslint-disable-next-line no-console
+  console.error(
+    'buyer-demo: set LEASH_BUYER_SECRET_KEY to a JSON byte array of a devnet keypair (see README).',
+  );
+  process.exit(1);
+}
 
 const rules = {
   v: '0.1' as const,
@@ -23,7 +34,17 @@ async function postReceipt(r: ReceiptV1): Promise<void> {
   });
 }
 
-const buyer = createBuyer({ agent, rules, onReceipt: postReceipt });
+const keyBytes = new Uint8Array(JSON.parse(buyerSecret) as number[]);
+const buyerSigner = await createKeyPairSignerFromBytes(keyBytes);
+
+const buyer = createBuyer({
+  agent,
+  rules,
+  signer: buyerSigner,
+  networks: ['solana-devnet'],
+  rpcUrl,
+  onReceipt: postReceipt,
+});
 
 async function tick(): Promise<void> {
   const { response, receipt } = await buyer.fetch(`${sellerUrl}/tag`, {

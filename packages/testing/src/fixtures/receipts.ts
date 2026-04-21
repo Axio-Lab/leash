@@ -11,7 +11,12 @@ export const fixtureReceiptSpend: ReceiptV1 = finalizeReceipt({
   request: { method: 'GET', url: 'https://example.com/ping', body_hash: null },
   decision: 'allow',
   reason: null,
-  price: { amount: '0.001', currency: 'USDC', network: 'solana:103' },
+  price: {
+    amount: '0.001',
+    currency: 'USDC',
+    network: 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1',
+    asset: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+  },
   facilitator: 'local',
   tx_sig: 'mock-abc',
   response: { status: 200, body_hash: null },

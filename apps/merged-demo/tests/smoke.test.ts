@@ -4,6 +4,7 @@ import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
 import { createSeller } from '@leash/seller-kit';
 import { createBuyer } from '@leash/buyer-kit';
+import type { ClientSvmSigner, LeashFetch } from '@leash/core';
 import type { ReceiptV1, RulesV1 } from '@leash/schemas';
 import { ReceiptV1Schema } from '@leash/schemas';
 
@@ -16,8 +17,10 @@ const RULES: RulesV1 = {
   triggers: [{ type: 'interval', seconds: 30 }],
 };
 
+const STUB_SIGNER = {} as ClientSvmSigner;
+
 describe('merged-demo: in-process buyer ↔ seller ↔ receipt store', () => {
-  it('runs the x402 round-trip and produces a valid spend receipt', async () => {
+  it('seller returns 402 + PAYMENT-REQUIRED header on an unpaid request', async () => {
     const umi = createUmi('https://api.devnet.solana.com').use(mplCore());
     const app = new Hono();
     createSeller(app, {
@@ -27,38 +30,35 @@ describe('merged-demo: in-process buyer ↔ seller ↔ receipt store', () => {
     });
     app.post('/echo', (c) => c.json({ echo: true }));
 
-    // Bridge `globalThis.fetch` calls to the in-memory Hono app so the buyer
-    // talks to the seller without a real socket. This mirrors what happens
-    // inside `merged-demo` when both run in the same process.
-    const realFetch = globalThis.fetch;
-    globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-      return app.request(url, init);
-    }) as typeof fetch;
+    const res = await app.request('http://localhost/echo', { method: 'POST' });
+    expect(res.status).toBe(402);
+    const required = res.headers.get('PAYMENT-REQUIRED');
+    expect(required).not.toBeNull();
+    const decoded = JSON.parse(Buffer.from(required ?? '', 'base64').toString('utf8')) as {
+      accepts?: { network: string; scheme: string }[];
+    };
+    expect(decoded.accepts?.[0]?.scheme).toBe('exact');
+    expect(decoded.accepts?.[0]?.network).toMatch(/^solana:/);
+  });
 
-    const receipts: ReceiptV1[] = [];
+  it('buyer policy gate emits a valid spend receipt on a 200 (with stubbed fetch)', async () => {
+    const sink: ReceiptV1[] = [];
+    const stubFetch: LeashFetch = async () =>
+      new Response(JSON.stringify({ paid: true }), { status: 200 });
+    const buyer = createBuyer({
+      agent: AGENT,
+      rules: RULES,
+      signer: STUB_SIGNER,
+      fetch: stubFetch,
+      onReceipt: (r) => void sink.push(r),
+    });
 
-    try {
-      const buyer = createBuyer({
-        agent: AGENT,
-        rules: RULES,
-        onReceipt: (r) => void receipts.push(r),
-      });
-
-      const { response, receipt } = await buyer.fetch('http://localhost/echo', { method: 'POST' });
-
-      expect(response.status).toBe(200);
-      expect(receipts).toHaveLength(1);
-
-      // Receipt is a valid ReceiptV1 and links back to the same agent.
-      expect(ReceiptV1Schema.parse(receipt)).toEqual(receipt);
-      expect(receipt.agent).toBe(AGENT);
-      expect(receipt.decision).toBe('allow');
-      expect(receipt.kind).toBe('spend');
-      expect(receipt.request.url).toBe('http://localhost/echo');
-    } finally {
-      globalThis.fetch = realFetch;
-    }
+    const { response, receipt } = await buyer.fetch('http://localhost/echo', { method: 'POST' });
+    expect(response.status).toBe(200);
+    expect(ReceiptV1Schema.parse(receipt)).toEqual(receipt);
+    expect(receipt.agent).toBe(AGENT);
+    expect(receipt.decision).toBe('allow');
+    expect(receipt.kind).toBe('spend');
+    expect(sink).toHaveLength(1);
   });
 });

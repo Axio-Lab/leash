@@ -1,13 +1,50 @@
 ---
 title: '@leash/core'
-description: Policy evaluation, receipt hashing, x402 client, treasury, kill-switch.
+description: Policy evaluation, receipt hashing, x402 client adapter, treasury, kill-switch.
 ---
 
-Key exports:
+`@leash/core` is the dependency-light primitive used by both the buyer and
+seller kits. It contains:
 
-- `Agent`, `treasuryPda` — agent + Asset Signer PDA derivation (mpl-core).
-- `evaluate` — pure policy decision.
-- `canonicalJson`, `sha256Hex`, `requestHash`, `computeReceiptHash`, `finalizeReceipt`, `verifyReceiptChain`.
-- `x402Fetch` — 402 → pay → retry HTTP wrapper.
-- `getTreasuryBalance`, `buildWithdrawTx` (stub for v0.1).
-- `readPauseFromEnv`, `createPauseResolver` — kill-switch helpers.
+- **Agent + treasury** — `treasuryPda(asset)` derives the Asset Signer PDA
+  used as `payTo` and the on-chain owner of the agent's funds.
+- **Policy** — `evaluate(rules, request, ledger, pause)` returns a pure
+  decision (`allow` / `deny` + `reason`).
+- **Hashing** — `canonicalJson`, `sha256Hex`, `requestHash`,
+  `paymentRequirementsHash`, `computeReceiptHash`, `finalizeReceipt`,
+  `verifyReceiptChain`. All hashing uses `@noble/hashes` so it runs in any
+  JS environment (Node, browser, edge).
+- **x402 client adapter** — `createSvmBuyerFetch({ signer, networks, rpcUrl })`
+  wraps `wrapFetchWithPayment` from `@x402/fetch` with `ExactSvmScheme` from
+  `@x402/svm` and a `ClientSvmSigner` derived from a `@solana/kit`
+  `TransactionPartialSigner`. This is what `@leash/buyer-kit` uses
+  internally; you usually don't need to touch it.
+- **Kill switch** — `readPauseFromEnv`, `createPauseResolver`. The buyer's
+  policy gate honours these so a single env flip (or admin RPC) can halt
+  every spend immediately.
+- **Treasury helpers** — `getTreasuryBalance`, `buildWithdrawTx` (stub for
+  v0.1).
+
+## Why a separate adapter?
+
+`@x402/fetch` is transport-agnostic — it doesn't know which chain or
+scheme the seller wants. We register `ExactSvmScheme` once, point it at
+the user's RPC, and reuse the same `paidFetch` for every buyer call. The
+adapter is also where we set the default network list (`solana-devnet`,
+`solana-mainnet`).
+
+```ts
+import { createSvmBuyerFetch } from '@leash/core/x402';
+
+const paidFetch = createSvmBuyerFetch({
+  signer,                                  // @solana/kit TransactionPartialSigner
+  networks: ['solana-devnet'],
+  rpcUrl: 'https://api.devnet.solana.com',
+});
+
+const res = await paidFetch('https://api.example.com/quote');
+```
+
+See [`Real x402 on Solana`](/standards/x402-on-solana) for the protocol
+walkthrough and a deeper dive on the headers (`PAYMENT-REQUIRED`,
+`PAYMENT-SIGNATURE`, `PAYMENT-RESPONSE`).

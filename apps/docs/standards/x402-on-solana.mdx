@@ -1,0 +1,137 @@
+---
+title: 'Real x402 on Solana'
+description: How Leash uses x402 + a Solana facilitator to settle agent traffic in real USDC.
+---
+
+Leash settles every agent ↔ agent (or agent ↔ API) request in real USDC
+on Solana using the [x402](https://x402.org) HTTP payment protocol and an
+HTTPS-compatible **facilitator**. This page documents the wire format,
+the headers, and how to swap facilitators. If you only want to fire a
+buyer or stand up a seller, see the SDK pages for
+[`@leash/buyer-kit`](/sdk/buyer-kit) and
+[`@leash/seller-kit`](/sdk/seller-kit).
+
+## The cast
+
+| Role | What it signs | Holds funds in | Pays gas |
+| --- | --- | --- | --- |
+| **Buyer** (your agent + signer) | The SPL transfer | Buyer's USDC ATA | Pays the **buyer-side** fee on the transfer |
+| **Seller** (`@leash/seller-kit` middleware) | Nothing | Asset Signer PDA (`payTo`) | — |
+| **Facilitator** (`facilitator.svmacc.tech` by default) | Nothing | — | Pays the **network fee** to broadcast `payTo` |
+
+Because Leash addresses the seller via the agent's Asset Signer PDA, the
+seller agent doesn't need a private key at all to receive payment. Funds
+land directly in the agent's treasury, where they can be moved by the
+agent's executive (registry-controlled) signer.
+
+## The headers
+
+x402 uses three HTTP headers, all base64-encoded JSON:
+
+### `PAYMENT-REQUIRED` (server → client, 402)
+
+The seller's offer. Leash always sends an `accepts[]` with one entry per
+configured payment route. Example payload (decoded):
+
+```json
+{
+  "x402Version": 2,
+  "accepts": [{
+    "scheme": "exact",
+    "network": "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+    "amount": "1000",
+    "asset": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+    "payTo": "<seller agent's Asset Signer PDA>",
+    "feePayer": "facilitator.svmacc.tech",
+    "extra": { "feePayer": "<facilitator pubkey>" },
+    "maxTimeoutSeconds": 30,
+    "description": "Tag a payload"
+  }]
+}
+```
+
+Notes:
+
+- `network` is the **CAIP-2** id (e.g. `solana:EtWT…` for devnet,
+  `solana:5eyk…` for mainnet). The `solana-devnet` /
+  `solana-mainnet` aliases used by Leash configs map to these
+  identifiers internally.
+- `amount` is in the smallest unit of the SPL token at `asset` (USDC has
+  6 decimals → `"1000"` = 0.001 USDC).
+- `payTo` is the **Asset Signer PDA** of the seller's Core asset, not a
+  wallet pubkey.
+
+### `PAYMENT-SIGNATURE` (client → server, retry)
+
+The buyer's signed SPL transfer + a copy of the `accepted` requirement
+(the middleware does a deep equality check). `@leash/core` builds and
+signs this for you via `ExactSvmScheme`.
+
+### `PAYMENT-RESPONSE` (server → client, 200)
+
+Settlement details emitted after the facilitator broadcasts the
+transfer. Includes `tx_sig` and `payment_requirements_hash` (SHA-256 of
+the canonical `accepts[i]` the buyer paid against). Leash copies both
+into the corresponding `ReceiptV1` so explorers can chain the buyer's
+`spend` to the seller's `earn`.
+
+## Swapping facilitators
+
+Any HTTPS x402 facilitator works. Configure on the seller side:
+
+```ts
+import { createSvmResourceServer } from '@leash/seller-kit/x402';
+
+const server = createSvmResourceServer({
+  network: 'solana-devnet',
+  payTo,
+  asset: '<USDC mint>',
+  facilitatorUrl: 'https://your-facilitator.example.com',
+});
+```
+
+There is **no** facilitator config on the buyer side — the buyer pays
+whatever the seller advertises, so the seller chooses.
+
+## Choosing a network
+
+| Alias | CAIP-2 | Default USDC mint |
+| --- | --- | --- |
+| `solana-mainnet` | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
+| `solana-devnet` | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
+
+You can pass either form anywhere a network id is accepted. The
+playground always shows the resolved CAIP-2 id in the receipt.
+
+## Devnet faucets
+
+Buyers need devnet SOL **and** devnet USDC. Two faucets we recommend:
+
+- SOL: <https://faucet.solana.com>
+- USDC: <https://faucet.circle.com> (mint
+  `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` to your buyer pubkey)
+
+The buyer playground in the web app surfaces the connected wallet's
+balance and links to both faucets when it sees zero.
+
+## End-to-end flow (sequence)
+
+```
+Buyer           Seller (createSeller)         Facilitator
+  |   POST /tag  ───────────────────────►       |
+  |   ◄────────  402 + PAYMENT-REQUIRED         |
+  |                                              |
+  |   build + sign SPL transfer                  |
+  |                                              |
+  |   POST /tag (PAYMENT-SIGNATURE)  ────────►   |
+  |               middleware → settle ──────────► broadcasts tx
+  |               ◄────────────── tx_sig         |
+  |   ◄──── 200 + body + PAYMENT-RESPONSE        |
+  |                                              |
+  | finalizeReceipt → spend ReceiptV1            |
+  | (onAfterSettle on seller → earn ReceiptV1)   |
+```
+
+Both receipts are deterministic (SHA-256 chained, identical hash inputs
+on both sides) so any third party can cryptographically verify a payment
+just from the explorer feed.

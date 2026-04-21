@@ -24,8 +24,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${mono.variable}`}>
-      <body>
+    // `suppressHydrationWarning` on <html> and <body> is intentional: browser
+    // extensions like Grammarly (data-gr-*, data-new-gr-*) and ColorZilla
+    // (cz-shortcut-listen) inject attributes onto these nodes before React
+    // hydrates. The diff is cosmetic and React would otherwise log a hydration
+    // mismatch on every page load. This flag only silences mismatches on THIS
+    // node — children still validate normally.
+    <html lang="en" className={`${inter.variable} ${mono.variable}`} suppressHydrationWarning>
+      <body suppressHydrationWarning>
         <Providers>
           <div className="min-h-dvh flex">
             <Sidebar />

@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Coins,
   Cog,
+  ExternalLink,
   FileText,
   Wallet as WalletIcon,
   ShieldCheck,
@@ -30,6 +31,7 @@ import { PageHeader } from '@/components/page-header';
 import { jsonFetcher } from '@/lib/fetcher';
 import { usePrivyUmi } from '@/lib/privy-umi';
 import { delegateExecution, registerExecutive } from '@leash/registry-utils';
+import { transactionExplorerUrl } from '@/lib/solscan';
 
 type FeedRes = {
   mint: string;
@@ -117,7 +119,31 @@ export default function AgentPage() {
               executiveAuthority: privyWallet.address,
             });
       setExecLastSig(res.signature);
-      await refetchExec();
+      const authority = privyWallet.address;
+      await refetchExec(
+        (prev) => {
+          if (action === 'register') {
+            return {
+              authority,
+              registered: true,
+              delegated: prev?.delegated ?? null,
+              error: undefined,
+              detail: undefined,
+            };
+          }
+          return {
+            authority,
+            registered: prev?.registered ?? true,
+            delegated: true,
+            error: undefined,
+            detail: undefined,
+          };
+        },
+        { revalidate: false },
+      );
+      window.setTimeout(() => {
+        void refetchExec();
+      }, 4000);
     } catch (err) {
       setExecError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -129,7 +155,10 @@ export default function AgentPage() {
     uri: string;
     document: unknown;
     source: string;
+    valid?: boolean;
+    schemaError?: string | null;
     error?: string;
+    detail?: string;
   }>(
     registryUri ? `/api/registry/resolve?uri=${encodeURIComponent(registryUri)}` : null,
     jsonFetcher,
@@ -380,9 +409,11 @@ export default function AgentPage() {
             <CardHeader>
               <CardTitle>Registration document</CardTitle>
               <CardDescription>
-                Paste the agent's published registration URI (Pinata / IPFS / HTTPS). We fetch and
-                validate it against <code className="font-mono">RegistrationV1</code> via{' '}
-                <code className="font-mono">@leash/registry-utils</code>.
+                The on-chain <code className="font-mono">AgentIdentity</code> plugin stores a URI
+                that points at the agent's metadata. We fetch and display it here. Strict MIP-104 /
+                ERC-8004 docs (<code className="font-mono">RegistrationV1</code>) get a "valid"
+                badge; the Metaplex Agents API returns a similar-but-non-strict shape and is
+                rendered as raw JSON.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
@@ -400,10 +431,37 @@ export default function AgentPage() {
                   </Button>
                 </div>
               </div>
+
               {registration?.error ? (
-                <p className="text-sm text-danger">{registration.error}</p>
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm text-danger">
+                    {registration.error}
+                    {registration.detail ? `: ${registration.detail}` : ''}
+                  </p>
+                  <p className="text-[11px] text-fg-subtle">
+                    The URI returned a non-2xx response or non-JSON body. Double-check that the URI
+                    is publicly fetchable.
+                  </p>
+                </div>
               ) : registration?.document ? (
-                <JsonViewer data={registration.document} maxHeight="32rem" />
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    {registration.valid ? (
+                      <Badge variant="success">RegistrationV1 (MIP-104) valid</Badge>
+                    ) : (
+                      <Badge variant="warning">non-strict shape</Badge>
+                    )}
+                    {!registration.valid && registration.schemaError && (
+                      <span
+                        className="text-[11px] text-fg-subtle truncate max-w-md"
+                        title={registration.schemaError}
+                      >
+                        schema mismatch — showing raw document
+                      </span>
+                    )}
+                  </div>
+                  <JsonViewer data={registration.document} maxHeight="32rem" />
+                </div>
               ) : (
                 <p className="text-xs text-fg-subtle">No document loaded yet.</p>
               )}
@@ -494,9 +552,26 @@ export default function AgentPage() {
               )}
               {execError && <p className="text-sm text-danger">{execError}</p>}
               {execLastSig && (
-                <div className="rounded-md border border-success/40 bg-success/10 p-3 text-xs">
-                  <span className="font-medium text-success">Tx confirmed:</span>{' '}
-                  <code className="font-mono break-all">{execLastSig}</code>
+                <div className="flex flex-col gap-1.5 rounded-md border border-success/40 bg-success/10 p-3 text-xs">
+                  <span className="font-medium text-success">Tx confirmed</span>
+                  <a
+                    href={transactionExplorerUrl(
+                      // Map the balance route's `mainnet | devnet` flag back to
+                      // an SvmNetwork string. Default to devnet if unknown so
+                      // the link still works in local dev.
+                      balance?.network === 'mainnet' ? 'solana-mainnet' : 'solana-devnet',
+                      execLastSig,
+                    )}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 font-mono text-brand hover:underline break-all"
+                  >
+                    <ExternalLink className="size-3 shrink-0" />
+                    <span className="break-all">{execLastSig}</span>
+                  </a>
+                  <span className="text-[11px] text-fg-subtle">
+                    Opens on Solscan ({balance?.network === 'mainnet' ? 'mainnet' : 'devnet'}).
+                  </span>
                 </div>
               )}
               <p className="text-xs text-fg-subtle leading-relaxed">

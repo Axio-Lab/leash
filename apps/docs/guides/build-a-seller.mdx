@@ -1,7 +1,12 @@
 ---
 title: Build a seller
-description: Wire a Hono app behind a Leash seller agent.
+description: Wire a Hono app behind a Leash seller agent with real x402.
 ---
+
+`createSeller` mounts the real x402 middleware on the routes you choose
+and resolves `payTo` to the seller agent's **Asset Signer PDA**, so funds
+land directly in the on-chain treasury — the seller agent never needs a
+private key.
 
 ```ts
 import { Hono } from 'hono';
@@ -9,16 +14,42 @@ import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
 import { createSeller } from '@leash/seller-kit';
 
-const umi = createUmi(process.env.SOLANA_RPC!).use(mplCore());
+const umi = createUmi(process.env.SOLANA_RPC ?? 'https://api.devnet.solana.com').use(mplCore());
 const app = new Hono();
 
 createSeller(app, {
   umi,
   sellerAgent: { asset: process.env.AGENT_ASSET! },
   routes: { 'POST /tag': { price: '$0.001', description: 'Tag a payload' } },
+  onReceipt: (r) =>
+    fetch(`http://localhost:8787/a/${r.agent}/receipts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(r),
+    }),
 });
 
 app.post('/tag', (c) => c.json({ tagged: true }));
 ```
 
-The seller's `payTo` resolves to the **Asset Signer PDA** of the configured agent — no key custody at receive time.
+Behaviour out of the box:
+
+- Unauthenticated requests → `402 + PAYMENT-REQUIRED` (base64 JSON).
+- Settled requests → real handler runs, then an `earn` `ReceiptV1` is
+  emitted with the real `tx_sig` and `payment_requirements_hash` from the
+  facilitator's `PAYMENT-RESPONSE`.
+- Default facilitator: `https://facilitator.svmacc.tech` (devnet/mainnet).
+
+## Probing without paying
+
+```bash
+curl -i -X POST http://localhost:3001/tag -d '{"hello":"leash"}'
+# HTTP/1.1 402 Payment Required
+# PAYMENT-REQUIRED: eyJ4NDAyVmVyc2lvbiI6Mi…
+```
+
+Decode the header (base64 → JSON) to inspect the offer. The
+[Seller playground](/sdk/seller-kit) does this for you.
+
+See [`Real x402 on Solana`](/standards/x402-on-solana) for the
+protocol-level walkthrough and how to swap facilitators.

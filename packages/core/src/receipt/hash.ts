@@ -1,32 +1,30 @@
-import { createHash } from 'node:crypto';
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 
+/**
+ * Synchronous SHA-256 via `@noble/hashes` so receipts can be hashed in
+ * Node, in the browser (Privy buyer), and in workers without depending
+ * on `node:crypto` or async `crypto.subtle`.
+ */
 export function requestHash(input: {
   method: string;
   url: string;
   body: string | null;
   headers?: Record<string, string>;
 }): string {
-  const h = createHash('sha256');
-  h.update(input.method);
-  h.update('\n');
-  h.update(input.url);
-  h.update('\n');
-  h.update(input.body ?? '');
-  h.update('\n');
+  const parts: string[] = [input.method, input.url, input.body ?? ''];
   if (input.headers) {
     const keys = Object.keys(input.headers).sort();
     for (const k of keys) {
-      h.update(k);
-      h.update('=');
-      h.update(String(input.headers[k]));
-      h.update('\n');
+      parts.push(`${k}=${String(input.headers[k])}`);
     }
   }
-  return `sha256:${h.digest('hex')}`;
+  const concatenated = `${parts.join('\n')}\n`;
+  return `sha256:${bytesToHex(sha256(utf8ToBytes(concatenated)))}`;
 }
 
 export function sha256Hex(data: string): string {
-  return createHash('sha256').update(data).digest('hex');
+  return bytesToHex(sha256(utf8ToBytes(data)));
 }
 
 /** Stable JSON stringify with sorted keys (shallow + deep for plain objects). */

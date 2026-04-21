@@ -11,7 +11,9 @@
   },
   "dependencies": {
     "@leash/buyer-kit": "workspace:*",
-    "@leash/schemas": "workspace:*"
+    "@leash/core": "workspace:*",
+    "@leash/schemas": "workspace:*",
+    "@solana/kit": "^5.5.0"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

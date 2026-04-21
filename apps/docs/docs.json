@@ -67,7 +67,11 @@
           },
           {
             "group": "Standards",
-            "pages": ["standards/receipt-format", "standards/conformance"]
+            "pages": [
+              "standards/x402-on-solana",
+              "standards/receipt-format",
+              "standards/conformance"
+            ]
           }
         ]
       }

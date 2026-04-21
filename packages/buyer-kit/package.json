@@ -22,7 +22,11 @@
   },
   "dependencies": {
     "@leash/core": "workspace:*",
-    "@leash/schemas": "workspace:*"
+    "@leash/schemas": "workspace:*",
+    "@solana/kit": "^5.1.0",
+    "@x402/core": "^2.10.0",
+    "@x402/fetch": "^2.10.0",
+    "@x402/svm": "^2.10.0"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

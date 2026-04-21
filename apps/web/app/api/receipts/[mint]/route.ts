@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ReceiptV1Schema, type ReceiptV1 } from '@leash/schemas';
 import { getReceiptsJsonl } from '@/lib/runner';
+import { RUNNER_URL } from '@/lib/env';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,4 +40,52 @@ export async function GET(
   });
 
   return NextResponse.json({ mint, receipts, errors });
+}
+
+/**
+ * Browser-safe proxy for shipping a receipt to the runner. The runner has no
+ * CORS preflight, so the buyer playground (which now signs with Privy in the
+ * browser) POSTs receipts here and we forward to `${RUNNER}/a/:mint/receipts`.
+ */
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ mint: string }> },
+): Promise<Response> {
+  const { mint } = await params;
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message ?? 'invalid_json' }, { status: 400 });
+  }
+  const parsed = ReceiptV1Schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'invalid_receipt', detail: parsed.error.message },
+      { status: 422 },
+    );
+  }
+  if (parsed.data.agent !== mint) {
+    return NextResponse.json(
+      { error: 'agent_mismatch', detail: `receipt.agent=${parsed.data.agent} != :mint=${mint}` },
+      { status: 422 },
+    );
+  }
+  try {
+    const upstream = await fetch(`${RUNNER_URL}/a/${mint}/receipts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(parsed.data),
+    });
+    const text = await upstream.text();
+    return new Response(text, {
+      status: upstream.status,
+      headers: { 'content-type': upstream.headers.get('content-type') ?? 'application/json' },
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { error: (err as Error).message ?? 'runner_offline' },
+      { status: 502 },
+    );
+  }
 }

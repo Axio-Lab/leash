@@ -10,12 +10,14 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@hono/node-server": "^1.13.7",
     "@leash/buyer-kit": "workspace:*",
+    "@leash/core": "workspace:*",
     "@leash/schemas": "workspace:*",
     "@leash/seller-kit": "workspace:*",
-    "@hono/node-server": "^1.13.7",
     "@metaplex-foundation/mpl-core": "^1.10.0",
     "@metaplex-foundation/umi-bundle-defaults": "^1.5.1",
+    "@solana/kit": "^5.5.0",
     "hono": "^4.6.14"
   },
   "devDependencies": {

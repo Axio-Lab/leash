@@ -1,37 +1,63 @@
-export type X402ClientOptions = {
-  /** Called when response is 402 — return headers to merge into retry (e.g. X-PAYMENT). */
-  onPaymentRequired?: (args: {
-    url: string;
-    response: Response;
-  }) => Promise<Record<string, string>>;
+import { x402Client } from '@x402/core/client';
+import type { Network } from '@x402/core/types';
+import { wrapFetchWithPayment } from '@x402/fetch';
+import { ExactSvmScheme } from '@x402/svm';
+import { SOLANA_DEVNET_CAIP2, SOLANA_MAINNET_CAIP2, SOLANA_TESTNET_CAIP2 } from '@x402/svm';
+import type { ClientSvmSigner } from '@x402/svm';
+
+export type LeashFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+export type LeashX402Network = 'solana-mainnet' | 'solana-devnet' | 'solana-testnet';
+
+const NETWORK_TO_CAIP2: Record<LeashX402Network, Network> = {
+  'solana-mainnet': SOLANA_MAINNET_CAIP2 as Network,
+  'solana-devnet': SOLANA_DEVNET_CAIP2 as Network,
+  'solana-testnet': SOLANA_TESTNET_CAIP2 as Network,
 };
 
-export type X402Result = {
-  request: { method: string; url: string };
-  status: number;
-  txSig: string | null;
-  response: Response;
-};
-
-export async function x402Fetch(
-  url: string,
-  init: RequestInit | undefined,
-  opts: X402ClientOptions,
-): Promise<X402Result> {
-  const method = (init?.method ?? 'GET').toUpperCase();
-  let res = await fetch(url, init);
-  if (res.status === 402 && opts.onPaymentRequired) {
-    const headers = await opts.onPaymentRequired({ url, response: res });
-    const merged = new Headers(init?.headers ?? undefined);
-    for (const [k, v] of Object.entries(headers)) {
-      merged.set(k, v);
-    }
-    res = await fetch(url, { ...init, headers: merged });
-  }
-  return {
-    request: { method, url },
-    status: res.status,
-    txSig: res.headers.get('x-tx-sig'),
-    response: res,
-  };
+export function caip2ForNetwork(network: LeashX402Network): Network {
+  return NETWORK_TO_CAIP2[network];
 }
+
+export type CreateSvmBuyerClientOptions = {
+  signer: ClientSvmSigner;
+  /**
+   * Networks to register on the underlying x402Client. Defaults to all three
+   * Solana clusters; only the ones the seller's `paymentRequirements` advertise
+   * will actually be exercised.
+   */
+  networks?: LeashX402Network[];
+  /** Optional custom RPC for transaction simulation/fetches. */
+  rpcUrl?: string;
+};
+
+/**
+ * Build a paid `fetch` for the buyer side of x402 on Solana.
+ *
+ * Wraps `globalThis.fetch` with `@x402/fetch`'s `wrapFetchWithPayment` and
+ * registers `ExactSvmScheme` against the provided signer. The returned
+ * function is a drop-in replacement for `fetch`: the first 402 response
+ * triggers a real SPL `TransferChecked` payment, and the request is replayed
+ * with `X-PAYMENT` attached.
+ *
+ * @example
+ * ```ts
+ * import { createKeyPairSignerFromBytes } from '@solana/kit';
+ * import { createSvmBuyerFetch } from '@leash/core';
+ *
+ * const signer = await createKeyPairSignerFromBytes(secret);
+ * const paidFetch = createSvmBuyerFetch({ signer, networks: ['solana-devnet'] });
+ * const res = await paidFetch('https://merchant.example/api/data');
+ * ```
+ */
+export function createSvmBuyerFetch(opts: CreateSvmBuyerClientOptions): LeashFetch {
+  const networks = opts.networks ?? ['solana-mainnet', 'solana-devnet', 'solana-testnet'];
+  const client = new x402Client();
+  for (const n of networks) {
+    client.register(NETWORK_TO_CAIP2[n], new ExactSvmScheme(opts.signer, { rpcUrl: opts.rpcUrl }));
+  }
+  return wrapFetchWithPayment(globalThis.fetch, client);
+}
+
+export { wrapFetchWithPayment, x402Client, ExactSvmScheme };
+export type { ClientSvmSigner };

@@ -1,13 +1,84 @@
 ---
 title: '@leash/buyer-kit'
-description: Scriptable buyer agents. createBuyer + fetch + receipt.
+description: Scriptable buyer agents. createBuyer + real x402 fetch + chained ReceiptV1.
 ---
+
+`@leash/buyer-kit` wraps `@leash/core` into the smallest possible "scriptable
+buyer". One call, one chained receipt, one real x402 SPL transfer.
 
 ```ts
 import { createBuyer } from '@leash/buyer-kit';
+import { createKeyPairSignerFromBytes } from '@solana/kit';
+import fs from 'node:fs';
 
-const buyer = createBuyer({ agent, rules });
-const { response, receipt } = await buyer.fetch(url, init);
+const signer = await createKeyPairSignerFromBytes(
+  new Uint8Array(JSON.parse(fs.readFileSync(process.env.LEASH_BUYER_SECRET_KEY!, 'utf8'))),
+);
+
+const buyer = createBuyer({
+  agent: '<Core asset mint of your buyer agent>',
+  rules: {
+    v: '0.1',
+    budget: { daily: '10', perCall: '0.01', currency: 'USDC' },
+    hosts: { allow: ['api.example.com'] },
+    triggers: [{ type: 'interval', seconds: 30 }],
+  },
+  signer,                         // Solana Kit TransactionPartialSigner
+  networks: ['solana-devnet'],    // CAIP-2 alias; mainnet works the same
+  rpcUrl: 'https://api.devnet.solana.com',
+  onReceipt: async (r) => {
+    await fetch(`http://localhost:8787/a/${r.agent}/receipts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(r),
+    });
+  },
+});
+
+const { response, receipt } = await buyer.fetch('https://api.example.com/quote', {
+  method: 'POST',
+  body: JSON.stringify({ pair: 'SOL/USD' }),
+  headers: { 'content-type': 'application/json' },
+});
 ```
 
-Internally the kit composes `@leash/schemas` (RulesV1), `@leash/core` (`x402Fetch`, `finalizeReceipt`) and a per-call `nonce` counter you can persist via your own storage.
+## What happens on each call
+
+1. **Policy gate** (`evaluate`) — host allow-list, per-call/daily ceilings,
+   pause check. A `deny` short-circuits and emits a `deny` receipt; no
+   network traffic, no spend.
+2. **`paidFetch`** = `wrapFetchWithPayment` from `@x402/fetch`, registered
+   with `ExactSvmScheme` from `@x402/svm`. The first request is normal; on
+   `402 Payment Required` the wrapper:
+   - Decodes `PAYMENT-REQUIRED` to the seller's `accepts[]`.
+   - Builds an SPL transfer matching the chosen requirement.
+   - Hands it to your `signer` for partial signing.
+   - Replays the request with `PAYMENT-SIGNATURE`.
+3. **Receipt finalization** (`finalizeReceipt`) — hashes the request,
+   pulls `tx_sig` + `payment_requirements_hash` from the seller's
+   `PAYMENT-RESPONSE` header, chains against `prev_receipt_hash`, and
+   returns a fully-formed `ReceiptV1`.
+
+## Browser usage (Privy / wallet-adapter)
+
+Provide any `TransactionPartialSigner` from `@solana/kit`. The web playground
+adapts a Privy embedded wallet via `apps/web/lib/privy-svm-signer.ts` —
+copy that file as a starting point for your own dApp.
+
+## API
+
+```ts
+type BuyerConfig = {
+  agent: string;
+  rules: RulesV1;
+  signer: ClientSvmSigner;
+  networks?: ('solana-mainnet' | 'solana-devnet' | string)[];
+  rpcUrl?: string;
+  fetch?: typeof globalThis.fetch;     // injection point for tests
+  onReceipt?: (r: ReceiptV1) => unknown;
+  prevReceiptHash?: string | null;
+};
+```
+
+See [`Real x402 on Solana`](/standards/x402-on-solana) for the protocol-level
+walkthrough.

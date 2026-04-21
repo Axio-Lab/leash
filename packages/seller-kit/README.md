@@ -2,17 +2,21 @@
 
 Hono integration for Leash sellers. Three responsibilities:
 
-1. **x402-shaped gate** (`simpleX402Gate`) — returns `402` unless the
-   request carries an `x-payment` header. Production should swap this for
-   `@x402/hono`'s `paymentMiddleware` + a real facilitator (PayAI / Corbits).
-2. **`createSeller(app, opts)`** — wires the gate onto the configured
-   `routes` and exposes the seller agent's **Asset Signer PDA** as `payTo`
-   (via `mpl-core`).
-3. **`earn` receipts** — every settled call (status 2xx/3xx after the
-   gate forwards) emits a tamper-evident `ReceiptV1` to the user-supplied
-   `onReceipt` callback. Receipts are nonce-ordered and hash-chained per
-   seller agent, mirroring `@leash/buyer-kit` so explorers can verify
-   both sides of the trade.
+1. **Real x402 middleware on Solana.** `createSeller` mounts
+   `paymentMiddlewareFromHTTPServer` from `@x402/hono`, configured via
+   `createSvmResourceServer` (which wraps `ExactSvmScheme` from
+   `@x402/svm`) and pointed at an HTTPS facilitator (default
+   `https://facilitator.svmacc.tech`). Unauthenticated traffic gets
+   `402 + PAYMENT-REQUIRED`; settled traffic invokes the real handler.
+2. **Asset Signer PDA `payTo`.** The middleware always credits the seller
+   agent's Asset Signer PDA (derived via `mpl-core`), so funds land in the
+   on-chain treasury without the seller agent needing a private key.
+3. **`earn` receipts.** Every settled call emits a tamper-evident
+   `ReceiptV1` (with the real `tx_sig` and
+   `payment_requirements_hash` from the facilitator's
+   `PAYMENT-RESPONSE`) to the user-supplied `onReceipt` callback. Receipts
+   are nonce-ordered and hash-chained per seller agent, mirroring
+   `@leash/buyer-kit` so explorers can verify both sides of the trade.
 
 ```ts
 import { createSeller } from '@leash/seller-kit';
@@ -21,8 +25,6 @@ createSeller(app, {
   umi,
   sellerAgent: { asset: assetMint },
   routes: { 'POST /tag': { price: '$0.001', description: 'tag' } },
-  // Ship every earn receipt to the runner. Errors are swallowed so a
-  // runner outage never breaks a paying customer's request.
   onReceipt: (r) =>
     fetch(`${RUNNER}/a/${r.agent}/receipts`, {
       method: 'POST',
@@ -34,11 +36,10 @@ createSeller(app, {
 ## Receipt semantics
 
 - **402 → no receipt.** No settled trade to record.
-- **2xx/3xx → one earn receipt.** Includes `request.body_hash`,
-  `response.status`, and `tx_sig` (forwarded from the request's `x-tx-sig`
-  header — set this from your facilitator).
-- **4xx/5xx after the gate → no receipt.** The handler failed after
-  payment was attached; recording it would lie about a settled trade.
+- **2xx after settle → one earn receipt** with `tx_sig` and
+  `payment_requirements_hash` lifted from `PAYMENT-RESPONSE`.
+- **Handler 4xx/5xx after payment → no receipt.** Recording would lie
+  about a settled trade.
 - **Chain.** `prev_receipt_hash` links to the previous receipt's
   `receipt_hash` for the same seller agent (in-process state).
 
@@ -53,10 +54,20 @@ parsePrice('0.5 USDT'); // { amount: '0.5',   currency: 'USDT' }
 parsePrice('0.01'); // { amount: '0.01',  currency: 'USDC' }
 ```
 
-v0.1 normalises `$` and `USD` to `USDC` since SVM settlement uses USDC.
+`$` and `USD` normalise to `USDC` since SVM settlement uses USDC.
 
-## Status
+## Configuring the facilitator
 
-v0.1 does **not** bundle `@x402/solana` (npm availability); the gate is
-intentionally minimal for demos. Production wiring lives behind a
-`paymentMiddleware` swap — the receipt layer is unchanged either way.
+```ts
+import { createSvmResourceServer } from '@leash/seller-kit/x402';
+
+const server = createSvmResourceServer({
+  network: 'solana-devnet',
+  payTo,
+  asset: '<USDC mint>',
+  facilitatorUrl: 'https://your-facilitator.example.com',
+});
+```
+
+See the [`Real x402 on Solana`](../../apps/docs/standards/x402-on-solana.mdx)
+doc for the protocol-level walkthrough.

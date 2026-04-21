@@ -27,6 +27,7 @@ import { PageHeader } from '@/components/page-header';
 import { JsonViewer } from '@/components/json-viewer';
 import { usePrivyUmi } from '@/lib/privy-umi';
 import { PRIVY_APP_ID } from '@/lib/env';
+import { transactionExplorerUrl } from '@/lib/solscan';
 
 type SavedAgent = {
   mint: string;
@@ -174,6 +175,18 @@ export default function NewAgentPage() {
     setImagePreview(url);
     return () => URL.revokeObjectURL(url);
   }, [imageFile]);
+
+  /** After mint, redirect to Solscan (or Explorer fallback) to inspect the tx. */
+  const explorerRedirected = React.useRef(false);
+  React.useEffect(() => {
+    if (!result?.signature || explorerRedirected.current) return;
+    explorerRedirected.current = true;
+    const href = transactionExplorerUrl(result.network, result.signature);
+    const t = window.setTimeout(() => {
+      window.location.assign(href);
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [result]);
 
   function handleImageFile(file: File | null) {
     setImageError(null);
@@ -733,6 +746,10 @@ export default function NewAgentPage() {
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <Bot className="size-4 text-brand" /> Mint succeeded
                 </CardTitle>
+                <CardDescription>
+                  Opening Solscan (or Solana Explorer for unsupported clusters) to inspect this
+                  transaction…
+                </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1">

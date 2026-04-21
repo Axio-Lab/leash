@@ -6,6 +6,7 @@ const PriceSchema = z.object({
   amount: z.string(),
   currency: z.string(),
   network: z.string().optional(),
+  asset: z.string().optional(),
 });
 
 const RequestSummarySchema = z.object({
@@ -22,6 +23,15 @@ const ResponseSummarySchema = z
   })
   .nullable();
 
+/**
+ * Facilitator identifier. We accept either a known short name (for
+ * historical fixtures) or a full URL for any HTTPS x402 facilitator.
+ * Real receipts SHOULD use the URL form so explorers can render a link.
+ */
+const FacilitatorSchema = z
+  .union([z.enum(['payai', 'corbits', 'svmacc', 'self', 'local']), z.string().url()])
+  .nullable();
+
 export const ReceiptV1Schema = z.object({
   v: z.literal('0.1'),
   kind: ReceiptKindSchema.default('spend'),
@@ -33,8 +43,15 @@ export const ReceiptV1Schema = z.object({
   decision: z.enum(['allow', 'deny']),
   reason: z.string().nullable(),
   price: PriceSchema.nullable(),
-  facilitator: z.enum(['payai', 'corbits', 'self', 'local']).nullable(),
+  facilitator: FacilitatorSchema,
   tx_sig: z.string().nullable(),
+  /**
+   * SHA-256 (hex) of the canonical `PaymentRequirements` object the buyer
+   * paid against. Lets explorers cryptographically tie a `spend` receipt to
+   * the `earn` receipt it settled, even when the seller uses dynamic pricing.
+   * Optional for backwards compatibility with v0.0 fixtures.
+   */
+  payment_requirements_hash: z.string().nullable().optional(),
   response: ResponseSummarySchema,
   prev_receipt_hash: z.string().nullable(),
   receipt_hash: z.string(),

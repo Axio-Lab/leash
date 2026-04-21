@@ -1,0 +1,59 @@
+# `@leash/seller-demo`
+
+A minimal Hono server that mounts the real `@leash/seller-kit` middleware
+(real x402 on Solana devnet) on `POST /tag`. Unauthenticated requests get
+`402 + PAYMENT-REQUIRED`. Once a buyer settles via the configured
+facilitator, the route runs the real handler and emits an `earn`
+`ReceiptV1` to the runner.
+
+## Prerequisites
+
+The seller does **not** sign anything itself — settlement happens via the
+facilitator, which pays the network fee and broadcasts the SPL transfer. You
+only need:
+
+1. A Core asset mint to act as `sellerAgent.asset`. The default is the
+   placeholder `1111…1111` so you can boot without registering an agent
+   first; for end-to-end receipts use a real Core asset created in the web
+   playground (`/agents/new`).
+2. The `@leash/runner` running so receipts have somewhere to go (otherwise
+   the seller still works, you just won't see them in the explorer).
+
+## Run
+
+```bash
+export SOLANA_RPC=https://api.devnet.solana.com
+export AGENT_ASSET=<your Core asset mint>
+export RUNNER_URL=http://localhost:8787
+export PORT=3001
+
+pnpm --filter @leash/seller-demo build
+pnpm --filter @leash/seller-demo start
+```
+
+You should see:
+
+```
+seller-demo on :3001
+```
+
+## Probing the seller without paying
+
+The middleware always responds 402 to unpaid traffic. To inspect the offer:
+
+```bash
+curl -i -X POST http://localhost:3001/tag -d '{"hello":"leash"}'
+```
+
+The response headers include `PAYMENT-REQUIRED: <base64>` — decode it for
+the `accepts[]` (asset mint, payTo PDA, amount, network). To actually
+settle, run `@leash/buyer-demo` against this seller (see its README).
+
+## Environment
+
+| Var           | Default                         | Description                          |
+| ------------- | ------------------------------- | ------------------------------------ |
+| `PORT`        | `3001`                          | Port to bind.                        |
+| `SOLANA_RPC`  | `https://api.devnet.solana.com` | RPC for the seller's Umi instance.   |
+| `AGENT_ASSET` | `1111…1111`                     | Core asset mint owning the receipts. |
+| `RUNNER_URL`  | `http://localhost:8787`         | Where to ship `earn` receipts.       |

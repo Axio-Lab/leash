@@ -1,0 +1,62 @@
+# `@leash/merged-demo`
+
+The full `buyer ↔ seller ↔ runner` loop in a single process. Useful for
+dev, smoke tests, and as the simplest possible example of how the three
+Leash kits fit together against real x402 on Solana devnet.
+
+What it does on boot:
+
+1. Spins up a Hono app with `@leash/seller-kit` mounted on `POST /echo`
+   (real x402 middleware → `facilitator.svmacc.tech`).
+2. If `LEASH_BUYER_SECRET_KEY` is set, also constructs a
+   `@leash/buyer-kit` instance with that signer and tickles the seller every
+   20 s. Each tick pays 0.001 USDC on devnet and emits both a `spend`
+   (buyer) and `earn` (seller) receipt to the runner.
+3. If the secret is not set, only the seller runs — the demo will still
+   respond `402 + PAYMENT-REQUIRED` so you can probe it from elsewhere
+   (e.g. the buyer playground in the web app).
+
+## Prerequisites
+
+Same as `@leash/buyer-demo` for the buyer half:
+
+1. A devnet keypair (`solana-keygen new`) funded with devnet SOL
+   (<https://faucet.solana.com>) and devnet USDC
+   (<https://faucet.circle.com>, mint
+   `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`).
+2. A Core asset mint for `AGENT_ASSET` (created via the web playground).
+
+## Run
+
+```bash
+export LEASH_BUYER_SECRET_KEY="$(cat ~/.config/solana/leash-buyer.json)"
+export SOLANA_RPC=https://api.devnet.solana.com
+export AGENT_ASSET=<your Core asset mint>
+export RUNNER_URL=http://localhost:8787
+export PORT=3003
+
+pnpm --filter @leash/merged-demo build
+pnpm --filter @leash/merged-demo start
+```
+
+You should see:
+
+```
+merged-demo seller+buyer on :3003
+merged buyer 200
+merged buyer 200
+…
+```
+
+Each `200` is a real x402 settlement on devnet. Inspect the `tx_sig` in the
+runner UI (`/agents/<asset>` in the web app) → Solscan link.
+
+## Environment
+
+| Var                      | Default                         | Description                           |
+| ------------------------ | ------------------------------- | ------------------------------------- |
+| `LEASH_BUYER_SECRET_KEY` | _optional_                      | If set, runs the buyer loop too.      |
+| `PORT`                   | `3003`                          | Port to bind.                         |
+| `SOLANA_RPC`             | `https://api.devnet.solana.com` | RPC the buyer signs against.          |
+| `AGENT_ASSET`            | `1111…1111`                     | Core asset mint shared by both sides. |
+| `RUNNER_URL`             | `http://localhost:8787`         | Receipt destination.                  |
