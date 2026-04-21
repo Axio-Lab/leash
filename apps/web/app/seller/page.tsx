@@ -24,6 +24,7 @@ import { Separator } from '@/components/ui/separator';
 import { JsonViewer } from '@/components/json-viewer';
 import { PageHeader } from '@/components/page-header';
 import { InlineCode } from '@/components/ui/code';
+import { useToast } from '@/components/ui/toast';
 import { listAgents, type StoredAgent } from '@/lib/agent-storage';
 
 type Method = 'GET' | 'POST';
@@ -44,6 +45,7 @@ const fetcher = async (url: string) => {
  * live x402 paywall served by `@leash/seller-kit`.
  */
 export default function SellerPage() {
+  const toast = useToast();
   const [agents, setAgents] = React.useState<
     Array<Pick<StoredAgent, 'mint' | 'label' | 'network'>>
   >([]);
@@ -54,7 +56,7 @@ export default function SellerPage() {
   );
   const [method, setMethod] = React.useState<Method>('POST');
   const [price, setPrice] = React.useState('$0.001');
-  const [bodyJson, setBodyJson] = React.useState('{"ok":true,"hello":"leash"}');
+  const [responseBodyJson, setResponseBodyJson] = React.useState('{}');
   const [customId, setCustomId] = React.useState('');
   const [redirectUrl, setRedirectUrl] = React.useState('');
   const [webhookUrl, setWebhookUrl] = React.useState('');
@@ -62,6 +64,18 @@ export default function SellerPage() {
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [origin, setOrigin] = React.useState('');
+
+  function resetFormFields() {
+    setLabel('');
+    setDescription('');
+    setMethod('POST');
+    setPrice('');
+    setResponseBodyJson('{}');
+    setCustomId('');
+    setRedirectUrl('');
+    setWebhookUrl('');
+    setWrapReceipt(true);
+  }
 
   React.useEffect(() => {
     const a = listAgents();
@@ -79,19 +93,35 @@ export default function SellerPage() {
     { refreshInterval: 5000 },
   );
   const links = data?.endpoints ?? [];
+  const lastListError = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (!listError) {
+      lastListError.current = null;
+      return;
+    }
+    const msg = (listError as Error).message;
+    if (lastListError.current === msg) return;
+    lastListError.current = msg;
+    toast.error('Could not load payment links', msg);
+  }, [listError, toast]);
 
   async function createLink(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     if (!ownerAgent) {
-      setError('Pick an agent to receive payments.');
+      const msg = 'Pick an agent to receive payments.';
+      setError(msg);
+      toast.error('Missing agent', msg);
       return;
     }
-    let parsedBody: unknown;
+    let parsedResponseBody: unknown;
     try {
-      parsedBody = bodyJson.trim() ? JSON.parse(bodyJson) : { ok: true };
+      parsedResponseBody = responseBodyJson.trim() ? JSON.parse(responseBodyJson) : {};
     } catch (err) {
-      setError(`Response body must be valid JSON: ${(err as Error).message}`);
+      const msg = `Response body must be valid JSON: ${(err as Error).message}`;
+      setError(msg);
+      toast.error('Invalid response body JSON', msg);
       return;
     }
     setSubmitting(true);
@@ -114,7 +144,7 @@ export default function SellerPage() {
           response: {
             status: 200,
             mimeType: 'application/json',
-            body: parsedBody,
+            body: parsedResponseBody,
           },
           redirect_url: redirectUrl.trim() || undefined,
           webhook_url: webhookUrl.trim() || undefined,
@@ -130,21 +160,30 @@ export default function SellerPage() {
       if (!res.ok || !json?.ok) {
         throw new Error(json?.detail ?? json?.error ?? `runner returned ${res.status}`);
       }
-      setCustomId('');
-      setRedirectUrl('');
-      setWebhookUrl('');
+      resetFormFields();
       await mutate(ownerEndpointsKey);
+      toast.success(
+        'Payment link created',
+        `Your /x/${json.endpoint?.id ?? 'new-link'} endpoint is live.`,
+      );
     } catch (err) {
-      setError((err as Error).message);
+      const msg = (err as Error).message;
+      setError(msg);
+      toast.error('Failed to create payment link', msg);
     } finally {
       setSubmitting(false);
     }
   }
 
   async function removeLink(id: string) {
-    if (!confirm(`Delete payment link "${id}"? Existing buyers will get 404.`)) return;
-    await fetch(`${ENDPOINTS_KEY}/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    await mutate(ownerEndpointsKey);
+    try {
+      const res = await fetch(`${ENDPOINTS_KEY}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`runner returned ${res.status}`);
+      await mutate(ownerEndpointsKey);
+      toast.success('Payment link deleted', `"${id}" now returns 404.`);
+    } catch (err) {
+      toast.error('Failed to delete payment link', (err as Error).message);
+    }
   }
 
   return (
@@ -251,14 +290,18 @@ export default function SellerPage() {
                   />
                 </Field>
 
-                <Field label="Response body (JSON)">
+                <Field label="Response body (optional JSON, returned after successful payment)">
                   <Textarea
-                    value={bodyJson}
-                    onChange={(e) => setBodyJson(e.target.value)}
-                    rows={5}
+                    value={responseBodyJson}
+                    onChange={(e) => setResponseBodyJson(e.target.value)}
+                    rows={4}
                     className="font-mono text-xs"
                     spellCheck={false}
+                    placeholder='{"status":"paid"}'
                   />
+                  <span className="text-[11px] text-fg-subtle">
+                    Leave as <InlineCode>{'{}'}</InlineCode> for an empty response payload.
+                  </span>
                 </Field>
 
                 <Separator />
@@ -409,13 +452,19 @@ function PaymentLinkRow({
   origin: string;
   onDelete: () => void;
 }) {
+  const toast = useToast();
   const url = `${origin || ''}/x/${endpoint.id}`;
   const [copied, setCopied] = React.useState(false);
   async function copy() {
     if (typeof navigator === 'undefined') return;
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      toast.success('Copied payment link', url);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      toast.error('Could not copy link', (err as Error).message);
+    }
   }
   return (
     <div className="rounded-md border border-border bg-bg-elev/40 p-3 flex flex-col gap-2">

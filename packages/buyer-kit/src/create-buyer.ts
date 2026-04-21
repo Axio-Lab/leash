@@ -58,6 +58,18 @@ export type BuyerConfig = {
 export type BuyerCallResult = {
   response: Response;
   receipt: ReceiptV1;
+  /**
+   * The price the seller actually demanded (decoded from the `payment-required`
+   * header). Present whenever the seller returned 402, regardless of whether
+   * settlement succeeded. Useful for the UI to say "tried to pay 5 USDC but…".
+   */
+  quotedPrice?: ReceiptV1['price'];
+  /**
+   * Human-readable reason the call did not settle. Sourced from the seller's
+   * `payment-required` header `error` field on 402s where no
+   * `PAYMENT-RESPONSE` came back. `undefined` on successful settlement.
+   */
+  failureReason?: string;
 };
 
 export type Buyer = {
@@ -129,6 +141,14 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
       state.recentRequestHashes.push(h);
 
       const settlement = parseSettlement(response);
+      // If the seller returned 402, decode its `payment-required` header so we
+      // can record what was actually demanded and *why* it didn't settle.
+      // We need to .clone() because callers will still want to read the body.
+      const quote =
+        response.status === 402 && !settlement
+          ? await parsePaymentRequired(response.clone(), networks)
+          : null;
+
       const draft = {
         v: '0.1' as const,
         kind: 'spend' as const,
@@ -138,20 +158,32 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
         policy_v: cfg.rules.v,
         request: { method, url, body_hash: body ? requestHash({ method, url, body }) : null },
         decision: 'allow' as const,
-        reason: null,
-        price: settlement?.price ?? {
-          amount: cfg.rules.budget.perCall,
-          currency: cfg.rules.budget.currency,
-        },
+        // Surface the seller / facilitator error verbatim so receipts carry
+        // a usable failure reason ("insufficient_funds", "facilitator_error",
+        // etc.) instead of a silent null.
+        reason: settlement ? null : (quote?.error ?? null),
+        // Order of precedence:
+        //   1. Settled price (truth)                   ← from PAYMENT-RESPONSE
+        //   2. Seller-quoted price on a failed 402     ← from payment-required
+        //   3. null (we never made a quote-able call)
+        // Falling back to `rules.budget.perCall` (the previous behaviour) was a
+        // bug — it stamped the policy ceiling on the receipt as if it were the
+        // demanded price.
+        price: settlement?.price ?? quote?.price ?? null,
         facilitator,
         tx_sig: settlement?.txSig ?? null,
-        payment_requirements_hash: settlement?.requirementsHash ?? null,
+        payment_requirements_hash: settlement?.requirementsHash ?? quote?.requirementsHash ?? null,
         response: { status: response.status, body_hash: null },
         prev_receipt_hash: null,
       };
       const receipt = finalizeReceipt(draft);
       await emitReceipt(cfg.onReceipt, receipt);
-      return { response, receipt };
+      return {
+        response,
+        receipt,
+        quotedPrice: quote?.price,
+        failureReason: settlement ? undefined : (quote?.error ?? undefined),
+      };
     },
   };
 }
@@ -197,6 +229,110 @@ function parseSettlement(response: Response): Settlement | null {
       }
     : null;
   return { txSig, price, requirementsHash };
+}
+
+type Quote = {
+  price: ReceiptV1['price'];
+  requirementsHash: string | null;
+  error: string | null;
+};
+
+/**
+ * Decode the seller's `payment-required` header on a failed 402 so we can
+ * record the *actual* demanded price and any facilitator-side error (e.g.
+ * `insufficient_funds`) on the receipt.
+ *
+ * The header is the base64url-encoded JSON of `PaymentRequired` per x402 v2.
+ * If the seller also returned a JSON error body (e.g.
+ * `{ "error": "..." }`), we prefer the body's message because facilitator
+ * errors land there after a failed `processSettlement`.
+ *
+ * Picks the first `accepts[i]` whose `network` matches one we're configured to
+ * pay on (so we report the price the buyer would have actually attempted, not
+ * an entry on a chain we wouldn't touch).
+ */
+async function parsePaymentRequired(
+  response: Response,
+  networks: LeashX402Network[],
+): Promise<Quote | null> {
+  let headerError: string | null = null;
+  let bodyError: string | null = null;
+  let chosen: PaymentRequirements | null = null;
+
+  const header =
+    response.headers.get('payment-required') ?? response.headers.get('PAYMENT-REQUIRED');
+  if (header) {
+    try {
+      const decoded = decodeBase64Json(header) as {
+        error?: string;
+        accepts?: PaymentRequirements[];
+      } | null;
+      if (decoded) {
+        if (typeof decoded.error === 'string' && decoded.error.length > 0) {
+          headerError = decoded.error;
+        }
+        const list = Array.isArray(decoded.accepts) ? decoded.accepts : [];
+        chosen = list.find((p) => networkMatches(p.network, networks)) ?? list[0] ?? null;
+      }
+    } catch {
+      /* malformed header — ignore */
+    }
+  }
+
+  // The seller's JSON body usually carries the most precise failure text
+  // when settlement (not parsing) failed. We try it as a best-effort enrichment.
+  try {
+    const text = await response.text();
+    if (text) {
+      const parsed = JSON.parse(text) as { error?: string };
+      if (parsed && typeof parsed.error === 'string' && parsed.error.length > 0) {
+        bodyError = parsed.error;
+      }
+    }
+  } catch {
+    /* not JSON — fine */
+  }
+
+  if (!chosen && !headerError && !bodyError) return null;
+
+  const price: ReceiptV1['price'] = chosen
+    ? {
+        amount: chosen.amount,
+        currency: 'USDC',
+        network: chosen.network,
+        asset: chosen.asset,
+      }
+    : null;
+
+  return {
+    price,
+    requirementsHash: paymentRequirementsHash(chosen),
+    error: bodyError ?? headerError,
+  };
+}
+
+function networkMatches(headerNetwork: string, configured: LeashX402Network[]): boolean {
+  // The seller sends CAIP-2 form (`solana:<genesis-prefix>`); our config uses
+  // friendly slugs like `solana-devnet`. Match leniently on the cluster word.
+  const lower = headerNetwork.toLowerCase();
+  return configured.some((c) => {
+    const slug = String(c).toLowerCase();
+    if (slug === lower) return true;
+    if (slug.includes('devnet') && lower.includes('etwtrabz')) return true; // devnet genesis prefix
+    if (slug.includes('mainnet') && lower.includes('5eykt4u')) return true; // mainnet-beta genesis prefix
+    return false;
+  });
+}
+
+function decodeBase64Json(input: string): unknown {
+  // x402 uses base64url; tolerate both standard and URL variants.
+  const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+  const raw =
+    typeof globalThis.atob === 'function'
+      ? globalThis.atob(padded)
+      : Buffer.from(padded, 'base64').toString('utf8');
+  return JSON.parse(raw);
 }
 
 async function emitReceipt(onReceipt: BuyerConfig['onReceipt'], receipt: ReceiptV1): Promise<void> {

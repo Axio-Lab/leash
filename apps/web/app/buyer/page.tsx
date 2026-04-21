@@ -26,6 +26,7 @@ import { Separator } from '@/components/ui/separator';
 import { JsonViewer } from '@/components/json-viewer';
 import { PageHeader } from '@/components/page-header';
 import { InlineCode } from '@/components/ui/code';
+import { useToast } from '@/components/ui/toast';
 import { usePrivySvmSigner } from '@/lib/privy-svm-signer';
 import { transactionExplorerUrl } from '@/lib/solscan';
 import { SOLANA_RPC } from '@/lib/env';
@@ -33,6 +34,7 @@ import { WalletBalanceBadge } from '@/components/wallet-balance-badge';
 import {
   effectiveRules,
   isLimitless,
+  LIMITLESS_RULES,
   listAgents,
   loadAgent,
   type StoredAgent,
@@ -42,6 +44,8 @@ type FireResult =
   | {
       ok: true;
       receipt: ReceiptV1;
+      quotedPrice?: ReceiptV1['price'];
+      failureReason?: string;
       response: {
         status: number;
         body: unknown;
@@ -64,6 +68,22 @@ const fetcher = async (url: string) => {
 };
 
 /**
+ * Render a `ReceiptV1['price']` (raw on-chain units, USDC = 6 decimals) as a
+ * human-friendly string like `5 USDC`. Returns `null` if the price isn't
+ * known yet so callers can branch on display.
+ */
+function formatPrice(price: ReceiptV1['price'] | undefined): string | null {
+  if (!price) return null;
+  const decimals = price.currency === 'USDC' ? 6 : 0;
+  if (decimals === 0) return `${price.amount} ${price.currency}`;
+  // Cheap fixed-point divide so we don't pull in BigInt math just for display.
+  const padded = price.amount.padStart(decimals + 1, '0');
+  const whole = padded.slice(0, -decimals);
+  const frac = padded.slice(-decimals).replace(/0+$/, '');
+  return `${frac ? `${whole}.${frac}` : whole} ${price.currency}`;
+}
+
+/**
  * Autonomous-agent cockpit.
  *
  * The user picks one of their agents (the "operator"). The Privy embedded
@@ -73,6 +93,7 @@ const fetcher = async (url: string) => {
  * call by `@leash/buyer-kit`'s policy gate.
  */
 export default function BuyerPage() {
+  const toast = useToast();
   const { signer, wallet, ready } = usePrivySvmSigner();
 
   const [agents, setAgents] = React.useState<
@@ -83,7 +104,7 @@ export default function BuyerPage() {
 
   const [url, setUrl] = React.useState('/x/');
   const [method, setMethod] = React.useState<'GET' | 'POST'>('POST');
-  const [body, setBody] = React.useState('{"hello":"leash"}');
+  const [body, setBody] = React.useState('{}');
   const [callbackUrl, setCallbackUrl] = React.useState('');
 
   const [loading, setLoading] = React.useState(false);
@@ -106,11 +127,13 @@ export default function BuyerPage() {
   });
   const allLinks = linksData?.endpoints ?? [];
 
-  const rules: RulesV1 = React.useMemo(
-    () => (selectedAgent ? effectiveRules(selectedAgent) : effectiveRules('')),
-    [selectedAgent],
-  );
+  const rules: RulesV1 = React.useMemo(() => {
+    if (agentRecord?.rules) return agentRecord.rules;
+    if (agentRecord?.rules === null) return LIMITLESS_RULES;
+    return selectedAgent ? effectiveRules(selectedAgent) : LIMITLESS_RULES;
+  }, [agentRecord, selectedAgent]);
   const isLimitlessAgent = isLimitless(agentRecord?.rules ?? null);
+  const rulesCardData = isLimitlessAgent ? {} : rules;
 
   async function shipReceipt(receipt: ReceiptV1): Promise<void> {
     try {
@@ -126,11 +149,15 @@ export default function BuyerPage() {
 
   async function fire() {
     if (!signer) {
-      setResult({ ok: false, error: 'Connect a Solana wallet first.' });
+      const msg = 'Connect a Solana wallet first.';
+      setResult({ ok: false, error: msg });
+      toast.error('Wallet required', msg);
       return;
     }
     if (!selectedAgent) {
-      setResult({ ok: false, error: 'Pick an agent first.' });
+      const msg = 'Pick an agent first.';
+      setResult({ ok: false, error: msg });
+      toast.error('Agent required', msg);
       return;
     }
     setLoading(true);
@@ -163,6 +190,8 @@ export default function BuyerPage() {
       setResult({
         ok: true,
         receipt: callResult.receipt,
+        quotedPrice: callResult.quotedPrice,
+        failureReason: callResult.failureReason,
         response: {
           status: callResult.response.status,
           body: parsed,
@@ -177,8 +206,26 @@ export default function BuyerPage() {
         },
       });
       setHistory((h) => [callResult.receipt, ...h].slice(0, 25));
+      const settled = !!callResult.receipt.tx_sig;
+      if (callResult.response.status === 402 && !settled) {
+        const quoted = formatPrice(callResult.quotedPrice);
+        const reason = callResult.failureReason ?? 'no failure reason returned by the seller';
+        toast.error(`Settlement failed${quoted ? ` (asked ${quoted})` : ''}`, reason);
+      } else if (settled) {
+        toast.success(
+          'x402 call completed',
+          `Status ${callResult.response.status} · receipt ${callResult.receipt.receipt_hash.slice(0, 12)}…`,
+        );
+      } else {
+        toast.info(
+          'Call completed (no settlement)',
+          `Status ${callResult.response.status} — no PAYMENT-RESPONSE header, no tx_sig.`,
+        );
+      }
     } catch (err) {
-      setResult({ ok: false, error: (err as Error).message ?? 'buyer.fetch failed' });
+      const msg = (err as Error).message ?? 'buyer.fetch failed';
+      setResult({ ok: false, error: msg });
+      toast.error('x402 call failed', msg);
     } finally {
       setLoading(false);
     }
@@ -189,6 +236,29 @@ export default function BuyerPage() {
   const agentShort = selectedAgent
     ? `${selectedAgent.slice(0, 4)}…${selectedAgent.slice(-4)}`
     : null;
+
+  function handleUrlChange(nextUrl: string) {
+    setUrl(nextUrl);
+    // If users paste a link with request body params, auto-fill the body box.
+    // Supported keys: ?body=... or ?request_body=...
+    if (typeof window === 'undefined') return;
+    try {
+      const parsed = new URL(nextUrl, window.location.origin);
+      const raw =
+        parsed.searchParams.get('body') ??
+        parsed.searchParams.get('request_body') ??
+        parsed.searchParams.get('requestBody');
+      if (!raw) return;
+      try {
+        const asJson = JSON.parse(raw) as unknown;
+        setBody(JSON.stringify(asJson, null, 2));
+      } catch {
+        setBody(raw);
+      }
+    } catch {
+      /* ignore invalid transient URL input while user is typing */
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -282,7 +352,7 @@ export default function BuyerPage() {
               <Field label="URL">
                 <Input
                   value={url}
-                  onChange={(e) => setUrl(e.target.value)}
+                  onChange={(e) => handleUrlChange(e.target.value)}
                   className="font-mono"
                   placeholder="/x/<id> or https://example.com/x402-route"
                 />
@@ -301,7 +371,11 @@ export default function BuyerPage() {
 
               {method === 'POST' && (
                 <Field label="Body">
-                  <Textarea value={body} onChange={(e) => setBody(e.target.value)} />
+                  <Textarea
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    placeholder="{}"
+                  />
                 </Field>
               )}
 
@@ -382,7 +456,7 @@ export default function BuyerPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <JsonViewer data={rules} maxHeight="14rem" />
+                <JsonViewer data={rulesCardData} maxHeight="14rem" />
               </CardContent>
             </Card>
 
@@ -486,6 +560,8 @@ export default function BuyerPage() {
 
 function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) {
   const leash = result.response.leash;
+  const settled = !!result.receipt.tx_sig;
+  const settlementFailed = result.response.status === 402 && !settled;
   return (
     <>
       <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -496,8 +572,9 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
         <Badge variant={result.receipt.decision === 'allow' ? 'brand' : 'danger'}>
           {result.receipt.decision}
         </Badge>
-        <Badge variant="success" className="gap-1">
-          <Receipt className="size-3" /> spend receipt shipped
+        <Badge variant={settled ? 'success' : 'outline'} className="gap-1">
+          <Receipt className="size-3" />
+          {settled ? 'settled on-chain' : 'no settlement'}
         </Badge>
         {leash.redirected_to && (
           <Badge variant="outline" className="gap-1" title={leash.redirected_to}>
@@ -505,6 +582,54 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
           </Badge>
         )}
       </div>
+      {settlementFailed && (
+        <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-xs text-fg-subtle">
+          <p className="text-sm text-fg">Seller returned 402 — payment did not settle.</p>
+          <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
+            <dt className="text-fg-muted">Seller demanded</dt>
+            <dd className="text-fg">
+              {formatPrice(result.quotedPrice) ?? <span className="text-fg-muted">unknown</span>}
+            </dd>
+            <dt className="text-fg-muted">Reason</dt>
+            <dd className="text-fg">
+              {result.failureReason ?? (
+                <span className="text-fg-muted">
+                  not reported by the seller (check Response body below)
+                </span>
+              )}
+            </dd>
+          </dl>
+          <p className="mt-2">Most common fixes:</p>
+          <ul className="ml-4 mt-1 list-disc space-y-0.5">
+            <li>
+              Mint devnet USDC (
+              <InlineCode>4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU</InlineCode>) to the
+              connected Privy wallet from{' '}
+              <a
+                href="https://faucet.circle.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand hover:underline"
+              >
+                faucet.circle.com
+              </a>
+              .
+            </li>
+            <li>
+              Top up a tiny bit of devnet SOL for ATA rent via{' '}
+              <a
+                href="https://faucet.solana.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand hover:underline"
+              >
+                faucet.solana.com
+              </a>
+              .
+            </li>
+          </ul>
+        </div>
+      )}
       {result.receipt.tx_sig && result.receipt.price?.network && (
         <a
           href={transactionExplorerUrl(result.receipt.price.network, result.receipt.tx_sig)}
