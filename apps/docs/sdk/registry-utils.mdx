@@ -1,0 +1,10 @@
+---
+title: '@leash/registry-utils'
+description: Pinata uploads, BYO URI resolution, leash-block helpers.
+---
+
+- `pinJson(json, opts?)` — uploads to Pinata; `PINATA_JWT` from env.
+- `resolveByoUri(uri)` — fetches + validates `RegistrationV1`.
+- `resolveOrUpload({ uri | json })` — combined entrypoint.
+- `verifyGatewayCid(gatewayUrl)` — HTTP 200 smoke check (full CIDv1 verify lands in v0.2).
+- `loadRegistrationDocument`, `registerAgentIdentity` — registration JSON helpers.

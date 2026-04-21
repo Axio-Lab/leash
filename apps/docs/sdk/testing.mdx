@@ -1,0 +1,11 @@
+---
+title: '@leash/testing'
+description: Fixtures, in-memory facilitator, and the leash-conformance CLI.
+---
+
+```bash
+pnpm --filter @leash/testing build
+pnpm exec leash-conformance path/to/receipts.jsonl
+```
+
+The CLI returns exit `0` and a JSON `{ ok: true, count }` when the feed parses + chain-verifies (using `@leash/core` `verifyReceiptChain`), else exit `1` with a `{ ok: false, line, reason }` payload.

@@ -1,0 +1,9 @@
+---
+title: '@leash/seller-kit'
+description: Hono integration. Asset Signer PDA payTo. Simple x402-shaped gate.
+---
+
+- `simpleX402Gate()` — minimal Hono middleware that returns 402 unless `x-payment` is present.
+- `createSeller(app, { umi, sellerAgent: { asset }, routes })` — registers the gate on each `METHOD /path` key and resolves `payTo` to the seller agent's Asset Signer PDA.
+
+v0.1 intentionally **does not** bundle `@x402/solana` (npm availability constraint). The gate is sufficient for local demos and the conformance suite.

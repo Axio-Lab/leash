@@ -1,0 +1,8 @@
+---
+title: Policy
+description: Pure evaluation of RulesV1 against a request and running state.
+---
+
+`Policy.evaluate(req, rules, state) -> { decision, reason? }` is **pure** — no IO, no async. Buyers, runners, and tests all share one decision function so allow/deny matrices stay consistent across deployments.
+
+Rules live as a JSON document referenced from the `leash` block on the registration JSON.

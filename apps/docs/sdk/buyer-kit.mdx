@@ -1,0 +1,13 @@
+---
+title: '@leash/buyer-kit'
+description: Scriptable buyer agents. createBuyer + fetch + receipt.
+---
+
+```ts
+import { createBuyer } from '@leash/buyer-kit';
+
+const buyer = createBuyer({ agent, rules });
+const { response, receipt } = await buyer.fetch(url, init);
+```
+
+Internally the kit composes `@leash/schemas` (RulesV1), `@leash/core` (`x402Fetch`, `finalizeReceipt`) and a per-call `nonce` counter you can persist via your own storage.

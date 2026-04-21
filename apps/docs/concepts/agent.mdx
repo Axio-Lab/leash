@@ -1,0 +1,8 @@
+---
+title: Agent
+description: One MPL Core asset. One Asset Signer treasury. Two capabilities.
+---
+
+A Leash agent is a **single MPL Core asset**. Its identity (registration JSON), treasury (Asset Signer PDA), and policy (`leash` block + `RulesV1` doc) all hang off that one mint. Buyer and seller are _capabilities_ layered on top of the same asset; an agent can do either, both, or neither at any time.
+
+See `@leash/core` `Agent` and `treasuryPda` for the runtime surface.

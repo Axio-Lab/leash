@@ -1,0 +1,6 @@
+---
+title: Withdraw funds
+description: Owner signs an MPL Core Execute that drains the Asset Signer PDA.
+---
+
+The asset owner is sovereign. Withdraws are normal `Execute(asset, ix=[transferChecked(USDC, sellerTreasury -> destination, amount)])` instructions signed by the owner's wallet. v0.1 ships the helper as a stub in `@leash/core` (`buildWithdrawTx`); the explorer's withdraw page lands in v0.2.

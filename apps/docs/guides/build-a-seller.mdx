@@ -1,0 +1,24 @@
+---
+title: Build a seller
+description: Wire a Hono app behind a Leash seller agent.
+---
+
+```ts
+import { Hono } from 'hono';
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
+import { mplCore } from '@metaplex-foundation/mpl-core';
+import { createSeller } from '@leash/seller-kit';
+
+const umi = createUmi(process.env.SOLANA_RPC!).use(mplCore());
+const app = new Hono();
+
+createSeller(app, {
+  umi,
+  sellerAgent: { asset: process.env.AGENT_ASSET! },
+  routes: { 'POST /tag': { price: '$0.001', description: 'Tag a payload' } },
+});
+
+app.post('/tag', (c) => c.json({ tagged: true }));
+```
+
+The seller's `payTo` resolves to the **Asset Signer PDA** of the configured agent — no key custody at receive time.

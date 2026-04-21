@@ -1,0 +1,53 @@
+# Split (default): runner + seller-demo + web. Merged profile: single merged-demo process.
+services:
+  runner:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: leash:local
+    command: ['node', 'packages/runner/dist/cli.js']
+    ports:
+      - '8787:8787'
+    environment:
+      PORT: '8787'
+
+  seller-demo:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: leash:local
+    command: ['node', 'apps/seller-demo/dist/index.js']
+    ports:
+      - '3001:3001'
+    environment:
+      PORT: '3001'
+      SOLANA_RPC: '${SOLANA_RPC:-https://api.devnet.solana.com}'
+      AGENT_ASSET: '${AGENT_ASSET:-11111111111111111111111111111111}'
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: leash:local
+    command: ['pnpm', '--filter', '@leash/web', 'start']
+    working_dir: /app
+    ports:
+      - '3000:3000'
+    environment:
+      LEASH_RUNNER_URL: 'http://runner:8787'
+    depends_on:
+      - runner
+
+  merged-demo:
+    profiles: [merged]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: leash:local
+    command: ['node', 'apps/merged-demo/dist/index.js']
+    ports:
+      - '3003:3003'
+    environment:
+      PORT: '3003'
+      SOLANA_RPC: '${SOLANA_RPC:-https://api.devnet.solana.com}'
+      AGENT_ASSET: '${AGENT_ASSET:-11111111111111111111111111111111}'

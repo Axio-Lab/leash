@@ -1,0 +1,31 @@
+{
+  "name": "@leash/schemas",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node ./scripts/export-json-schema.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "echo lint:schemas",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "zod-to-json-schema": "^3.24.3",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

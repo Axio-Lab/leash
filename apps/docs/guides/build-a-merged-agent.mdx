@@ -1,0 +1,30 @@
+---
+title: Build a merged agent
+description: One asset that both sells and buys, sharing a single feed.
+---
+
+The merged demo lives at `apps/merged-demo`.
+
+### With Docker
+
+From the **`leash/`** repo root (where `docker-compose.yml` lives):
+
+```bash
+docker compose --profile merged up --build merged-demo
+```
+
+### Without Docker
+
+Use **Node ≥ 20** and **pnpm**. From **`leash/`**:
+
+```bash
+pnpm install
+pnpm turbo run build --filter=@leash/merged-demo
+pnpm --filter @leash/merged-demo start
+```
+
+Optional env vars (same as Compose): `PORT` (default `3003`), `SOLANA_RPC`, `AGENT_ASSET`.
+
+---
+
+It boots **one** Hono app with `createSeller(...)` and starts an interval-driven `createBuyer(...)` against the same `AGENT_ASSET`. Earn (`kind: 'earn'`) and spend (`kind: 'spend'`) receipts share one nonce sequence.

@@ -1,0 +1,13 @@
+---
+title: Receipt
+description: Hash-chained JSONL feed of every gated call.
+---
+
+Every gated call yields a `ReceiptV1`:
+
+- **`kind`** — `spend` (buyer-initiated) or `earn` (seller-initiated).
+- **`nonce`** — gapless, per-agent, monotonically increasing from 0.
+- **`prev_receipt_hash`** — `null` at genesis, otherwise the previous receipt's hash.
+- **`receipt_hash`** — `sha256(canonicalJson(receipt without receipt_hash))`.
+
+Verify any feed with `@leash/core` `verifyReceiptChain` or the `leash-conformance` CLI shipped from `@leash/testing`.

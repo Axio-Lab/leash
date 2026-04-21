@@ -1,0 +1,39 @@
+---
+title: Quickstart
+description: Bring up the Leash split or merged stack locally in five minutes.
+---
+
+## Prerequisites
+
+- Node **>= 20**
+- pnpm **9**
+- (Optional) Docker for the compose flows
+
+## Install + build
+
+```bash
+pnpm install
+pnpm turbo run build typecheck lint test
+```
+
+## Run the split stack (default)
+
+```bash
+docker compose up --build
+```
+
+Brings up `runner` (`:8787`), `seller-demo` (`:3001`), and `web` (`:3000`).
+
+## Run the merged stack
+
+```bash
+docker compose --profile merged up --build merged-demo
+```
+
+A single agent that both sells (`POST /echo`) and buys (interval-driven calls back into itself), all writing to one receipt feed.
+
+## Scripted demo
+
+```bash
+SELLER_URL=http://localhost:3001 pnpm exec tsx scripts/e2e-demo.ts
+```

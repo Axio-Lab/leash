@@ -1,0 +1,10 @@
+node_modules
+.next
+.turbo
+dist
+coverage
+.git
+**/*.log
+.env
+.env.*
+apps/docs/schemas/*.mdx

@@ -1,0 +1,103 @@
+/**
+ * Mintlify customizations for Leash docs.
+ *
+ * Hooks documented at https://mintlify.com/docs/customize/custom-scripts.
+ *
+ * The `*[id]` / `[class*=…]` patterns exist because Mintlify ships a few themes
+ * (`maple`, `mint`, `linden`, …) and each renders the layout with slightly
+ * different class names. We target both the documented IDs/component tags AND
+ * the underlying Tailwind max-widths so the rules survive theme upgrades.
+ */
+
+/* -------------------------------------------------------------------------- */
+/* 1. Wider page content                                                      */
+/* -------------------------------------------------------------------------- */
+
+#body-content,
+#content-area,
+#content {
+  max-width: none !important;
+  width: 100% !important;
+}
+
+/* Mintlify's own component tags */
+content-container,
+content-side-layout,
+mdx-content {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+/* Cap the actual prose so reading length stays sane, but generous */
+mdx-content {
+  max-width: min(80rem, 100%) !important;
+  margin-left: 0 !important;
+}
+
+/* Theme-specific Tailwind containers (max-w-*) used inside the article */
+#content-area [class*='max-w-'],
+#content [class*='max-w-'] {
+  max-width: none !important;
+}
+
+/* Don't widen the table of contents column */
+#table-of-contents,
+#table-of-contents-layout,
+#table-of-contents-content {
+  max-width: 16rem !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 2. Code blocks: full column width, no horizontal cramp                     */
+/* -------------------------------------------------------------------------- */
+
+code-block,
+code-group,
+mdx-content pre,
+mdx-content [class*='code-block'],
+mdx-content [class*='codeblock'] {
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+mdx-content pre {
+  overflow-x: auto; /* horizontal scroll for very long lines */
+  white-space: pre; /* keep formatting */
+  word-break: normal;
+}
+
+mdx-content pre code {
+  display: block;
+  min-width: 0;
+  font-size: 0.875rem; /* a touch larger so it doesn't feel squashed */
+  line-height: 1.55;
+}
+
+/* Tabbed code groups: let the active panel breathe */
+code-group [role='tabpanel'],
+code-group > div {
+  max-width: 100% !important;
+}
+
+/* API playground panes (when you wire OpenAPI) */
+#request-example,
+#response-example,
+#api-playground-input {
+  max-width: 100% !important;
+}
+
+/* -------------------------------------------------------------------------- */
+/* 3. Pagination footer: title only, like the sidebar                         */
+/* -------------------------------------------------------------------------- */
+
+#pagination eyebrow,
+pagination-prev eyebrow,
+pagination-next eyebrow,
+pagination-prev method-pill,
+pagination-next method-pill,
+pagination-prev > p,
+pagination-next > p,
+pagination-prev nav-dropdown-item-description,
+pagination-next nav-dropdown-item-description {
+  display: none !important;
+}

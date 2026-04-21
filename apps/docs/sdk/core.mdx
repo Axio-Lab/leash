@@ -1,0 +1,13 @@
+---
+title: '@leash/core'
+description: Policy evaluation, receipt hashing, x402 client, treasury, kill-switch.
+---
+
+Key exports:
+
+- `Agent`, `treasuryPda` — agent + Asset Signer PDA derivation (mpl-core).
+- `evaluate` — pure policy decision.
+- `canonicalJson`, `sha256Hex`, `requestHash`, `computeReceiptHash`, `finalizeReceipt`, `verifyReceiptChain`.
+- `x402Fetch` — 402 → pay → retry HTTP wrapper.
+- `getTreasuryBalance`, `buildWithdrawTx` (stub for v0.1).
+- `readPauseFromEnv`, `createPauseResolver` — kill-switch helpers.

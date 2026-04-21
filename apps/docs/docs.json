@@ -1,0 +1,75 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "Leash",
+  "theme": "maple",
+  "colors": {
+    "primary": "#9b8cff",
+    "light": "#bca8ff",
+    "dark": "#1a1533"
+  },
+  "appearance": { "default": "dark", "strict": false },
+  "background": {
+    "decoration": "grid",
+    "color": {
+      "light": "#f8fafc",
+      "dark": "#0b0b0f"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting started",
+            "pages": ["introduction", "quickstart"]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "concepts/agent",
+              "concepts/treasury",
+              "concepts/policy",
+              "concepts/receipt",
+              "concepts/capabilities"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/build-a-seller",
+              "guides/build-a-buyer",
+              "guides/build-a-merged-agent",
+              "guides/withdraw-funds",
+              "guides/pause-an-agent"
+            ]
+          },
+          {
+            "group": "SDK reference",
+            "pages": [
+              "sdk/core",
+              "sdk/seller-kit",
+              "sdk/buyer-kit",
+              "sdk/registry-utils",
+              "sdk/runner",
+              "sdk/testing"
+            ]
+          },
+          {
+            "group": "Schemas",
+            "pages": [
+              "schemas/receipt-v1",
+              "schemas/rules-v1",
+              "schemas/leash-block-v1",
+              "schemas/registration-v1"
+            ]
+          },
+          {
+            "group": "Standards",
+            "pages": ["standards/receipt-format", "standards/conformance"]
+          }
+        ]
+      }
+    ]
+  }
+}

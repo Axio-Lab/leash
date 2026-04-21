@@ -1,0 +1,11 @@
+---
+title: Pause an agent
+description: Env breaker plus on-chain AppData mirror.
+---
+
+Two switches:
+
+1. **`LEASH_KILL=1`** — env-level circuit breaker. Runner refuses outbound work immediately. `/health` returns `{ ok: false, paused: true, source: "env" }`.
+2. **On-chain `paused: bool`** — written by the asset owner via `updatePluginV1` on the AppData plugin. Wire `createPauseResolver({ fetchOnchainPaused })` into the runner; reads are cached for 5 s by default.
+
+The runner's `/pause` endpoint reports the live state and source.

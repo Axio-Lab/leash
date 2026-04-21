@@ -1,0 +1,10 @@
+---
+title: Conformance
+description: How third-party Leash implementations prove compatibility.
+---
+
+```bash
+pnpm exec leash-conformance <feed.jsonl|->
+```
+
+The suite asserts: receipt schema validity (`ReceiptV1`), gapless `nonce` from 0, `prev_receipt_hash` chain integrity, and `receipt_hash` recomputation. The CLI reads from a path or `-` for stdin and exits non-zero on the first violation.

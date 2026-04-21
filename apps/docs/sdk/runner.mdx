@@ -1,0 +1,11 @@
+---
+title: '@leash/runner'
+description: HTTP service that hosts JSONL receipt feeds and the kill switch.
+---
+
+- **`leash-runner`** CLI — `node packages/runner/dist/cli.js` boots the Hono server.
+- **`/health`** — `{ ok, paused, source }`.
+- **`/pause`** — same plus `env_kill`.
+- **`/a/:mint/receipts.jsonl`** — append-only feed (in-memory `Map` in v0.1, swap for SQLite later).
+
+Wire on-chain pause via `createHttpServer(store, { resolvePause: createPauseResolver({ fetchOnchainPaused }) })`.

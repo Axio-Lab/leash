@@ -1,0 +1,11 @@
+---
+title: Treasury
+description: Asset Signer PDA — receive without keys, withdraw via MPL Core Execute.
+---
+
+The Asset Signer PDA derived from the MPL Core asset is the agent treasury. It has no private key:
+
+- **Receiving** USDC requires no signature — standard SPL transfers land in the PDA.
+- **Spending** requires the asset owner (or a delegated executive) to sign an `Execute` instruction routed through MPL Core.
+
+`@leash/core` exposes `getTreasuryBalance` and a `buildWithdrawTx` stub; v0.1 demos use the PDA derivation only.

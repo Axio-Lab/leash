@@ -1,0 +1,12 @@
+---
+title: Receipt format
+description: Wire format of the JSONL feed.
+---
+
+Each line is canonical-JSON encoded `ReceiptV1` (see [Schemas](/schemas/receipt-v1)) terminated by `\n`. Constraints:
+
+- One writer per agent.
+- Append-only.
+- `nonce` gapless from 0.
+- `prev_receipt_hash[N] = receipt_hash[N-1]`; `prev_receipt_hash[0] = null`.
+- `receipt_hash = sha256(canonicalJson(receipt without receipt_hash))`.

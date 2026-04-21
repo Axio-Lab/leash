@@ -1,0 +1,11 @@
+---
+title: Capabilities
+description: Buyer + seller as orthogonal capabilities on one identity.
+---
+
+| Mode   | Assets | Treasuries | Receipts feed     | Use case                                                     |
+| ------ | ------ | ---------- | ----------------- | ------------------------------------------------------------ |
+| Split  | 2      | 2          | 2 (one per asset) | Teaching, isolated accounting                                |
+| Merged | 1      | 1          | 1 (mixed `kind`)  | Production agents that consume APIs to produce paid services |
+
+Both ship in v0.1: `docker compose up` (split, default) vs `docker compose --profile merged up` (merged).

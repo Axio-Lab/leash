@@ -1,0 +1,24 @@
+---
+title: Build a buyer
+description: Script an agent that pays an x402 endpoint.
+---
+
+```ts
+import { createBuyer } from '@leash/buyer-kit';
+
+const buyer = createBuyer({
+  agent: process.env.AGENT_ASSET!,
+  rules: {
+    v: '0.1',
+    budget: { daily: '1.0', perCall: '0.01', currency: 'USDC' },
+    hosts: { allow: ['seller-demo.local'] },
+    triggers: [],
+  },
+});
+
+const { response, receipt } = await buyer.fetch('https://seller-demo.local/tag', {
+  method: 'POST',
+});
+```
+
+Receipts are produced via `@leash/core` `finalizeReceipt`; persist them in your own JSONL or hand them to `@leash/runner`.
