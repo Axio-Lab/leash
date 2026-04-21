@@ -23,16 +23,16 @@ the UI calls the runner from the **Next server**, which still defaults to port *
 
 ## Pages
 
-| Route | What it does |
-|-------|-------------|
-| `/` | Dashboard: runner kill-switch state, env, jump links. |
-| `/runner` | Live tail of `receipts.jsonl` for any agent mint, with poll interval. |
-| `/agents` | Track Core asset mints locally; click into a profile. |
-| `/agents/[mint]` | Treasury PDA, earn/spend totals, receipt feed, registration document. |
-| `/seller` | Hits a built-in `simpleX402Gate`-shaped echo route; toggle `x-payment` to see 402 vs allow. |
-| `/buyer` | Build a `RulesV1` doc, fire `createBuyer().fetch(...)`, render the resulting receipt. |
-| `/schemas` | Live Zod validator for `ReceiptV1`, `RulesV1`, `RegistrationV1`, `LeashBlockV1`. |
-| `/a/[mint]/receipts.jsonl` | Public NDJSON proxy of the runner feed (kept for compatibility). |
+| Route                      | What it does                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------- |
+| `/`                        | Dashboard: runner kill-switch state, env, jump links.                                       |
+| `/runner`                  | Live tail of `receipts.jsonl` for any agent mint, with poll interval.                       |
+| `/agents`                  | Track Core asset mints locally; click into a profile.                                       |
+| `/agents/[mint]`           | Treasury PDA, earn/spend totals, receipt feed, registration document.                       |
+| `/seller`                  | Hits a built-in `simpleX402Gate`-shaped echo route; toggle `x-payment` to see 402 vs allow. |
+| `/buyer`                   | Build a `RulesV1` doc, fire `createBuyer().fetch(...)`, render the resulting receipt.       |
+| `/schemas`                 | Live Zod validator for `ReceiptV1`, `RulesV1`, `RegistrationV1`, `LeashBlockV1`.            |
+| `/a/[mint]/receipts.jsonl` | Public NDJSON proxy of the runner feed (kept for compatibility).                            |
 
 ## API routes
 

@@ -136,8 +136,8 @@ export default function RunnerPage() {
           {!feed && <p className="text-sm text-fg-muted">Loading…</p>}
           {feed && feed.receipts.length === 0 && (
             <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-fg-muted">
-              No receipts yet for{' '}
-              <code className="font-mono text-xs">{mint.slice(0, 16)}…</code>. Fire one from the{' '}
+              No receipts yet for <code className="font-mono text-xs">{mint.slice(0, 16)}…</code>.
+              Fire one from the{' '}
               <a className="text-brand hover:underline" href="/buyer">
                 buyer playground
               </a>

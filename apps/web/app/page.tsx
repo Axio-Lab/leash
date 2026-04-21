@@ -26,11 +26,31 @@ type PauseRes = {
 };
 
 const QUICKLINKS = [
-  { href: '/runner', icon: Activity, title: 'Runner', desc: 'Live `receipts.jsonl` for any agent.' },
-  { href: '/seller', icon: ShoppingBag, title: 'Seller playground', desc: 'Hit a paid route with the x402 gate.' },
-  { href: '/buyer', icon: Send, title: 'Buyer playground', desc: 'Build RulesV1, fire a request, see the receipt.' },
+  {
+    href: '/runner',
+    icon: Activity,
+    title: 'Runner',
+    desc: 'Live `receipts.jsonl` for any agent.',
+  },
+  {
+    href: '/seller',
+    icon: ShoppingBag,
+    title: 'Seller playground',
+    desc: 'Hit a paid route with the x402 gate.',
+  },
+  {
+    href: '/buyer',
+    icon: Send,
+    title: 'Buyer playground',
+    desc: 'Build RulesV1, fire a request, see the receipt.',
+  },
   { href: '/agents', icon: Bot, title: 'Agents', desc: 'Browse & open agent profiles.' },
-  { href: '/schemas', icon: FileJson2, title: 'Schemas', desc: 'Validate payloads against the live Zod schemas.' },
+  {
+    href: '/schemas',
+    icon: FileJson2,
+    title: 'Schemas',
+    desc: 'Validate payloads against the live Zod schemas.',
+  },
 ];
 
 export default function DashboardPage() {
@@ -63,9 +83,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-xs font-medium uppercase tracking-widest text-fg-subtle">
-          Jump in
-        </h2>
+        <h2 className="text-xs font-medium uppercase tracking-widest text-fg-subtle">Jump in</h2>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {QUICKLINKS.map((q) => {
             const Icon = q.icon;
@@ -105,7 +123,8 @@ export default function DashboardPage() {
             <Step n="2" title="Run a seller">
               <code className="text-xs">pnpm --filter @leash/seller-demo start</code>
               <p className="text-xs text-fg-subtle mt-1">
-                Or use the built-in <Link href="/seller" className="text-brand hover:underline">
+                Or use the built-in{' '}
+                <Link href="/seller" className="text-brand hover:underline">
                   seller playground
                 </Link>{' '}
                 which exposes <span className="font-mono">/api/seller/echo</span>.
@@ -114,7 +133,9 @@ export default function DashboardPage() {
             <Step n="3" title="Drive a buyer">
               <p className="text-xs text-fg-subtle">
                 Build a <span className="font-mono">RulesV1</span> doc in the{' '}
-                <Link href="/buyer" className="text-brand hover:underline">buyer playground</Link>{' '}
+                <Link href="/buyer" className="text-brand hover:underline">
+                  buyer playground
+                </Link>{' '}
                 and fire a request. The returned receipt mirrors what the runner stores.
               </p>
             </Step>

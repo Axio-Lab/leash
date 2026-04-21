@@ -32,17 +32,20 @@ export default function BuyerPage() {
   const [result, setResult] = React.useState<FireResult | null>(null);
   const [history, setHistory] = React.useState<ReceiptV1[]>([]);
 
-  const rules: RulesV1 = React.useMemo(() => ({
-    v: '0.1',
-    budget: { daily, perCall, currency: 'USDC' },
-    hosts: {
-      allow: hostsRaw
-        .split(',')
-        .map((h) => h.trim())
-        .filter(Boolean),
-    },
-    triggers: [{ type: 'interval', seconds: intervalSeconds }],
-  }), [daily, perCall, hostsRaw, intervalSeconds]);
+  const rules: RulesV1 = React.useMemo(
+    () => ({
+      v: '0.1',
+      budget: { daily, perCall, currency: 'USDC' },
+      hosts: {
+        allow: hostsRaw
+          .split(',')
+          .map((h) => h.trim())
+          .filter(Boolean),
+      },
+      triggers: [{ type: 'interval', seconds: intervalSeconds }],
+    }),
+    [daily, perCall, hostsRaw, intervalSeconds],
+  );
 
   async function fire() {
     setLoading(true);
@@ -88,8 +91,8 @@ export default function BuyerPage() {
           <CardHeader>
             <CardTitle>Request</CardTitle>
             <CardDescription>
-              Default targets the built-in <InlineCode>/api/seller/echo</InlineCode> seller, so
-              this round-trips end-to-end with no other process.
+              Default targets the built-in <InlineCode>/api/seller/echo</InlineCode> seller, so this
+              round-trips end-to-end with no other process.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -192,9 +195,7 @@ export default function BuyerPage() {
                     <Badge variant={result.response.status < 400 ? 'success' : 'warning'}>
                       {result.response.status}
                     </Badge>
-                    <Badge
-                      variant={result.receipt.decision === 'allow' ? 'brand' : 'danger'}
-                    >
+                    <Badge variant={result.receipt.decision === 'allow' ? 'brand' : 'danger'}>
                       {result.receipt.decision}
                     </Badge>
                   </div>
@@ -221,8 +222,8 @@ export default function BuyerPage() {
                   </Button>
                 </CardTitle>
                 <CardDescription>
-                  Receipts from this browser session (not persisted to the runner; that's
-                  configured separately).
+                  Receipts from this browser session (not persisted to the runner; that's configured
+                  separately).
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-2">

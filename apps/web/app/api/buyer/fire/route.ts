@@ -25,10 +25,7 @@ export async function POST(req: Request) {
     const json = await req.json();
     payload = Body.parse(json);
   } catch (err) {
-    return NextResponse.json(
-      { error: (err as Error).message ?? 'invalid body' },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: (err as Error).message ?? 'invalid body' }, { status: 400 });
   }
 
   try {

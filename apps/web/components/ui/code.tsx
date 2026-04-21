@@ -1,11 +1,7 @@
 import * as React from 'react';
 import { cn } from '@/lib/cn';
 
-export function InlineCode({
-  className,
-  children,
-  ...props
-}: React.HTMLAttributes<HTMLElement>) {
+export function InlineCode({ className, children, ...props }: React.HTMLAttributes<HTMLElement>) {
   return (
     <code
       className={cn(

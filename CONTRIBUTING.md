@@ -10,12 +10,7 @@
 
 ```bash
 pnpm install
-pnpm ci 
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-pnpm format:check
+pnpm ci   # format:check → typecheck → lint → test → build (same as GitHub Actions)
 ```
 
 ## Husky
@@ -24,5 +19,5 @@ pnpm format:check
 
 ## PR checklist
 
-- [ ] `pnpm turbo run lint typecheck test build`
+- [ ] `pnpm ci`
 - [ ] JSON Schema exports: change Zod in `@leash/schemas`, then `pnpm gen:docs` if docs should stay in sync.

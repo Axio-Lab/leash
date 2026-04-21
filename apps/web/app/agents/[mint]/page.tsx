@@ -3,13 +3,7 @@
 import * as React from 'react';
 import { useParams } from 'next/navigation';
 import useSWR from 'swr';
-import {
-  ArrowLeft,
-  Coins,
-  Cog,
-  FileText,
-  Wallet as WalletIcon,
-} from 'lucide-react';
+import { ArrowLeft, Coins, Cog, FileText, Wallet as WalletIcon } from 'lucide-react';
 import Link from 'next/link';
 import type { ReceiptV1 } from '@leash/schemas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -34,11 +28,9 @@ export default function AgentPage() {
   const mint = decodeURIComponent(params.mint);
   const [registryUri, setRegistryUri] = React.useState('');
 
-  const { data: feed } = useSWR<FeedRes>(
-    mint ? `/api/receipts/${mint}` : null,
-    jsonFetcher,
-    { refreshInterval: 4000 },
-  );
+  const { data: feed } = useSWR<FeedRes>(mint ? `/api/receipts/${mint}` : null, jsonFetcher, {
+    refreshInterval: 4000,
+  });
 
   const { data: payTo } = useSWR<{ asset: string; payTo: string; error?: string }>(
     mint ? `/api/seller/payTo?asset=${mint}` : null,
@@ -50,7 +42,10 @@ export default function AgentPage() {
     document: unknown;
     source: string;
     error?: string;
-  }>(registryUri ? `/api/registry/resolve?uri=${encodeURIComponent(registryUri)}` : null, jsonFetcher);
+  }>(
+    registryUri ? `/api/registry/resolve?uri=${encodeURIComponent(registryUri)}` : null,
+    jsonFetcher,
+  );
 
   const earnCount = feed?.receipts.filter((r) => r.kind === 'earn').length ?? 0;
   const spendCount = feed?.receipts.filter((r) => r.kind === 'spend').length ?? 0;
@@ -65,9 +60,7 @@ export default function AgentPage() {
       </Link>
       <PageHeader
         eyebrow="Agent profile"
-        title={
-          <span className="font-mono text-xl break-all">{mint}</span>
-        }
+        title={<span className="font-mono text-xl break-all">{mint}</span>}
         description="Identity, treasury, capabilities, and the on-runner receipt feed for this Core asset."
         actions={
           <Button asChild variant="secondary" size="sm">
@@ -143,7 +136,9 @@ export default function AgentPage() {
               {feed?.receipts
                 .slice()
                 .reverse()
-                .map((r) => <ReceiptRow key={r.receipt_hash} receipt={r} />)}
+                .map((r) => (
+                  <ReceiptRow key={r.receipt_hash} receipt={r} />
+                ))}
             </CardContent>
           </Card>
         </TabsContent>

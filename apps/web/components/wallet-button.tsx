@@ -74,7 +74,11 @@ function ConfiguredWallet({
       >
         <span className="size-1.5 rounded-full bg-success" />
         {shorten(address) || 'no-wallet'}
-        {copied ? <Check className="size-3 text-success" /> : <Copy className="size-3 opacity-50" />}
+        {copied ? (
+          <Check className="size-3 text-success" />
+        ) : (
+          <Copy className="size-3 opacity-50" />
+        )}
       </button>
       <Button variant="ghost" size="icon" onClick={logout} title="Log out">
         <LogOut className="size-4" />

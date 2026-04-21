@@ -17,7 +17,9 @@ export function JsonViewer({
   const [copied, setCopied] = React.useState(false);
 
   return (
-    <div className={cn('relative group rounded-md border border-border bg-bg-elev-2/70', className)}>
+    <div
+      className={cn('relative group rounded-md border border-border bg-bg-elev-2/70', className)}
+    >
       <button
         type="button"
         onClick={() => {

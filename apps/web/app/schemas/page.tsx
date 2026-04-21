@@ -55,9 +55,7 @@ const TEMPLATES: Record<SchemaName, string> = {
       name: 'Demo agent',
       description: 'Built with Leash',
       image: 'https://example.com/img.png',
-      services: [
-        { name: 'echo', endpoint: 'https://example.com/echo', version: '1.0.0' },
-      ],
+      services: [{ name: 'echo', endpoint: 'https://example.com/echo', version: '1.0.0' }],
       active: true,
     },
     null,
@@ -164,9 +162,7 @@ export default function SchemasPage() {
               <Button onClick={validate} disabled={loading}>
                 {loading ? 'Validating…' : `Validate against ${schema}`}
               </Button>
-              {parseErr && (
-                <p className="text-xs text-danger">JSON parse error: {parseErr}</p>
-              )}
+              {parseErr && <p className="text-xs text-danger">JSON parse error: {parseErr}</p>}
             </div>
 
             <div className="flex flex-col gap-2">
