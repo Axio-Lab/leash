@@ -10,6 +10,7 @@
 
 ```bash
 pnpm install
+pnpm ci 
 pnpm lint
 pnpm typecheck
 pnpm test

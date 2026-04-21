@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { Send, ShoppingBag, Lock, Unlock } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input, Textarea } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';

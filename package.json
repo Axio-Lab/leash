@@ -6,6 +6,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "ci": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint --continue",
