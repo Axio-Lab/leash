@@ -10,3 +10,4 @@ export * from './create-agent.js';
 export * from './agent-identity.js';
 export * from './executive.js';
 export * from './operator.js';
+export * from './delegation.js';

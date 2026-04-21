@@ -5,6 +5,8 @@ export * from './receipt/hash.js';
 export * from './receipt/build.js';
 export * from './receipt/verify.js';
 export * from './x402/client.js';
+export * from './x402/delegate-scheme.js';
+export * from './x402/facilitator.js';
 export * from './x402/parse.js';
 export * from './treasury/balance.js';
 export * from './treasury/withdraw.js';

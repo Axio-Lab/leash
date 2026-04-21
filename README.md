@@ -1,6 +1,6 @@
 # Leash v0.1
 
-Monorepo: **schemas → core → kits → runner → apps**. See [`LEASH.md`](./LEASH.md) for product context.
+> **Stablecoin rails for agents that spend on the open internet.**
 
 ## Requirements
 

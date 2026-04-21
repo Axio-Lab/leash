@@ -47,6 +47,20 @@ const StoredAgentSchema = z.object({
   owner: z.string().optional(),
   /** Behaviour rules. `null` ⇒ "limitless" (no policy gate). */
   rules: z.union([RulesV1Schema, z.null()]),
+  /**
+   * The agent treasury's USDC ATA, set when {@link setSpendDelegation} runs.
+   * Buyers pass this to `createBuyer({ sourceTokenAccount })` so funds debit
+   * from the agent PDA instead of the executive's personal wallet.
+   */
+  sourceTokenAccount: z.string().optional(),
+  /** Mint backing {@link sourceTokenAccount}. Defaults to USDC devnet. */
+  fundingMint: z.string().optional(),
+  /**
+   * The agent treasury (Asset Signer PDA). Mirrors what
+   * `findAssetSignerPda(asset)` returns; cached so the dashboard can show
+   * it without an extra RPC call.
+   */
+  treasury: z.string().optional(),
   createdAt: z.string(),
 });
 
@@ -146,6 +160,9 @@ export function saveAgent(input: {
   network: string;
   owner?: string;
   rules?: RulesV1 | null;
+  sourceTokenAccount?: string;
+  fundingMint?: string;
+  treasury?: string;
 }): StoredAgent {
   const s = safeWindow();
   if (!s) throw new Error('localStorage unavailable');
@@ -157,6 +174,9 @@ export function saveAgent(input: {
     network: input.network,
     owner: input.owner ?? existing?.owner,
     rules: input.rules ?? null,
+    sourceTokenAccount: input.sourceTokenAccount ?? existing?.sourceTokenAccount,
+    fundingMint: input.fundingMint ?? existing?.fundingMint,
+    treasury: input.treasury ?? existing?.treasury,
     createdAt: existing?.createdAt ?? new Date().toISOString(),
   };
   writeJson(s, KEY_PREFIX + input.mint, stored);

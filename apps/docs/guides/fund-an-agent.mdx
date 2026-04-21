@@ -1,0 +1,136 @@
+---
+title: 'Fund an agent'
+description: 'Approve a spend allowance from your agent treasury so the executive (your wallet) can pay x402 calls on its behalf.'
+---
+
+> Leash is **stablecoin rails for agents that spend on the open internet**. The pattern
+> we recommend for production is "client funds the agent, the agent makes them
+> money": funds physically live on the **agent treasury** (a Metaplex Core
+> Asset Signer PDA owned by the agent), and the **executive** (a Privy
+> embedded wallet, a Node keypair, a TEE — anything that can sign Solana
+> transactions) is granted a capped delegation to move them.
+
+## Why a delegation (not a per-call wrap)?
+
+Every production Solana x402 facilitator (`facilitator.svmacc.tech`,
+`facilitator.payai.network`, `x402.org/facilitator`, Coinbase CDP) only
+settles vanilla SPL `TransferChecked` transactions. Wrapping the transfer in
+`mpl-core::Execute` would require facilitator-side changes the seller doesn't
+control. Instead Leash uses a **one-time `SPL.Approve`** wrapped in
+`mpl-core::Execute`:
+
+- The **agent's Asset Signer PDA** is the on-chain owner of the USDC ATA.
+- The **executive** (your wallet) becomes the SPL **delegate** of that ATA,
+  authorised to move up to `delegated_amount` units.
+- Every settled call emits a vanilla `TransferChecked` signed by the executive
+  acting as a delegate. The SPL token program automatically debits the
+  treasury and reduces the remaining allowance.
+
+This keeps the on-chain transfer shape identical to plain x402, so the entire
+facilitator landscape "just works" while funds stay agent-owned.
+
+## In the playground
+
+1. Mint an agent at <a href="/agents/new">`/agents/new`</a>. The "Spend
+   allowance" field on tab 2 sets the initial delegation (defaults to $5
+   USDC). On submit, the playground:
+   1. Mints the Core asset.
+   2. Idempotently creates the agent's USDC ATA.
+   3. Wraps an `SPL.Approve` in `mpl-core::Execute` and signs once.
+2. Top up: send USDC on devnet (mint
+   `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`,
+   <a href="https://faucet.circle.com">faucet.circle.com</a>) directly to the
+   treasury PDA — the ATA is auto-created on first deposit if needed.
+3. Adjust or revoke at any time on the agent profile
+   (`/agents/<mint>` → "Spend allowance" card). Re-approving overwrites the
+   cap; revoking clears it (`delegate = None`, `delegated_amount = 0`).
+
+The buyer cockpit (`/buyer`) reads delegation status before each call and
+disables **Fire request** when the quoted price exceeds the remaining
+allowance or the treasury balance.
+
+## Programmatically
+
+Use `@leash/registry-utils` from any Node program:
+
+```ts
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
+import { keypairIdentity } from '@metaplex-foundation/umi';
+import { mplCore } from '@metaplex-foundation/mpl-core';
+import {
+  setSpendDelegation,
+  getSpendDelegation,
+  revokeSpendDelegation,
+} from '@leash/registry-utils';
+
+const umi = createUmi('https://api.devnet.solana.com').use(mplCore());
+umi.use(keypairIdentity(myKeypair)); // owner of the agent
+
+// Approve $5 USDC of spend authority for `executiveWallet`.
+const { signature, treasury, sourceTokenAccount, delegatedAmount } =
+  await setSpendDelegation(umi, {
+    agentAsset: 'CoreAss…Asset',
+    mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', // devnet USDC
+    executive: executiveWallet.address,
+    amount: 5_000_000n, // 5 USDC (6 decimals)
+  });
+
+// Verify on-chain.
+const status = await getSpendDelegation(umi, {
+  agentAsset: 'CoreAss…Asset',
+  mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+});
+// { treasury, sourceTokenAccount, sourceExists: true,
+//   balance: 0n, delegate: executiveWallet.address,
+//   delegatedAmount: 5_000_000n }
+
+// Drop the allowance once the run is over.
+await revokeSpendDelegation(umi, {
+  agentAsset: 'CoreAss…Asset',
+  mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+});
+```
+
+The `sourceTokenAccount` returned by `setSpendDelegation` is what the buyer
+must pass when constructing the client:
+
+```ts
+import { createBuyer } from '@leash/buyer-kit';
+
+const buyer = createBuyer({
+  agent: agentAsset,
+  rules,
+  signer: executiveSigner,
+  networks: ['solana-devnet'],
+  sourceTokenAccount, // ← debit the agent treasury, not the executive's wallet
+});
+```
+
+When `sourceTokenAccount` is omitted the buyer-kit falls back to spending
+from the executive's own USDC ATA. Useful for headless smoke tests; not what
+you want in production.
+
+## On-chain shape
+
+After `setSpendDelegation` lands you can read the SPL token account directly:
+
+```bash
+spl-token --url devnet account-info <sourceTokenAccount>
+# Owner:    <treasury PDA>          # agent's Asset Signer PDA
+# Mint:     4zMMC9...                # USDC
+# Balance:  0                         # until you top up
+# Delegate: <executive wallet>       # your Privy wallet / Node keypair
+# Delegated: 5                       # in display units (5 USDC)
+```
+
+Every settled x402 call decrements `Delegated` by the call price. When it hits
+zero the next call returns `402 + insufficient_funds` and the buyer-kit
+records that reason on the `ReceiptV1` so your cockpit can surface "top up
+needed" without guessing.
+
+## See also
+
+- [`@leash/registry-utils` →](../sdk/registry-utils) — full delegation API.
+- [`@leash/buyer-kit` →](../sdk/buyer-kit) — wiring `sourceTokenAccount`.
+- [x402 on Solana →](../standards/x402-on-solana) — why a delegate transfer
+  remains wire-compatible with every facilitator.

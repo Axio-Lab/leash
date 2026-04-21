@@ -8,6 +8,20 @@ const rpcUrl = process.env.SOLANA_RPC ?? 'https://api.devnet.solana.com';
 const agent = process.env.AGENT_ASSET ?? '11111111111111111111111111111111';
 const intervalMs = Number(process.env.POLL_MS ?? 30_000);
 const buyerSecret = process.env.LEASH_BUYER_SECRET_KEY;
+/**
+ * Optional: the agent's USDC ATA (owned by the agent's Asset Signer PDA).
+ *
+ * When set, the buyer signs transfers as the SPL **delegate** of this account
+ * and funds debit from the agent treasury — matching the playground's
+ * "agent funds itself" model. Set up the delegation once with
+ * `setSpendDelegation` from `@leash/registry-utils` (the web app does this
+ * automatically at agent creation time).
+ *
+ * When unset, the buyer-kit falls back to spending from the signer wallet's
+ * own USDC ATA — useful for headless smoke tests where you haven't minted a
+ * Core agent yet.
+ */
+const sourceTokenAccount = process.env.LEASH_BUYER_SOURCE_TOKEN_ACCOUNT;
 
 if (!buyerSecret) {
   // eslint-disable-next-line no-console
@@ -44,6 +58,7 @@ const buyer = createBuyer({
   networks: ['solana-devnet'],
   rpcUrl,
   onReceipt: postReceipt,
+  ...(sourceTokenAccount ? { sourceTokenAccount } : {}),
 });
 
 async function tick(): Promise<void> {

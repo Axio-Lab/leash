@@ -12,6 +12,13 @@ const rpc = process.env.SOLANA_RPC ?? 'https://api.devnet.solana.com';
 const asset = process.env.AGENT_ASSET ?? '11111111111111111111111111111111';
 const runnerUrl = process.env.RUNNER_URL ?? 'http://localhost:8787';
 const buyerSecret = process.env.LEASH_BUYER_SECRET_KEY;
+/**
+ * Optional: agent treasury USDC ATA. When set the buyer signs as the SPL
+ * delegate of this account so funds debit from the agent treasury rather
+ * than from the executive's own wallet. See `apps/buyer-demo/README.md` →
+ * "Agent-funded mode" for the wiring steps.
+ */
+const sourceTokenAccount = process.env.LEASH_BUYER_SOURCE_TOKEN_ACCOUNT;
 
 const umi = createUmi(rpc).use(mplCore());
 const app = new Hono();
@@ -54,6 +61,7 @@ if (!buyerSecret) {
     networks: ['solana-devnet'],
     rpcUrl: rpc,
     onReceipt: postReceipt,
+    ...(sourceTokenAccount ? { sourceTokenAccount } : {}),
   });
 
   setInterval(() => {

@@ -13,6 +13,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:devnet": "RUN_DEVNET=1 turbo run test:devnet",
+    "e2e:devnet": "tsx scripts/e2e-devnet.ts",
     "gen:docs": "node scripts/gen-schema-docs.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

@@ -31,6 +31,13 @@ const buyer = createBuyer({
   signer,
   networks: ['solana-devnet'],
   rpcUrl: 'https://api.devnet.solana.com',
+
+  // Recommended: spend from the agent treasury, not the executive's wallet.
+  // Set this to the `sourceTokenAccount` returned by `setSpendDelegation`
+  // (see "Fund an agent"). When omitted, the buyer-kit falls back to spending
+  // from the executive's own USDC ATA — useful for smoke tests, not for prod.
+  sourceTokenAccount: process.env.LEASH_BUYER_SOURCE_TOKEN_ACCOUNT,
+
   onReceipt: (r) =>
     fetch(`http://localhost:8787/a/${r.agent}/receipts`, {
       method: 'POST',
@@ -46,10 +53,14 @@ const { response, receipt } = await buyer.fetch('https://seller-demo.local/tag',
 console.log(receipt.tx_sig); // real Solana signature
 ```
 
-The buyer signer needs **devnet SOL** (for the SPL transfer fee) and
-**devnet USDC** (the funds being moved). See
-[`Real x402 on Solana`](/standards/x402-on-solana) for the faucets and
-the wire-level header walkthrough.
+In agent-funded mode the executive needs a tiny amount of **devnet SOL** for
+the network fee (the facilitator pays the rest), the **agent treasury** holds
+the USDC being moved, and the executive must already be the SPL delegate of
+the agent's USDC ATA — see [Fund an agent](./fund-an-agent). In legacy mode
+(no `sourceTokenAccount`) the signer wallet itself needs both SOL and USDC.
+
+See [`Real x402 on Solana`](/standards/x402-on-solana) for the wire-level
+header walkthrough and the facilitator landscape.
 
 ## Browser usage
 

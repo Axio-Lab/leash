@@ -15,14 +15,43 @@ buyer or stand up a seller, see the SDK pages for
 
 | Role | What it signs | Holds funds in | Pays gas |
 | --- | --- | --- | --- |
-| **Buyer** (your agent + signer) | The SPL transfer | Buyer's USDC ATA | Pays the **buyer-side** fee on the transfer |
+| **Executive** (Privy wallet, Node keypair, TEE) | The SPL transfer (as **delegate** of the buyer agent treasury) | — | Pays the buyer-side fee on the transfer |
+| **Buyer agent** (Core asset) | Nothing — passive owner | Asset Signer PDA → SPL token ATA | — |
 | **Seller** (`@leash/seller-kit` middleware) | Nothing | Asset Signer PDA (`payTo`) | — |
-| **Facilitator** (`facilitator.svmacc.tech` by default) | Nothing | — | Pays the **network fee** to broadcast `payTo` |
+| **Facilitator** (`facilitator.svmacc.tech` devnet, `facilitator.payai.network` mainnet) | Nothing | — | Pays the **network fee** to broadcast `payTo` |
 
-Because Leash addresses the seller via the agent's Asset Signer PDA, the
-seller agent doesn't need a private key at all to receive payment. Funds
-land directly in the agent's treasury, where they can be moved by the
-agent's executive (registry-controlled) signer.
+Both parties address themselves via Core Asset Signer PDAs. Funds land in
+the seller agent's treasury directly, and they leave the buyer agent's
+treasury via a delegated `TransferChecked` — see "Agent-funded transfers"
+below.
+
+## Agent-funded transfers (the delegate trick)
+
+Out-of-the-box `@x402/svm`'s `ExactSvmScheme` derives the source ATA from
+the signer's wallet — it assumes the signer also owns the funds. That's
+wrong for Leash agents: funds live on the **agent treasury PDA**, but the
+PDA can only sign through `mpl-core::Execute`, which no production
+facilitator wraps for you.
+
+Leash sidesteps this with a one-time delegation:
+
+1. Owner runs `setSpendDelegation` (`@leash/registry-utils`). It wraps an
+   SPL `Approve` in `mpl-core::Execute`, signed by the owner; the program
+   debits the asset signer PDA via CPI and authorises the executive as the
+   ATA's SPL **delegate** for up to `delegated_amount` units.
+2. Buyer-kit, when constructed with `sourceTokenAccount`, registers
+   `LeashDelegateExactSvmScheme` (`@leash/core`) instead of
+   `ExactSvmScheme`. The on-chain transfer is still a vanilla
+   `TransferChecked` — only the `source` field switches from "executive's
+   ATA" to "agent treasury's ATA", and `authority` is the executive
+   (signing as delegate). Every facilitator we tested
+   (`facilitator.svmacc.tech`, `facilitator.payai.network`,
+   `x402.org/facilitator`, Coinbase CDP) settles it without modification.
+3. The SPL token program automatically reduces `delegated_amount` after
+   each transfer; once exhausted the next call returns
+   `402 + insufficient_funds`. Re-approve to top up; revoke to lock down.
+
+See [Fund an agent](/guides/fund-an-agent) for the wiring steps.
 
 ## The headers
 
@@ -77,21 +106,28 @@ into the corresponding `ReceiptV1` so explorers can chain the buyer's
 
 ## Swapping facilitators
 
-Any HTTPS x402 facilitator works. Configure on the seller side:
+Any HTTPS x402 facilitator works. The defaults Leash ships with:
+
+| Network | Default facilitator | Notes |
+| --- | --- | --- |
+| `solana-devnet` | `https://facilitator.svmacc.tech` | Free, gas-sponsored, supports Token-2022. Used by the playground. |
+| `solana-mainnet` | `https://facilitator.payai.network` | Gas-sponsored mainnet exact-scheme facilitator. |
+
+Override per-process by setting `LEASH_FACILITATOR_URL`, or per-seller via
+`facilitator: '…'`:
 
 ```ts
 import { createSvmResourceServer } from '@leash/seller-kit/x402';
 
 const server = createSvmResourceServer({
-  network: 'solana-devnet',
-  payTo,
-  asset: '<USDC mint>',
-  facilitatorUrl: 'https://your-facilitator.example.com',
+  networks: ['solana-mainnet'],
+  facilitator: 'https://your-facilitator.example.com',
 });
 ```
 
-There is **no** facilitator config on the buyer side — the buyer pays
-whatever the seller advertises, so the seller chooses.
+There is **no** facilitator config required on the buyer side — the buyer
+pays whatever the seller advertises, so the seller chooses. The buyer-kit
+records the facilitator URL on every receipt for explorer cross-checking.
 
 ## Choosing a network
 

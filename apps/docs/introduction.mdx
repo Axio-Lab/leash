@@ -1,9 +1,15 @@
 ---
 title: Introduction
-description: Leash v0.1 — schemas, kits, runner, and demos.
+description: Stablecoin rails for agents that spend on the open internet.
 ---
 
-Leash is a **wallet + policy + receipt** stack for autonomous agents on Solana.
+**Leash is stablecoin rails for agents that spend on the open internet.** It
+ships a wallet (an MPL Core agent treasury PDA), a capped spend allowance
+(SPL token delegate to your executive wallet), a policy gate (`RulesV1`),
+and a chained receipt feed (`ReceiptV1`) — all settled through real
+[x402](https://x402.org) HTTP payments in USDC on Solana, via any compatible
+facilitator. Drop it in front of any agent and it can buy, get paid, and
+prove every transfer happened.
 
 ## Monorepo
 

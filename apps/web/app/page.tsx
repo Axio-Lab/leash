@@ -63,7 +63,7 @@ export default function DashboardPage() {
       <PageHeader
         eyebrow="Playground"
         title="Leash control room"
-        description="One place to drive the runner, agents, sellers, buyers, and the schemas they share."
+        description="Stablecoin rails for agents that spend on the open internet. One place to drive the runner, agents, sellers, buyers, and the schemas they share."
       />
 
       <section className="grid gap-4 md:grid-cols-3">

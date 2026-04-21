@@ -74,11 +74,40 @@ type BuyerConfig = {
   signer: ClientSvmSigner;
   networks?: ('solana-mainnet' | 'solana-devnet' | string)[];
   rpcUrl?: string;
+  /**
+   * Optional. The agent treasury's USDC ATA, returned by `setSpendDelegation`
+   * from `@leash/registry-utils`. When set, every settled call signs as the
+   * SPL **delegate** of this account so funds debit from the agent treasury
+   * rather than from the executive's wallet. Recommended for production —
+   * see "Fund an agent" guide.
+   */
+  sourceTokenAccount?: string;
+  /**
+   * Override the default x402 facilitator URL. Defaults to
+   * `facilitator.svmacc.tech` on devnet and `facilitator.payai.network` on
+   * mainnet; the env var `LEASH_FACILITATOR_URL` overrides both.
+   */
+  facilitator?: string;
   fetch?: typeof globalThis.fetch;     // injection point for tests
   onReceipt?: (r: ReceiptV1) => unknown;
-  prevReceiptHash?: string | null;
+};
+
+type BuyerCallResult = {
+  response: Response;
+  receipt: ReceiptV1;
+  /** Price the seller demanded (parsed from PAYMENT-REQUIRED on a 402). */
+  quotedPrice?: ReceiptV1['price'];
+  /** Reason the call did not settle (e.g. "insufficient_funds"). */
+  failureReason?: string;
 };
 ```
 
+When `sourceTokenAccount` is set the buyer-kit registers
+`LeashDelegateExactSvmScheme` from `@leash/core` instead of the vanilla
+`@x402/svm` exact scheme — wire-compatible with every facilitator (the
+on-chain instruction is still a plain SPL `TransferChecked`), but with the
+**agent treasury** as the source instead of the executive's own ATA.
+
 See [`Real x402 on Solana`](/standards/x402-on-solana) for the protocol-level
-walkthrough.
+walkthrough and [`Fund an agent`](/guides/fund-an-agent) for the wiring
+steps.

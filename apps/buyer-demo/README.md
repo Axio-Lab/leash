@@ -69,11 +69,24 @@ app) to see it on Solscan.
 
 ## Environment
 
-| Var                      | Default                         | Description                               |
-| ------------------------ | ------------------------------- | ----------------------------------------- |
-| `LEASH_BUYER_SECRET_KEY` | _required_                      | JSON byte array of a devnet keypair.      |
-| `SELLER_URL`             | `http://localhost:3001`         | Base URL of the seller.                   |
-| `RUNNER_URL`             | `http://localhost:8787`         | `@leash/runner` base URL.                 |
-| `AGENT_ASSET`            | `1111…1111`                     | Core asset mint to attribute receipts to. |
-| `SOLANA_RPC`             | `https://api.devnet.solana.com` | RPC the buyer signs against.              |
-| `POLL_MS`                | `30000`                         | Interval between buyer ticks.             |
+| Var                                | Default                         | Description                                                                                                                  |
+| ---------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `LEASH_BUYER_SECRET_KEY`           | _required_                      | JSON byte array of a devnet keypair. Acts as the agent's **executive** signer.                                               |
+| `LEASH_BUYER_SOURCE_TOKEN_ACCOUNT` | _unset_                         | Optional. Agent treasury USDC ATA — funds debit from here when set, executive must already hold an SPL `Approve` delegation. |
+| `SELLER_URL`                       | `http://localhost:3001`         | Base URL of the seller.                                                                                                      |
+| `RUNNER_URL`                       | `http://localhost:8787`         | `@leash/runner` base URL.                                                                                                    |
+| `AGENT_ASSET`                      | `1111…1111`                     | Core asset mint to attribute receipts to.                                                                                    |
+| `SOLANA_RPC`                       | `https://api.devnet.solana.com` | RPC the buyer signs against.                                                                                                 |
+| `POLL_MS`                          | `30000`                         | Interval between buyer ticks.                                                                                                |
+
+### Agent-funded mode (recommended)
+
+For the production "client funds the agent, the agent makes them money" flow:
+
+1. Mint an agent (web playground or `createAgent` from `@leash/registry-utils`).
+2. Approve the executive (this CLI's keypair) as the SPL delegate of the
+   agent's USDC ATA via `setSpendDelegation` from `@leash/registry-utils`.
+3. Fund the agent treasury PDA with USDC on devnet.
+4. Set `LEASH_BUYER_SOURCE_TOKEN_ACCOUNT` to the printed
+   `sourceTokenAccount` and run as usual. Every settled call now debits the
+   agent treasury and decreases the remaining delegation.

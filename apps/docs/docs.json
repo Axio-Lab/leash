@@ -1,6 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "name": "Leash",
+  "description": "Stablecoin rails for agents that spend on the open internet.",
   "theme": "maple",
   "colors": {
     "primary": "#9b8cff",
@@ -38,6 +39,7 @@
             "group": "Guides",
             "pages": [
               "guides/create-an-agent",
+              "guides/fund-an-agent",
               "guides/create-an-endpoint",
               "guides/build-a-seller",
               "guides/build-a-buyer",

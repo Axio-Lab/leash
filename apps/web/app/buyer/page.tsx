@@ -28,6 +28,7 @@ import { PageHeader } from '@/components/page-header';
 import { InlineCode } from '@/components/ui/code';
 import { useToast } from '@/components/ui/toast';
 import { usePrivySvmSigner } from '@/lib/privy-svm-signer';
+import { usePrivyUmi } from '@/lib/privy-umi';
 import { transactionExplorerUrl } from '@/lib/solscan';
 import { SOLANA_RPC } from '@/lib/env';
 import { WalletBalanceBadge } from '@/components/wallet-balance-badge';
@@ -39,6 +40,21 @@ import {
   loadAgent,
   type StoredAgent,
 } from '@/lib/agent-storage';
+import { getSpendDelegation, type SpendDelegationStatus } from '@leash/registry-utils';
+
+const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+const USDC_MAINNET = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+
+/** Convert a `1.23` decimal string into atomic USDC units (`1230000n`). */
+function decimalToAtomicUsdc(input: string): bigint | null {
+  const s = input.trim();
+  if (!s) return null;
+  const m = s.match(/^(\d+)(?:\.(\d{1,6}))?$/);
+  if (!m) return null;
+  const whole = m[1];
+  const frac = (m[2] ?? '').padEnd(6, '0');
+  return BigInt(whole) * 1_000_000n + BigInt(frac);
+}
 
 type FireResult =
   | {
@@ -95,6 +111,7 @@ function formatPrice(price: ReceiptV1['price'] | undefined): string | null {
 export default function BuyerPage() {
   const toast = useToast();
   const { signer, wallet, ready } = usePrivySvmSigner();
+  const { umi: privyUmi } = usePrivyUmi();
 
   const [agents, setAgents] = React.useState<
     Array<Pick<StoredAgent, 'mint' | 'label' | 'network'>>
@@ -126,6 +143,64 @@ export default function BuyerPage() {
     refreshInterval: 8000,
   });
   const allLinks = linksData?.endpoints ?? [];
+
+  // The mint the agent funds calls from (USDC, network-aware).
+  const fundingMint = React.useMemo(() => {
+    if (agentRecord?.fundingMint) return agentRecord.fundingMint;
+    return agentRecord?.network === 'solana-mainnet' ? USDC_MAINNET : USDC_DEVNET;
+  }, [agentRecord]);
+
+  const [delegation, setDelegation] = React.useState<SpendDelegationStatus | null>(null);
+  const [delegationLoading, setDelegationLoading] = React.useState(false);
+  const [delegationError, setDelegationError] = React.useState<string | null>(null);
+
+  const refreshDelegation = React.useCallback(async () => {
+    if (!privyUmi || !selectedAgent) {
+      setDelegation(null);
+      return;
+    }
+    setDelegationLoading(true);
+    setDelegationError(null);
+    try {
+      const status = await getSpendDelegation(privyUmi, {
+        agentAsset: selectedAgent,
+        mint: fundingMint,
+      });
+      setDelegation(status);
+    } catch (err) {
+      setDelegation(null);
+      setDelegationError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDelegationLoading(false);
+    }
+  }, [privyUmi, selectedAgent, fundingMint]);
+
+  React.useEffect(() => {
+    void refreshDelegation();
+  }, [refreshDelegation]);
+
+  // Quoted price for the link the user is currently aiming at — used to gate
+  // the Fire button when the delegation is too small to cover the call.
+  const quotedAtomic: bigint | null = React.useMemo(() => {
+    try {
+      const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://x');
+      const m = u.pathname.match(/\/x\/([^/]+)/);
+      if (!m) return null;
+      const ep = allLinks.find((e) => e.id === m[1]);
+      if (!ep?.price) return null;
+      // Endpoint price strings look like "0.05 USDC" or "5 USDC".
+      const priceMatch = ep.price.match(/^([\d.]+)\s*([A-Z]+)$/);
+      if (!priceMatch || priceMatch[2] !== 'USDC') return null;
+      return decimalToAtomicUsdc(priceMatch[1]);
+    } catch {
+      return null;
+    }
+  }, [url, allLinks]);
+
+  const insufficientDelegation =
+    delegation != null &&
+    quotedAtomic != null &&
+    (delegation.delegatedAmount < quotedAtomic || delegation.balance < quotedAtomic);
 
   const rules: RulesV1 = React.useMemo(() => {
     if (agentRecord?.rules) return agentRecord.rules;
@@ -171,6 +246,9 @@ export default function BuyerPage() {
         networks: ['solana-devnet'],
         rpcUrl: SOLANA_RPC,
         onReceipt: shipReceipt,
+        ...(agentRecord?.sourceTokenAccount
+          ? { sourceTokenAccount: agentRecord.sourceTokenAccount }
+          : {}),
       });
       const headers: Record<string, string> = {};
       if (method === 'POST' && body) headers['content-type'] = 'application/json';
@@ -212,6 +290,9 @@ export default function BuyerPage() {
         const reason = callResult.failureReason ?? 'no failure reason returned by the seller';
         toast.error(`Settlement failed${quoted ? ` (asked ${quoted})` : ''}`, reason);
       } else if (settled) {
+        // Refresh delegation in the background so the new remaining allowance
+        // appears in the gating panel without a manual page reload.
+        void refreshDelegation();
         toast.success(
           'x402 call completed',
           `Status ${callResult.response.status} · receipt ${callResult.receipt.receipt_hash.slice(0, 12)}…`,
@@ -306,7 +387,9 @@ export default function BuyerPage() {
                   Run an Agent
                 </a>{' '}
                 docs, your wallet is registered as the agent&apos;s Executive and authorised via an
-                on-chain delegation record. No private keys ever leave the browser.
+                on-chain delegation record. <strong>Funds debit from the agent treasury</strong>{' '}
+                (PDA-owned USDC ATA) via the SPL token <code className="font-mono">Approve</code>{' '}
+                you set on the agent profile — your wallet just signs the transfer.
               </span>
             </div>
           )}
@@ -438,13 +521,88 @@ export default function BuyerPage() {
                 </span>
               </div>
 
-              <Button onClick={fire} disabled={loading || !signer || !selectedAgent} size="lg">
-                <Send /> {loading ? 'Signing & paying…' : 'Fire request'}
+              <Button
+                onClick={fire}
+                disabled={loading || !signer || !selectedAgent || insufficientDelegation}
+                size="lg"
+              >
+                <Send />{' '}
+                {loading
+                  ? 'Signing & paying…'
+                  : insufficientDelegation
+                    ? 'Insufficient treasury / allowance'
+                    : 'Fire request'}
               </Button>
             </CardContent>
           </Card>
 
           <div className="flex flex-col gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Wallet className="size-4 text-brand" /> Agent treasury &amp; allowance
+                </CardTitle>
+                <CardDescription>
+                  How much USDC the agent holds and how much your executive wallet is approved to
+                  spend on its behalf. Both are read straight from the agent&apos;s on-chain SPL
+                  ATA.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-2 text-xs">
+                {!selectedAgent ? (
+                  <p className="text-fg-muted">Pick an agent to see treasury status.</p>
+                ) : delegationError ? (
+                  <p className="text-danger">{delegationError}</p>
+                ) : delegationLoading && !delegation ? (
+                  <p className="text-fg-muted">Reading on-chain delegation…</p>
+                ) : delegation ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Stat
+                        label="Treasury balance"
+                        value={`${(Number(delegation.balance) / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDC`}
+                        sub={delegation.sourceExists ? 'ATA initialised' : 'ATA not yet created'}
+                      />
+                      <Stat
+                        label="Remaining allowance"
+                        value={`${(Number(delegation.delegatedAmount) / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDC`}
+                        sub={
+                          delegation.delegate
+                            ? `delegate ${delegation.delegate.slice(0, 6)}…${delegation.delegate.slice(-4)}`
+                            : 'no delegate set'
+                        }
+                      />
+                    </div>
+                    {!agentRecord?.sourceTokenAccount && (
+                      <p className="text-warning">
+                        This agent doesn&apos;t have a saved <code>sourceTokenAccount</code> on this
+                        device. The buyer-kit will fall back to spending from your Privy
+                        wallet&apos;s own USDC ATA (legacy mode). Open the agent profile and{' '}
+                        <em>Set allowance</em> to wire up the treasury.
+                      </p>
+                    )}
+                    {insufficientDelegation && (
+                      <p className="text-danger">
+                        Quoted price exceeds the remaining allowance or treasury balance for this
+                        agent. Re-approve a higher allowance and/or top up the treasury before
+                        firing.
+                      </p>
+                    )}
+                    {selectedAgent && (
+                      <Link
+                        href={`/agents/${encodeURIComponent(selectedAgent)}`}
+                        className="text-brand hover:underline w-fit"
+                      >
+                        Manage allowance on agent profile →
+                      </Link>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-fg-muted">Connect a wallet to read delegation.</p>
+                )}
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -679,6 +837,16 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div className="flex flex-col gap-1.5">
       <Label>{label}</Label>
       {children}
+    </div>
+  );
+}
+
+function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-md border border-border bg-bg-elev/40 p-2.5">
+      <div className="text-[10px] uppercase tracking-wider text-fg-subtle">{label}</div>
+      <div className="font-mono text-sm">{value}</div>
+      {sub && <div className="text-[10px] text-fg-subtle">{sub}</div>}
     </div>
   );
 }

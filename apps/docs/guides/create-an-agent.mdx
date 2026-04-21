@@ -81,7 +81,27 @@ await delegateExecution(umi, {
 });
 ```
 
-See [Run an Agent](https://www.metaplex.com/docs/agents/run-an-agent) for the full execution model. The actual `Execute` composer (e.g. SPL `transferChecked` from the treasury) is the next item on the roadmap; for now the playground stops at delegation.
+See [Run an Agent](https://www.metaplex.com/docs/agents/run-an-agent) for the full execution model.
+
+## Fund the agent (treasury delegation)
+
+For real x402 calls the executive needs a **capped SPL delegation** on the
+agent treasury — that's how funds debit from the agent (not from your
+personal wallet) on every settled call. One call:
+
+```ts
+import { setSpendDelegation } from '@leash/registry-utils';
+
+await setSpendDelegation(umi, {
+  agentAsset: assetAddress,
+  mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', // devnet USDC
+  executive: String(umi.identity.publicKey),
+  amount: 5_000_000n, // 5 USDC
+});
+```
+
+Full walkthrough — including how to top up, adjust, and revoke — in
+[Fund an agent](./fund-an-agent).
 
 ## What "Supported trust" means
 

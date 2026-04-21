@@ -15,6 +15,22 @@ description: Pinata uploads, BYO URI resolution, leash-block helpers.
 - `getAgentTreasury(context, asset)` — derives the Asset Signer PDA (the agent's built-in wallet).
 - `loadAgentRegistration(uri)` / `loadRegistrationDocument(uri)` — fetch + Zod-validate `RegistrationV1`.
 
+### Spend allowance (treasury → executive)
+
+The agent treasury (an Asset Signer PDA) physically owns the funds. To let an
+executive wallet move them via x402, approve a **capped SPL delegation** on
+the agent's USDC ATA. Implemented as an `SPL.Approve` wrapped in
+`mpl-core::Execute` so the PDA can authorise it via CPI; the resulting
+delegation is wire-compatible with every existing x402 facilitator (the
+on-chain transfer is plain `TransferChecked`).
+
+- `setSpendDelegation(umi, { agentAsset, mint, executive, amount, payer?, authority?, tokenProgram? })` — idempotently creates the agent's ATA and approves `executive` for up to `amount` atomic units. Returns `{ signature, treasury, sourceTokenAccount, delegatedAmount, delegate }`.
+- `revokeSpendDelegation(umi, { agentAsset, mint, payer?, authority?, tokenProgram? })` — drops `delegate` and `delegated_amount` to zero.
+- `getSpendDelegation(umi, { agentAsset, mint, tokenProgram? })` — reads on-chain state without sending a tx. Returns `{ treasury, sourceTokenAccount, sourceExists, balance, delegate, delegatedAmount }`.
+- Constants: `SPL_TOKEN_PROGRAM_ID`, `TOKEN_2022_PROGRAM_ID`.
+
+Full walkthrough in [Fund an agent](/guides/fund-an-agent).
+
 ### Execute (delegation)
 
 Mirrors the Metaplex [Run an Agent](https://www.metaplex.com/docs/agents/run-an-agent) guide step-for-step. The web playground signs all three calls with the connected **Privy embedded wallet** — there is no server-side signer in the user flow.

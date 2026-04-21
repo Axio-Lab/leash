@@ -3,6 +3,7 @@ import type { FacilitatorClient } from '@x402/core/server';
 import type { Network } from '@x402/core/types';
 import { ExactSvmScheme } from '@x402/svm/exact/server';
 import { SOLANA_DEVNET_CAIP2, SOLANA_MAINNET_CAIP2, SOLANA_TESTNET_CAIP2 } from '@x402/svm';
+import { defaultFacilitatorFor, FALLBACK_FACILITATOR_URL } from '@leash/core';
 
 export type LeashSellerNetwork = 'solana-mainnet' | 'solana-devnet' | 'solana-testnet';
 
@@ -16,7 +17,12 @@ export function caip2ForSellerNetwork(network: LeashSellerNetwork): Network {
   return NETWORK_TO_CAIP2[network];
 }
 
-export const DEFAULT_FACILITATOR_URL = 'https://facilitator.svmacc.tech';
+/**
+ * Backwards-compatible alias. New code should prefer
+ * {@link defaultFacilitatorFor} from `@leash/core` so devnet and mainnet pick
+ * appropriate hosts and `LEASH_FACILITATOR_URL` overrides flow uniformly.
+ */
+export const DEFAULT_FACILITATOR_URL = FALLBACK_FACILITATOR_URL;
 
 export type CreateSvmResourceServerOptions = {
   /** CAIP-2 networks the seller accepts. Defaults to `['solana-devnet']`. */
@@ -41,10 +47,11 @@ export function createSvmResourceServer(opts: CreateSvmResourceServerOptions = {
   facilitatorUrl: string | null;
 } {
   const networks = opts.networks ?? ['solana-devnet'];
+  const defaultUrl = defaultFacilitatorFor(networks);
   const facilitatorClient: FacilitatorClient =
     typeof opts.facilitator === 'string'
       ? new HTTPFacilitatorClient({ url: opts.facilitator })
-      : (opts.facilitator ?? new HTTPFacilitatorClient({ url: DEFAULT_FACILITATOR_URL }));
+      : (opts.facilitator ?? new HTTPFacilitatorClient({ url: defaultUrl }));
 
   const facilitatorUrl =
     facilitatorClient instanceof HTTPFacilitatorClient ? facilitatorClient.url : null;

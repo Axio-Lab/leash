@@ -2,6 +2,7 @@ import type { ReceiptV1, RulesV1 } from '@leash/schemas';
 import {
   createSvmBuyerFetch,
   decodePaymentResponseHeader,
+  defaultFacilitatorFor,
   evaluate,
   finalizeReceipt,
   paymentRequirementsHash,
@@ -33,6 +34,17 @@ export type BuyerConfig = {
   networks?: LeashX402Network[];
   /** Optional custom RPC URL passed to `ExactSvmScheme`. */
   rpcUrl?: string;
+  /**
+   * If set, payments use the Leash delegate scheme instead of the default
+   * `ExactSvmScheme`: funds debit from this token account (e.g. an agent
+   * treasury PDA's USDC ATA) and `signer` signs as the SPL **delegate** of
+   * that account. The owner of the account must have previously approved
+   * `signer.address` for at least the per-call price (see
+   * `setSpendDelegation` in `@leash/registry-utils`).
+   *
+   * Leave undefined for vanilla "signer pays from their own ATA" flow.
+   */
+  sourceTokenAccount?: string;
   /**
    * Facilitator label/URL written to receipts. The buyer never talks to the
    * facilitator directly — the seller does — but recording it on the receipt
@@ -76,7 +88,9 @@ export type Buyer = {
   fetch(url: string, init?: RequestInit): Promise<BuyerCallResult>;
 };
 
-const DEFAULT_FACILITATOR = 'https://facilitator.svmacc.tech';
+// Imported from @leash/core. Re-resolved on every createBuyer call so the
+// LEASH_FACILITATOR_URL env override applies even when buyer-kit is bundled
+// without process polyfills (the helper guards `typeof process`).
 
 /**
  * Build a Leash buyer agent. The returned `fetch` enforces the policy
@@ -87,13 +101,14 @@ const DEFAULT_FACILITATOR = 'https://facilitator.svmacc.tech';
  */
 export function createBuyer(cfg: BuyerConfig): Buyer {
   const networks = cfg.networks ?? (['solana-devnet'] as LeashX402Network[]);
-  const facilitator = cfg.facilitator ?? DEFAULT_FACILITATOR;
+  const facilitator = cfg.facilitator ?? defaultFacilitatorFor(networks);
   const paidFetch =
     cfg.fetch ??
     createSvmBuyerFetch({
       signer: cfg.signer,
       networks,
-      rpcUrl: cfg.rpcUrl,
+      ...(cfg.rpcUrl ? { rpcUrl: cfg.rpcUrl } : {}),
+      ...(cfg.sourceTokenAccount ? { sourceTokenAccount: cfg.sourceTokenAccount } : {}),
     });
 
   const state: PolicyState = {

@@ -30,9 +30,29 @@ import { Label } from '@/components/ui/label';
 import { PageHeader } from '@/components/page-header';
 import { jsonFetcher } from '@/lib/fetcher';
 import { usePrivyUmi } from '@/lib/privy-umi';
-import { delegateExecution, registerExecutive } from '@leash/registry-utils';
+import {
+  delegateExecution,
+  registerExecutive,
+  getSpendDelegation,
+  setSpendDelegation,
+  revokeSpendDelegation,
+  type SpendDelegationStatus,
+} from '@leash/registry-utils';
 import { transactionExplorerUrl } from '@/lib/solscan';
-import { loadAgent, type StoredAgent } from '@/lib/agent-storage';
+import { loadAgent, saveAgent, type StoredAgent } from '@/lib/agent-storage';
+import { useToast } from '@/components/ui/toast';
+
+const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+const USDC_MAINNET = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+
+function defaultUsdcMint(network: 'mainnet' | 'devnet' | undefined): {
+  mint: string;
+  label: string;
+} {
+  return network === 'mainnet'
+    ? { mint: USDC_MAINNET, label: 'USDC' }
+    : { mint: USDC_DEVNET, label: 'USDC (devnet)' };
+}
 
 type FeedRes = {
   mint: string;
@@ -106,6 +126,101 @@ export default function AgentPage() {
   const [execBusy, setExecBusy] = React.useState<null | 'register' | 'delegate'>(null);
   const [execError, setExecError] = React.useState<string | null>(null);
   const [execLastSig, setExecLastSig] = React.useState<string | null>(null);
+
+  // ---- Spend allowance (treasury → executive SPL Approve) ----
+  const toast = useToast();
+  const usdcInfo = defaultUsdcMint(balance?.network);
+  const [delegation, setDelegation] = React.useState<SpendDelegationStatus | null>(null);
+  const [delegationLoading, setDelegationLoading] = React.useState(false);
+  const [delegationError, setDelegationError] = React.useState<string | null>(null);
+  const [allowanceDraft, setAllowanceDraft] = React.useState('5.00');
+  const [allowanceBusy, setAllowanceBusy] = React.useState<'set' | 'revoke' | null>(null);
+  const [allowanceLastSig, setAllowanceLastSig] = React.useState<string | null>(null);
+
+  const refreshDelegation = React.useCallback(async () => {
+    if (!privyUmi || !mint) return;
+    setDelegationLoading(true);
+    setDelegationError(null);
+    try {
+      const status = await getSpendDelegation(privyUmi, {
+        agentAsset: mint,
+        mint: usdcInfo.mint,
+      });
+      setDelegation(status);
+    } catch (err) {
+      setDelegationError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDelegationLoading(false);
+    }
+  }, [privyUmi, mint, usdcInfo.mint]);
+
+  React.useEffect(() => {
+    void refreshDelegation();
+  }, [refreshDelegation]);
+
+  async function handleSetAllowance() {
+    if (!privyUmi || !privyWallet) {
+      toast.error('Connect a wallet', 'You need a Solana wallet to approve a delegation.');
+      return;
+    }
+    const decimal = Number(allowanceDraft);
+    if (!Number.isFinite(decimal) || decimal <= 0) {
+      toast.error('Invalid amount', 'Enter a positive USDC amount.');
+      return;
+    }
+    setAllowanceBusy('set');
+    setAllowanceLastSig(null);
+    try {
+      const atomic = BigInt(Math.round(decimal * 1_000_000));
+      const res = await setSpendDelegation(privyUmi, {
+        agentAsset: mint,
+        mint: usdcInfo.mint,
+        executive: privyWallet.address,
+        amount: atomic,
+      });
+      setAllowanceLastSig(res.signature);
+      saveAgent({
+        mint,
+        label: localRecord?.label,
+        network:
+          localRecord?.network ??
+          (balance?.network === 'mainnet' ? 'solana-mainnet' : 'solana-devnet'),
+        owner: localRecord?.owner ?? privyWallet.address,
+        rules: localRecord?.rules ?? null,
+        sourceTokenAccount: res.sourceTokenAccount,
+        fundingMint: usdcInfo.mint,
+        treasury: res.treasury,
+      });
+      setLocalRecord(loadAgent(mint));
+      toast.success('Allowance updated', `${allowanceDraft} ${usdcInfo.label} approved.`);
+      await refreshDelegation();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error('Approve failed', msg);
+    } finally {
+      setAllowanceBusy(null);
+    }
+  }
+
+  async function handleRevokeAllowance() {
+    if (!privyUmi || !privyWallet) return;
+    setAllowanceBusy('revoke');
+    setAllowanceLastSig(null);
+    try {
+      const res = await revokeSpendDelegation(privyUmi, {
+        agentAsset: mint,
+        mint: usdcInfo.mint,
+      });
+      setAllowanceLastSig(res.signature);
+      toast.info('Delegation revoked', 'Executive can no longer move treasury funds.');
+      await refreshDelegation();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error('Revoke failed', msg);
+    } finally {
+      setAllowanceBusy(null);
+    }
+  }
 
   async function callExec(action: 'register' | 'delegate') {
     if (!privyUmi || !privyWallet) {
@@ -371,6 +486,149 @@ export default function AgentPage() {
               )}
             </ul>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <KeyRound className="size-4 text-brand" /> Spend allowance ({usdcInfo.label})
+            </CardTitle>
+            <CardDescription>
+              How much of the agent treasury your wallet (the executive) is allowed to move per x402
+              call. Backed by an SPL <code className="font-mono text-xs">Approve</code> on the
+              agent&apos;s USDC ATA — funds physically live on the agent treasury PDA, the executive
+              just signs. Re-approve to top up; revoke to lock everything down.
+            </CardDescription>
+          </div>
+          <Button variant="ghost" size="icon" onClick={refreshDelegation} title="Refresh">
+            <RefreshCw className="size-4" />
+          </Button>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {!privyWallet ? (
+            <p className="text-sm text-warning">
+              Connect a Solana wallet (top-right) to view or change the delegation.
+            </p>
+          ) : delegationLoading && !delegation ? (
+            <p className="text-xs text-fg-muted">Reading on-chain delegation…</p>
+          ) : delegationError ? (
+            <p className="text-sm text-danger">{delegationError}</p>
+          ) : delegation ? (
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-md border border-border bg-bg-elev/40 p-3">
+                <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
+                  Treasury balance
+                </span>
+                <div className="font-mono text-sm">
+                  {(Number(delegation.balance) / 1_000_000).toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 6,
+                  })}{' '}
+                  {usdcInfo.label}
+                </div>
+                <span className="text-[10px] text-fg-subtle">
+                  {delegation.sourceExists ? 'ATA initialised' : 'ATA not yet created'}
+                </span>
+              </div>
+              <div className="rounded-md border border-border bg-bg-elev/40 p-3">
+                <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
+                  Remaining allowance
+                </span>
+                <div className="font-mono text-sm">
+                  {(Number(delegation.delegatedAmount) / 1_000_000).toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 6,
+                  })}{' '}
+                  {usdcInfo.label}
+                </div>
+                <span className="text-[10px] text-fg-subtle">
+                  {delegation.delegate
+                    ? `delegate: ${delegation.delegate.slice(0, 8)}…${delegation.delegate.slice(-4)}`
+                    : 'no delegate'}
+                </span>
+              </div>
+              <div className="rounded-md border border-border bg-bg-elev/40 p-3">
+                <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
+                  Source ATA
+                </span>
+                <code className="block font-mono text-[10px] break-all text-fg-muted">
+                  {delegation.sourceTokenAccount}
+                </code>
+                <span className="text-[10px] text-fg-subtle">
+                  Buyer-kit uses this as <code className="font-mono">sourceTokenAccount</code>.
+                </span>
+              </div>
+
+              <div className="md:col-span-3 grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="allowance" className="text-xs">
+                    New allowance ({usdcInfo.label})
+                  </Label>
+                  <Input
+                    id="allowance"
+                    value={allowanceDraft}
+                    onChange={(e) => setAllowanceDraft(e.target.value)}
+                    inputMode="decimal"
+                    placeholder="5.00"
+                    className="font-mono"
+                  />
+                  <span className="text-[11px] text-fg-subtle">
+                    Sets the cap (overwrites any existing one). Top up by re-approving.
+                  </span>
+                </div>
+                <Button onClick={handleSetAllowance} disabled={allowanceBusy != null}>
+                  {allowanceBusy === 'set' && <Loader2 className="size-4 animate-spin" />}
+                  Set allowance
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={handleRevokeAllowance}
+                  disabled={allowanceBusy != null || !delegation.delegate}
+                >
+                  {allowanceBusy === 'revoke' && <Loader2 className="size-4 animate-spin" />}
+                  Revoke
+                </Button>
+              </div>
+
+              {delegation.sourceExists && delegation.balance === 0n && (
+                <div className="md:col-span-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-[11px] text-warning leading-relaxed">
+                  Treasury holds <strong>0 {usdcInfo.label}</strong>. Send some to{' '}
+                  <code className="font-mono">{delegation.sourceTokenAccount}</code> (or to the
+                  treasury PDA <code className="font-mono">{delegation.treasury}</code> — the ATA is
+                  auto-created on first deposit). Devnet faucet:{' '}
+                  <a
+                    href="https://faucet.circle.com/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-brand hover:underline"
+                  >
+                    faucet.circle.com
+                  </a>
+                  .
+                </div>
+              )}
+
+              {allowanceLastSig && (
+                <div className="md:col-span-3 flex flex-col gap-1.5 rounded-md border border-success/40 bg-success/10 p-3 text-xs">
+                  <span className="font-medium text-success">Tx confirmed</span>
+                  <a
+                    href={transactionExplorerUrl(
+                      balance?.network === 'mainnet' ? 'solana-mainnet' : 'solana-devnet',
+                      allowanceLastSig,
+                    )}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 font-mono text-brand hover:underline break-all"
+                  >
+                    <ExternalLink className="size-3 shrink-0" />
+                    <span className="break-all">{allowanceLastSig}</span>
+                  </a>
+                </div>
+              )}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

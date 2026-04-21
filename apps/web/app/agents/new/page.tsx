@@ -18,7 +18,7 @@ import {
   X,
   Info,
 } from 'lucide-react';
-import { createAgent, type CreateAgentInput } from '@leash/registry-utils';
+import { createAgent, setSpendDelegation, type CreateAgentInput } from '@leash/registry-utils';
 import type { RulesV1 } from '@leash/schemas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
@@ -98,7 +98,28 @@ type CreateOk = {
   uriSource: UriMode;
   /** Whether rules were attached (false = limitless). */
   hasRules: boolean;
+  /** Set when an SPL Approve was issued so the executive can spend on the agent's behalf. */
+  delegation?: {
+    treasury: string;
+    sourceTokenAccount: string;
+    delegatedAmount: string;
+    fundingMint: string;
+    fundingMintLabel: string;
+    signature: string;
+  };
+  /** Surfaced when the mint succeeded but the post-mint delegation tx failed (rare). */
+  delegationError?: string;
 };
+
+const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+const USDC_MAINNET = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+
+/** Pick the USDC mint that matches the agent's chosen network. */
+function usdcMintForNetwork(network: Network): { mint: string; label: string } | null {
+  if (network === 'solana-devnet') return { mint: USDC_DEVNET, label: 'USDC (devnet)' };
+  if (network === 'solana-mainnet') return { mint: USDC_MAINNET, label: 'USDC' };
+  return null;
+}
 
 function shorten(addr: string): string {
   return addr.length > 10 ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : addr;
@@ -133,8 +154,16 @@ export default function NewAgentPage() {
   const [allowedHostsRaw, setAllowedHostsRaw] = React.useState('');
   const [intervalSeconds, setIntervalSeconds] = React.useState(30);
 
+  // ---- Spend allowance (one-time SPL Approve from agent treasury → executive) ----
+  // Default $5 covers ~1000 calls @ $0.005 — enough for a real demo without
+  // spooking the user. They can revoke / adjust later from /agents/[mint].
+  const [spendCapUsdc, setSpendCapUsdc] = React.useState('5.00');
+  const usdcInfo = usdcMintForNetwork(network);
+
   const [busy, setBusy] = React.useState(false);
-  const [busyStep, setBusyStep] = React.useState<'pinning' | 'minting' | 'persisting' | null>(null);
+  const [busyStep, setBusyStep] = React.useState<
+    'pinning' | 'minting' | 'persisting' | 'delegating' | null
+  >(null);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<CreateOk | null>(null);
   const [formTab, setFormTab] = React.useState<'core' | 'services'>('core');
@@ -311,6 +340,59 @@ export default function NewAgentPage() {
         rules,
       });
 
+      // 4. Spend allowance: ONE-TIME mpl-core::Execute(SPL.Approve) so the
+      //    executive (Privy wallet) can move up to `spendCapUsdc` USDC out
+      //    of the agent's PDA-owned ATA — this is what makes "client funds
+      //    the agent and it goes out to make money" actually work end-to-end.
+      //    See packages/registry-utils/src/delegation.ts for the rationale.
+      let delegation: CreateOk['delegation'] | undefined;
+      let delegationError: string | undefined;
+      const capDecimal = Number(spendCapUsdc);
+      if (Number.isFinite(capDecimal) && capDecimal > 0 && usdcInfo) {
+        try {
+          setBusyStep('delegating');
+          const atomic = BigInt(Math.round(capDecimal * 1_000_000));
+          const approved = await setSpendDelegation(umi, {
+            agentAsset: res.assetAddress,
+            mint: usdcInfo.mint,
+            executive: wallet.address,
+            amount: atomic,
+          });
+          delegation = {
+            treasury: approved.treasury,
+            sourceTokenAccount: approved.sourceTokenAccount,
+            delegatedAmount: spendCapUsdc,
+            fundingMint: usdcInfo.mint,
+            fundingMintLabel: usdcInfo.label,
+            signature: approved.signature,
+          };
+          saveAgent({
+            mint: res.assetAddress,
+            label: name.trim(),
+            network: res.network,
+            owner: wallet.address,
+            rules,
+            sourceTokenAccount: approved.sourceTokenAccount,
+            fundingMint: usdcInfo.mint,
+            treasury: approved.treasury,
+          });
+          toast.success(
+            'Spend allowance set',
+            `${name.trim()} can now spend up to ${spendCapUsdc} ${usdcInfo.label} from its treasury.`,
+          );
+        } catch (err) {
+          delegationError = err instanceof Error ? err.message : String(err);
+          toast.error(
+            'Delegation failed',
+            'Mint succeeded, but the spend allowance tx failed. You can retry it from the agent page.',
+          );
+        }
+      } else if (!usdcInfo) {
+        // The agent was minted on a non-Solana cluster (eclipse, sonic…); skip
+        // delegation gracefully. Funding lives outside the playground here.
+        delegationError = `Spend allowance is currently only wired for solana-devnet / solana-mainnet (got ${network}).`;
+      }
+
       setResult({
         ok: true,
         ...res,
@@ -318,6 +400,8 @@ export default function NewAgentPage() {
         uri: finalUri,
         uriSource: uriMode,
         hasRules: rules !== null,
+        ...(delegation ? { delegation } : {}),
+        ...(delegationError ? { delegationError } : {}),
       });
       toast.success(
         'Agent minted',
@@ -747,6 +831,66 @@ export default function NewAgentPage() {
                     )}
                   </div>
 
+                  {/* Spend allowance — single SPL Approve from the agent's
+                      treasury PDA to the executive (Privy wallet). After this
+                      lands, every x402 call debits the AGENT's USDC ATA, not
+                      the user's personal balance. The user can revoke or
+                      adjust the cap from the agent page later. */}
+                  <div className="flex flex-col gap-3 rounded-md border border-border bg-bg-elev/40 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-col">
+                        <Label className="flex items-center gap-2">
+                          Spend allowance
+                          <span
+                            className="inline-flex items-center text-fg-subtle"
+                            title="One-time mpl-core::Execute(SPL.Approve) granting your wallet a capped delegation over the agent's USDC ATA. Funds physically live on the agent treasury PDA — your wallet just signs."
+                          >
+                            <Info className="size-3.5" />
+                          </span>
+                        </Label>
+                        <span className="text-[11px] text-fg-subtle">
+                          Cap your wallet can spend on the agent&apos;s behalf. Refill or revoke any
+                          time from the agent page.
+                        </span>
+                      </div>
+                      <Badge variant={usdcInfo ? 'brand' : 'outline'} className="self-start">
+                        {usdcInfo ? usdcInfo.label : `${network} · skipped`}
+                      </Badge>
+                    </div>
+                    {usdcInfo ? (
+                      <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+                        <div className="flex flex-col gap-1.5">
+                          <Label htmlFor="spendCap" className="text-xs">
+                            Spend cap ({usdcInfo.label})
+                          </Label>
+                          <Input
+                            id="spendCap"
+                            value={spendCapUsdc}
+                            onChange={(e) => setSpendCapUsdc(e.target.value)}
+                            inputMode="decimal"
+                            placeholder="5.00"
+                            className="font-mono"
+                          />
+                          <span className="text-[11px] text-fg-subtle">
+                            <code className="font-mono">0</code> skips delegation; you can run it
+                            later from <code className="font-mono">/agents/{'{mint}'}</code>.
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-fg-subtle leading-relaxed md:max-w-[14rem]">
+                          ≈ {(Number(spendCapUsdc) / 0.005 || 0).toFixed(0)} calls @ $0.005
+                          <br />≈ {(Number(spendCapUsdc) / 0.05 || 0).toFixed(0)} calls @ $0.05
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-warning">
+                        Spend allowance only wired for{' '}
+                        <code className="font-mono">solana-devnet</code> and{' '}
+                        <code className="font-mono">solana-mainnet</code>. You can still mint on{' '}
+                        {network} and approve later.
+                      </span>
+                    )}
+                  </div>
+
                   {/* Behaviour rules — set ONCE at agent creation. The buyer
                       cockpit reads these directly from agent storage, so the
                       agent is autonomous: no per-call rules form. */}
@@ -858,7 +1002,9 @@ export default function NewAgentPage() {
                           ? 'Minting…'
                           : busyStep === 'persisting'
                             ? 'Saving…'
-                            : 'Create agent'}
+                            : busyStep === 'delegating'
+                              ? 'Approving spend…'
+                              : 'Create agent'}
                     </Button>
                     {!ready && <span className="text-sm text-fg-muted">Loading wallet…</span>}
                     {ready && !wallet && (
@@ -984,9 +1130,44 @@ export default function NewAgentPage() {
                   </a>
                 </div>
                 <Badge variant="brand">{result.network}</Badge>
+
+                {result.delegation && (
+                  <div className="flex flex-col gap-1.5 rounded-md border border-brand/30 bg-brand-soft/30 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
+                        Spend allowance set
+                      </span>
+                      <Badge variant="brand">
+                        {result.delegation.delegatedAmount} {result.delegation.fundingMintLabel}
+                      </Badge>
+                    </div>
+                    <div className="flex flex-col gap-0.5 text-[11px]">
+                      <span className="text-fg-subtle">Treasury (PDA, holds funds)</span>
+                      <code className="font-mono break-all">{result.delegation.treasury}</code>
+                      <span className="text-fg-subtle mt-1">USDC ATA (debit source)</span>
+                      <code className="font-mono break-all">
+                        {result.delegation.sourceTokenAccount}
+                      </code>
+                      <a
+                        href={transactionExplorerUrl(result.network, result.delegation.signature)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-mono break-all text-brand hover:underline mt-1"
+                      >
+                        Approve tx → {result.delegation.signature.slice(0, 12)}…
+                      </a>
+                    </div>
+                  </div>
+                )}
+                {result.delegationError && (
+                  <div className="rounded-md border border-warning/40 bg-warning/10 p-2 text-[11px] text-warning leading-relaxed">
+                    {result.delegationError}
+                  </div>
+                )}
+
                 <div className="flex flex-wrap gap-2">
                   <Button onClick={() => router.push(`/agents/${result.assetAddress}`)}>
-                    Open profile + delegate execution
+                    Open profile + manage allowance
                   </Button>
                   <Button variant="ghost" asChild>
                     <a

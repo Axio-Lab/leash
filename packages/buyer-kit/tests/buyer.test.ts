@@ -96,6 +96,90 @@ describe('createBuyer', () => {
     expect(result.receipt.payment_requirements_hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it('records a settled tx_sig and the on-chain price from the PAYMENT-RESPONSE header', async () => {
+    // Realistic shape of `@x402/hono`'s success response: the seller stamps
+    // `payment-response` with the matched paymentRequirements + the
+    // confirmed Solana tx signature.
+    const settle = {
+      success: true,
+      transaction:
+        '5UfDvnh6f4eS2RHJtcZTKbiaT3iuHowBbZBJekMNF1S25o1y2VW9KUYfh4ymcKeevQNcm9DMZSk1cSMz4iHUnCpu',
+      paymentRequirements: {
+        scheme: 'exact',
+        network: 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1',
+        amount: '1000',
+        asset: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+        payTo: 'CTd5VBFYJnGDGv5DbhWfPmrQ96G5ibvmZiyRPURXNyox',
+        maxTimeoutSeconds: 300,
+        extra: { feePayer: 'FYB56sVBW2r4Ka7W9kdJWTPY9FKQLxbT6h4Ysr6aLPZD' },
+      },
+    };
+    const headerB64 = Buffer.from(JSON.stringify(settle), 'utf8').toString('base64');
+    const stubFetch: LeashFetch = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'payment-response': headerB64 },
+      }),
+    );
+    const buyer = createBuyer({
+      agent: 'A1',
+      rules,
+      signer: stubSigner,
+      fetch: stubFetch,
+      sourceTokenAccount: 'AgentTreasuryUsdcAtaXXXXXXXXXXXXXXXXXXXXXXX',
+    });
+    const result = await buyer.fetch('http://merchant.test/tag', { method: 'POST' });
+    expect(result.response.status).toBe(200);
+    expect(result.receipt.decision).toBe('allow');
+    expect(result.receipt.tx_sig).toBe(settle.transaction);
+    expect(result.receipt.price?.amount).toBe('1000');
+    expect(result.receipt.payment_requirements_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.failureReason).toBeUndefined();
+  });
+
+  it('handles a facilitator failure (delegation exhausted) and records the demanded price', async () => {
+    // Simulates the wire shape after the facilitator rejects the partially
+    // signed tx because the SPL Approve has been fully consumed: the
+    // seller proxies a 402 with the demanded `accepts[]` and a body error
+    // such as "transaction_simulation_failed" (delegate amount = 0).
+    const paymentRequired = {
+      x402Version: 2,
+      error: 'Payment required',
+      resource: { url: 'http://merchant.test/tag', description: 'Premium' },
+      accepts: [
+        {
+          scheme: 'exact',
+          network: 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1',
+          amount: '50000',
+          asset: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+          payTo: 'CTd5VBFYJnGDGv5DbhWfPmrQ96G5ibvmZiyRPURXNyox',
+          maxTimeoutSeconds: 300,
+          extra: { feePayer: 'FYB56sVBW2r4Ka7W9kdJWTPY9FKQLxbT6h4Ysr6aLPZD' },
+        },
+      ],
+    };
+    const headerB64 = Buffer.from(JSON.stringify(paymentRequired), 'utf8').toString('base64');
+    const stubFetch: LeashFetch = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'transaction_simulation_failed' }), {
+        status: 402,
+        headers: { 'content-type': 'application/json', 'payment-required': headerB64 },
+      }),
+    );
+    const buyer = createBuyer({
+      agent: 'A1',
+      rules,
+      signer: stubSigner,
+      fetch: stubFetch,
+      sourceTokenAccount: 'AgentTreasuryUsdcAtaXXXXXXXXXXXXXXXXXXXXXXX',
+    });
+    const result = await buyer.fetch('http://merchant.test/tag', { method: 'POST' });
+    expect(result.response.status).toBe(402);
+    expect(result.receipt.tx_sig).toBeNull();
+    expect(result.receipt.price?.amount).toBe('50000');
+    expect(result.receipt.reason).toBe('transaction_simulation_failed');
+    expect(result.failureReason).toBe('transaction_simulation_failed');
+  });
+
   it('emits a deny receipt without calling fetch when the host is denied', async () => {
     const stubFetch = vi.fn() as unknown as LeashFetch;
     const buyer = createBuyer({
