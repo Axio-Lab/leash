@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { caip2ForNetwork } from '../src/x402/client.js';
+import { buildPaymentLinkMeta, fetchPaymentLinkMeta } from '../src/x402/discovery.js';
 import { paymentRequirementsHash } from '../src/x402/parse.js';
 
 describe('caip2ForNetwork', () => {
@@ -34,5 +35,134 @@ describe('paymentRequirementsHash', () => {
     const h0 = paymentRequirementsHash(a);
     const h1 = paymentRequirementsHash({ ...a, amount: '2000' });
     expect(h0).not.toBe(h1);
+  });
+});
+
+describe('fetchPaymentLinkMeta', () => {
+  it('parses a discovery payload from a full /x/<id> URL', async () => {
+    const meta = await fetchPaymentLinkMeta('https://example.com/x/abc123', {
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            ok: true,
+            kind: 'leash.payment-link',
+            endpoint: {
+              id: 'abc123',
+              label: 'Premium echo',
+              description: null,
+              method: 'POST',
+              url: 'https://example.com/x/abc123',
+              price: '$0.001',
+              network: 'solana-devnet',
+              owner_agent: '33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR',
+              payTo: 'CTd5VBFYJnGDGv5DbhWfPmrQ96G5ibvmZiyRPURXNyox',
+              response: { status: 200, mimeType: 'application/json', body_kind: 'json' },
+              hooks: { wrap_receipt: true, webhook_url: null },
+              created_at: '2026-04-22T00:00:00.000Z',
+              updated_at: '2026-04-22T00:00:00.000Z',
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    });
+    expect(meta.kind).toBe('leash.payment-link');
+    expect(meta.endpoint.id).toBe('abc123');
+    expect(meta.endpoint.network).toBe('solana-devnet');
+  });
+
+  it('builds /x/<id> when called with base URL + id', async () => {
+    let seenUrl = '';
+    await fetchPaymentLinkMeta('https://example.com', 'xyz789', {
+      fetch: async (input) => {
+        seenUrl = String(input);
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            kind: 'leash.payment-link',
+            endpoint: {
+              id: 'xyz789',
+              label: 'x',
+              description: null,
+              method: 'GET',
+              url: 'https://example.com/x/xyz789',
+              price: '1 USDC',
+              network: 'solana-mainnet',
+              owner_agent: 'Agent11111111111111111111111111111111111111',
+              payTo: null,
+              response: { status: 200, mimeType: 'application/json', body_kind: 'json' },
+              hooks: { wrap_receipt: false, webhook_url: null },
+              created_at: '2026-04-22T00:00:00.000Z',
+              updated_at: '2026-04-22T00:00:00.000Z',
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      },
+    });
+    expect(seenUrl).toBe('https://example.com/x/xyz789');
+  });
+
+  it('round-trips through buildPaymentLinkMeta', async () => {
+    const built = buildPaymentLinkMeta({
+      endpoint: {
+        id: 'rt-1',
+        label: 'Round-trip link',
+        description: 'desc',
+        method: 'POST',
+        price: '$0.10',
+        network: 'solana-devnet',
+        owner_agent: '33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR',
+        response: {
+          status: 200,
+          mimeType: 'application/json',
+          body: { ok: true },
+        },
+        wrap_receipt: true,
+        webhook_url: null,
+        created_at: '2026-04-22T00:00:00.000Z',
+        updated_at: '2026-04-22T00:00:00.000Z',
+      },
+      origin: 'https://example.com',
+      payTo: 'CTd5VBFYJnGDGv5DbhWfPmrQ96G5ibvmZiyRPURXNyox',
+      facilitator: 'https://facilitator.svmacc.tech',
+      docsUrl: 'https://leash.svmacc.tech/docs/playground/seller',
+    });
+    const meta = await fetchPaymentLinkMeta('https://example.com/x/rt-1', {
+      fetch: async () =>
+        new Response(JSON.stringify(built), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    });
+    expect(meta.endpoint.id).toBe('rt-1');
+    expect(meta.endpoint.url).toBe('https://example.com/x/rt-1');
+    expect(meta.endpoint.response.body_kind).toBe('json');
+    expect(meta.endpoint.hooks.wrap_receipt).toBe(true);
+    expect(meta.facilitator).toBe('https://facilitator.svmacc.tech');
+  });
+
+  it('derives body_kind="text" when seller body is a string', () => {
+    const built = buildPaymentLinkMeta({
+      endpoint: {
+        id: 'rt-2',
+        label: 'Text body',
+        method: 'GET',
+        price: '$0.01',
+        network: 'solana-mainnet',
+        owner_agent: 'Agent11111111111111111111111111111111111111',
+        response: {
+          status: 200,
+          mimeType: 'text/plain',
+          body: 'hello world',
+        },
+        wrap_receipt: false,
+        created_at: '2026-04-22T00:00:00.000Z',
+        updated_at: '2026-04-22T00:00:00.000Z',
+      },
+      origin: 'https://example.com',
+      payTo: null,
+    });
+    expect(built.endpoint.response.body_kind).toBe('text');
+    expect(built.facilitator).toBeUndefined();
   });
 });

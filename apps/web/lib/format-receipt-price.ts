@@ -29,3 +29,23 @@ export function formatReceiptPriceWithCurrency(
   if (core === null) return null;
   return `${core} ${price.currency}`;
 }
+
+/**
+ * USD-style display ("$1.23", "$0.001000") for stablecoin prices. Falls back
+ * to {@link formatReceiptPriceWithCurrency} for non-stable currencies. Handy
+ * for receipt feeds where the dollar peg makes the value scannable at a
+ * glance and avoids the trailing "USDC" noise.
+ */
+export function formatReceiptPriceUsd(price: ReceiptV1['price'] | undefined | null): string | null {
+  if (!price) return null;
+  const STABLES = new Set(['USDC', 'USDT', 'USDG', 'PYUSD']);
+  if (!STABLES.has(price.currency)) return formatReceiptPriceWithCurrency(price);
+  const core = formatReceiptPrice(price);
+  if (core === null) return null;
+  // For "1" / "1.5" pad to two decimals so $1 doesn't look truncated;
+  // for "0.000002" preserve the long tail.
+  if (/^\d+$/.test(core)) return `$${core}.00`;
+  const [whole, frac = ''] = core.split('.');
+  if (frac.length < 2) return `$${whole}.${frac.padEnd(2, '0')}`;
+  return `$${core}`;
+}

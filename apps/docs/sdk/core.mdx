@@ -9,7 +9,12 @@ seller kits. It contains:
 - **Agent + treasury** — `treasuryPda(asset)` derives the Asset Signer PDA
   used as `payTo` and the on-chain owner of the agent's funds.
 - **Policy** — `evaluate(rules, request, ledger, pause)` returns a pure
-  decision (`allow` / `deny` + `reason`).
+  decision (`allow` / `deny` + `reason`). Buyer/seller kits also stamp
+  `rejected` on receipts when the gate allowed a call but the payment did
+  not settle.
+- **Networks** — `caip2ForNetwork('solana-devnet')` returns the wire-level
+  CAIP-2 chain id; the inverse `networkFromCaip2('solana:EtWTRABZ…')` returns
+  the friendly Leash slug used on receipts.
 - **Hashing** — `canonicalJson`, `sha256Hex`, `requestHash`,
   `paymentRequirementsHash`, `computeReceiptHash`, `finalizeReceipt`,
   `verifyReceiptChain`. All hashing uses `@noble/hashes` so it runs in any
@@ -19,6 +24,9 @@ seller kits. It contains:
   `@x402/svm` and a `ClientSvmSigner` derived from a `@solana/kit`
   `TransactionPartialSigner`. This is what `@leash/buyer-kit` uses
   internally; you usually don't need to touch it.
+- **Payment-link discovery** — `fetchPaymentLinkMeta()` fetches and type-checks
+  the browser-friendly `GET /x/<id>` metadata payload exposed by the web app,
+  so SDK consumers can inspect a link before paying.
 - **Kill switch** — `readPauseFromEnv`, `createPauseResolver`. The buyer's
   policy gate honours these so a single env flip (or admin RPC) can halt
   every spend immediately.
@@ -43,6 +51,19 @@ const paidFetch = createSvmBuyerFetch({
 });
 
 const res = await paidFetch('https://api.example.com/quote');
+```
+
+```ts
+import { fetchPaymentLinkMeta } from '@leash/core';
+
+// Variant 1: full shareable URL
+const metaA = await fetchPaymentLinkMeta('https://yourapp.com/x/uhnb6e1zm');
+
+// Variant 2: base host + endpoint id
+const metaB = await fetchPaymentLinkMeta('https://yourapp.com', 'uhnb6e1zm');
+
+console.log(metaA.endpoint.price);   // "$0.001"
+console.log(metaB.endpoint.method);  // "POST"
 ```
 
 See [`Real x402 on Solana`](/standards/x402-on-solana) for the protocol

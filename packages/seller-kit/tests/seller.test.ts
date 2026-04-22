@@ -138,7 +138,11 @@ describe('createSeller — earn receipts', () => {
     expect(r.agent).toBe(ASSET);
     expect(r.decision).toBe('allow');
     expect(r.price?.currency).toBe('USDC');
-    expect(r.price?.network).toBe(SOLANA_DEVNET_CAIP2);
+    // Receipts now stamp the friendly Leash slug (`solana-devnet`) instead
+    // of the raw CAIP-2 chain id so explorers don't have to render
+    // `solana:<genesis>` blobs. The wire-level paymentRequirements still
+    // use the CAIP-2 form (verified by other tests in this file).
+    expect(r.price?.network).toBe('solana-devnet');
     expect(r.tx_sig).toMatch(/^sig-/);
     expect(r.facilitator).not.toBeNull();
     expect(r.payment_requirements_hash).toMatch(/^[0-9a-f]{64}$/);

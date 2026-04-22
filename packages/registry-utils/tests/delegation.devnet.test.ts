@@ -38,6 +38,7 @@ import {
   setSpendDelegation,
   revokeSpendDelegation,
   getSpendDelegation,
+  provisionTreasuryAtas,
 } from '../src/delegation.js';
 
 const SHOULD_RUN =
@@ -115,6 +116,32 @@ describeOrSkip('SPL spend delegation (devnet)', () => {
       const status3 = await getSpendDelegation(umi, { agentAsset, mint: USDC });
       expect(status3.delegate).toBeNull();
       expect(status3.delegatedAmount).toBe(0n);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'idempotently provisions treasury stable ATAs',
+    async () => {
+      // First call: may create the USDC ATA (or no-op if already there).
+      const first = await provisionTreasuryAtas(umi, {
+        agentAsset,
+        network: 'solana-devnet',
+      });
+      expect(first.atas.length).toBeGreaterThan(0);
+      const usdcEntry = first.atas.find((a) => a.symbol === 'USDC');
+      expect(usdcEntry).toBeDefined();
+      expect(usdcEntry?.address).toMatch(/^[1-9A-HJ-NP-Za-km-z]+$/);
+
+      // Second call: must be a no-op.
+      const second = await provisionTreasuryAtas(umi, {
+        agentAsset,
+        network: 'solana-devnet',
+      });
+      for (const a of second.atas) {
+        expect(a.created).toBe(false);
+        expect(a.signature).toBeUndefined();
+      }
     },
     TIMEOUT,
   );

@@ -83,9 +83,15 @@ describe('createBuyer', () => {
     expect(result.receipt.price).toEqual({
       amount: '5000000',
       currency: 'USDC',
-      network: 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1',
+      // The receipt normalises CAIP-2 chain ids to Leash's friendly slugs so
+      // explorers don't have to render `solana:<genesis>` blobs.
+      network: 'solana-devnet',
       asset: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
     });
+    // The 402-with-no-PAYMENT-RESPONSE case is a `rejected` decision: policy
+    // allowed the call but settlement did not happen (insufficient funds, in
+    // this fixture).
+    expect(result.receipt.decision).toBe('rejected');
     // Body error wins over header error because it's typically the more
     // specific facilitator-side message.
     expect(result.receipt.reason).toBe('insufficient_funds');
@@ -133,6 +139,8 @@ describe('createBuyer', () => {
     expect(result.receipt.decision).toBe('allow');
     expect(result.receipt.tx_sig).toBe(settle.transaction);
     expect(result.receipt.price?.amount).toBe('1000');
+    // CAIP-2 → friendly slug normalisation also applies on settled receipts.
+    expect(result.receipt.price?.network).toBe('solana-devnet');
     expect(result.receipt.payment_requirements_hash).toMatch(/^[0-9a-f]{64}$/);
     expect(result.failureReason).toBeUndefined();
   });

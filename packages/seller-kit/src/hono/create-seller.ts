@@ -1,7 +1,12 @@
 import type { Hono } from 'hono';
 import type { Context as UmiContext } from '@metaplex-foundation/umi';
 import type { ReceiptV1 } from '@leash/schemas';
-import { finalizeReceipt, paymentRequirementsHash, requestHash } from '@leash/core';
+import {
+  finalizeReceipt,
+  networkFromCaip2,
+  paymentRequirementsHash,
+  requestHash,
+} from '@leash/core';
 import { paymentMiddlewareFromHTTPServer } from '@x402/hono';
 import { x402HTTPResourceServer } from '@x402/core/server';
 import type {
@@ -139,7 +144,11 @@ export function createSeller(app: Hono, opts: CreateSellerOptions): Seller {
     const route = findRouteForPath(opts.routes, reqCtx);
     const price = route ? parsePrice(route.price) : null;
     const enrichedPrice = price
-      ? { ...price, network: networkCaip2, asset: requirements.asset }
+      ? {
+          ...price,
+          network: networkFromCaip2(networkCaip2) ?? sellerNetwork,
+          asset: requirements.asset,
+        }
       : null;
     await emitEarnReceipt({
       state,

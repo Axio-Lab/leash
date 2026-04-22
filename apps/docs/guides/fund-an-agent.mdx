@@ -35,15 +35,24 @@ facilitator landscape "just works" while funds stay agent-owned.
    allowance" field on tab 2 sets the initial delegation (defaults to $5
    USDC). On submit, the playground:
    1. Mints the Core asset.
-   2. Idempotently creates the agent's USDC ATA.
+   2. **Provisions the treasury's curated stable ATAs** (USDC on devnet;
+      USDC + USDT on mainnet) via
+      [`provisionTreasuryAtas`](../sdk/registry-utils#provisiontreasuryatas).
+      Your wallet pays rent (~0.002 SOL per ATA) once. From then on
+      wallets, faucets, and other agents can transfer to the agent's
+      treasury without "recipient has no token account" errors.
    3. Wraps an `SPL.Approve` in `mpl-core::Execute` and signs once.
 2. Top up: send USDC on devnet (mint
    `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`,
    <a href="https://faucet.circle.com">faucet.circle.com</a>) directly to the
-   treasury PDA — the ATA is auto-created on first deposit if needed.
+   treasury PDA. Because the ATA is already provisioned, the deposit lands
+   in one tx without any extra setup from the sender.
 3. Adjust or revoke at any time on the agent profile
    (`/agents/<mint>` → "Spend allowance" card). Re-approving overwrites the
    cap; revoking clears it (`delegate = None`, `delegated_amount = 0`).
+4. Re-provision a legacy agent (minted before auto-provisioning shipped) by
+   clicking **Provision stable ATAs** on the treasury card — same helper,
+   idempotent.
 
 The buyer cockpit (`/buyer`) reads delegation status before each call and
 disables **Fire request** when the quoted price exceeds the remaining
@@ -90,6 +99,29 @@ await revokeSpendDelegation(umi, {
   mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
 });
 ```
+
+### Pre-provisioning ATAs
+
+If you want every supported stable ATA created up front (so wallets and
+faucets can target the treasury without "recipient has no token account"
+failures), call [`provisionTreasuryAtas`](../sdk/registry-utils#provisiontreasuryatas)
+once after minting:
+
+```ts
+import { provisionTreasuryAtas } from '@leash/registry-utils';
+
+const { treasury, atas } = await provisionTreasuryAtas(umi, {
+  agentAsset: 'CoreAss…Asset',
+  network: 'solana-devnet',
+});
+
+for (const a of atas) {
+  console.log(a.symbol, a.address, a.created ? 'created' : 'already existed');
+}
+```
+
+It's idempotent: re-running emits zero transactions when every ATA is
+already in place.
 
 The `sourceTokenAccount` returned by `setSpendDelegation` is what the buyer
 must pass when constructing the client:

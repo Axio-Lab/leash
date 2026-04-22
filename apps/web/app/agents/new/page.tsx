@@ -18,7 +18,13 @@ import {
   X,
   Info,
 } from 'lucide-react';
-import { createAgent, setSpendDelegation, type CreateAgentInput } from '@leash/registry-utils';
+import {
+  createAgent,
+  provisionTreasuryAtas,
+  setSpendDelegation,
+  type CreateAgentInput,
+  type ProvisionTreasuryAtasResult,
+} from '@leash/registry-utils';
 import type { RulesV1 } from '@leash/schemas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
@@ -109,6 +115,10 @@ type CreateOk = {
   };
   /** Surfaced when the mint succeeded but the post-mint delegation tx failed (rare). */
   delegationError?: string;
+  /** Treasury ATAs created (or already-present) for supported stables. */
+  treasuryAtas?: ProvisionTreasuryAtasResult['atas'];
+  /** Surfaced when ATA provisioning failed (mint still succeeded). */
+  provisionError?: string;
 };
 
 const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
@@ -162,7 +172,7 @@ export default function NewAgentPage() {
 
   const [busy, setBusy] = React.useState(false);
   const [busyStep, setBusyStep] = React.useState<
-    'pinning' | 'minting' | 'persisting' | 'delegating' | null
+    'pinning' | 'minting' | 'persisting' | 'provisioning' | 'delegating' | null
   >(null);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<CreateOk | null>(null);
@@ -340,7 +350,41 @@ export default function NewAgentPage() {
         rules,
       });
 
-      // 4. Spend allowance: ONE-TIME mpl-core::Execute(SPL.Approve) so the
+      // 4. Provision the treasury's ATAs for the canonical stables on this
+      //    network (USDC on devnet; USDC + USDT on mainnet). One signature,
+      //    rent paid once by the connected wallet. After this lands, users
+      //    can fund the agent by sending stablecoins to its treasury PDA
+      //    and wallets won't refuse to send to "an account with no ATA".
+      //    Bonus: setSpendDelegation in the next step will skip its own
+      //    CreateIdempotent (because the ATA already exists), which side-
+      //    steps the spurious "Provided owner is not allowed" failure mode.
+      let treasuryAtas: ProvisionTreasuryAtasResult['atas'] | undefined;
+      let provisionError: string | undefined;
+      if (network === 'solana-devnet' || network === 'solana-mainnet') {
+        try {
+          setBusyStep('provisioning');
+          const provisioned = await provisionTreasuryAtas(umi, {
+            agentAsset: res.assetAddress,
+            network,
+          });
+          treasuryAtas = provisioned.atas;
+          const created = provisioned.atas.filter((a) => a.created);
+          if (created.length > 0) {
+            toast.success(
+              'Treasury ATAs provisioned',
+              `${created.map((a) => a.symbol ?? a.mint.slice(0, 4)).join(', ')} ready to receive funds.`,
+            );
+          }
+        } catch (err) {
+          provisionError = err instanceof Error ? err.message : String(err);
+          toast.error(
+            'ATA provisioning failed',
+            'Mint succeeded, but creating the treasury ATAs failed. You can retry from the agent page.',
+          );
+        }
+      }
+
+      // 5. Spend allowance: ONE-TIME mpl-core::Execute(SPL.Approve) so the
       //    executive (Privy wallet) can move up to `spendCapUsdc` USDC out
       //    of the agent's PDA-owned ATA — this is what makes "client funds
       //    the agent and it goes out to make money" actually work end-to-end.
@@ -402,6 +446,8 @@ export default function NewAgentPage() {
         hasRules: rules !== null,
         ...(delegation ? { delegation } : {}),
         ...(delegationError ? { delegationError } : {}),
+        ...(treasuryAtas ? { treasuryAtas } : {}),
+        ...(provisionError ? { provisionError } : {}),
       });
       toast.success(
         'Agent minted',
@@ -1002,9 +1048,11 @@ export default function NewAgentPage() {
                           ? 'Minting…'
                           : busyStep === 'persisting'
                             ? 'Saving…'
-                            : busyStep === 'delegating'
-                              ? 'Approving spend…'
-                              : 'Create agent'}
+                            : busyStep === 'provisioning'
+                              ? 'Provisioning ATAs…'
+                              : busyStep === 'delegating'
+                                ? 'Approving spend…'
+                                : 'Create agent'}
                     </Button>
                     {!ready && <span className="text-sm text-fg-muted">Loading wallet…</span>}
                     {ready && !wallet && (
@@ -1130,6 +1178,42 @@ export default function NewAgentPage() {
                   </a>
                 </div>
                 <Badge variant="brand">{result.network}</Badge>
+
+                {result.treasuryAtas && result.treasuryAtas.length > 0 && (
+                  <div className="flex flex-col gap-1.5 rounded-md border border-border bg-bg-elev/40 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
+                        Treasury ATAs
+                      </span>
+                      <Badge variant="outline">
+                        {result.treasuryAtas.filter((a) => a.created).length} created ·{' '}
+                        {result.treasuryAtas.filter((a) => !a.created).length} existed
+                      </Badge>
+                    </div>
+                    <span className="text-[11px] text-fg-subtle">
+                      Send these mints to the treasury and the agent can spend them. One-time rent
+                      paid by your wallet.
+                    </span>
+                    <div className="flex flex-col gap-1">
+                      {result.treasuryAtas.map((a) => (
+                        <div
+                          key={a.address}
+                          className="flex items-center justify-between gap-2 text-[11px]"
+                        >
+                          <Badge variant={a.created ? 'brand' : 'outline'} className="shrink-0">
+                            {a.symbol ?? a.mint.slice(0, 4)}
+                          </Badge>
+                          <code className="font-mono break-all text-fg-muted">{a.address}</code>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {result.provisionError && (
+                  <div className="rounded-md border border-warning/40 bg-warning/10 p-2 text-[11px] text-warning leading-relaxed">
+                    {result.provisionError}
+                  </div>
+                )}
 
                 {result.delegation && (
                   <div className="flex flex-col gap-1.5 rounded-md border border-brand/30 bg-brand-soft/30 p-3">

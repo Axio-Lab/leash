@@ -5,6 +5,7 @@ import Link from 'next/link';
 import useSWR, { mutate } from 'swr';
 import {
   Bot,
+  ChevronRight,
   Copy,
   ExternalLink,
   Globe2,
@@ -14,7 +15,8 @@ import {
   Receipt,
   Trash2,
 } from 'lucide-react';
-import type { EndpointV1 } from '@leash/schemas';
+import { cn } from '@/lib/cn';
+import type { EndpointV1, ReceiptV1 } from '@leash/schemas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,6 +27,8 @@ import { JsonViewer } from '@/components/json-viewer';
 import { PageHeader } from '@/components/page-header';
 import { InlineCode } from '@/components/ui/code';
 import { useToast } from '@/components/ui/toast';
+import { Pager, usePagedItems } from '@/components/ui/pager';
+import { ReceiptRow } from '@/components/receipt-row';
 import { listAgents, type StoredAgent } from '@/lib/agent-storage';
 
 type Method = 'GET' | 'POST';
@@ -58,7 +62,6 @@ export default function SellerPage() {
   const [price, setPrice] = React.useState('$0.001');
   const [responseBodyJson, setResponseBodyJson] = React.useState('{}');
   const [customId, setCustomId] = React.useState('');
-  const [redirectUrl, setRedirectUrl] = React.useState('');
   const [webhookUrl, setWebhookUrl] = React.useState('');
   const [wrapReceipt, setWrapReceipt] = React.useState(true);
   const [submitting, setSubmitting] = React.useState(false);
@@ -72,7 +75,6 @@ export default function SellerPage() {
     setPrice('');
     setResponseBodyJson('{}');
     setCustomId('');
-    setRedirectUrl('');
     setWebhookUrl('');
     setWrapReceipt(true);
   }
@@ -93,7 +95,27 @@ export default function SellerPage() {
     { refreshInterval: 5000 },
   );
   const links = data?.endpoints ?? [];
+  const linksPaged = usePagedItems(links, 5);
   const lastListError = React.useRef<string | null>(null);
+
+  // Earn-receipt feed for the selected agent. We auto-refresh every 5s so
+  // a payment landing in another tab shows up here without a manual reload.
+  const receiptsKey = ownerAgent ? `/api/receipts/${ownerAgent}` : null;
+  const { data: receiptFeed, error: receiptError } = useSWR<{ receipts: ReceiptV1[] }>(
+    receiptsKey,
+    fetcher,
+    { refreshInterval: 5000 },
+  );
+  const earnReceipts = React.useMemo(
+    () =>
+      (receiptFeed?.receipts ?? [])
+        .filter((r) => r.kind === 'earn' && r.decision === 'allow' && r.tx_sig)
+        // newest first
+        .slice()
+        .reverse(),
+    [receiptFeed],
+  );
+  const receiptsPaged = usePagedItems(earnReceipts, 5);
 
   React.useEffect(() => {
     if (!listError) {
@@ -146,7 +168,6 @@ export default function SellerPage() {
             mimeType: 'application/json',
             body: parsedResponseBody,
           },
-          redirect_url: redirectUrl.trim() || undefined,
           webhook_url: webhookUrl.trim() || undefined,
           wrap_receipt: wrapReceipt,
         }),
@@ -310,21 +331,6 @@ export default function SellerPage() {
                   Post-payment hooks (all optional)
                 </h3>
 
-                <Field label="Redirect URL (303 after payment)">
-                  <Input
-                    value={redirectUrl}
-                    onChange={(e) => setRedirectUrl(e.target.value)}
-                    placeholder="https://yoursite.com/thank-you"
-                    type="url"
-                    className="font-mono text-xs"
-                  />
-                  <span className="text-[11px] text-fg-subtle">
-                    Receives <InlineCode>?leash_tx</InlineCode>,{' '}
-                    <InlineCode>?leash_receipt</InlineCode>, <InlineCode>?leash_agent</InlineCode>{' '}
-                    appended automatically.
-                  </span>
-                </Field>
-
                 <Field label="Webhook URL (fire-and-forget POST)">
                   <Input
                     value={webhookUrl}
@@ -334,9 +340,11 @@ export default function SellerPage() {
                     className="font-mono text-xs"
                   />
                   <span className="text-[11px] text-fg-subtle">
-                    Receives <InlineCode>{'{ payment, response }'}</InlineCode> JSON. Buyers can add
-                    a per-call <InlineCode>x-leash-callback</InlineCode> header to fire one of their
-                    own.
+                    After settlement we POST <InlineCode>{'{ payment, response }'}</InlineCode> here
+                    in the background. Use it to hand the paid response to a downstream agent /
+                    fulfilment service / analytics sink without making the buyer poll. Buyers can
+                    add a per-call <InlineCode>x-leash-callback</InlineCode> header to fire one of
+                    their own (both will be called).
                   </span>
                 </Field>
 
@@ -354,8 +362,7 @@ export default function SellerPage() {
                       <InlineCode>
                         {'{ data: <body>, _leash: { tx_sig, receipt_hash, explorer, … } }'}
                       </InlineCode>{' '}
-                      so callers get the proof inline. Ignored when <strong>Redirect URL</strong> is
-                      set.
+                      so callers get the proof inline.
                     </span>
                   </span>
                 </label>
@@ -400,7 +407,7 @@ export default function SellerPage() {
                     No payment links yet for this agent.
                   </p>
                 )}
-                {links.map((ep) => (
+                {linksPaged.pageItems.map((ep) => (
                   <PaymentLinkRow
                     key={ep.id}
                     endpoint={ep}
@@ -408,6 +415,13 @@ export default function SellerPage() {
                     onDelete={() => removeLink(ep.id)}
                   />
                 ))}
+                <Pager
+                  page={linksPaged.page}
+                  pageCount={linksPaged.pageCount}
+                  onPageChange={linksPaged.setPage}
+                  total={linksPaged.total}
+                  pageSize={linksPaged.pageSize}
+                />
               </CardContent>
             </Card>
 
@@ -417,22 +431,41 @@ export default function SellerPage() {
                   <Receipt className="size-4 text-brand" /> Receipts feed
                 </CardTitle>
                 <CardDescription>
-                  Every settlement on a link emits an <InlineCode>earn</InlineCode>{' '}
-                  <InlineCode>ReceiptV1</InlineCode> back to the runner under{' '}
-                  <InlineCode>/a/&lt;agent&gt;/receipts</InlineCode>.
+                  Successful <InlineCode>earn</InlineCode> receipts collected by this agent. Auto-
+                  refreshes every 5s. Receipts that did not settle (insufficient balance,
+                  facilitator error, etc) are filtered out — open the agent profile to see them.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                {ownerAgent ? (
+              <CardContent className="flex flex-col gap-3">
+                {!ownerAgent && <span className="text-sm text-fg-muted">Pick an agent first.</span>}
+                {ownerAgent && receiptError && (
+                  <p className="text-sm text-danger">
+                    Couldn&apos;t reach the runner: {(receiptError as Error).message}
+                  </p>
+                )}
+                {ownerAgent && !receiptError && earnReceipts.length === 0 && (
+                  <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-fg-muted">
+                    No earn receipts yet — share one of your payment links to collect a payment.
+                  </p>
+                )}
+                {receiptsPaged.pageItems.map((r) => (
+                  <ReceiptRow key={r.receipt_hash} receipt={r} />
+                ))}
+                <Pager
+                  page={receiptsPaged.page}
+                  pageCount={receiptsPaged.pageCount}
+                  onPageChange={receiptsPaged.setPage}
+                  total={receiptsPaged.total}
+                  pageSize={receiptsPaged.pageSize}
+                />
+                {ownerAgent && (
                   <Link
                     href={`/agents/${ownerAgent}`}
-                    className="inline-flex items-center gap-2 text-sm text-brand hover:underline"
+                    className="inline-flex items-center gap-2 text-xs text-brand hover:underline self-start"
                   >
-                    <Bot className="size-4" /> Open agent profile · view earn receipts
+                    <Bot className="size-3.5" /> Full receipt history · agent profile
                     <ExternalLink className="size-3" />
                   </Link>
-                ) : (
-                  <span className="text-sm text-fg-muted">Pick an agent first.</span>
                 )}
               </CardContent>
             </Card>
@@ -443,6 +476,11 @@ export default function SellerPage() {
   );
 }
 
+/**
+ * Compact, collapsible payment-link row that mirrors the receipt-feed
+ * visual language: chevron + method/price/id summary on a single line,
+ * expand to reveal the full URL, share controls, and the raw EndpointV1.
+ */
 function PaymentLinkRow({
   endpoint,
   origin,
@@ -454,8 +492,10 @@ function PaymentLinkRow({
 }) {
   const toast = useToast();
   const url = `${origin || ''}/x/${endpoint.id}`;
+  const [open, setOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
-  async function copy() {
+  async function copy(e: React.MouseEvent) {
+    e.stopPropagation();
     if (typeof navigator === 'undefined') return;
     try {
       await navigator.clipboard.writeText(url);
@@ -467,52 +507,71 @@ function PaymentLinkRow({
     }
   }
   return (
-    <div className="rounded-md border border-border bg-bg-elev/40 p-3 flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Badge variant="brand">{endpoint.method}</Badge>
-          <code className="font-mono text-xs">{endpoint.id}</code>
-          <Badge variant="success">{endpoint.price}</Badge>
+    <div className="rounded-md border border-border bg-bg-elev/60">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-bg-elev"
+      >
+        <ChevronRight
+          className={cn('size-4 text-fg-subtle transition-transform', open && 'rotate-90')}
+        />
+        <Badge variant="brand">{endpoint.method}</Badge>
+        <Badge variant="success">{endpoint.price}</Badge>
+        <span className="font-mono text-xs text-fg-muted truncate">/x/{endpoint.id}</span>
+        <span className="ml-auto flex items-center gap-3 text-xs text-fg-subtle">
+          <span className="hidden sm:inline truncate max-w-[14rem]" title={endpoint.label}>
+            {endpoint.label}
+          </span>
+          {endpoint.wrap_receipt && (
+            <Badge variant="outline" className="hidden sm:inline-flex">
+              embeds receipt
+            </Badge>
+          )}
+          {endpoint.webhook_url && (
+            <Badge variant="outline" title={endpoint.webhook_url} className="hidden sm:inline-flex">
+              ⇉ webhook
+            </Badge>
+          )}
+          <span
+            role="button"
+            aria-label="Delete payment link"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="rounded p-1 text-fg-subtle hover:bg-bg hover:text-danger"
+          >
+            <Trash2 className="size-3.5" />
+          </span>
+        </span>
+      </button>
+      {open ? (
+        <div className="border-t border-border p-3 flex flex-col gap-2">
+          {endpoint.description && (
+            <div className="text-xs text-fg-muted">{endpoint.description}</div>
+          )}
+          <div className="flex items-center gap-2">
+            <code className="flex-1 break-all rounded border border-border bg-bg px-2 py-1 text-[11px] font-mono">
+              {url}
+            </code>
+            <Button variant="secondary" size="sm" onClick={copy}>
+              <Copy className="size-3.5" /> {copied ? 'Copied' : 'Copy'}
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <a href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                <ExternalLink className="size-3.5" /> Open
+              </a>
+            </Button>
+          </div>
+          <details className="text-[11px] text-fg-subtle">
+            <summary className="cursor-pointer hover:text-fg">EndpointV1</summary>
+            <div className="pt-2">
+              <JsonViewer data={endpoint} maxHeight="14rem" />
+            </div>
+          </details>
         </div>
-        <Button variant="ghost" size="sm" onClick={onDelete}>
-          <Trash2 className="size-3.5" />
-        </Button>
-      </div>
-      <div className="text-sm">{endpoint.label}</div>
-      {endpoint.description && <div className="text-xs text-fg-muted">{endpoint.description}</div>}
-      <div className="flex flex-wrap gap-1 text-[10px]">
-        {endpoint.wrap_receipt && <Badge variant="outline">embeds receipt</Badge>}
-        {endpoint.redirect_url && (
-          <Badge variant="outline" title={endpoint.redirect_url}>
-            ↳ redirect
-          </Badge>
-        )}
-        {endpoint.webhook_url && (
-          <Badge variant="outline" title={endpoint.webhook_url}>
-            ⇉ webhook
-          </Badge>
-        )}
-      </div>
-      <Separator />
-      <div className="flex items-center gap-2">
-        <code className="flex-1 break-all rounded border border-border bg-bg px-2 py-1 text-[11px] font-mono">
-          {url}
-        </code>
-        <Button variant="secondary" size="sm" onClick={copy}>
-          <Copy className="size-3.5" /> {copied ? 'Copied' : 'Copy'}
-        </Button>
-        <Button variant="ghost" size="sm" asChild>
-          <a href={url} target="_blank" rel="noreferrer">
-            <ExternalLink className="size-3.5" /> Open
-          </a>
-        </Button>
-      </div>
-      <details className="text-[11px] text-fg-subtle">
-        <summary className="cursor-pointer hover:text-fg">EndpointV1</summary>
-        <div className="pt-2">
-          <JsonViewer data={endpoint} maxHeight="14rem" />
-        </div>
-      </details>
+      ) : null}
     </div>
   );
 }

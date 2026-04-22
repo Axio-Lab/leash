@@ -24,7 +24,6 @@ stores your `EndpointV1` descriptors and the Next.js app exposes them at
    - **Custom slug** (optional) — the bit after `/x/`.
    - **Response body** — JSON returned verbatim after settlement.
    - **Post-payment hooks** (all optional, see below):
-     - `redirect_url` — 303 redirect after payment (e.g. thank-you page).
      - `webhook_url` — fire-and-forget POST of `{ payment, response }`.
      - `wrap_receipt` — embed the receipt envelope in the JSON body.
 4. Click **Create payment link**. The runner stores the descriptor and
@@ -32,11 +31,10 @@ stores your `EndpointV1` descriptors and the Next.js app exposes them at
 
 ## Post-payment hooks
 
-Once a buyer pays, the seller has three orthogonal ways to react:
+Once a buyer pays, the seller has two orthogonal ways to react:
 
 | Hook            | When you'd use it                                                         |
 | --------------- | ------------------------------------------------------------------------- |
-| `redirect_url`  | Funnel the buyer to a thank-you page, gated download, or product page.    |
 | `webhook_url`   | Hand the response to a downstream agent without making the buyer poll.    |
 | `wrap_receipt`  | Caller wants the receipt inline (e.g. autonomous agents chaining calls).  |
 
@@ -54,20 +52,6 @@ X-Leash-Agent-Explorer:   https://yourapp/agents/<mint>
 ```
 
 `access-control-expose-headers` is set so browser clients can read them.
-
-### `redirect_url` — 303 to a thank-you page
-
-Set `redirect_url: "https://yoursite.com/thank-you"` on the endpoint and
-the seller will respond with `303 See Other` after settlement, with the
-payment proof appended:
-
-```text
-HTTP/1.1 303 See Other
-Location: https://yoursite.com/thank-you?leash_tx=<sig>&leash_receipt=<hash>&leash_agent=<mint>
-```
-
-The destination page can verify the payment server-side (look up the
-receipt under `/a/<agent>/receipts/<hash>`) before unlocking content.
 
 ### `webhook_url` — fire-and-forget agent-to-agent
 
@@ -121,8 +105,7 @@ Set `wrap_receipt: true` and JSON responses become:
 ```
 
 Use this when callers (especially autonomous agents) shouldn't have to
-read response headers separately. Ignored when `redirect_url` is set or
-when the response isn't JSON.
+read response headers separately. Ignored when the response isn't JSON.
 
 The shareable URL is a real x402 paywall:
 
@@ -132,7 +115,25 @@ curl -i -X POST https://yourapp/x/<id> -d '{"hello":"leash"}'
 
 # Pay → 200 + your response template + a real Solana tx_sig
 # (use @leash/buyer-kit or the autonomous-agent cockpit)
+
+# Discovery (browser-friendly) — open the link directly in a browser to get
+# a JSON descriptor of the offer. Works for any endpoint method without
+# triggering a payment, useful for sharing a link in chat or docs.
+curl https://yourapp/x/<id>
+# {
+#   "ok": true,
+#   "kind": "leash.payment-link",
+#   "endpoint": { "id":"…","method":"POST","price":"$0.001","payTo":"…", … },
+#   "facilitator": "https://facilitator.svmacc.tech"
+# }
 ```
+
+<Tip>
+  The discovery view only fires for `GET` probes that don't carry an
+  `X-PAYMENT` header on a method-mismatched route. A buyer that sends the
+  configured method **with** payment headers always hits the real x402
+  middleware and pays as expected.
+</Tip>
 
 ## What the runner stores
 
@@ -150,7 +151,6 @@ curl -i -X POST https://yourapp/x/<id> -d '{"hello":"leash"}'
     "mimeType": "application/json",
     "body": { "ok": true, "hello": "leash" }
   },
-  "redirect_url": "https://yoursite.com/thank-you",   // optional
   "webhook_url": "https://your-agent.com/cb",         // optional
   "wrap_receipt": true,                                // optional
   "created_at": "2026-04-21T11:06:20.906Z",

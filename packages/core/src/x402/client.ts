@@ -21,6 +21,29 @@ export function caip2ForNetwork(network: LeashX402Network): Network {
   return NETWORK_TO_CAIP2[network];
 }
 
+/**
+ * Inverse of {@link caip2ForNetwork} — turn a CAIP-2 chain id (the form
+ * x402 facilitators emit on the wire, e.g. `solana:EtWTRABZaYq6...`) into a
+ * friendly Leash slug (`solana-devnet`). Falls back to the original input
+ * for unknown chains so receipts written by older code still round-trip.
+ *
+ * Used everywhere a receipt's `price.network` is constructed from a payment-
+ * required header so explorers display `solana-devnet` instead of the raw
+ * `solana:<genesis>` blob.
+ */
+export function networkFromCaip2(input: string | null | undefined): string | null {
+  if (!input) return null;
+  const lower = input.toLowerCase();
+  if (lower === 'solana-mainnet' || lower === 'solana-devnet' || lower === 'solana-testnet') {
+    return lower;
+  }
+  // Match by genesis-hash prefix (CAIP-2 truncates to 32 chars).
+  if (lower.startsWith('solana:5eykt4u')) return 'solana-mainnet';
+  if (lower.startsWith('solana:etwtrabz')) return 'solana-devnet';
+  if (lower.startsWith('solana:4uhcvjyu')) return 'solana-testnet';
+  return input;
+}
+
 export type CreateSvmBuyerClientOptions = {
   signer: ClientSvmSigner;
   /**

@@ -34,11 +34,10 @@ shareable `/x/<id>` x402 paywalls (see the
   `updated_at`. The runner generates an `id` if you don't supply one.
 - **`DELETE /endpoints/:id`** — remove. Returns `204` on success.
 
-`EndpointV1` accepts three optional post-payment hooks that the
-`/x/<id>` route honours automatically — **`redirect_url`** (303 to a
-thank-you page), **`webhook_url`** (fire-and-forget POST of
-`{ payment, response }`), and **`wrap_receipt`** (embed the receipt
-envelope in JSON responses). See
+`EndpointV1` accepts two optional post-payment hooks that the
+`/x/<id>` route honours automatically — **`webhook_url`** (fire-and-forget
+POST of `{ payment, response }`), and **`wrap_receipt`** (embed the
+receipt envelope in JSON responses). See
 [Create a payment link](/guides/create-an-endpoint#post-payment-hooks)
 for the full payload reference.
 

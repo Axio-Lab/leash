@@ -68,14 +68,6 @@ export const EndpointV1Schema = z.object({
   /** Returned verbatim after a successful settlement. */
   response: ResponseTemplateSchema,
   /**
-   * Optional post-payment redirect. When set, the seller responds with
-   * `303 See Other` and a `Location` header pointing here, with
-   * `?leash_tx=<sig>&leash_receipt=<hash>&leash_agent=<mint>` appended so
-   * the destination page can verify the payment server-side. Use for
-   * thank-you pages, gated downloads, or "click here to redeem" flows.
-   */
-  redirect_url: HttpUrlSchema.optional(),
-  /**
    * Optional fire-and-forget webhook. When set, after a successful
    * settlement the runner POSTs `{ payment, response }` to this URL in
    * the background. Use to hand the paid response to a downstream agent
@@ -87,8 +79,8 @@ export const EndpointV1Schema = z.object({
    * If `true`, JSON responses are wrapped as
    * `{ data: <user-body>, _leash: { tx_sig, receipt_hash, agent, explorer } }`
    * so paying agents have everything they need in one payload. Defaults
-   * to `false` (preserves arbitrary response contracts). Always honoured
-   * for `application/json` responses; ignored for non-JSON / string bodies.
+   * to `false` (preserves arbitrary response contracts). Honoured for
+   * `application/json` responses; ignored for non-JSON / string bodies.
    */
   wrap_receipt: z.boolean().default(false),
   created_at: z.string(),

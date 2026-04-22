@@ -93,7 +93,7 @@ describe('runner endpoints CRUD', () => {
     expect(res.status).toBe(404);
   });
 
-  it('accepts optional redirect_url, webhook_url, wrap_receipt fields', async () => {
+  it('accepts optional webhook_url + wrap_receipt fields', async () => {
     const { app } = newApp();
     const res = await app.request('http://localhost/endpoints', {
       method: 'POST',
@@ -101,7 +101,6 @@ describe('runner endpoints CRUD', () => {
       body: JSON.stringify(
         endpointBody({
           id: 'with-hooks',
-          redirect_url: 'https://example.com/thanks',
           webhook_url: 'https://example.com/leash-callback',
           wrap_receipt: true,
         }),
@@ -109,19 +108,18 @@ describe('runner endpoints CRUD', () => {
     });
     expect(res.status, await res.clone().text()).toBe(200);
     const json = (await res.json()) as {
-      endpoint: { redirect_url?: string; webhook_url?: string; wrap_receipt?: boolean };
+      endpoint: { webhook_url?: string; wrap_receipt?: boolean };
     };
-    expect(json.endpoint.redirect_url).toBe('https://example.com/thanks');
     expect(json.endpoint.webhook_url).toBe('https://example.com/leash-callback');
     expect(json.endpoint.wrap_receipt).toBe(true);
   });
 
-  it('rejects non-http URLs in redirect_url / webhook_url', async () => {
+  it('rejects non-http URLs in webhook_url', async () => {
     const { app } = newApp();
     const res = await app.request('http://localhost/endpoints', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(endpointBody({ id: 'bad-url', redirect_url: 'javascript:alert(1)' })),
+      body: JSON.stringify(endpointBody({ id: 'bad-url', webhook_url: 'javascript:alert(1)' })),
     });
     expect(res.status).toBe(422);
   });

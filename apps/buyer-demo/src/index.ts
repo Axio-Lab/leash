@@ -1,4 +1,5 @@
 import { createBuyer } from '@leash/buyer-kit';
+import { fetchPaymentLinkMeta } from '@leash/core';
 import type { ReceiptV1 } from '@leash/schemas';
 import { createKeyPairSignerFromBytes } from '@solana/kit';
 
@@ -22,6 +23,7 @@ const buyerSecret = process.env.LEASH_BUYER_SECRET_KEY;
  * Core agent yet.
  */
 const sourceTokenAccount = process.env.LEASH_BUYER_SOURCE_TOKEN_ACCOUNT;
+const isLeashPaymentLink = /\/x\/[^/]+$/i.test(sellerUrl);
 
 if (!buyerSecret) {
   // eslint-disable-next-line no-console
@@ -61,12 +63,33 @@ const buyer = createBuyer({
   ...(sourceTokenAccount ? { sourceTokenAccount } : {}),
 });
 
+let requestUrl = isLeashPaymentLink ? sellerUrl : `${sellerUrl}/tag`;
+let requestMethod: 'GET' | 'POST' = 'POST';
+if (isLeashPaymentLink) {
+  try {
+    const meta = await fetchPaymentLinkMeta(sellerUrl);
+    requestUrl = meta.endpoint.url;
+    requestMethod = meta.endpoint.method;
+    // eslint-disable-next-line no-console
+    console.log(
+      `buyer-demo discovered payment link ${meta.endpoint.id} (${meta.endpoint.method} ${meta.endpoint.price} on ${meta.endpoint.network})`,
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(`buyer-demo discovery failed for ${sellerUrl}; continuing anyway`, err);
+  }
+}
+
 async function tick(): Promise<void> {
-  const { response, receipt } = await buyer.fetch(`${sellerUrl}/tag`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ts: Date.now() }),
-  });
+  const init: RequestInit =
+    requestMethod === 'POST'
+      ? {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ts: Date.now() }),
+        }
+      : { method: 'GET' };
+  const { response, receipt } = await buyer.fetch(requestUrl, init);
   // eslint-disable-next-line no-console
   console.log('buyer tick', response.status, receipt.decision, receipt.receipt_hash.slice(0, 8));
 }

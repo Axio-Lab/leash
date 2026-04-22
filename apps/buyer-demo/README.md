@@ -8,12 +8,19 @@
 > so no private key ever leaves the browser.
 
 A small Node CLI that loops a real x402 buyer against a seller endpoint
-(`POST /tag` by default) on **Solana devnet**. Each tick:
+(`POST /tag` by default) on **Solana devnet**. It now supports both:
+
+- a seller base URL (`http://localhost:3001`) → calls `POST /tag`
+- a direct Leash payment link (`http://localhost:3000/x/<id>`) → first
+  resolves metadata with `fetchPaymentLinkMeta()` from `@leash/core`, then
+  calls the discovered method/url
+
+Each tick:
 
 1. Loads a devnet keypair from `LEASH_BUYER_SECRET_KEY`.
 2. Constructs a `@leash/buyer-kit` client (`createBuyer`) with that signer
    and a `RulesV1` policy.
-3. Calls `buyer.fetch(SELLER_URL/tag)`. The first response is `402` with a
+3. Calls `buyer.fetch(...)`. The first response is `402` with a
    `PAYMENT-REQUIRED` header; `@x402/fetch` builds and signs an SPL-USDC
    transfer, retries the request, and the seller settles via
    `facilitator.svmacc.tech`.
@@ -73,7 +80,7 @@ app) to see it on Solscan.
 | ---------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `LEASH_BUYER_SECRET_KEY`           | _required_                      | JSON byte array of a devnet keypair. Acts as the agent's **executive** signer.                                               |
 | `LEASH_BUYER_SOURCE_TOKEN_ACCOUNT` | _unset_                         | Optional. Agent treasury USDC ATA — funds debit from here when set, executive must already hold an SPL `Approve` delegation. |
-| `SELLER_URL`                       | `http://localhost:3001`         | Base URL of the seller.                                                                                                      |
+| `SELLER_URL`                       | `http://localhost:3001`         | Seller base URL or direct Leash payment-link URL (`.../x/<id>`).                                                             |
 | `RUNNER_URL`                       | `http://localhost:8787`         | `@leash/runner` base URL.                                                                                                    |
 | `AGENT_ASSET`                      | `1111…1111`                     | Core asset mint to attribute receipts to.                                                                                    |
 | `SOLANA_RPC`                       | `https://api.devnet.solana.com` | RPC the buyer signs against.                                                                                                 |

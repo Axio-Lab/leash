@@ -6,7 +6,6 @@ import useSWR from 'swr';
 import {
   Bot,
   ExternalLink,
-  Globe2,
   Plus,
   Receipt,
   Send,
@@ -16,6 +15,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { createBuyer, type BuyerCallResult } from '@leash/buyer-kit';
+import { fetchPaymentLinkMeta } from '@leash/core';
 import type { EndpointV1, ReceiptV1, RulesV1 } from '@leash/schemas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
@@ -63,6 +63,14 @@ type FireResult =
       receipt: ReceiptV1;
       quotedPrice?: ReceiptV1['price'];
       failureReason?: string;
+      /**
+       * Snapshot of the treasury balance / approved allowance at fire-time.
+       * Used by `ResultPanel` to reclassify a generic 402 ("transaction
+       * simulation failed") into a precise "insufficient balance" /
+       * "insufficient allowance" diagnosis when the seller's quoted price
+       * exceeds what we can actually spend.
+       */
+      treasury?: { balanceAtomic: bigint; delegatedAtomic: bigint };
       response: {
         status: number;
         body: unknown;
@@ -128,6 +136,42 @@ export default function BuyerPage() {
     refreshInterval: 8000,
   });
   const allLinks = linksData?.endpoints ?? [];
+  const parsedTargetUrl = React.useMemo(() => {
+    try {
+      return new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://x');
+    } catch {
+      return null;
+    }
+  }, [url]);
+  const looksLikeLeashLink = !!parsedTargetUrl?.pathname.match(/\/x\/[^/]+$/);
+  const discoveryKey = looksLikeLeashLink ? `discovery:${parsedTargetUrl!.toString()}` : null;
+  const { data: discoveredLinkMeta } = useSWR(
+    discoveryKey,
+    async () => {
+      if (!parsedTargetUrl) return null;
+      try {
+        return await fetchPaymentLinkMeta(parsedTargetUrl.toString());
+      } catch {
+        // Cross-origin links without CORS or non-Leash URLs will fail
+        // discovery; pre-flight falls back to the runner's local endpoint
+        // list (allLinks) and then to seller-quoted price on 402.
+        return null;
+      }
+    },
+    { revalidateOnFocus: false },
+  );
+  React.useEffect(() => {
+    if (!discoveredLinkMeta?.endpoint) return;
+    // Make the discovery payload the single source of truth for method/URL
+    // when the user pastes a Leash payment-link (`/x/<id>`). This avoids
+    // stale local assumptions (e.g. defaulting to POST on a GET-priced link).
+    if (discoveredLinkMeta.endpoint.method !== method) {
+      setMethod(discoveredLinkMeta.endpoint.method);
+    }
+    if (parsedTargetUrl && discoveredLinkMeta.endpoint.url !== parsedTargetUrl.toString()) {
+      setUrl(discoveredLinkMeta.endpoint.url);
+    }
+  }, [discoveredLinkMeta, method, parsedTargetUrl]);
 
   // The mint the agent funds calls from (USDC, network-aware).
   const fundingMint = React.useMemo(() => {
@@ -167,6 +211,13 @@ export default function BuyerPage() {
   // Quoted price for the link the user is currently aiming at — used to gate
   // the Fire button when the delegation is too small to cover the call.
   const quotedAtomic: bigint | null = React.useMemo(() => {
+    const fromDiscovery = discoveredLinkMeta?.endpoint.price;
+    if (fromDiscovery) {
+      const m = fromDiscovery.match(/^([\d.]+)\s*([A-Z]+)$/);
+      if (m && m[2] === 'USDC') {
+        return decimalToAtomicUsdc(m[1]);
+      }
+    }
     try {
       const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://x');
       const m = u.pathname.match(/\/x\/([^/]+)/);
@@ -180,7 +231,7 @@ export default function BuyerPage() {
     } catch {
       return null;
     }
-  }, [url, allLinks]);
+  }, [url, allLinks, discoveredLinkMeta]);
 
   const insufficientDelegation =
     delegation != null &&
@@ -220,6 +271,49 @@ export default function BuyerPage() {
       toast.error('Agent required', msg);
       return;
     }
+
+    // Pre-flight: re-read on-chain delegation right before firing so the gate
+    // reflects reality (the user might have just topped up in another tab) and
+    // we never burn a Privy popup on a call we already know will revert.
+    let live: SpendDelegationStatus | null = delegation;
+    try {
+      if (privyUmi) {
+        live = await getSpendDelegation(privyUmi, {
+          agentAsset: selectedAgent,
+          mint: fundingMint,
+        });
+        setDelegation(live);
+      }
+    } catch {
+      /* fall back to the cached delegation read above */
+    }
+
+    if (live && quotedAtomic != null) {
+      if (live.balance < quotedAtomic) {
+        const have = (Number(live.balance) / 1_000_000).toFixed(6);
+        const need = (Number(quotedAtomic) / 1_000_000).toFixed(6);
+        const msg = `Treasury holds ${have} USDC but the seller wants ${need} USDC.`;
+        setResult({ ok: false, error: msg });
+        toast.error('Insufficient treasury balance', msg);
+        return;
+      }
+      if (live.delegatedAmount < quotedAtomic) {
+        const have = (Number(live.delegatedAmount) / 1_000_000).toFixed(6);
+        const need = (Number(quotedAtomic) / 1_000_000).toFixed(6);
+        const msg = `Executive is approved for ${have} USDC but this call needs ${need} USDC. Re-approve a higher allowance on the agent profile.`;
+        setResult({ ok: false, error: msg });
+        toast.error('Insufficient allowance', msg);
+        return;
+      }
+      if (!live.delegate) {
+        const msg =
+          'No delegate set on this agent. Open the agent profile and run "Set allowance" first.';
+        setResult({ ok: false, error: msg });
+        toast.error('Delegation missing', msg);
+        return;
+      }
+    }
+
     setLoading(true);
     setResult(null);
     try {
@@ -238,7 +332,12 @@ export default function BuyerPage() {
       const headers: Record<string, string> = {};
       if (method === 'POST' && body) headers['content-type'] = 'application/json';
       if (callbackUrl.trim()) headers['x-leash-callback'] = callbackUrl.trim();
-      const init: RequestInit = { method, redirect: 'manual' };
+      // Let the browser follow any 3xx automatically. The seller's `/x/<id>`
+      // route doesn't redirect today (the `redirect_url` hook was removed in
+      // favour of just `wrap_receipt` + `webhook_url` + `X-Leash-*`
+      // headers), but if a buyer-side proxy sits in front we still read
+      // `response.url` query params as a defensive fallback below.
+      const init: RequestInit = { method };
       if (Object.keys(headers).length > 0) init.headers = headers;
       if (method === 'POST' && body) init.body = body;
       const callResult: BuyerCallResult = await buyer.fetch(target, init);
@@ -250,42 +349,135 @@ export default function BuyerPage() {
         /* leave as text */
       }
       const h = callResult.response.headers;
+      const redirected = callResult.response.redirected;
+      const finalUrl = callResult.response.url || target;
+      // Defensive: if any caller-installed proxy ever rewrites the response
+      // URL with `?leash_tx&leash_receipt&leash_agent` query params, prefer
+      // those over a missing X-Leash-* header. The seller-kit doesn't
+      // produce these today; this is purely a graceful-degradation hook.
+      let urlLeash: {
+        tx_sig: string | null;
+        receipt_hash: string | null;
+        agent: string | null;
+      } = { tx_sig: null, receipt_hash: null, agent: null };
+      try {
+        const u = new URL(finalUrl);
+        urlLeash = {
+          tx_sig: u.searchParams.get('leash_tx'),
+          receipt_hash: u.searchParams.get('leash_receipt'),
+          agent: u.searchParams.get('leash_agent'),
+        };
+      } catch {
+        /* opaque or invalid url — fall back to header values */
+      }
       setResult({
         ok: true,
         receipt: callResult.receipt,
         quotedPrice: callResult.quotedPrice,
         failureReason: callResult.failureReason,
+        ...(live
+          ? {
+              treasury: {
+                balanceAtomic: live.balance,
+                delegatedAtomic: live.delegatedAmount,
+              },
+            }
+          : {}),
         response: {
           status: callResult.response.status,
           body: parsed,
           leash: {
-            tx_sig: h.get('x-leash-tx-sig') || null,
-            receipt_hash: h.get('x-leash-receipt-hash') || null,
-            agent: h.get('x-leash-agent') || null,
+            tx_sig: h.get('x-leash-tx-sig') || urlLeash.tx_sig || null,
+            receipt_hash: h.get('x-leash-receipt-hash') || urlLeash.receipt_hash || null,
+            agent: h.get('x-leash-agent') || urlLeash.agent || null,
             tx_explorer: h.get('x-leash-tx-explorer') || null,
             agent_explorer: h.get('x-leash-agent-explorer') || null,
-            redirected_to: callResult.response.status === 303 ? h.get('location') : null,
+            redirected_to: redirected ? finalUrl : null,
           },
         },
       });
       setHistory((h) => [callResult.receipt, ...h].slice(0, 25));
       const settled = !!callResult.receipt.tx_sig;
-      if (callResult.response.status === 402 && !settled) {
+      const status = callResult.response.status;
+      // A `redirected` response (303 → followed) with status 0 is *not* a
+      // network failure; it's a successful payment + redirect. Treat it
+      // accordingly so the toast/panel match what actually happened on-chain.
+      const isNetworkFailure = status === 0 && !callResult.response.redirected;
+
+      // Authoritative quoted price from the seller's payment-required header
+      // (parsed by buyer-kit). Convert to bigint atomic units so we can
+      // compare against treasury / allowance.
+      const quotedAtomicFromSeller: bigint | null = (() => {
+        const raw = callResult.quotedPrice?.amount;
+        if (!raw) return null;
+        try {
+          return BigInt(raw);
+        } catch {
+          return null;
+        }
+      })();
+
+      // Cheap-and-correct reclassification: even when the pre-flight didn't
+      // fire (because /api/endpoints hadn't loaded yet, or the URL was
+      // cross-origin), we now know exactly what the seller asked for. If it
+      // exceeds what we can actually spend, surface that as the headline
+      // failure instead of a generic "transaction_simulation".
+      let insufficient: 'balance' | 'allowance' | null = null;
+      if (live && quotedAtomicFromSeller != null) {
+        if (live.balance < quotedAtomicFromSeller) insufficient = 'balance';
+        else if (live.delegatedAmount < quotedAtomicFromSeller) insufficient = 'allowance';
+      }
+
+      if (isNetworkFailure) {
+        toast.error(
+          'Network error — request never reached the seller',
+          callResult.failureReason ??
+            'The signer popup was likely cancelled, or the facilitator/RPC was unreachable.',
+        );
+      } else if (status === 402 && !settled && insufficient === 'balance' && live) {
+        const have = (Number(live.balance) / 1_000_000).toFixed(6);
+        const need = formatReceiptPriceWithCurrency(callResult.quotedPrice) ?? 'unknown';
+        toast.error(
+          'Insufficient balance to complete payment',
+          `Treasury holds ${have} USDC but the seller requires ${need}.`,
+        );
+      } else if (status === 402 && !settled && insufficient === 'allowance' && live) {
+        const have = (Number(live.delegatedAmount) / 1_000_000).toFixed(6);
+        const need = formatReceiptPriceWithCurrency(callResult.quotedPrice) ?? 'unknown';
+        toast.error(
+          'Insufficient allowance to complete payment',
+          `Executive is approved for ${have} USDC but the seller requires ${need}. Re-approve a higher allowance on the agent profile.`,
+        );
+      } else if (status === 402 && !settled) {
         const quoted = formatReceiptPriceWithCurrency(callResult.quotedPrice);
         const reason = callResult.failureReason ?? 'no failure reason returned by the seller';
         toast.error(`Settlement failed${quoted ? ` (asked ${quoted})` : ''}`, reason);
       } else if (settled) {
         // Refresh delegation in the background so the new remaining allowance
-        // appears in the gating panel without a manual page reload.
-        void refreshDelegation();
+        // and treasury balance appear without a manual page reload. Devnet
+        // RPCs are occasionally laggy right after settlement, so re-poll a
+        // couple of times with a small backoff to catch the post-settle
+        // state instead of the pre-settle snapshot.
+        void (async () => {
+          await refreshDelegation();
+          await new Promise((r) => window.setTimeout(r, 1500));
+          await refreshDelegation();
+          await new Promise((r) => window.setTimeout(r, 2500));
+          await refreshDelegation();
+        })();
+        // Clear the firing-line so the next call starts from a clean slate.
+        // Keep the agent + URL pre-selected so users can re-fire quickly,
+        // and only reset transient inputs (request body + per-call callback).
+        setBody('{}');
+        setCallbackUrl('');
         toast.success(
           'x402 call completed',
-          `Status ${callResult.response.status} · receipt ${callResult.receipt.receipt_hash.slice(0, 12)}…`,
+          `Status ${status} · receipt ${callResult.receipt.receipt_hash.slice(0, 12)}…`,
         );
       } else {
         toast.info(
           'Call completed (no settlement)',
-          `Status ${callResult.response.status} — no PAYMENT-RESPONSE header, no tx_sig.`,
+          `Status ${status} — endpoint did not require payment, or returned without a PAYMENT-RESPONSE header.`,
         );
       }
     } catch (err) {
@@ -334,53 +526,6 @@ export default function BuyerPage() {
         description="Pick one of your agents, point it at any x402 URL on the open internet, and your Privy wallet will sign on its behalf as the registered Executive. Behaviour rules captured at agent creation gate every call."
       />
 
-      <Card className="border-warning/40 bg-warning/5">
-        <CardContent className="flex flex-wrap items-center gap-3 py-3 text-sm">
-          <Wallet className="size-4 text-warning" />
-          {!ready && <span>Loading Privy…</span>}
-          {ready && !wallet && (
-            <span>
-              Connect a Solana wallet (top-right) to enable real x402 calls. Until then the page is
-              read-only.
-            </span>
-          )}
-          {ready && wallet && (
-            <div className="flex flex-col gap-2 w-full">
-              <div className="flex flex-wrap items-center gap-2">
-                <span>
-                  Executive <span className="font-mono text-fg">{ownerShort}</span> signing on
-                  behalf of agent{' '}
-                  {agentShort ? (
-                    <span className="font-mono text-fg">{agentShort}</span>
-                  ) : (
-                    <em>(none selected)</em>
-                  )}
-                  .
-                </span>
-                <Badge variant="brand">solana-devnet</Badge>
-                <Badge variant="success">facilitator.svmacc.tech</Badge>
-              </div>
-              <WalletBalanceBadge owner={owner} label="Executive (Privy)" />
-              <span className="text-[11px] text-fg-subtle">
-                Per Metaplex&apos;s{' '}
-                <a
-                  href="https://www.metaplex.com/docs/agents/run-an-agent"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline"
-                >
-                  Run an Agent
-                </a>{' '}
-                docs, your wallet is registered as the agent&apos;s Executive and authorised via an
-                on-chain delegation record. <strong>Funds debit from the agent treasury</strong>{' '}
-                (PDA-owned USDC ATA) via the SPL token <code className="font-mono">Approve</code>{' '}
-                you set on the agent profile — your wallet just signs the transfer.
-              </span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {agents.length === 0 ? (
         <Card className="border-warning/40 bg-warning/5">
           <CardContent className="flex flex-col gap-3 py-4">
@@ -403,6 +548,32 @@ export default function BuyerPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2 border-b border-border pb-4 text-xs">
+                {!ready && <span className="text-fg-muted">Loading Privy…</span>}
+                {ready && !wallet && (
+                  <span className="text-warning">
+                    Connect a Solana wallet (top-right) to sign x402 transfers.
+                  </span>
+                )}
+                {ready && wallet && (
+                  <>
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-fg">
+                      <span>
+                        Executive <span className="font-mono">{ownerShort}</span> · agent{' '}
+                        {agentShort ? (
+                          <span className="font-mono">{agentShort}</span>
+                        ) : (
+                          <em>(none)</em>
+                        )}
+                      </span>
+                      <Badge variant="brand">solana-devnet</Badge>
+                      <Badge variant="success">facilitator.svmacc.tech</Badge>
+                    </div>
+                    <WalletBalanceBadge owner={owner} label="Executive (Privy)" />
+                  </>
+                )}
+              </div>
+
               <Field label="Agent (operator)">
                 <select
                   value={selectedAgent}
@@ -667,36 +838,6 @@ export default function BuyerPage() {
           </div>
         </div>
       )}
-
-      {allLinks.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe2 className="size-4 text-brand" /> All discoverable payment links
-            </CardTitle>
-            <CardDescription>
-              Every payment link the runner knows about. Pick one above to load it into the
-              firing-line.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {allLinks.map((ep) => (
-              <Link
-                key={ep.id}
-                href={`/x/${ep.id}`}
-                target="_blank"
-                className="rounded border border-border bg-bg-elev px-2 py-1 text-xs hover:border-border-strong"
-              >
-                <Badge variant="brand" className="mr-1">
-                  {ep.method}
-                </Badge>
-                <span className="font-mono">/x/{ep.id}</span> · {ep.price}{' '}
-                <ExternalLink className="size-3 inline" />
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
@@ -704,20 +845,72 @@ export default function BuyerPage() {
 function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) {
   const leash = result.response.leash;
   const settled = !!result.receipt.tx_sig;
-  const settlementFailed = result.response.status === 402 && !settled;
+  const status = result.response.status;
+  // A status-0 response that was actually `redirected` is a real,
+  // settled call — the browser just stripped headers because the seller
+  // returned 303. Don't render the red "network failed" panel for it.
+  const networkFailed = status === 0 && !leash.redirected_to;
+  const settlementFailed = status === 402 && !settled;
+
+  // Re-derive the "why didn't this settle" classification inside the panel
+  // so the visual matches the toast. We cannot reuse the closure scope from
+  // `fire()` here because `ResultPanel` is rendered at a higher level.
+  const quotedAtomic: bigint | null = (() => {
+    const raw = result.quotedPrice?.amount;
+    if (!raw) return null;
+    try {
+      return BigInt(raw);
+    } catch {
+      return null;
+    }
+  })();
+  let insufficient: 'balance' | 'allowance' | null = null;
+  if (settlementFailed && result.treasury && quotedAtomic != null) {
+    if (result.treasury.balanceAtomic < quotedAtomic) insufficient = 'balance';
+    else if (result.treasury.delegatedAtomic < quotedAtomic) insufficient = 'allowance';
+  }
+  const haveBalanceUsdc = result.treasury
+    ? (Number(result.treasury.balanceAtomic) / 1_000_000).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 6,
+      })
+    : null;
+  const haveAllowanceUsdc = result.treasury
+    ? (Number(result.treasury.delegatedAtomic) / 1_000_000).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 6,
+      })
+    : null;
+  const needPretty = formatReceiptPriceWithCurrency(result.quotedPrice);
+  // Anything else that's not a settlement and not 402 is treated as
+  // "endpoint didn't ask for payment" (e.g. /x/<id> is free, or returned
+  // a 5xx after settlement). We render a neutral note rather than a green
+  // "settled" badge to avoid the misleading "Response as payment completed,
+  // no settlement" copy users were seeing.
+  const statusBadgeVariant: 'success' | 'warning' | 'danger' = networkFailed
+    ? 'danger'
+    : status >= 400
+      ? 'warning'
+      : 'success';
+  const settlementBadge: { variant: 'success' | 'danger' | 'outline'; label: string } = settled
+    ? { variant: 'success', label: 'settled on-chain' }
+    : networkFailed
+      ? { variant: 'danger', label: 'never sent' }
+      : settlementFailed
+        ? { variant: 'danger', label: 'settlement failed' }
+        : { variant: 'outline', label: 'no settlement' };
+
   return (
     <>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         Response status:{' '}
-        <Badge variant={result.response.status < 400 ? 'success' : 'warning'}>
-          {result.response.status}
-        </Badge>
+        <Badge variant={statusBadgeVariant}>{networkFailed ? 'no response' : status}</Badge>
         <Badge variant={result.receipt.decision === 'allow' ? 'brand' : 'danger'}>
           {result.receipt.decision}
         </Badge>
-        <Badge variant={settled ? 'success' : 'outline'} className="gap-1">
+        <Badge variant={settlementBadge.variant} className="gap-1">
           <Receipt className="size-3" />
-          {settled ? 'settled on-chain' : 'no settlement'}
+          {settlementBadge.label}
         </Badge>
         {leash.redirected_to && (
           <Badge variant="outline" className="gap-1" title={leash.redirected_to}>
@@ -725,15 +918,93 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
           </Badge>
         )}
       </div>
-      {settlementFailed && (
+
+      {networkFailed && (
+        <div className="rounded-md border border-danger/40 bg-danger/5 p-3 text-xs text-fg-subtle">
+          <p className="text-sm text-fg">Network error — request never reached the seller.</p>
+          <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
+            <dt className="text-fg-muted">Reason</dt>
+            <dd className="text-fg break-all">
+              {result.failureReason ?? (
+                <span className="text-fg-muted">
+                  buyer-kit returned a Response.error() with no further detail
+                </span>
+              )}
+            </dd>
+          </dl>
+          <p className="mt-2">Most common causes:</p>
+          <ul className="ml-4 mt-1 list-disc space-y-0.5">
+            <li>The Privy popup was closed or rejected before signing.</li>
+            <li>
+              The configured facilitator (<InlineCode>facilitator.svmacc.tech</InlineCode>) returned
+              an error or timed out while settling.
+            </li>
+            <li>
+              The Solana RPC endpoint is unreachable / rate-limited (check{' '}
+              <InlineCode>NEXT_PUBLIC_SOLANA_RPC</InlineCode>).
+            </li>
+            <li>
+              The agent treasury ATA does not exist yet — open the agent profile and click{' '}
+              <em>Provision stable ATAs</em>.
+            </li>
+          </ul>
+        </div>
+      )}
+
+      {settlementFailed && insufficient === 'balance' && (
+        <div className="rounded-md border border-danger/40 bg-danger/5 p-3 text-xs text-fg-subtle">
+          <p className="text-sm text-fg">Insufficient balance to complete payment.</p>
+          <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
+            <dt className="text-fg-muted">Treasury holds</dt>
+            <dd className="text-fg font-mono">{haveBalanceUsdc} USDC</dd>
+            <dt className="text-fg-muted">Seller requires</dt>
+            <dd className="text-fg font-mono">{needPretty ?? 'unknown'}</dd>
+          </dl>
+          <p className="mt-2">
+            Top up the agent&apos;s USDC ATA, then click <strong>Fire request</strong> again.
+          </p>
+          <ul className="ml-4 mt-1 list-disc space-y-0.5">
+            <li>
+              Mint devnet USDC (
+              <InlineCode>4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU</InlineCode>) to the agent
+              treasury ATA from{' '}
+              <a
+                href="https://faucet.circle.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand hover:underline"
+              >
+                faucet.circle.com
+              </a>
+              .
+            </li>
+          </ul>
+        </div>
+      )}
+
+      {settlementFailed && insufficient === 'allowance' && (
+        <div className="rounded-md border border-danger/40 bg-danger/5 p-3 text-xs text-fg-subtle">
+          <p className="text-sm text-fg">Insufficient allowance to complete payment.</p>
+          <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
+            <dt className="text-fg-muted">Executive approved for</dt>
+            <dd className="text-fg font-mono">{haveAllowanceUsdc} USDC</dd>
+            <dt className="text-fg-muted">Seller requires</dt>
+            <dd className="text-fg font-mono">{needPretty ?? 'unknown'}</dd>
+          </dl>
+          <p className="mt-2">
+            Open the agent profile and run <strong>Set allowance</strong> with a higher cap before
+            re-firing.
+          </p>
+        </div>
+      )}
+
+      {settlementFailed && insufficient == null && (
         <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-xs text-fg-subtle">
           <p className="text-sm text-fg">Seller returned 402 — payment did not settle.</p>
           <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
             <dt className="text-fg-muted">Seller demanded</dt>
             <dd className="text-fg">
-              {formatReceiptPriceWithCurrency(result.quotedPrice) ?? (
-                <span className="text-fg-muted">unknown</span>
-              )}
+              {needPretty ?? <span className="text-fg-muted">unknown</span>}
             </dd>
             <dt className="text-fg-muted">Reason</dt>
             <dd className="text-fg">
@@ -748,8 +1019,8 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
           <ul className="ml-4 mt-1 list-disc space-y-0.5">
             <li>
               Mint devnet USDC (
-              <InlineCode>4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU</InlineCode>) to the
-              connected Privy wallet from{' '}
+              <InlineCode>4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU</InlineCode>) to the agent
+              treasury ATA from{' '}
               <a
                 href="https://faucet.circle.com"
                 target="_blank"

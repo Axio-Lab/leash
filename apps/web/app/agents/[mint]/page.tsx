@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import useSWR from 'swr';
 import {
   ArrowLeft,
+  ArrowRight,
   Coins,
   Cog,
   ExternalLink,
@@ -16,6 +17,11 @@ import {
   Loader2,
   RefreshCw,
   Copy,
+  PlusCircle,
+  Send,
+  ShieldOff,
+  Sparkles,
+  Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
 import type { ReceiptV1 } from '@leash/schemas';
@@ -24,6 +30,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReceiptRow } from '@/components/receipt-row';
+import { Pager, usePagedItems } from '@/components/ui/pager';
 import { JsonViewer } from '@/components/json-viewer';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,6 +43,8 @@ import {
   getSpendDelegation,
   setSpendDelegation,
   revokeSpendDelegation,
+  provisionTreasuryAtas,
+  type ProvisionTreasuryAtasResult,
   type SpendDelegationStatus,
 } from '@leash/registry-utils';
 import { transactionExplorerUrl } from '@/lib/solscan';
@@ -136,9 +145,14 @@ export default function AgentPage() {
   const [allowanceDraft, setAllowanceDraft] = React.useState('5.00');
   const [allowanceBusy, setAllowanceBusy] = React.useState<'set' | 'revoke' | null>(null);
   const [allowanceLastSig, setAllowanceLastSig] = React.useState<string | null>(null);
+  const [provisionBusy, setProvisionBusy] = React.useState(false);
+  const [provisionResult, setProvisionResult] = React.useState<ProvisionTreasuryAtasResult | null>(
+    null,
+  );
+  const [provisionError, setProvisionError] = React.useState<string | null>(null);
 
-  const refreshDelegation = React.useCallback(async () => {
-    if (!privyUmi || !mint) return;
+  const refreshDelegation = React.useCallback(async (): Promise<SpendDelegationStatus | null> => {
+    if (!privyUmi || !mint) return null;
     setDelegationLoading(true);
     setDelegationError(null);
     try {
@@ -147,12 +161,39 @@ export default function AgentPage() {
         mint: usdcInfo.mint,
       });
       setDelegation(status);
+      return status;
     } catch (err) {
       setDelegationError(err instanceof Error ? err.message : String(err));
+      return null;
     } finally {
       setDelegationLoading(false);
     }
   }, [privyUmi, mint, usdcInfo.mint]);
+
+  /**
+   * Re-read the delegation up to `maxAttempts` times with exponential
+   * backoff until either the on-chain `delegate` matches `expectedDelegate`
+   * AND `delegatedAmount` matches `expectedAmount`, or we time out.
+   *
+   * Devnet RPCs occasionally return slightly stale data immediately after
+   * `sendAndConfirm` returns. The polling loop ensures the "Remaining
+   * allowance" tile reflects the value the user just approved instead of
+   * a brief flash of the previous (or zero) state.
+   */
+  const confirmDelegationMatches = React.useCallback(
+    async (expected: { delegate: string | null; amount: bigint }) => {
+      const delays = [800, 1200, 1800, 2500];
+      for (const wait of delays) {
+        const status = await refreshDelegation();
+        if (!status) return;
+        const delegateMatches = (status.delegate ?? null) === expected.delegate;
+        const amountMatches = status.delegatedAmount === expected.amount;
+        if (delegateMatches && amountMatches) return;
+        await new Promise((r) => window.setTimeout(r, wait));
+      }
+    },
+    [refreshDelegation],
+  );
 
   React.useEffect(() => {
     void refreshDelegation();
@@ -190,15 +231,74 @@ export default function AgentPage() {
         sourceTokenAccount: res.sourceTokenAccount,
         fundingMint: usdcInfo.mint,
         treasury: res.treasury,
+        allowanceCap: atomic.toString(),
+        allowanceUpdatedAt: new Date().toISOString(),
       });
       setLocalRecord(loadAgent(mint));
+
+      // Optimistic update — sendAndConfirm already resolved, so we know
+      // the delegation lives on-chain. Reflect it in the UI immediately
+      // instead of waiting for the (sometimes laggy) RPC re-read.
+      setDelegation((prev) => ({
+        treasury: res.treasury,
+        sourceTokenAccount: res.sourceTokenAccount,
+        sourceExists: true,
+        balance: prev?.balance ?? 0n,
+        delegate: privyWallet.address,
+        delegatedAmount: atomic,
+      }));
+
       toast.success('Allowance updated', `${allowanceDraft} ${usdcInfo.label} approved.`);
-      await refreshDelegation();
+
+      // Belt-and-braces: re-read on-chain a few times so we self-correct
+      // if the RPC lagged the first time around.
+      await confirmDelegationMatches({ delegate: privyWallet.address, amount: atomic });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error('Approve failed', msg);
     } finally {
       setAllowanceBusy(null);
+    }
+  }
+
+  /**
+   * Idempotently create the curated stable ATAs (USDC on devnet; USDC + USDT
+   * on mainnet) for this agent's treasury. Useful for legacy agents minted
+   * before automatic provisioning shipped, or to recover after a failed
+   * post-mint provisioning step.
+   */
+  async function handleProvisionAtas() {
+    if (!privyUmi || !privyWallet) {
+      toast.error('Connect a wallet', 'You need a Solana wallet to provision treasury ATAs.');
+      return;
+    }
+    const network: 'solana-mainnet' | 'solana-devnet' =
+      balance?.network === 'mainnet' ? 'solana-mainnet' : 'solana-devnet';
+    setProvisionBusy(true);
+    setProvisionError(null);
+    try {
+      const res = await provisionTreasuryAtas(privyUmi, {
+        agentAsset: mint,
+        network,
+      });
+      setProvisionResult(res);
+      const created = res.atas.filter((a) => a.created);
+      if (created.length === 0) {
+        toast.info('Already provisioned', 'Every supported stable ATA exists for this treasury.');
+      } else {
+        toast.success(
+          'Treasury ATAs provisioned',
+          `${created.map((a) => a.symbol ?? a.mint.slice(0, 4)).join(', ')} ready to receive funds.`,
+        );
+      }
+      await refreshDelegation();
+      await refetchBalance();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setProvisionError(msg);
+      toast.error('Provisioning failed', msg);
+    } finally {
+      setProvisionBusy(false);
     }
   }
 
@@ -212,8 +312,34 @@ export default function AgentPage() {
         mint: usdcInfo.mint,
       });
       setAllowanceLastSig(res.signature);
+      saveAgent({
+        mint,
+        label: localRecord?.label,
+        network:
+          localRecord?.network ??
+          (balance?.network === 'mainnet' ? 'solana-mainnet' : 'solana-devnet'),
+        owner: localRecord?.owner ?? privyWallet.address,
+        rules: localRecord?.rules ?? null,
+        sourceTokenAccount: res.sourceTokenAccount,
+        fundingMint: usdcInfo.mint,
+        treasury: res.treasury,
+        allowanceCap: '0',
+        allowanceUpdatedAt: new Date().toISOString(),
+      });
+      setLocalRecord(loadAgent(mint));
+
+      // Optimistic clear so the "no delegate" state shows up immediately.
+      setDelegation((prev) => ({
+        treasury: res.treasury,
+        sourceTokenAccount: res.sourceTokenAccount,
+        sourceExists: true,
+        balance: prev?.balance ?? 0n,
+        delegate: null,
+        delegatedAmount: 0n,
+      }));
+
       toast.info('Delegation revoked', 'Executive can no longer move treasury funds.');
-      await refreshDelegation();
+      await confirmDelegationMatches({ delegate: null, amount: 0n });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error('Revoke failed', msg);
@@ -292,6 +418,11 @@ export default function AgentPage() {
 
   const earnCount = feed?.receipts.filter((r) => r.kind === 'earn').length ?? 0;
   const spendCount = feed?.receipts.filter((r) => r.kind === 'spend').length ?? 0;
+  const sortedReceipts = React.useMemo(
+    () => (feed?.receipts ?? []).slice().reverse(),
+    [feed?.receipts],
+  );
+  const receiptsPaged = usePagedItems(sortedReceipts, 5);
 
   return (
     <div className="flex flex-col gap-6">
@@ -351,9 +482,34 @@ export default function AgentPage() {
                 ? 'loading…'
                 : balance.error
                   ? balance.error
-                  : `${balance.sol.toFixed(4)} SOL + ${balance.tokens.filter((t) => t.ui > 0).length} tokens`}
+                  : (() => {
+                      // The "value" of an agent treasury is the spendable
+                      // stablecoin balance (USDC primarily). SOL only matters
+                      // for ATA rent so we show it as a secondary line. We
+                      // explicitly avoid the previous "5.0000 SOL + N tokens"
+                      // copy which conflated rent SOL with spendable balance.
+                      const stables = balance.tokens.filter(
+                        (t) =>
+                          t.symbol === 'USDC' ||
+                          t.symbol === 'USDT' ||
+                          t.symbol === 'USDG' ||
+                          t.symbol === 'PYUSD',
+                      );
+                      const usdcLike = stables.reduce((acc, t) => acc + t.ui, 0);
+                      const otherTokens = balance.tokens.filter(
+                        (t) => !stables.includes(t) && t.ui > 0,
+                      );
+                      const stablePart =
+                        stables.length > 0
+                          ? `${usdcLike.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${stables[0]?.symbol ?? 'USDC'}`
+                          : '0.00 USDC';
+                      const extra = otherTokens.length > 0 ? ` · +${otherTokens.length} other` : '';
+                      return `${stablePart}${extra}`;
+                    })()}
             </CardTitle>
-            <span className="text-[11px] text-fg-subtle">See full breakdown ↓</span>
+            <span className="text-[11px] text-fg-subtle">
+              {balance == null ? 'See full breakdown ↓' : `+ ${balance.sol.toFixed(0)} SOL`}
+            </span>
           </CardHeader>
         </Card>
         <Card>
@@ -407,13 +563,44 @@ export default function AgentPage() {
               </div>
             )}
           </div>
-          <Button variant="ghost" size="icon" onClick={() => refetchBalance()} title="Refresh">
-            <RefreshCw className="size-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleProvisionAtas}
+              disabled={provisionBusy || !privyWallet}
+              title="Idempotently create the agent treasury's USDC / USDT ATAs"
+            >
+              {provisionBusy && <Loader2 className="size-3.5 animate-spin" />}
+              Provision stable ATAs
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => refetchBalance()} title="Refresh">
+              <RefreshCw className="size-4" />
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {balance?.error && <p className="text-sm text-danger">{balance.error}</p>}
           {!balance && <p className="text-sm text-fg-muted">Loading…</p>}
+          {provisionError && (
+            <div className="rounded-md border border-danger/40 bg-danger/10 p-2 text-xs text-danger">
+              {provisionError}
+            </div>
+          )}
+          {provisionResult && provisionResult.atas.length > 0 && (
+            <div className="flex flex-col gap-1 rounded-md border border-border bg-bg-elev/40 p-2 text-[11px]">
+              <span className="uppercase tracking-wider text-fg-subtle">Treasury ATAs</span>
+              {provisionResult.atas.map((a) => (
+                <div key={a.address} className="flex items-center justify-between gap-2">
+                  <Badge variant={a.created ? 'brand' : 'outline'}>
+                    {a.symbol ?? a.mint.slice(0, 4)}
+                    {a.created ? ' · created' : ' · existed'}
+                  </Badge>
+                  <code className="font-mono break-all text-fg-muted">{a.address}</code>
+                </div>
+              ))}
+            </div>
+          )}
 
           {balance && !balance.error && (
             <ul className="flex flex-col divide-y divide-border/60">
@@ -516,118 +703,194 @@ export default function AgentPage() {
           ) : delegationError ? (
             <p className="text-sm text-danger">{delegationError}</p>
           ) : delegation ? (
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-md border border-border bg-bg-elev/40 p-3">
-                <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
-                  Treasury balance
-                </span>
-                <div className="font-mono text-sm">
-                  {(Number(delegation.balance) / 1_000_000).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 6,
-                  })}{' '}
-                  {usdcInfo.label}
-                </div>
-                <span className="text-[10px] text-fg-subtle">
-                  {delegation.sourceExists ? 'ATA initialised' : 'ATA not yet created'}
-                </span>
-              </div>
-              <div className="rounded-md border border-border bg-bg-elev/40 p-3">
-                <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
-                  Remaining allowance
-                </span>
-                <div className="font-mono text-sm">
-                  {(Number(delegation.delegatedAmount) / 1_000_000).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 6,
-                  })}{' '}
-                  {usdcInfo.label}
-                </div>
-                <span className="text-[10px] text-fg-subtle">
-                  {delegation.delegate
-                    ? `delegate: ${delegation.delegate.slice(0, 8)}…${delegation.delegate.slice(-4)}`
-                    : 'no delegate'}
-                </span>
-              </div>
-              <div className="rounded-md border border-border bg-bg-elev/40 p-3">
-                <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
-                  Source ATA
-                </span>
-                <code className="block font-mono text-[10px] break-all text-fg-muted">
-                  {delegation.sourceTokenAccount}
-                </code>
-                <span className="text-[10px] text-fg-subtle">
-                  Buyer-kit uses this as <code className="font-mono">sourceTokenAccount</code>.
-                </span>
-              </div>
+            (() => {
+              const remaining = delegation.delegatedAmount;
+              const treasuryBalance = delegation.balance;
+              const cap = computeCap(localRecord?.allowanceCap, remaining);
+              const used = cap > remaining ? cap - remaining : 0n;
+              const usedPct = cap > 0n ? Math.min(100, Number((used * 10000n) / cap) / 100) : 0;
+              const remainingUsdc = Number(remaining) / 1_000_000;
+              const balanceUsdc = Number(treasuryBalance) / 1_000_000;
+              const capUsdc = Number(cap) / 1_000_000;
+              const usedUsdc = Number(used) / 1_000_000;
+              const effectiveSpend = Math.min(remainingUsdc, balanceUsdc);
+              const spotPriceUsdc = 0.005;
+              const callsLeft = spotPriceUsdc > 0 ? Math.floor(effectiveSpend / spotPriceUsdc) : 0;
+              const isPolling = allowanceBusy == null && delegationLoading && delegation != null;
 
-              <div className="md:col-span-3 grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="allowance" className="text-xs">
-                    New allowance ({usdcInfo.label})
-                  </Label>
-                  <Input
-                    id="allowance"
-                    value={allowanceDraft}
-                    onChange={(e) => setAllowanceDraft(e.target.value)}
-                    inputMode="decimal"
-                    placeholder="5.00"
-                    className="font-mono"
+              return (
+                <>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-md border border-border bg-bg-elev/40 p-3">
+                      <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
+                        Treasury balance
+                      </span>
+                      <div className="font-mono text-sm">
+                        {balanceUsdc.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 6,
+                        })}{' '}
+                        {usdcInfo.label}
+                      </div>
+                      <span className="text-[10px] text-fg-subtle">
+                        {delegation.sourceExists ? 'ATA initialised' : 'ATA not yet created'}
+                      </span>
+                    </div>
+                    <div className="rounded-md border border-border bg-bg-elev/40 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
+                          Remaining allowance
+                        </span>
+                        {isPolling && (
+                          <Loader2
+                            className="size-3 animate-spin text-fg-subtle"
+                            aria-label="Confirming on-chain"
+                          />
+                        )}
+                      </div>
+                      <div className="font-mono text-sm">
+                        {remainingUsdc.toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 6,
+                        })}{' '}
+                        {usdcInfo.label}
+                      </div>
+                      <span className="text-[10px] text-fg-subtle">
+                        {delegation.delegate
+                          ? `delegate: ${delegation.delegate.slice(0, 8)}…${delegation.delegate.slice(-4)}`
+                          : 'no delegate'}
+                      </span>
+                    </div>
+                    <div className="rounded-md border border-border bg-bg-elev/40 p-3">
+                      <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
+                        Source ATA
+                      </span>
+                      <code className="block font-mono text-[10px] break-all text-fg-muted">
+                        {delegation.sourceTokenAccount}
+                      </code>
+                      <span className="text-[10px] text-fg-subtle">
+                        Buyer-kit uses this as <code className="font-mono">sourceTokenAccount</code>
+                        .
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Cap-vs-used progress bar. We compute `cap` as max(stored
+                      allowanceCap, current delegatedAmount) so externally
+                      re-approved delegations still render meaningfully. */}
+                  {cap > 0n && (
+                    <div className="rounded-md border border-border bg-bg-elev/40 p-3 flex flex-col gap-2">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="uppercase tracking-wider text-fg-subtle">
+                          Allowance usage
+                        </span>
+                        <span className="font-mono text-fg-muted">
+                          {usedUsdc.toFixed(usedUsdc < 1 ? 4 : 2)} /{' '}
+                          {capUsdc.toFixed(capUsdc < 1 ? 4 : 2)} {usdcInfo.label} used
+                        </span>
+                      </div>
+                      <div
+                        className="h-2 w-full rounded-full bg-bg-elev-2 overflow-hidden"
+                        role="progressbar"
+                        aria-valuenow={usedPct}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                      >
+                        <div
+                          className={
+                            'h-full transition-all ' +
+                            (usedPct > 80 ? 'bg-warning' : usedPct > 50 ? 'bg-brand' : 'bg-success')
+                          }
+                          style={{ width: `${usedPct}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-fg-subtle">
+                        {remainingUsdc <= 0
+                          ? 'Cap exhausted — re-approve below to keep going.'
+                          : `≈ ${callsLeft.toLocaleString()} more calls @ $${spotPriceUsdc.toFixed(3)} (or ${Math.floor(effectiveSpend / 0.05).toLocaleString()} @ $0.05) before you re-approve.`}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* What's next — actionable hints based on current state. */}
+                  <NextSteps
+                    delegation={delegation}
+                    balanceUsdc={balanceUsdc}
+                    remainingUsdc={remainingUsdc}
+                    capUsdc={capUsdc}
+                    mint={mint}
+                    usdcLabel={usdcInfo.label}
                   />
-                  <span className="text-[11px] text-fg-subtle">
-                    Sets the cap (overwrites any existing one). Top up by re-approving.
-                  </span>
-                </div>
-                <Button onClick={handleSetAllowance} disabled={allowanceBusy != null}>
-                  {allowanceBusy === 'set' && <Loader2 className="size-4 animate-spin" />}
-                  Set allowance
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={handleRevokeAllowance}
-                  disabled={allowanceBusy != null || !delegation.delegate}
-                >
-                  {allowanceBusy === 'revoke' && <Loader2 className="size-4 animate-spin" />}
-                  Revoke
-                </Button>
-              </div>
 
-              {delegation.sourceExists && delegation.balance === 0n && (
-                <div className="md:col-span-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-[11px] text-warning leading-relaxed">
-                  Treasury holds <strong>0 {usdcInfo.label}</strong>. Send some to{' '}
-                  <code className="font-mono">{delegation.sourceTokenAccount}</code> (or to the
-                  treasury PDA <code className="font-mono">{delegation.treasury}</code> — the ATA is
-                  auto-created on first deposit). Devnet faucet:{' '}
-                  <a
-                    href="https://faucet.circle.com/"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-brand hover:underline"
-                  >
-                    faucet.circle.com
-                  </a>
-                  .
-                </div>
-              )}
+                  <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="allowance" className="text-xs">
+                        New allowance ({usdcInfo.label})
+                      </Label>
+                      <Input
+                        id="allowance"
+                        value={allowanceDraft}
+                        onChange={(e) => setAllowanceDraft(e.target.value)}
+                        inputMode="decimal"
+                        placeholder="5.00"
+                        className="font-mono"
+                      />
+                      <span className="text-[11px] text-fg-subtle">
+                        Sets the cap (overwrites any existing one). Top up by re-approving.
+                      </span>
+                    </div>
+                    <Button onClick={handleSetAllowance} disabled={allowanceBusy != null}>
+                      {allowanceBusy === 'set' && <Loader2 className="size-4 animate-spin" />}
+                      Set allowance
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={handleRevokeAllowance}
+                      disabled={allowanceBusy != null || !delegation.delegate}
+                    >
+                      {allowanceBusy === 'revoke' && <Loader2 className="size-4 animate-spin" />}
+                      Revoke
+                    </Button>
+                  </div>
 
-              {allowanceLastSig && (
-                <div className="md:col-span-3 flex flex-col gap-1.5 rounded-md border border-success/40 bg-success/10 p-3 text-xs">
-                  <span className="font-medium text-success">Tx confirmed</span>
-                  <a
-                    href={transactionExplorerUrl(
-                      balance?.network === 'mainnet' ? 'solana-mainnet' : 'solana-devnet',
-                      allowanceLastSig,
-                    )}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 font-mono text-brand hover:underline break-all"
-                  >
-                    <ExternalLink className="size-3 shrink-0" />
-                    <span className="break-all">{allowanceLastSig}</span>
-                  </a>
-                </div>
-              )}
-            </div>
+                  {delegation.sourceExists && delegation.balance === 0n && (
+                    <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-[11px] text-warning leading-relaxed">
+                      Treasury holds <strong>0 {usdcInfo.label}</strong>. Send some to{' '}
+                      <code className="font-mono">{delegation.sourceTokenAccount}</code> (or to the
+                      treasury PDA <code className="font-mono">{delegation.treasury}</code> — the
+                      ATA is auto-created on first deposit). Devnet faucet:{' '}
+                      <a
+                        href="https://faucet.circle.com/"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-brand hover:underline"
+                      >
+                        faucet.circle.com
+                      </a>
+                      .
+                    </div>
+                  )}
+
+                  {allowanceLastSig && (
+                    <div className="flex flex-col gap-1.5 rounded-md border border-success/40 bg-success/10 p-3 text-xs">
+                      <span className="font-medium text-success">Tx confirmed</span>
+                      <a
+                        href={transactionExplorerUrl(
+                          balance?.network === 'mainnet' ? 'solana-mainnet' : 'solana-devnet',
+                          allowanceLastSig,
+                        )}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 font-mono text-brand hover:underline break-all"
+                      >
+                        <ExternalLink className="size-3 shrink-0" />
+                        <span className="break-all">{allowanceLastSig}</span>
+                      </a>
+                    </div>
+                  )}
+                </>
+              );
+            })()
           ) : null}
         </CardContent>
       </Card>
@@ -732,12 +995,16 @@ export default function AgentPage() {
                   No receipts yet for this agent.
                 </div>
               )}
-              {feed?.receipts
-                .slice()
-                .reverse()
-                .map((r) => (
-                  <ReceiptRow key={r.receipt_hash} receipt={r} />
-                ))}
+              {receiptsPaged.pageItems.map((r) => (
+                <ReceiptRow key={r.receipt_hash} receipt={r} />
+              ))}
+              <Pager
+                page={receiptsPaged.page}
+                pageCount={receiptsPaged.pageCount}
+                onPageChange={receiptsPaged.setPage}
+                total={receiptsPaged.total}
+                pageSize={receiptsPaged.pageSize}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -937,6 +1204,197 @@ export default function AgentPage() {
           </Card>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+/**
+ * Resolve the "cap" used by the allowance progress bar.
+ *
+ * Strategy:
+ *   1. If we cached the most recent `setSpendDelegation` amount in
+ *      localStorage, use it. That's the source of truth for "how much was
+ *      originally approved" because SPL `Approve` overwrites the value
+ *      and the chain only exposes the current `delegated_amount`.
+ *   2. If the on-chain `delegatedAmount` is _bigger_ than the cached cap
+ *      (e.g. the user re-approved through another tool), trust the chain
+ *      and treat that as the new cap.
+ *   3. Otherwise fall back to the on-chain value so the "0% used" state
+ *      still renders meaningfully right after a fresh approve.
+ */
+function computeCap(stored: string | undefined, currentRemaining: bigint): bigint {
+  let storedCap = 0n;
+  if (stored) {
+    try {
+      storedCap = BigInt(stored);
+    } catch {
+      storedCap = 0n;
+    }
+  }
+  if (storedCap === 0n) return currentRemaining;
+  if (currentRemaining > storedCap) return currentRemaining;
+  return storedCap;
+}
+
+/**
+ * Stateful "what should I do next?" panel for the spend-allowance card.
+ *
+ * Picks 1–3 actionable suggestions based on whether the agent has a
+ * delegate, treasury balance, and remaining allowance. Each suggestion is
+ * a real link (deep-link into /buyer pre-filled with this agent, faucet,
+ * etc.) so users aren't left wondering "ok now what".
+ */
+function NextSteps(props: {
+  delegation: SpendDelegationStatus;
+  balanceUsdc: number;
+  remainingUsdc: number;
+  capUsdc: number;
+  mint: string;
+  usdcLabel: string;
+}) {
+  const { delegation, balanceUsdc, remainingUsdc, capUsdc, mint, usdcLabel } = props;
+  type Step = {
+    icon: React.ReactNode;
+    title: string;
+    body: React.ReactNode;
+    tone: 'brand' | 'warning' | 'success';
+  };
+  const steps: Step[] = [];
+
+  if (!delegation.delegate) {
+    steps.push({
+      tone: 'brand',
+      icon: <KeyRound className="size-4" />,
+      title: 'Set an allowance',
+      body: (
+        <>
+          The agent can&apos;t spend until you approve a cap. Use the form below — start with
+          something small like <code className="font-mono">5.00 {usdcLabel}</code>.
+        </>
+      ),
+    });
+  }
+
+  if (delegation.sourceExists && balanceUsdc <= 0) {
+    steps.push({
+      tone: 'warning',
+      icon: <Wallet className="size-4" />,
+      title: 'Fund the treasury',
+      body: (
+        <>
+          Treasury balance is <strong>0 {usdcLabel}</strong>. Send {usdcLabel} to{' '}
+          <code className="font-mono break-all">{delegation.sourceTokenAccount}</code>. Devnet?{' '}
+          <a
+            className="text-brand hover:underline"
+            href="https://faucet.circle.com/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Circle faucet ↗
+          </a>
+        </>
+      ),
+    });
+  }
+
+  if (delegation.delegate && remainingUsdc <= 0) {
+    steps.push({
+      tone: 'warning',
+      icon: <PlusCircle className="size-4" />,
+      title: 'Re-approve to top up',
+      body: (
+        <>
+          Cap is exhausted ({capUsdc.toFixed(2)} {usdcLabel} all spent). Re-run{' '}
+          <strong>Set allowance</strong> below to extend it.
+        </>
+      ),
+    });
+  }
+
+  if (delegation.delegate && remainingUsdc > 0 && balanceUsdc > 0) {
+    steps.push({
+      tone: 'success',
+      icon: <Send className="size-4" />,
+      title: 'Try a real x402 call',
+      body: (
+        <>
+          Open the buyer cockpit and fire a request — the agent will sign with the executive and
+          settle from the treasury.{' '}
+          <Link
+            href={`/buyer?agent=${mint}`}
+            className="inline-flex items-center gap-1 text-brand hover:underline"
+          >
+            Go to buyer <ArrowRight className="size-3" />
+          </Link>
+        </>
+      ),
+    });
+  }
+
+  if (delegation.delegate && remainingUsdc > 0 && capUsdc > 0 && remainingUsdc / capUsdc < 0.2) {
+    steps.push({
+      tone: 'warning',
+      icon: <Sparkles className="size-4" />,
+      title: 'Running low',
+      body: (
+        <>
+          Less than 20% of the original cap left ({remainingUsdc.toFixed(4)} {usdcLabel}). Consider
+          re-approving before the next big spend.
+        </>
+      ),
+    });
+  }
+
+  if (delegation.delegate) {
+    steps.push({
+      tone: 'brand',
+      icon: <ShieldOff className="size-4" />,
+      title: 'Lock everything down',
+      body: (
+        <>
+          Use the <strong>Revoke</strong> button to set the cap to 0 and freeze spending.
+        </>
+      ),
+    });
+  }
+
+  if (steps.length === 0) return null;
+
+  return (
+    <div className="rounded-md border border-border bg-bg-elev/40 p-3 flex flex-col gap-2">
+      <span className="text-[11px] uppercase tracking-wider text-fg-subtle">What&apos;s next</span>
+      <ul className="flex flex-col gap-2">
+        {steps.slice(0, 3).map((s, i) => (
+          <li
+            key={i}
+            className={
+              'flex items-start gap-2.5 rounded-md border p-2.5 text-xs leading-relaxed ' +
+              (s.tone === 'success'
+                ? 'border-success/30 bg-success/5 text-fg-default'
+                : s.tone === 'warning'
+                  ? 'border-warning/30 bg-warning/5 text-fg-default'
+                  : 'border-brand/30 bg-brand/5 text-fg-default')
+            }
+          >
+            <span
+              className={
+                'mt-0.5 ' +
+                (s.tone === 'success'
+                  ? 'text-success'
+                  : s.tone === 'warning'
+                    ? 'text-warning'
+                    : 'text-brand')
+              }
+            >
+              {s.icon}
+            </span>
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="font-medium">{s.title}</span>
+              <span className="text-fg-muted">{s.body}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

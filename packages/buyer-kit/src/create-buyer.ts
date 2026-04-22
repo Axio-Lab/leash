@@ -5,6 +5,7 @@ import {
   defaultFacilitatorFor,
   evaluate,
   finalizeReceipt,
+  networkFromCaip2,
   paymentRequirementsHash,
   requestHash,
   type ClientSvmSigner,
@@ -21,7 +22,7 @@ export type BuyerConfig = {
   spentToday?: string;
   /**
    * `@solana/kit` `TransactionSigner` used to sign x402 SPL token transfers.
-   * On Node, build it via `createKeyPairSignerFromBytes(secret)`. In the
+   * On Node, build it via `createKeyPairSignerFromBytes(secret) via @solana/kit`. In the
    * browser, use the Privy → kit adapter (`apps/web/lib/privy-x402-signer.ts`).
    */
   signer: ClientSvmSigner;
@@ -152,10 +153,50 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
         };
       }
 
-      const response = await paidFetch(url, init);
+      // Run the (payment-wrapped) fetch but never let a transport-layer
+      // exception bubble up as an unhandled rejection — we always want to
+      // emit a receipt that records *why* the call failed. Common causes:
+      //   - Privy popup was cancelled (`wallet_signing_rejected`)
+      //   - Facilitator returned a non-2xx response while settling
+      //   - RPC is unreachable / rate-limited
+      //   - `Response.error()` produced by `@x402/fetch` on bad headers
+      let response: Response;
+      let networkError: string | null = null;
+      try {
+        response = await paidFetch(url, init);
+      } catch (err) {
+        networkError = err instanceof Error ? err.message : String(err);
+        // Synthesize a Response so callers always see a uniform shape.
+        response = new Response(JSON.stringify({ error: networkError }), {
+          status: 0,
+          statusText: 'Network error',
+        });
+      }
       state.recentRequestHashes.push(h);
 
-      const settlement = parseSettlement(response);
+      // Try header-based settlement first, then fall back to mining
+      // `?leash_tx=…&leash_receipt=…&leash_agent=…` query params off
+      // `response.url`. The Leash seller-kit doesn't produce those today
+      // (the legacy 303-redirect hook was removed), but the URL fallback
+      // stays in place as defensive code in case a buyer-side proxy ever
+      // re-attaches them after eating the X-Leash-* headers.
+      const settlement = parseSettlement(response) ?? parseRedirectSettlement(response);
+      // `Response.error()` surfaces as `status: 0` AND `type === 'error'`.
+      // **Opaque redirects** also surface as `status: 0` — but they mean the
+      // request actually succeeded; the browser just stripped headers because
+      // the caller asked for `redirect: 'manual'`. We MUST NOT classify
+      // those as network failures, otherwise users see "request never reached
+      // the seller" even though their USDC was debited.
+      const isOpaqueRedirect =
+        response.type === 'opaqueredirect' || (response.status === 0 && response.redirected);
+      if (!networkError && response.status === 0 && !isOpaqueRedirect) {
+        networkError =
+          'Network error — the request did not reach the seller. The signer popup was likely cancelled, or the facilitator/RPC was unreachable.';
+      }
+      // Suppress the synthetic message if we now know it was a successful
+      // opaque redirect (our earlier branch may have set a generic string).
+      if (isOpaqueRedirect) networkError = null;
+
       // If the seller returned 402, decode its `payment-required` header so we
       // can record what was actually demanded and *why* it didn't settle.
       // We need to .clone() because callers will still want to read the body.
@@ -163,6 +204,20 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
         response.status === 402 && !settlement
           ? await parsePaymentRequired(response.clone(), networks)
           : null;
+
+      const failureReason = settlement ? null : (quote?.error ?? networkError ?? null);
+
+      // The call **was** rejected if the policy gate let it through but the
+      // request itself failed: 402 with no PAYMENT-RESPONSE (settlement
+      // didn't happen), any 4xx/5xx, or a transport-layer error. A 2xx with
+      // no payment header is a legitimate "the seller didn't gate this
+      // route" success — those stay `allow`. We surface this in the
+      // `decision` field so explorers can colour failed receipts red
+      // without introspecting `tx_sig === null`.
+      const settled = settlement?.txSig != null && settlement.txSig.length > 0;
+      const callFailed =
+        networkError != null || response.status === 402 || (response.status >= 400 && !settled);
+      const decision: 'allow' | 'rejected' = callFailed ? 'rejected' : 'allow';
 
       const draft = {
         v: '0.1' as const,
@@ -172,11 +227,12 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
         ts: new Date().toISOString(),
         policy_v: cfg.rules.v,
         request: { method, url, body_hash: body ? requestHash({ method, url, body }) : null },
-        decision: 'allow' as const,
-        // Surface the seller / facilitator error verbatim so receipts carry
-        // a usable failure reason ("insufficient_funds", "facilitator_error",
-        // etc.) instead of a silent null.
-        reason: settlement ? null : (quote?.error ?? null),
+        decision,
+        // Surface the seller / facilitator / network error verbatim so
+        // receipts carry a usable failure reason ("insufficient_funds",
+        // "facilitator_error", "Network error — …") instead of a silent
+        // null.
+        reason: failureReason,
         // Order of precedence:
         //   1. Settled price (truth)                   ← from PAYMENT-RESPONSE
         //   2. Seller-quoted price on a failed 402     ← from payment-required
@@ -197,7 +253,7 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
         response,
         receipt,
         quotedPrice: quote?.price,
-        failureReason: settlement ? undefined : (quote?.error ?? undefined),
+        failureReason: failureReason ?? undefined,
       };
     },
   };
@@ -239,7 +295,7 @@ function parseSettlement(response: Response): Settlement | null {
     ? {
         amount: requirements.amount,
         currency: 'USDC',
-        network: requirements.network,
+        network: networkFromCaip2(requirements.network) ?? requirements.network,
         asset: requirements.asset,
       }
     : null;
@@ -314,7 +370,7 @@ async function parsePaymentRequired(
     ? {
         amount: chosen.amount,
         currency: 'USDC',
-        network: chosen.network,
+        network: networkFromCaip2(chosen.network) ?? chosen.network,
         asset: chosen.asset,
       }
     : null;
@@ -323,6 +379,33 @@ async function parsePaymentRequired(
     price,
     requirementsHash: paymentRequirementsHash(chosen),
     error: bodyError ?? headerError,
+  };
+}
+
+/**
+ * Extract a {@link Settlement} from `response.url` query params. Leash's
+ * own seller-kit doesn't emit these anymore (the legacy `redirect_url`
+ * hook was removed in favour of `wrap_receipt` + `webhook_url` +
+ * X-Leash-* headers), but we keep this fallback in case a buyer-side
+ * proxy attaches `?leash_tx=…&leash_receipt=…&leash_agent=…` after the
+ * fact. Returns `null` for the common case (no params present).
+ */
+function parseRedirectSettlement(response: Response): Settlement | null {
+  const rawUrl = response.url;
+  if (!rawUrl) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return null;
+  }
+  const txSig = parsed.searchParams.get('leash_tx');
+  const receiptHash = parsed.searchParams.get('leash_receipt');
+  if (!txSig && !receiptHash) return null;
+  return {
+    txSig: txSig && txSig.length > 0 ? txSig : null,
+    price: null,
+    requirementsHash: null,
   };
 }
 

@@ -59,7 +59,11 @@ import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
 
 import { createBuyer } from '@leash/buyer-kit';
 import { createSeller } from '@leash/seller-kit';
-import { setSpendDelegation, getSpendDelegation } from '@leash/registry-utils';
+import {
+  setSpendDelegation,
+  getSpendDelegation,
+  provisionTreasuryAtas,
+} from '@leash/registry-utils';
 
 const RPC = process.env.LEASH_TEST_RPC ?? 'https://api.devnet.solana.com';
 const USDC = process.env.LEASH_TEST_USDC_MINT ?? '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
@@ -104,6 +108,32 @@ async function main(): Promise<void> {
   console.log('buyer ag  :', BUYER_AGENT);
   console.log('seller ag :', SELLER_AGENT);
   console.log('price     :', PRICE_USDC, 'USDC =', priceAtomic.toString(), 'atomic');
+
+  // ---- Ensure both buyer and seller treasuries have their stable ATAs ----
+  // Idempotent — just confirms the canonical USDC ATA exists for each agent.
+  // Without this, sending USDC to a wallet UI usually fails ("recipient has
+  // no token account") and setSpendDelegation would have to create the ATA
+  // inline (which is the path that surfaces "Provided owner is not allowed"
+  // when the on-chain shape doesn't match expectations).
+  for (const [label, asset] of [
+    ['buyer', BUYER_AGENT as string],
+    ['seller', SELLER_AGENT as string],
+  ] as const) {
+    const provisioned = await provisionTreasuryAtas(umi, {
+      agentAsset: asset,
+      network: 'solana-devnet',
+    });
+    const created = provisioned.atas.filter((a) => a.created);
+    console.log(
+      `${label} treasury ATAs:`,
+      provisioned.atas
+        .map((a) => `${a.symbol ?? a.mint.slice(0, 4)}=${a.created ? 'new' : 'ok'}`)
+        .join(' '),
+    );
+    if (created.length > 0 && created[0].signature) {
+      console.log(`  → tx: ${created[0].signature}`);
+    }
+  }
 
   // ---- Ensure delegation covers the call ----
   let status = await getSpendDelegation(umi, {

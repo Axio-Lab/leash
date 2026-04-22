@@ -40,7 +40,15 @@ export const ReceiptV1Schema = z.object({
   ts: z.string(),
   policy_v: z.string(),
   request: RequestSummarySchema,
-  decision: z.enum(['allow', 'deny']),
+  /**
+   * Outcome of the call:
+   *  - `allow`    — policy gate passed AND (for spend receipts) payment settled.
+   *  - `deny`     — policy gate denied the call before any payment was attempted.
+   *  - `rejected` — policy gate allowed the call, but settlement failed
+   *                 (insufficient balance, facilitator error, RPC outage, etc).
+   *                 The `reason` field carries the failure cause.
+   */
+  decision: z.enum(['allow', 'deny', 'rejected']),
   reason: z.string().nullable(),
   price: PriceSchema.nullable(),
   facilitator: FacilitatorSchema,

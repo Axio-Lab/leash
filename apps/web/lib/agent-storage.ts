@@ -61,6 +61,18 @@ const StoredAgentSchema = z.object({
    * it without an extra RPC call.
    */
   treasury: z.string().optional(),
+  /**
+   * The most recent SPL Approve cap we set on the treasury ATA, recorded
+   * in **atomic units** (string to keep bigint compat through JSON).
+   *
+   * On-chain we only see `delegated_amount`, which decreases with every
+   * settled transfer. Caching the original cap lets the UI show
+   * "used / remaining" + a progress bar instead of just the bare remaining
+   * value. Re-approving overwrites this; revoking clears it.
+   */
+  allowanceCap: z.string().optional(),
+  /** ISO timestamp of the last setSpendDelegation. */
+  allowanceUpdatedAt: z.string().optional(),
   createdAt: z.string(),
 });
 
@@ -163,6 +175,8 @@ export function saveAgent(input: {
   sourceTokenAccount?: string;
   fundingMint?: string;
   treasury?: string;
+  allowanceCap?: string;
+  allowanceUpdatedAt?: string;
 }): StoredAgent {
   const s = safeWindow();
   if (!s) throw new Error('localStorage unavailable');
@@ -177,6 +191,8 @@ export function saveAgent(input: {
     sourceTokenAccount: input.sourceTokenAccount ?? existing?.sourceTokenAccount,
     fundingMint: input.fundingMint ?? existing?.fundingMint,
     treasury: input.treasury ?? existing?.treasury,
+    allowanceCap: input.allowanceCap ?? existing?.allowanceCap,
+    allowanceUpdatedAt: input.allowanceUpdatedAt ?? existing?.allowanceUpdatedAt,
     createdAt: existing?.createdAt ?? new Date().toISOString(),
   };
   writeJson(s, KEY_PREFIX + input.mint, stored);

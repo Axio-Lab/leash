@@ -4,8 +4,10 @@ import { Hono, type Context } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
 import { createSeller } from '@leash/seller-kit';
+import { resolveSellerPayTo } from '@leash/seller-kit';
 import type { EndpointV1, ReceiptV1 } from '@leash/schemas';
 import { EndpointV1Schema } from '@leash/schemas';
+import { buildPaymentLinkMeta, type PaymentLinkMeta } from '@leash/core';
 import { RUNNER_URL, SOLANA_RPC } from '@/lib/env';
 
 export const runtime = 'nodejs';
@@ -20,8 +22,6 @@ export const dynamic = 'force-dynamic';
  * returned, an `earn` `ReceiptV1` is shipped to the runner, and the
  * response is post-processed according to the endpoint config:
  *
- *   - `redirect_url`  → 303 to that URL with the payment proof appended
- *                       as `?leash_tx=…&leash_receipt=…&leash_agent=…`
  *   - `wrap_receipt`  → JSON body becomes `{ data: <user-body>, _leash: {...} }`
  *   - `webhook_url`   → fire-and-forget POST of `{ payment, response }`
  *                       to the URL after settlement
@@ -103,8 +103,8 @@ function buildEnvelope(
 
 /**
  * Apply the post-payment side-effects — header stamping, optional body
- * envelope, redirect, and webhook fire-and-forget. Returns the new
- * Response that should replace the seller's response.
+ * envelope, and webhook fire-and-forget. Returns the new Response that
+ * should replace the seller's response.
  */
 async function finalizeResponse(
   res: Response,
@@ -156,24 +156,14 @@ async function finalizeResponse(
     });
   }
 
-  // 3. Optional 303 redirect to a thank-you page with the payment proof inline.
-  if (endpoint.redirect_url) {
-    const target = new URL(endpoint.redirect_url);
-    if (envelope.tx_sig) target.searchParams.set('leash_tx', envelope.tx_sig);
-    target.searchParams.set('leash_receipt', envelope.receipt_hash);
-    target.searchParams.set('leash_agent', envelope.agent);
-    headers.set('location', target.toString());
-    return new Response(null, { status: 303, headers });
-  }
-
-  // 4. Optional JSON body wrap so callers get the receipt inline.
+  // 3. Optional JSON body wrap so callers get the receipt inline.
   if (endpoint.wrap_receipt && isJson) {
     bodyText = JSON.stringify({ data: parsedBody, _leash: envelope });
     headers.set('content-length', String(Buffer.byteLength(bodyText, 'utf8')));
     return new Response(bodyText, { status: res.status, headers });
   }
 
-  // 5. Pass-through (still with X-Leash-* headers stamped).
+  // 4. Pass-through (still with X-Leash-* headers stamped).
   return new Response(bodyText, { status: res.status, headers });
 }
 
@@ -224,6 +214,50 @@ function buildApp(endpoint: EndpointV1, pathname: string): Hono {
   return app;
 }
 
+/**
+ * Build a public, no-payment "what is this link?" descriptor. Returned when a
+ * client probes `/x/<id>` without an `X-PAYMENT` header on a method that
+ * doesn't match the configured `endpoint.method` (typically a browser GET to
+ * a POST-only paywall) or any browser-like Accept.
+ *
+ * Delegates to {@link buildPaymentLinkMeta} from `@leash/core` so the wire
+ * shape stays in sync with the SDK consumer ({@link fetchPaymentLinkMeta}).
+ */
+function buildDiscoveryPayload(req: Request, endpoint: EndpointV1): PaymentLinkMeta {
+  const origin = new URL(req.url).origin;
+  const umi = createUmi(SOLANA_RPC).use(mplCore());
+  let payTo: string | null = null;
+  try {
+    payTo = resolveSellerPayTo(umi, { asset: endpoint.owner_agent });
+  } catch {
+    /* mint may be unrecognised on this RPC — payTo is best-effort */
+  }
+  return buildPaymentLinkMeta({
+    endpoint: {
+      id: endpoint.id,
+      label: endpoint.label,
+      description: endpoint.description ?? null,
+      method: endpoint.method,
+      price: endpoint.price,
+      network: endpoint.network,
+      owner_agent: endpoint.owner_agent,
+      response: {
+        status: endpoint.response.status,
+        mimeType: endpoint.response.mimeType,
+        body: endpoint.response.body,
+      },
+      webhook_url: endpoint.webhook_url ?? null,
+      wrap_receipt: endpoint.wrap_receipt,
+      created_at: endpoint.created_at,
+      updated_at: endpoint.updated_at,
+    },
+    origin,
+    payTo,
+    facilitator: 'https://facilitator.svmacc.tech',
+    docsUrl: 'https://leash.svmacc.tech/docs/playground/seller',
+  });
+}
+
 async function dispatch(req: Request, id: string): Promise<Response> {
   const endpoint = await loadEndpoint(id);
   if (!endpoint) {
@@ -235,6 +269,21 @@ async function dispatch(req: Request, id: string): Promise<Response> {
       { status: 404 },
     );
   }
+
+  // Discovery shortcut: plain browser visits should always see metadata,
+  // even for GET-configured links. We detect "browser intent" by Accept:
+  // text/html. x402 clients still receive the real 402/payment flow because
+  // they either send X-PAYMENT on replay, or use non-browser accepts.
+  const reqMethod = req.method.toUpperCase();
+  const hasPaymentHeader =
+    req.headers.has('x-payment') || req.headers.has('X-PAYMENT'.toLowerCase());
+  const accept = req.headers.get('accept')?.toLowerCase() ?? '';
+  const browserLike = accept.includes('text/html');
+  const methodMismatched = endpoint.method !== 'GET';
+  if (!hasPaymentHeader && reqMethod === 'GET' && (methodMismatched || browserLike)) {
+    return NextResponse.json(buildDiscoveryPayload(req, endpoint), { status: 200 });
+  }
+
   const u = new URL(req.url);
   const app = buildApp(endpoint, u.pathname);
   return app.fetch(req);
