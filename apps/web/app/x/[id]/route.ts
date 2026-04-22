@@ -3,11 +3,17 @@ import { NextResponse } from 'next/server';
 import { Hono, type Context } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
-import { createSeller } from '@leash/seller-kit';
-import { resolveSellerPayTo } from '@leash/seller-kit';
+import { createSeller, networkAlias, resolveSellerPayTo } from '@leash/seller-kit';
+import {
+  LEASH_CALLBACK_HEADER,
+  buildLeashEnvelope,
+  buildLeashHeaders,
+  buildPaymentLinkMeta,
+  buildWebhookPayload,
+  type PaymentLinkMeta,
+} from '@leash/core';
+import { createRunnerClient } from '@leash/runner';
 import type { EndpointV1, ReceiptV1 } from '@leash/schemas';
-import { EndpointV1Schema } from '@leash/schemas';
-import { buildPaymentLinkMeta, type PaymentLinkMeta } from '@leash/core';
 import { RUNNER_URL, SOLANA_RPC } from '@/lib/env';
 
 export const runtime = 'nodejs';
@@ -23,82 +29,36 @@ export const dynamic = 'force-dynamic';
  * response is post-processed according to the endpoint config:
  *
  *   - `wrap_receipt`  → JSON body becomes `{ data: <user-body>, _leash: {...} }`
- *   - `webhook_url`   → fire-and-forget POST of `{ payment, response }`
- *                       to the URL after settlement
+ *   - `webhook_url`   → fire-and-forget POST of `WebhookPayload` to the URL
+ *                       after settlement (built via `@leash/core`)
  *   - `x-leash-callback` request header → same webhook behaviour, but
  *                       buyer-supplied (per-call). Fired in addition to
  *                       `webhook_url` if both are set.
  *   - `X-Leash-*` response headers stamped on every successful settlement
+ *
+ * Every wire concern (envelope shape, header names, webhook payload) lives
+ * in `@leash/core` so the producer + consumer share a single contract.
  */
-
-const SOLSCAN_CLUSTER: Record<EndpointV1['network'], string> = {
-  'solana-mainnet': '',
-  'solana-devnet': '?cluster=devnet',
-  'solana-testnet': '?cluster=testnet',
-};
 
 type ReceiptHolder = { receipt: ReceiptV1 | null };
 const receiptStore = new AsyncLocalStorage<ReceiptHolder>();
 
+const runner = createRunnerClient({ url: RUNNER_URL });
+
 async function loadEndpoint(id: string): Promise<EndpointV1 | null> {
   try {
-    const res = await fetch(new URL(`/endpoints/${encodeURIComponent(id)}`, RUNNER_URL), {
-      cache: 'no-store',
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return EndpointV1Schema.parse(json);
+    return await runner.endpoints.get(id);
   } catch {
     return null;
   }
 }
 
 async function postReceipt(receipt: ReceiptV1): Promise<void> {
-  await fetch(`${RUNNER_URL}/a/${receipt.agent}/receipts`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(receipt),
-  }).catch(() => {
+  try {
+    await runner.receipts.post(receipt);
+  } catch {
     /* runner outage must not surface as a paying customer's HTTP error */
-  });
-}
-
-function networkAlias(network: EndpointV1['network']): 'solana-devnet' | 'solana-mainnet' {
-  if (network === 'solana-mainnet') return 'solana-mainnet';
-  // Fold testnet → devnet for v0.1 (no testnet facilitator exists).
-  return 'solana-devnet';
-}
-
-type LeashEnvelope = {
-  tx_sig: string | null;
-  receipt_hash: string;
-  agent: string;
-  network: string | null;
-  amount: { amount: string; currency: string } | null;
-  facilitator: string | null;
-  explorer: { tx: string | null; agent: string };
-};
-
-function buildEnvelope(
-  receipt: ReceiptV1,
-  origin: string,
-  network: EndpointV1['network'],
-): LeashEnvelope {
-  const cluster = SOLSCAN_CLUSTER[network] ?? '';
-  return {
-    tx_sig: receipt.tx_sig ?? null,
-    receipt_hash: receipt.receipt_hash,
-    agent: receipt.agent,
-    network: receipt.price?.network ?? null,
-    amount: receipt.price
-      ? { amount: receipt.price.amount, currency: receipt.price.currency }
-      : null,
-    facilitator: receipt.facilitator ?? null,
-    explorer: {
-      tx: receipt.tx_sig ? `https://solscan.io/tx/${receipt.tx_sig}${cluster}` : null,
-      agent: `${origin}/agents/${receipt.agent}`,
-    },
-  };
+  }
 }
 
 /**
@@ -113,8 +73,11 @@ async function finalizeResponse(
   req: Request,
 ): Promise<Response> {
   const origin = new URL(req.url).origin;
-  const envelope = buildEnvelope(receipt, origin, endpoint.network);
-  const callerCallback = req.headers.get('x-leash-callback');
+  const envelope = buildLeashEnvelope(receipt, {
+    origin,
+    network: networkAlias(endpoint.network) === 'solana-mainnet' ? 'mainnet' : 'devnet',
+  });
+  const callerCallback = req.headers.get(LEASH_CALLBACK_HEADER);
 
   // 1. Build the canonical payload (used for both webhook + optional body wrap).
   let bodyText = await res.text();
@@ -131,18 +94,10 @@ async function finalizeResponse(
 
   const isJson = (res.headers.get('content-type') ?? '').includes('application/json');
   const headers = new Headers(res.headers);
-  headers.set('x-leash-tx-sig', envelope.tx_sig ?? '');
-  headers.set('x-leash-receipt-hash', envelope.receipt_hash);
-  headers.set('x-leash-agent', envelope.agent);
-  if (envelope.explorer.tx) headers.set('x-leash-tx-explorer', envelope.explorer.tx);
-  headers.set('x-leash-agent-explorer', envelope.explorer.agent);
-  headers.set(
-    'access-control-expose-headers',
-    'x-leash-tx-sig, x-leash-receipt-hash, x-leash-agent, x-leash-tx-explorer, x-leash-agent-explorer',
-  );
+  buildLeashHeaders(envelope, headers);
 
   // 2. Fire webhooks (fire-and-forget so a slow downstream doesn't block the buyer).
-  const webhookPayload = JSON.stringify({ payment: envelope, response: parsedBody });
+  const webhookBody = JSON.stringify(buildWebhookPayload({ envelope, response: parsedBody }));
   const webhooks = [endpoint.webhook_url, callerCallback].filter(
     (u): u is string => typeof u === 'string' && u.length > 0,
   );
@@ -150,7 +105,7 @@ async function finalizeResponse(
     void fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: webhookPayload,
+      body: webhookBody,
     }).catch(() => {
       /* webhook outages are silent; receipt feed is the source of truth */
     });

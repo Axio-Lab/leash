@@ -26,7 +26,6 @@ import type { LeashX402Network } from './client.js';
 export const DEFAULT_FACILITATORS: Partial<Record<LeashX402Network, string>> = {
   'solana-devnet': 'https://facilitator.svmacc.tech',
   'solana-mainnet': 'https://facilitator.payai.network',
-  // testnet has no widely-deployed facilitator; callers must pass one explicitly.
 };
 
 /** Universal fallback when nothing else resolves. */

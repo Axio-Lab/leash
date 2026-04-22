@@ -53,3 +53,22 @@ const app = createHttpServer(createMemoryStore(), {
   endpoints: createEndpointStore({ persistPath: '/var/lib/leash/endpoints.jsonl' }),
 });
 ```
+
+## Typed runner client
+
+The same package exports a typed client so SDK consumers don't reach for
+raw `fetch` (and don't misspell paths). It validates against
+`EndpointV1Schema` / `ReceiptV1Schema` on the way out.
+
+```ts
+import { createRunnerClient } from '@leash/runner';
+
+const runner = createRunnerClient({ url: 'http://localhost:4040' });
+
+await runner.health();                        // { ok, paused, source }
+await runner.endpoints.list({ ownerAgent });  // EndpointV1[]
+const ep = await runner.endpoints.get('abc'); // EndpointV1 | null
+await runner.endpoints.create({ /* ... */ }); // EndpointV1
+await runner.receipts.post(receipt);          // returns canonical receipt_hash
+await runner.receipts.list(mint);             // ReceiptV1[]
+```

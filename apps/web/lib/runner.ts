@@ -1,23 +1,22 @@
 /**
  * Server-side helpers for talking to the local `@leash/runner`.
- * Used by Next API routes; never imported into client components directly.
+ *
+ * Thin re-export of `createRunnerClient` from `@leash/runner` so every
+ * Next API route shares the same typed client. Importers that want the
+ * legacy `getHealth/getPause/getReceiptsJsonl` shape can keep using the
+ * helper functions below; new code should prefer `runnerClient` directly.
  */
 
+import { createRunnerClient, type RunnerHealth, type RunnerPause } from '@leash/runner';
 import { RUNNER_URL } from './env';
 
-export type RunnerHealth = {
-  ok: boolean;
-  paused: boolean;
-  source: 'env' | 'onchain' | 'cache';
-};
+export const runnerClient = createRunnerClient({ url: RUNNER_URL });
 
-export type RunnerPause = RunnerHealth & { env_kill: boolean };
+export type { RunnerHealth, RunnerPause };
 
 export async function getHealth(): Promise<RunnerHealth | { error: string }> {
   try {
-    const res = await fetch(`${RUNNER_URL}/health`, { cache: 'no-store' });
-    if (!res.ok) return { error: `runner /health ${res.status}` };
-    return (await res.json()) as RunnerHealth;
+    return await runnerClient.health();
   } catch (err) {
     return { error: (err as Error).message };
   }
@@ -25,15 +24,12 @@ export async function getHealth(): Promise<RunnerHealth | { error: string }> {
 
 export async function getPause(): Promise<RunnerPause | { error: string }> {
   try {
-    const res = await fetch(`${RUNNER_URL}/pause`, { cache: 'no-store' });
-    if (!res.ok) return { error: `runner /pause ${res.status}` };
-    return (await res.json()) as RunnerPause;
+    return await runnerClient.pause();
   } catch (err) {
     return { error: (err as Error).message };
   }
 }
 
 export async function getReceiptsJsonl(mint: string): Promise<string> {
-  const res = await fetch(`${RUNNER_URL}/a/${mint}/receipts.jsonl`, { cache: 'no-store' });
-  return res.text();
+  return runnerClient.receipts.jsonl(mint);
 }

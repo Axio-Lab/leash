@@ -14,6 +14,7 @@
     "@leash/buyer-kit": "workspace:*",
     "@leash/core": "workspace:*",
     "@leash/registry-utils": "workspace:*",
+    "@leash/runner": "workspace:*",
     "@leash/schemas": "workspace:*",
     "@leash/seller-kit": "workspace:*",
     "@metaplex-foundation/mpl-agent-registry": "^0.2.5",

@@ -56,15 +56,18 @@ X-Leash-Agent-Explorer:   https://yourapp/agents/<mint>
 ### `webhook_url` — fire-and-forget agent-to-agent
 
 Set `webhook_url: "https://your-agent.com/leash-callback"` and after
-each settlement the runner will POST:
+each settlement the runner will POST a versioned `WebhookPayload`:
 
 ```jsonc
 {
+  "v": "0.1",
+  "kind": "leash.payment.settled",
+  "ts": "2026-04-22T18:30:00.000Z",
   "payment": {
     "tx_sig": "5J7…",
     "receipt_hash": "leash:receipt:v1:…",
     "agent": "33Qv…",
-    "network": "solana:103",
+    "network": "solana-devnet",
     "amount": { "amount": "1000", "currency": "USDC" },
     "facilitator": "https://facilitator.svmacc.tech",
     "explorer": {
@@ -72,7 +75,7 @@ each settlement the runner will POST:
       "agent": "https://yourapp/agents/33Qv…"
     }
   },
-  "response": <your endpoint response body>
+  "response": "<your endpoint response body>"
 }
 ```
 
@@ -80,10 +83,25 @@ It's fire-and-forget — webhook outages don't surface as the buyer's
 HTTP error. The receipt feed under `/a/<agent>/receipts` is the canonical
 source of truth.
 
+Downstream agents that receive these payloads should validate them with
+`parseWebhookPayload` from `@leash/core` rather than parsing the JSON by
+hand:
+
+```ts
+import { parseWebhookPayload } from '@leash/core';
+
+export async function POST(req: Request) {
+  const body = await req.json();
+  const event = parseWebhookPayload(body);    // throws on shape mismatch
+  // event.payment.tx_sig, event.payment.amount.currency, event.response …
+}
+```
+
 **Per-call override:** buyers can add an `x-leash-callback: <url>`
-request header to fire one of their own webhooks. This is on top of the
-seller's `webhook_url` (both will be called) — so the seller and buyer
-can each pipe the response into different downstream agents.
+request header (`LEASH_CALLBACK_HEADER` from `@leash/core`) to fire one
+of their own webhooks. This is on top of the seller's `webhook_url`
+(both will be called) — so the seller and buyer can each pipe the
+response into different downstream agents.
 
 ### `wrap_receipt` — embed the receipt in the body
 

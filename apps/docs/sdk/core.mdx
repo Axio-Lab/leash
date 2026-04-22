@@ -25,8 +25,33 @@ seller kits. It contains:
   `TransactionPartialSigner`. This is what `@leash/buyer-kit` uses
   internally; you usually don't need to touch it.
 - **Payment-link discovery** — `fetchPaymentLinkMeta()` fetches and type-checks
-  the browser-friendly `GET /x/<id>` metadata payload exposed by the web app,
-  so SDK consumers can inspect a link before paying.
+  the browser-friendly `GET /x/<id>` metadata payload exposed by the web app;
+  `buildPaymentLinkMeta()` produces it on the server.
+- **Payment envelope** — `buildLeashEnvelope(receipt, { origin })` produces the
+  compact `LeashPaymentEnvelope` that gets stamped onto webhooks, response
+  headers, and `wrap_receipt` bodies after a settled payment.
+- **`X-Leash-*` headers** — `buildLeashHeaders(envelope, headers)` and
+  `parseLeashHeaders(response)` round-trip the envelope through HTTP
+  responses without sellers / buyers misspelling header names.
+  `LEASH_HEADERS` is the canonical name map; `LEASH_CALLBACK_HEADER` is the
+  per-call webhook opt-in (`x-leash-callback`).
+- **Webhook payload** — `buildWebhookPayload({ envelope, response })` and
+  `parseWebhookPayload(json)` produce / validate the JSON body Leash POSTs
+  to `endpoint.webhook_url`. Versioned (`v: '0.1'`) and discriminated
+  (`kind: 'leash.payment.settled'`) so downstream agents can route safely.
+- **Token registry** — `KNOWN_TOKENS`, `lookupToken(mint, network)`,
+  `pinnedMints(network)`, `defaultUsdcMint(network)`. Stables on mainnet +
+  devnet plus a few bluechips, indexed for UI surfaces.
+- **Format helpers** — `atomicToDecimal`, `decimalToAtomic`,
+  `formatTokenBalance`, `formatReceiptPrice`, `formatReceiptPriceUsd`. Use
+  these instead of hand-rolled `*1_000_000` math; they pull decimals from
+  the registry so Token-2022 stables don't silently truncate.
+- **Explorer links** — `transactionExplorerUrl`, `addressExplorerUrl`,
+  `agentExplorerUrl`. Solscan by default; pass
+  `{ provider: 'solana-explorer' }` for the official explorer.
+- **Treasury balances** — `listSplBalances({ owner, rpcUrl, network })`
+  enumerates SPL + Token-2022 balances and pins missing stables with zero
+  so UIs always render them.
 - **Kill switch** — `readPauseFromEnv`, `createPauseResolver`. The buyer's
   policy gate honours these so a single env flip (or admin RPC) can halt
   every spend immediately.
@@ -64,6 +89,66 @@ const metaB = await fetchPaymentLinkMeta('https://yourapp.com', 'uhnb6e1zm');
 
 console.log(metaA.endpoint.price);   // "$0.001"
 console.log(metaB.endpoint.method);  // "POST"
+```
+
+## Settlement envelope, headers, and webhooks
+
+After a successful x402 settlement the seller `/x/<id>` route stamps a
+compact summary onto the response. Producers + consumers share one type:
+
+```ts
+import {
+  buildLeashEnvelope,
+  buildLeashHeaders,
+  parseLeashHeaders,
+  buildWebhookPayload,
+  parseWebhookPayload,
+  LEASH_HEADERS,
+  LEASH_CALLBACK_HEADER,
+} from '@leash/core';
+
+// SELLER side: stamp envelope onto response headers + ship a webhook.
+const envelope = buildLeashEnvelope(earnReceipt, { origin: 'https://app.example.com' });
+const headers = buildLeashHeaders(envelope, new Headers(res.headers));
+const body = JSON.stringify(buildWebhookPayload({ envelope, response: parsedBody }));
+
+// BUYER side: parse the headers off the response without misspelling names.
+const parsed = parseLeashHeaders(response);
+console.log(parsed.txSig, parsed.receiptHash);
+
+// Per-call webhook opt-in: buyers attach `x-leash-callback: <url>` and the
+// seller delivers the same payload to that URL in addition to its own
+// `endpoint.webhook_url`.
+fetch(url, { headers: { [LEASH_CALLBACK_HEADER]: 'https://my-agent.example/webhook' } });
+```
+
+## Token registry, formatters, and explorer links
+
+```ts
+import {
+  KNOWN_TOKENS,
+  defaultUsdcMint,
+  formatReceiptPriceUsd,
+  formatTokenBalance,
+  lookupToken,
+  listSplBalances,
+  transactionExplorerUrl,
+} from '@leash/core';
+
+const usdc = defaultUsdcMint('devnet');                    // canonical mint
+const meta = lookupToken(usdc.mint, 'devnet');             // { decimals: 6, ... }
+
+formatTokenBalance('1500000', usdc.mint, 'devnet');        // "1.5"
+formatReceiptPriceUsd({ amount: '2', currency: 'USDC' });  // "$0.000002"
+
+const balances = await listSplBalances({
+  owner: 'CTd5VBFYJnGDGv5DbhWfPmrQ96G5ibvmZiyRPURXNyox',
+  rpcUrl: 'https://api.devnet.solana.com',
+  network: 'devnet',
+});
+
+transactionExplorerUrl('5sig', { network: 'devnet' });
+// 'https://solscan.io/tx/5sig?cluster=devnet'
 ```
 
 See [`Real x402 on Solana`](/standards/x402-on-solana) for the protocol

@@ -18,6 +18,18 @@ export function caip2ForSellerNetwork(network: LeashSellerNetwork): Network {
 }
 
 /**
+ * Collapse `solana-testnet` → `solana-devnet` for the purposes of choosing
+ * a facilitator / settlement network. v0.1 does not have a public testnet
+ * facilitator, so testnet endpoints settle on devnet rails.
+ *
+ * Used by the public `/x/<id>` route so seller links built on testnet
+ * still work end-to-end without a dedicated facilitator deploy.
+ */
+export function networkAlias(network: LeashSellerNetwork): 'solana-mainnet' | 'solana-devnet' {
+  return network === 'solana-mainnet' ? 'solana-mainnet' : 'solana-devnet';
+}
+
+/**
  * Backwards-compatible alias. New code should prefer
  * {@link defaultFacilitatorFor} from `@leash/core` so devnet and mainnet pick
  * appropriate hosts and `LEASH_FACILITATOR_URL` overrides flow uniformly.
