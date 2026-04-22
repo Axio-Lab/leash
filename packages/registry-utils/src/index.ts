@@ -11,3 +11,4 @@ export * from './agent-identity.js';
 export * from './executive.js';
 export * from './operator.js';
 export * from './delegation.js';
+export * from './withdraw.js';

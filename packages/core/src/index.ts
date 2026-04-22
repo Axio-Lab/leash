@@ -14,7 +14,6 @@ export * from './x402/parse.js';
 export * from './x402/webhook.js';
 export * from './treasury/balance.js';
 export * from './treasury/list-balances.js';
-export * from './treasury/withdraw.js';
 export * from './treasury/pause.js';
 export * from './tokens/index.js';
 export * from './explorer/index.js';

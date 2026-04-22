@@ -128,7 +128,7 @@ export default function SellerPage() {
     toast.error('Could not load payment links', msg);
   }, [listError, toast]);
 
-  async function createLink(e: React.FormEvent) {
+  async function createLink(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     if (!ownerAgent) {

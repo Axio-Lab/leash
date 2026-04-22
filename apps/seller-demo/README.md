@@ -58,9 +58,25 @@ settle, run `@leash/buyer-demo` against this seller (see its README).
 
 ## Environment
 
-| Var           | Default                         | Description                          |
-| ------------- | ------------------------------- | ------------------------------------ |
-| `PORT`        | `3001`                          | Port to bind.                        |
-| `SOLANA_RPC`  | `https://api.devnet.solana.com` | RPC for the seller's Umi instance.   |
-| `AGENT_ASSET` | `1111…1111`                     | Core asset mint owning the receipts. |
-| `RUNNER_URL`  | `http://localhost:8787`         | Where to ship `earn` receipts.       |
+| Var                     | Default                         | Description                                                                                                                                                                                                                                                                                                                                                |
+| ----------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                  | `3001`                          | Port to bind.                                                                                                                                                                                                                                                                                                                                              |
+| `SOLANA_RPC`            | `https://api.devnet.solana.com` | RPC for the seller's Umi instance.                                                                                                                                                                                                                                                                                                                         |
+| `AGENT_ASSET`           | `1111…1111`                     | Core asset mint owning the receipts.                                                                                                                                                                                                                                                                                                                       |
+| `RUNNER_URL`            | `http://localhost:8787`         | Where to ship `earn` receipts.                                                                                                                                                                                                                                                                                                                             |
+| `LEASH_FACILITATOR_URL` | _network default_               | Facilitator the seller uses to verify and settle. Set to `https://facilitator.leash.dev` for the Leash-operated devnet facilitator (v0.1, devnet only) or `http://localhost:8787` to point at a local instance. Falls back to `defaultFacilitatorFor()` from `@leash/core/x402` when unset. See [Run a Facilitator](../docs/guides/run-a-facilitator.mdx). |
+
+### Routing through the Leash facilitator
+
+```bash
+# Hosted (devnet, when DNS is live)
+export LEASH_FACILITATOR_URL=https://facilitator.leash.dev
+
+# Self-hosted: run the Leash facilitator app and point at it
+pnpm --filter @leash/facilitator-app dev   # boots on :8787 by default
+export LEASH_FACILITATOR_URL=http://localhost:8787
+```
+
+The seller-kit reads this env on startup and persists the resolved URL
+into every `earn` ReceiptV1 (`receipt.facilitator_url`) so explorers
+can independently re-verify the on-chain settlement.

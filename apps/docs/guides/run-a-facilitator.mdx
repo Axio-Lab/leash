@@ -1,0 +1,152 @@
+---
+title: 'Run a Leash facilitator'
+description: 'Operate facilitator.leash.dev (or your own) with @leash/facilitator on Solana devnet.'
+---
+
+> Leash now ships its own x402 facilitator. v0.1 runs **devnet only**
+> behind `https://facilitator.leash.dev`. Anyone can self-host the same
+> binary in 60 seconds — useful for local dev, integration tests, or
+> running your own settlement infrastructure on mainnet.
+
+## What a facilitator does
+
+In x402, the **buyer** signs a transaction transferring tokens to the
+seller. The buyer never touches the blockchain — instead, the seller
+forwards the signed payload to a **facilitator**:
+
+1. `POST /verify` — facilitator inspects the signed transaction and
+   confirms it does what the seller asked (right amount, right mint,
+   right destination, right network).
+2. `POST /settle` — facilitator adds its own signature as fee payer,
+   broadcasts to Solana, and returns the on-chain signature.
+3. `GET  /supported` — published list of `(scheme, network)` tuples
+   the facilitator accepts. `HTTPFacilitatorClient` calls this on
+   startup.
+
+The facilitator absorbs the fee-payer SOL cost so buyers can pay in
+USDC alone. That's the entire deal — the rest is wire format and key
+management.
+
+## Wire compatibility
+
+`@leash/facilitator` registers the **Exact SVM** scheme from `@x402/svm`
+for both protocol v1 and v2. That means every existing Leash buyer
+(`@leash/buyer-kit`) and seller (`@leash/seller-kit`) deployment works
+out of the box: just set `LEASH_FACILITATOR_URL`.
+
+```bash
+# Use the hosted Leash facilitator (devnet)
+export LEASH_FACILITATOR_URL=https://facilitator.leash.dev
+
+# Or point at a local one
+export LEASH_FACILITATOR_URL=http://localhost:8787
+```
+
+The endpoint shape exactly matches `HTTPFacilitatorClient` from
+`@x402/core`, so dropping in any other facilitator URL (svmacc, PayAI,
+Coinbase) is a one-env-var swap.
+
+## Self-host in 5 commands
+
+```bash
+# 1. Install the package binary
+pnpm add -g @leash/facilitator
+
+# 2. Generate a Solana keypair to act as fee payer
+solana-keygen new -o .leash-fee-payer.json --no-bip39-passphrase
+
+# 3. Top it up on devnet (free)
+solana airdrop 1 -k .leash-fee-payer.json --url https://api.devnet.solana.com
+
+# 4. Export the secret
+export LEASH_FACILITATOR_SECRET_KEY="$(cat .leash-fee-payer.json)"
+
+# 5. Boot the server
+leash-facilitator
+```
+
+Output:
+
+```
+[leash-facilitator] listening on http://0.0.0.0:8787
+[leash-facilitator] networks: solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1
+[leash-facilitator] fee payer(s): HxzEv...
+```
+
+That's a real x402 facilitator running on devnet. Verify it from
+another terminal:
+
+```bash
+curl http://localhost:8787/supported | jq
+```
+
+You should see one entry per `(scheme, network, x402Version)` tuple.
+
+## Running inside the monorepo
+
+For local hacking on the facilitator itself, use the workspace app:
+
+```bash
+solana-keygen new -o .leash-fee-payer.json --no-bip39-passphrase
+solana airdrop 1 -k .leash-fee-payer.json --url https://api.devnet.solana.com
+export LEASH_FACILITATOR_SECRET_KEY="$(cat .leash-fee-payer.json)"
+pnpm --filter @leash/facilitator-app dev
+```
+
+Then in a second terminal:
+
+```bash
+export LEASH_FACILITATOR_URL=http://localhost:8787
+pnpm --filter @leash/buyer-demo start    # all three demos pick this up
+pnpm --filter @leash/seller-demo start
+pnpm --filter @leash/merged-demo start
+```
+
+## Configuration
+
+| Env var | Default | Description |
+| --- | --- | --- |
+| `LEASH_FACILITATOR_SECRET_KEY` | _required_ | Solana 64-byte secret. Either a JSON byte array (Solana CLI export) or a base58 string (Phantom/Solflare export). |
+| `LEASH_FACILITATOR_NETWORKS` | `devnet` | Comma list. Allowed: `devnet`, `testnet`, `mainnet`. |
+| `LEASH_FACILITATOR_PORT` | `8787` | HTTP port. |
+| `LEASH_FACILITATOR_HOST` | `0.0.0.0` | Bind address. |
+| `LEASH_FACILITATOR_RPC_URL` | _kit defaults_ | Override the RPC URL used for ALL networks. |
+
+## Going to mainnet
+
+The codepath supports it; v0.1 of the hosted instance does not. To run
+your own mainnet facilitator:
+
+1. Generate a fresh keypair (do **not** reuse the devnet one).
+2. Fund it with **real SOL** — facilitators pay tx fees out of pocket.
+   Roughly 0.0001 SOL per settlement; 0.1 SOL is a comfortable runway
+   for thousands of payments.
+3. `LEASH_FACILITATOR_NETWORKS=mainnet` (or `devnet,mainnet`).
+4. Front the HTTP listener with TLS + abuse protection (Cloudflare
+   Worker / nginx). The package itself does not implement auth or
+   rate limiting; the assumption is you'll terminate that at the edge.
+
+The CLI prints a `WARNING` line when mainnet is enabled. Heed it.
+
+## Architecture (one paragraph)
+
+`@leash/facilitator` is a thin Hono app over two upstream pieces:
+`x402Facilitator` from `@x402/core` (which knows the protocol) and
+`ExactSvmScheme`/`ExactSvmSchemeV1` from `@x402/svm` (which know how to
+build, verify, and submit Solana token transfers). The Leash-specific
+parts are: env-driven config (`LEASH_FACILITATOR_*`), a base58
+secret-key decoder so you can paste a Phantom export verbatim, and a
+`/health` endpoint that reports the fee-payer addresses for monitoring.
+Total dependency footprint stays under what `@leash/seller-kit`
+already pulls in.
+
+## Roadmap
+
+- **v0.2** — Settlement persistence. Cross-reference settled txs with
+  `ReceiptV1` records from `@leash/runner` to power the explorer.
+- **v0.3** — Multi-key fee payer rotation for higher throughput.
+- **v0.4** — Mainnet on the hosted instance.
+- **v0.5** — Hooks for fraud detection and per-merchant rate limiting.
+
+If you self-host today on mainnet, you're already getting v0.4 — just
+without the conveniences of the hosted instance.

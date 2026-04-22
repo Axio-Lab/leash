@@ -53,10 +53,28 @@ runner UI (`/agents/<asset>` in the web app) → Solscan link.
 
 ## Environment
 
-| Var                      | Default                         | Description                           |
-| ------------------------ | ------------------------------- | ------------------------------------- |
-| `LEASH_BUYER_SECRET_KEY` | _optional_                      | If set, runs the buyer loop too.      |
-| `PORT`                   | `3003`                          | Port to bind.                         |
-| `SOLANA_RPC`             | `https://api.devnet.solana.com` | RPC the buyer signs against.          |
-| `AGENT_ASSET`            | `1111…1111`                     | Core asset mint shared by both sides. |
-| `RUNNER_URL`             | `http://localhost:8787`         | Receipt destination.                  |
+| Var                      | Default                         | Description                                                                                                                                                                                                                |
+| ------------------------ | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LEASH_BUYER_SECRET_KEY` | _optional_                      | If set, runs the buyer loop too.                                                                                                                                                                                           |
+| `PORT`                   | `3003`                          | Port to bind.                                                                                                                                                                                                              |
+| `SOLANA_RPC`             | `https://api.devnet.solana.com` | RPC the buyer signs against.                                                                                                                                                                                               |
+| `AGENT_ASSET`            | `1111…1111`                     | Core asset mint shared by both sides.                                                                                                                                                                                      |
+| `RUNNER_URL`             | `http://localhost:8787`         | Receipt destination.                                                                                                                                                                                                       |
+| `LEASH_FACILITATOR_URL`  | _network default_               | Facilitator the **seller half** uses to verify and settle. Both `spend` (buyer) and `earn` (seller) receipts will record the resolved URL. See [Run a Facilitator](../docs/guides/run-a-facilitator.mdx) for self-hosting. |
+
+### Routing through the Leash facilitator
+
+Because both halves run in this single process, flipping
+`LEASH_FACILITATOR_URL` swaps the entire settlement path in one go:
+
+```bash
+# Hosted (devnet, when DNS is live)
+export LEASH_FACILITATOR_URL=https://facilitator.leash.dev
+
+# Self-hosted: requires apps/facilitator running in another terminal
+export LEASH_FACILITATOR_URL=http://localhost:8787
+```
+
+This is the fastest way to smoke-test a brand-new facilitator deploy:
+boot it, point the merged demo at it, and watch real `spend`/`earn`
+pairs flow through against devnet.

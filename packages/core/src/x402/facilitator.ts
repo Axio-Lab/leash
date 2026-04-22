@@ -17,6 +17,16 @@
  *     sponsored mainnet exact-scheme facilitator run by PayAI. Drop in your
  *     own URL if you want to self-host.
  *
+ * Coming soon:
+ *
+ *   - **Leash devnet facilitator** → `https://facilitator.leash.dev` —
+ *     `@leash/facilitator` running x402's `exact` SVM scheme (v1 + v2)
+ *     against Solana devnet. Operationally equivalent to svmacc but
+ *     under our control, so we can tie settlements back to receipts in
+ *     the explorer (Order #6 from the roadmap). Opt in by exporting
+ *     `LEASH_FACILITATOR_URL=https://facilitator.leash.dev` until we
+ *     promote it to the default in {@link DEFAULT_FACILITATORS}.
+ *
  * To override: set `LEASH_FACILITATOR_URL` in the buyer/seller process, or
  * pass `facilitator: '…'` directly to `createBuyer` / `createSeller`.
  */
@@ -27,6 +37,16 @@ export const DEFAULT_FACILITATORS: Partial<Record<LeashX402Network, string>> = {
   'solana-devnet': 'https://facilitator.svmacc.tech',
   'solana-mainnet': 'https://facilitator.payai.network',
 };
+
+/**
+ * Public URL of the Leash-operated facilitator. **Devnet only** in v0.1.
+ *
+ * Not yet wired into {@link DEFAULT_FACILITATORS} — once the host is
+ * stable and we've topped up the fee-payer wallet, devnet will switch
+ * over here. Exposed today so demos and docs can reference it as an
+ * opt-in via `LEASH_FACILITATOR_URL=…`.
+ */
+export const LEASH_FACILITATOR_URL = 'https://facilitator.leash.dev';
 
 /** Universal fallback when nothing else resolves. */
 export const FALLBACK_FACILITATOR_URL = 'https://facilitator.svmacc.tech';

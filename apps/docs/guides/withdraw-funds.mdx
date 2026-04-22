@@ -1,6 +1,140 @@
 ---
-title: Withdraw funds
-description: Owner signs an MPL Core Execute that drains the Asset Signer PDA.
+title: 'Withdraw treasury funds'
+description: 'Owner-driven withdraw of stablecoins from the agent treasury (Asset Signer PDA) to any destination wallet.'
 ---
 
-The asset owner is sovereign. Withdraws are normal `Execute(asset, ix=[transferChecked(USDC, sellerTreasury -> destination, amount)])` instructions signed by the owner's wallet. v0.1 ships the helper as a stub in `@leash/core` (`buildWithdrawTx`); the explorer's withdraw page lands in v0.2.
+> The agent **owner** is sovereign. Withdraws bypass the executive
+> delegation entirely — the owner signs an
+> `mpl-core::Execute(SPL.TransferChecked)` that CPI-signs the transfer on
+> behalf of the agent's Asset Signer PDA. v0.2 ships the implementation
+> in `@leash/registry-utils` and exposes a one-click flow in the web
+> playground.
+
+## What withdrawing actually does
+
+The agent treasury is owned on-chain by the **Asset Signer PDA** derived
+from the agent's Core asset. Only the asset's `owner` field can authorise
+an `mpl-core::Execute` instruction, and `Execute` is the only path that
+lets a CPI signer act on behalf of the PDA.
+
+Concretely, every withdraw is one transaction with a single instruction:
+
+```text
+mpl-core::Execute(
+  asset = <agent Core asset>,
+  authority = owner wallet (signs),
+  instructions = [
+    SPL Token: TransferChecked(
+      source      = <treasury USDC ATA>,
+      mint        = <USDC mint>,
+      destination = <destination wallet's USDC ATA>,
+      authority   = <treasury PDA>   // CPI-signed by mpl-core
+      amount, decimals
+    )
+  ]
+)
+```
+
+`TransferChecked` (discriminator 12) is preferred over plain `Transfer`
+because Token-2022 mints with a transfer-fee extension reject the legacy
+opcode. Same wire-shape works for both classic SPL Token and Token-2022
+mints, so a USDC withdraw today and a future Token-2022 stable withdraw
+share one code path.
+
+If the destination wallet doesn't have an ATA for the mint yet, the
+helper bundles a `CreateIdempotent` in front (the executive pays the
+~2k lamport rent). That means "send to a fresh wallet" Just Works — no
+"create your ATA first" round-trip.
+
+## SDK usage
+
+```ts
+import { withdrawTreasury, withdrawTreasuryAll } from '@leash/registry-utils';
+
+// Specific amount (atomic units — USDC has 6 decimals)
+const res = await withdrawTreasury(umi, {
+  agentAsset: 'CoreAss…Asset',
+  mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', // USDC devnet
+  destination: ownerWallet.address,
+  amount: 5_000_000n, // $5 USDC
+});
+
+// Drain the whole balance (returns null if treasury is empty — no tx broadcast)
+const drained = await withdrawTreasuryAll(umi, {
+  agentAsset: asset,
+  mint: USDC_DEVNET,
+  destination: rescueWallet,
+});
+```
+
+The signer comes from `umi.identity` by default. In the playground
+that's the connected Privy embedded wallet — pass `authority` /
+`payer` overrides explicitly if you need them split.
+
+### Returned shape
+
+```ts
+{
+  signature: string;                  // base58 tx sig — link out via Solscan
+  treasury: string;                   // Asset Signer PDA
+  sourceTokenAccount: string;         // treasury USDC ATA (debited)
+  destinationTokenAccount: string;    // destination USDC ATA (credited)
+  amount: bigint;                     // atomic units that moved
+  destination: string;                // destination wallet (not its ATA)
+}
+```
+
+### Reading the balance first (UI gating)
+
+```ts
+import { getTreasuryBalance } from '@leash/registry-utils';
+
+const balance = await getTreasuryBalance(umi, {
+  agentAsset: asset,
+  mint: USDC_DEVNET,
+});
+// e.g. 12_345_000n -> "12.345 USDC available"
+```
+
+## The web playground flow
+
+The agent detail page (`/agents/<mint>`) ships a **Withdraw treasury**
+card right under the spend allowance section.
+
+- **Destination** input defaults to the connected owner wallet. Edit it
+  to any valid Solana address; the UI flips to a yellow "external"
+  badge and requires you to tick a confirmation box before the button
+  unlocks. This is the rescue path for compromised executives —
+  withdraw to a fresh wallet you control before rotating.
+- **Amount** in `USDC` (decimal). The badge below shows the current
+  treasury balance, so "what's the max I can pull" is a glance away.
+- **Withdraw all** reads the on-chain balance and drains it in one tx.
+  Disabled when the treasury is at zero.
+
+Successful txs surface a **Tx confirmed** card with a Solscan link.
+Treasury balance and remaining-allowance tiles refresh automatically.
+
+## Withdraw vs revoke
+
+These solve different problems and you usually want both:
+
+| Action | What it does | When to use |
+| --- | --- | --- |
+| `revokeSpendDelegation` | Drops the executive's SPL delegation. Funds stay on the treasury PDA. | Lock down spending without moving money. |
+| `withdrawTreasury` | Moves stablecoins out of the treasury to a destination wallet. | Agent retired; you want the funds back. |
+
+Belt-and-braces during incident response: revoke first (instant, zero
+funds at risk if the executive key was leaked), then withdraw to a
+clean wallet.
+
+## What's not covered yet
+
+- **Multi-mint withdraw in one tx.** v0.2 withdraws one mint per call.
+  If you need to drain USDC and USDT in one click, call
+  `withdrawTreasuryAll` twice (the playground will batch this in v0.3).
+- **Closing empty ATAs.** The treasury holds onto its empty ATAs after a
+  full withdraw (~2k lamports of rent each). Closing requires a
+  separate `mpl-core::Execute(SPL.CloseAccount)` — coming in v0.3.
+- **Owner transfer.** This guide assumes the asset owner stays the same
+  wallet. Transferring ownership of the Core asset is a separate
+  `mpl-core::Transfer` flow — see the [Metaplex Core docs](https://developers.metaplex.com/core).

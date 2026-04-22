@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useParams } from 'next/navigation';
 import useSWR from 'swr';
 import {
+  ArrowDownToLine,
   ArrowLeft,
   ArrowRight,
   Coins,
@@ -21,6 +22,7 @@ import {
   Send,
   ShieldOff,
   Sparkles,
+  TriangleAlert,
   Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -44,6 +46,8 @@ import {
   setSpendDelegation,
   revokeSpendDelegation,
   provisionTreasuryAtas,
+  withdrawTreasury,
+  withdrawTreasuryAll,
   type ProvisionTreasuryAtasResult,
   type SpendDelegationStatus,
 } from '@leash/registry-utils';
@@ -61,6 +65,17 @@ function defaultUsdcMint(network: 'mainnet' | 'devnet' | undefined): {
   return network === 'mainnet'
     ? { mint: USDC_MAINNET, label: 'USDC' }
     : { mint: USDC_DEVNET, label: 'USDC (devnet)' };
+}
+
+/**
+ * Cheap client-side guard for the withdraw destination input — verifies
+ * the string looks like a base58-encoded Solana address (32–44 chars,
+ * base58 alphabet). Real validation happens on chain when the tx
+ * simulates, but this stops typos from triggering wallet popups.
+ */
+function isLikelySolanaAddress(input: string): boolean {
+  if (input.length < 32 || input.length > 44) return false;
+  return /^[1-9A-HJ-NP-Za-km-z]+$/.test(input);
 }
 
 type FeedRes = {
@@ -345,6 +360,92 @@ export default function AgentPage() {
       toast.error('Revoke failed', msg);
     } finally {
       setAllowanceBusy(null);
+    }
+  }
+
+  // ---- Withdraw treasury (owner → arbitrary destination) ----
+  const [withdrawAmountDraft, setWithdrawAmountDraft] = React.useState('');
+  const [withdrawDestinationDraft, setWithdrawDestinationDraft] = React.useState('');
+  const [withdrawBusy, setWithdrawBusy] = React.useState<null | 'amount' | 'all'>(null);
+  const [withdrawLastSig, setWithdrawLastSig] = React.useState<string | null>(null);
+  const [withdrawDestinationConfirmed, setWithdrawDestinationConfirmed] = React.useState(false);
+
+  // Default the destination to the connected (owner) wallet whenever it
+  // changes. The user can still type a different address — we surface a
+  // warning + require an explicit confirm box in that case.
+  React.useEffect(() => {
+    if (privyWallet?.address && withdrawDestinationDraft === '') {
+      setWithdrawDestinationDraft(privyWallet.address);
+    }
+  }, [privyWallet?.address, withdrawDestinationDraft]);
+
+  const isWithdrawDestinationOwner =
+    !!privyWallet?.address && withdrawDestinationDraft.trim() === privyWallet.address;
+  const isWithdrawDestinationValid = isLikelySolanaAddress(withdrawDestinationDraft.trim());
+  const requiresWithdrawConfirmation = isWithdrawDestinationValid && !isWithdrawDestinationOwner;
+
+  async function handleWithdraw(mode: 'amount' | 'all') {
+    if (!privyUmi || !privyWallet) {
+      toast.error('Connect a wallet', 'You need a Solana wallet to withdraw.');
+      return;
+    }
+    const destination = withdrawDestinationDraft.trim();
+    if (!isLikelySolanaAddress(destination)) {
+      toast.error('Invalid destination', 'Paste a valid Solana wallet address.');
+      return;
+    }
+    if (requiresWithdrawConfirmation && !withdrawDestinationConfirmed) {
+      toast.error(
+        'Confirm destination',
+        'You\u2019re sending to an address that is not your owner wallet. Tick the confirmation box first.',
+      );
+      return;
+    }
+    setWithdrawBusy(mode);
+    setWithdrawLastSig(null);
+    try {
+      let res;
+      if (mode === 'all') {
+        res = await withdrawTreasuryAll(privyUmi, {
+          agentAsset: mint,
+          mint: usdcInfo.mint,
+          destination,
+        });
+        if (!res) {
+          toast.info('Nothing to withdraw', 'Treasury balance is 0.');
+          return;
+        }
+      } else {
+        const decimal = Number(withdrawAmountDraft);
+        if (!Number.isFinite(decimal) || decimal <= 0) {
+          toast.error('Invalid amount', `Enter a positive ${usdcInfo.label} amount.`);
+          return;
+        }
+        const atomic = BigInt(Math.round(decimal * 1_000_000));
+        res = await withdrawTreasury(privyUmi, {
+          agentAsset: mint,
+          mint: usdcInfo.mint,
+          destination,
+          amount: atomic,
+        });
+      }
+      setWithdrawLastSig(res.signature);
+      const sentUsdc = Number(res.amount) / 1_000_000;
+      toast.success(
+        'Withdrawal confirmed',
+        `${sentUsdc.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 6,
+        })} ${usdcInfo.label} sent to ${destination.slice(0, 8)}\u2026${destination.slice(-4)}.`,
+      );
+      // Surface the new (lower) treasury balance immediately rather than
+      // waiting on the next 8s poll.
+      await Promise.all([refreshDelegation(), refetchBalance()]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error('Withdraw failed', msg);
+    } finally {
+      setWithdrawBusy(null);
     }
   }
 
@@ -895,6 +996,145 @@ export default function AgentPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ArrowDownToLine className="size-4 text-brand" /> Withdraw treasury ({usdcInfo.label})
+          </CardTitle>
+          <CardDescription>
+            Move {usdcInfo.label} out of the agent treasury. The connected wallet (the agent
+            <strong> owner</strong>) signs an{' '}
+            <code className="font-mono text-xs">mpl-core::Execute</code> instruction that CPI-signs
+            an SPL <code className="font-mono text-xs">TransferChecked</code> on the treasury PDA.
+            The destination ATA is created automatically if it doesn&apos;t exist.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {!privyWallet ? (
+            <p className="text-sm text-warning">
+              Connect a Solana wallet (top-right) to withdraw from this treasury.
+            </p>
+          ) : (
+            <>
+              <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="withdraw-destination" className="text-xs">
+                    Destination wallet
+                  </Label>
+                  <Input
+                    id="withdraw-destination"
+                    value={withdrawDestinationDraft}
+                    onChange={(e) => {
+                      setWithdrawDestinationDraft(e.target.value);
+                      setWithdrawDestinationConfirmed(false);
+                    }}
+                    spellCheck={false}
+                    className="font-mono text-xs"
+                    placeholder={privyWallet.address}
+                  />
+                  <span className="text-[11px] text-fg-subtle">
+                    Defaults to your owner wallet. We send to this address&apos;s{' '}
+                    <code className="font-mono">{usdcInfo.label}</code> ATA — created on the fly if
+                    missing.
+                  </span>
+                </div>
+                {isWithdrawDestinationOwner ? (
+                  <Badge variant="success" className="gap-1 self-start md:self-end">
+                    <ShieldCheck className="size-3" /> owner
+                  </Badge>
+                ) : isWithdrawDestinationValid ? (
+                  <Badge variant="warning" className="gap-1 self-start md:self-end">
+                    <TriangleAlert className="size-3" /> external
+                  </Badge>
+                ) : null}
+              </div>
+
+              {requiresWithdrawConfirmation && (
+                <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-[12px] text-warning leading-relaxed">
+                  <TriangleAlert className="size-4 shrink-0 mt-0.5" />
+                  <div className="flex flex-col gap-1.5">
+                    <span>
+                      You&apos;re withdrawing to an address that is <strong>not</strong> your owner
+                      wallet. Funds will leave this agent permanently. Double-check the address
+                      character-by-character before confirming.
+                    </span>
+                    <label className="inline-flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={withdrawDestinationConfirmed}
+                        onChange={(e) => setWithdrawDestinationConfirmed(e.target.checked)}
+                      />
+                      <span>I&apos;ve verified this address.</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="withdraw-amount" className="text-xs">
+                    Amount ({usdcInfo.label})
+                  </Label>
+                  <Input
+                    id="withdraw-amount"
+                    value={withdrawAmountDraft}
+                    onChange={(e) => setWithdrawAmountDraft(e.target.value)}
+                    inputMode="decimal"
+                    placeholder="1.00"
+                    className="font-mono"
+                  />
+                  <span className="text-[11px] text-fg-subtle">
+                    Treasury balance:{' '}
+                    <strong className="text-fg-muted">
+                      {delegation
+                        ? (Number(delegation.balance) / 1_000_000).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 6,
+                          })
+                        : '—'}{' '}
+                      {usdcInfo.label}
+                    </strong>
+                  </span>
+                </div>
+                <Button
+                  onClick={() => handleWithdraw('amount')}
+                  disabled={withdrawBusy != null || !withdrawAmountDraft}
+                >
+                  {withdrawBusy === 'amount' && <Loader2 className="size-4 animate-spin" />}
+                  Withdraw
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => handleWithdraw('all')}
+                  disabled={withdrawBusy != null || !delegation || delegation.balance === 0n}
+                >
+                  {withdrawBusy === 'all' && <Loader2 className="size-4 animate-spin" />}
+                  Withdraw all
+                </Button>
+              </div>
+
+              {withdrawLastSig && (
+                <div className="flex flex-col gap-1.5 rounded-md border border-success/40 bg-success/10 p-3 text-xs">
+                  <span className="font-medium text-success">Tx confirmed</span>
+                  <a
+                    href={transactionExplorerUrl(
+                      balance?.network === 'mainnet' ? 'solana-mainnet' : 'solana-devnet',
+                      withdrawLastSig,
+                    )}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 font-mono text-brand hover:underline break-all"
+                  >
+                    <ExternalLink className="size-3 shrink-0" />
+                    <span className="break-all">{withdrawLastSig}</span>
+                  </a>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       {localRecord && (
         <Card>
           <CardHeader>
@@ -1195,10 +1435,12 @@ export default function AgentPage() {
                 guide's `registerExecutiveV1`, `delegateExecutionV1`, and{' '}
                 <code className="font-mono">verifyDelegation</code> snippets one-for-one. Once
                 delegation lands, the executive can sign Core{' '}
-                <code className="font-mono">Execute</code> ixs on the agent's behalf. The actual
-                <code className="font-mono"> mpl-core Execute</code> composition (e.g. SPL{' '}
-                <code className="font-mono">transferChecked</code> from the treasury) ships next as{' '}
-                <code className="font-mono">@leash/core/treasury/withdraw</code>.
+                <code className="font-mono">Execute</code> ixs on the agent's behalf. The owner-side{' '}
+                <code className="font-mono">mpl-core Execute</code> composition (SPL{' '}
+                <code className="font-mono">transferChecked</code> from the treasury) ships in{' '}
+                <code className="font-mono">@leash/registry-utils</code> as{' '}
+                <code className="font-mono">withdrawTreasury</code> — see the{' '}
+                <strong>Withdraw treasury</strong> card above.
               </p>
             </CardContent>
           </Card>

@@ -45,7 +45,8 @@
               "guides/build-a-buyer",
               "guides/build-a-merged-agent",
               "guides/withdraw-funds",
-              "guides/pause-an-agent"
+              "guides/pause-an-agent",
+              "guides/run-a-facilitator"
             ]
           },
           {
