@@ -41,6 +41,7 @@ import {
   type StoredAgent,
 } from '@/lib/agent-storage';
 import { getSpendDelegation, type SpendDelegationStatus } from '@leash/registry-utils';
+import { formatReceiptPriceWithCurrency } from '@/lib/format-receipt-price';
 
 const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
 const USDC_MAINNET = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
@@ -82,22 +83,6 @@ const fetcher = async (url: string) => {
   if (!res.ok) throw new Error(`${url} → ${res.status}`);
   return res.json();
 };
-
-/**
- * Render a `ReceiptV1['price']` (raw on-chain units, USDC = 6 decimals) as a
- * human-friendly string like `5 USDC`. Returns `null` if the price isn't
- * known yet so callers can branch on display.
- */
-function formatPrice(price: ReceiptV1['price'] | undefined): string | null {
-  if (!price) return null;
-  const decimals = price.currency === 'USDC' ? 6 : 0;
-  if (decimals === 0) return `${price.amount} ${price.currency}`;
-  // Cheap fixed-point divide so we don't pull in BigInt math just for display.
-  const padded = price.amount.padStart(decimals + 1, '0');
-  const whole = padded.slice(0, -decimals);
-  const frac = padded.slice(-decimals).replace(/0+$/, '');
-  return `${frac ? `${whole}.${frac}` : whole} ${price.currency}`;
-}
 
 /**
  * Autonomous-agent cockpit.
@@ -286,7 +271,7 @@ export default function BuyerPage() {
       setHistory((h) => [callResult.receipt, ...h].slice(0, 25));
       const settled = !!callResult.receipt.tx_sig;
       if (callResult.response.status === 402 && !settled) {
-        const quoted = formatPrice(callResult.quotedPrice);
+        const quoted = formatReceiptPriceWithCurrency(callResult.quotedPrice);
         const reason = callResult.failureReason ?? 'no failure reason returned by the seller';
         toast.error(`Settlement failed${quoted ? ` (asked ${quoted})` : ''}`, reason);
       } else if (settled) {
@@ -746,7 +731,9 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
           <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
             <dt className="text-fg-muted">Seller demanded</dt>
             <dd className="text-fg">
-              {formatPrice(result.quotedPrice) ?? <span className="text-fg-muted">unknown</span>}
+              {formatReceiptPriceWithCurrency(result.quotedPrice) ?? (
+                <span className="text-fg-muted">unknown</span>
+              )}
             </dd>
             <dt className="text-fg-muted">Reason</dt>
             <dd className="text-fg">

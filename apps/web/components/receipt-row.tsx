@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import type { ReceiptV1 } from '@leash/schemas';
+import { formatReceiptPriceWithCurrency } from '@/lib/format-receipt-price';
 import { Badge } from '@/components/ui/badge';
 import { JsonViewer } from '@/components/json-viewer';
 import { ChevronRight } from 'lucide-react';
@@ -27,9 +28,7 @@ export function ReceiptRow({ receipt }: { receipt: ReceiptV1 }) {
         </span>
         <span className="ml-auto flex items-center gap-3 text-xs text-fg-subtle">
           {price ? (
-            <span className="font-mono text-fg">
-              {price.amount} {price.currency}
-            </span>
+            <span className="font-mono text-fg">{formatReceiptPriceWithCurrency(price)}</span>
           ) : null}
           <span>#{nonce}</span>
           <span>{new Date(ts).toLocaleTimeString()}</span>
