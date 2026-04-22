@@ -1,6 +1,6 @@
 # Leash
 
-**Open rails for agents that spend on the open internet.**
+**An open rail for agents that spend on the open internet.**
 
 > The smallest surface that turns an MPL Core agent into a constrained, accountable, x402-native economic actor — and that lets every other agent-economy primitive be built as a thin app on top.
 

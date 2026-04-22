@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "name": "Leash",
-  "description": "Stablecoin rails for agents that spend on the open internet.",
+  "description": "An open rail for agents that spend on the open internet.",
   "theme": "maple",
   "colors": {
     "primary": "#9b8cff",

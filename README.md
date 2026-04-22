@@ -1,6 +1,6 @@
 # Leash v0.1
 
-> **Stablecoin rails for agents that spend on the open internet.**
+> **An open rail for agents that spend on the open internet.**
 
 ## Requirements
 
