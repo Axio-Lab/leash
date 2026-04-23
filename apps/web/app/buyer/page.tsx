@@ -15,7 +15,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { createBuyer, type BuyerCallResult } from '@leash/buyer-kit';
-import { fetchPaymentLinkMeta } from '@leash/core';
+import { fetchPaymentLinkMeta, KNOWN_STABLE_SYMBOLS, type KnownStableSymbol } from '@leash/core';
 import type { EndpointV1, ReceiptV1, RulesV1 } from '@leash/schemas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
@@ -116,6 +116,7 @@ export default function BuyerPage() {
   const [method, setMethod] = React.useState<'GET' | 'POST'>('POST');
   const [body, setBody] = React.useState('{}');
   const [callbackUrl, setCallbackUrl] = React.useState('');
+  const [payCurrency, setPayCurrency] = React.useState<KnownStableSymbol>('USDC');
 
   const [loading, setLoading] = React.useState(false);
   const [result, setResult] = React.useState<FireResult | null>(null);
@@ -329,6 +330,7 @@ export default function BuyerPage() {
         networks: [network],
         rpcUrl: SOLANA_RPC,
         onReceipt: shipReceipt,
+        preferredCurrency: payCurrency,
         ...(agentRecord?.sourceTokenAccount
           ? { sourceTokenAccount: agentRecord.sourceTokenAccount }
           : {}),
@@ -590,16 +592,53 @@ export default function BuyerPage() {
                 />
               </Field>
 
-              <Field label="Method">
-                <select
-                  value={method}
-                  onChange={(e) => setMethod(e.target.value as 'GET' | 'POST')}
-                  className="h-9 rounded-md border border-border bg-bg-elev px-3 text-sm w-32"
-                >
-                  <option value="GET">GET</option>
-                  <option value="POST">POST</option>
-                </select>
-              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Method">
+                  <select
+                    value={method}
+                    onChange={(e) => setMethod(e.target.value as 'GET' | 'POST')}
+                    className="h-9 rounded-md border border-border bg-bg-elev px-3 text-sm"
+                  >
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                  </select>
+                </Field>
+                <Field label="Pay with">
+                  <select
+                    value={payCurrency}
+                    onChange={(e) => setPayCurrency(e.target.value as KnownStableSymbol)}
+                    className="h-9 rounded-md border border-border bg-bg-elev px-3 text-sm"
+                  >
+                    {KNOWN_STABLE_SYMBOLS.map((sym) => {
+                      const accepted =
+                        !discoveredLinkMeta ||
+                        discoveredLinkMeta.endpoint.currency === sym ||
+                        discoveredLinkMeta.endpoint.accepts_currencies.includes(sym);
+                      return (
+                        <option key={sym} value={sym}>
+                          {sym}
+                          {accepted ? '' : ' (not accepted by this link)'}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {discoveredLinkMeta ? (
+                    <span className="text-[11px] text-fg-subtle">
+                      Seller accepts:{' '}
+                      <span className="font-mono">
+                        {[
+                          discoveredLinkMeta.endpoint.currency,
+                          ...discoveredLinkMeta.endpoint.accepts_currencies,
+                        ].join(', ')}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-fg-subtle">
+                      Buyer-kit will pick the matching <InlineCode>accepts[]</InlineCode> entry.
+                    </span>
+                  )}
+                </Field>
+              </div>
 
               {method === 'POST' && (
                 <Field label="Body">

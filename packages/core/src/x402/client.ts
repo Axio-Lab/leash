@@ -63,6 +63,14 @@ export type CreateSvmBuyerClientOptions = {
    * If omitted, the default `ExactSvmScheme` is used (signer also owns funds).
    */
   sourceTokenAccount?: Address | string;
+  /**
+   * SPL mint address the buyer prefers to settle in. When the seller offers
+   * multiple `accepts[]` (e.g. USDC + USDG), the underlying `x402Client`
+   * selector picks the entry whose `asset` matches this mint. Falls back to
+   * the first compatible entry when no preferred match exists, so a request
+   * never fails just because the buyer's preference is unavailable.
+   */
+  preferredAsset?: string;
 };
 
 /**
@@ -86,7 +94,17 @@ export type CreateSvmBuyerClientOptions = {
  */
 export function createSvmBuyerFetch(opts: CreateSvmBuyerClientOptions): LeashFetch {
   const networks = opts.networks ?? ['solana-mainnet', 'solana-devnet', 'solana-testnet'];
-  const client = new x402Client();
+  const preferredAsset = opts.preferredAsset?.trim();
+  // The default selector picks `paymentRequirements[0]`. We override it to
+  // honour the buyer's preferred mint when the seller advertises multiple
+  // `accepts[]` (e.g. a USDC link that also accepts USDG / USDT). Falling
+  // back to the first entry keeps single-currency endpoints unaffected.
+  const client = preferredAsset
+    ? new x402Client((_v, reqs) => {
+        const match = reqs.find((r) => r.asset === preferredAsset);
+        return match ?? reqs[0];
+      })
+    : new x402Client();
   for (const n of networks) {
     const scheme = opts.sourceTokenAccount
       ? new LeashDelegateExactSvmScheme({

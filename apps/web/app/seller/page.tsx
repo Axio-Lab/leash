@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import type { EndpointV1, ReceiptV1 } from '@leash/schemas';
+import { KNOWN_STABLE_SYMBOLS, type KnownStableSymbol } from '@leash/core';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -61,6 +62,8 @@ export default function SellerPage() {
   );
   const [method, setMethod] = React.useState<Method>('POST');
   const [price, setPrice] = React.useState('$0.001');
+  const [currency, setCurrency] = React.useState<KnownStableSymbol>('USDC');
+  const [extraCurrencies, setExtraCurrencies] = React.useState<KnownStableSymbol[]>([]);
   const [responseBodyJson, setResponseBodyJson] = React.useState('{}');
   const [customId, setCustomId] = React.useState('');
   const [webhookUrl, setWebhookUrl] = React.useState('');
@@ -74,6 +77,8 @@ export default function SellerPage() {
     setDescription('');
     setMethod('POST');
     setPrice('');
+    setCurrency('USDC');
+    setExtraCurrencies([]);
     setResponseBodyJson('{}');
     setCustomId('');
     setWebhookUrl('');
@@ -166,6 +171,8 @@ export default function SellerPage() {
           owner_agent: ownerAgent,
           method,
           price: price.trim(),
+          currency,
+          accepts_currencies: extraCurrencies,
           network,
           response: {
             status: 200,
@@ -285,7 +292,7 @@ export default function SellerPage() {
                   />
                 </Field>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <Field label="Method">
                     <select
                       value={method}
@@ -296,7 +303,7 @@ export default function SellerPage() {
                       <option value="GET">GET</option>
                     </select>
                   </Field>
-                  <Field label="Price (USDC)">
+                  <Field label="Price">
                     <Input
                       value={price}
                       onChange={(e) => setPrice(e.target.value)}
@@ -304,7 +311,59 @@ export default function SellerPage() {
                       placeholder="$0.001"
                     />
                   </Field>
+                  <Field label="Currency">
+                    <select
+                      value={currency}
+                      onChange={(e) => {
+                        const next = e.target.value as KnownStableSymbol;
+                        setCurrency(next);
+                        setExtraCurrencies((prev) => prev.filter((c) => c !== next));
+                      }}
+                      className="h-9 rounded-md border border-border bg-bg-elev px-3 text-sm"
+                    >
+                      {KNOWN_STABLE_SYMBOLS.map((sym) => (
+                        <option key={sym} value={sym}>
+                          {sym}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
                 </div>
+
+                <Field label="Also accept (buyers may pay in any of these)">
+                  <div className="flex flex-wrap gap-2">
+                    {KNOWN_STABLE_SYMBOLS.filter((sym) => sym !== currency).map((sym) => {
+                      const checked = extraCurrencies.includes(sym);
+                      return (
+                        <label
+                          key={sym}
+                          className={cn(
+                            'flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs cursor-pointer',
+                            checked
+                              ? 'border-brand bg-brand/10 text-fg'
+                              : 'border-border bg-bg-elev text-fg-muted hover:text-fg',
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) =>
+                              setExtraCurrencies((prev) =>
+                                e.target.checked ? [...prev, sym] : prev.filter((c) => c !== sym),
+                              )
+                            }
+                            className="size-3.5"
+                          />
+                          <span className="font-mono">{sym}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <span className="text-[11px] text-fg-subtle">
+                    Same atomic price; buyer-kit picks an accepted token from the seller&apos;s
+                    advertised <InlineCode>accepts[]</InlineCode>.
+                  </span>
+                </Field>
 
                 <Field label="Custom slug (optional)">
                   <Input
@@ -521,7 +580,19 @@ function PaymentLinkRow({
           className={cn('size-4 text-fg-subtle transition-transform', open && 'rotate-90')}
         />
         <Badge variant="brand">{endpoint.method}</Badge>
-        <Badge variant="success">{endpoint.price}</Badge>
+        <Badge variant="success">
+          {endpoint.price} {endpoint.currency}
+        </Badge>
+        {endpoint.accepts_currencies && endpoint.accepts_currencies.length > 0 && (
+          <span className="hidden md:inline-flex items-center gap-1 text-[10px] text-fg-subtle">
+            +{' '}
+            {endpoint.accepts_currencies.map((c) => (
+              <Badge key={c} variant="outline" className="text-[10px]">
+                {c}
+              </Badge>
+            ))}
+          </span>
+        )}
         <span className="font-mono text-xs text-fg-muted truncate">/x/{endpoint.id}</span>
         <span className="ml-auto flex items-center gap-3 text-xs text-fg-subtle">
           <span className="hidden sm:inline truncate max-w-[14rem]" title={endpoint.label}>

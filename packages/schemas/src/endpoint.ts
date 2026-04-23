@@ -59,12 +59,29 @@ export const EndpointV1Schema = z.object({
   /** HTTP method clients must use. */
   method: EndpointMethodSchema,
   /**
-   * Display price string, parsed by `@x402/svm`'s `ExactSvmScheme`. Examples:
-   * `"$0.001"`, `"0.01 USDC"`, `"0.5"`. Always denominated in USDC for v0.1.
+   * Display price string, parsed by `@leash/seller-kit`'s `parsePrice`.
+   * Examples: `"$0.001"`, `"0.01 USDC"`, `"0.5"`. Denominated in `currency`
+   * (defaults to `'USDC'`).
    */
   price: z.string().min(1),
   /** CAIP-2 network the seller settles on. Defaults to `'solana-devnet'`. */
   network: z.enum(['solana-mainnet', 'solana-devnet', 'solana-testnet']).default('solana-devnet'),
+  /**
+   * Primary settlement currency. Must be a Leash-known stablecoin so the
+   * runner can resolve a real SPL mint via `@leash/core/tokens`. Defaults
+   * to `'USDC'` for backwards compatibility with pre-multi-currency links.
+   */
+  currency: z.enum(['USDC', 'USDT', 'USDG']).default('USDC'),
+  /**
+   * Additional stablecoins this endpoint also accepts. The runner advertises
+   * an x402 `accepts[]` of equivalent payment options at the same dollar
+   * amount across each stable, so paying agents can choose any. The primary
+   * `currency` is always implicitly accepted.
+   */
+  accepts_currencies: z
+    .array(z.enum(['USDC', 'USDT', 'USDG']))
+    .max(3)
+    .default([]),
   /** Returned verbatim after a successful settlement. */
   response: ResponseTemplateSchema,
   /**

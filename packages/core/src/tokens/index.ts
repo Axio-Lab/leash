@@ -114,6 +114,37 @@ export function lookupToken(mint: string, network: TokenNetwork): KnownToken | u
 }
 
 /**
+ * Symbols of the well-known USD-pegged stablecoins Leash supports for x402
+ * settlement. Restricted to the registry's stable entries so consumers can
+ * pin a typed dropdown without re-deriving the list.
+ */
+export type KnownStableSymbol = 'USDC' | 'USDT' | 'USDG';
+
+/** All stablecoin tickers we recognise on at least one network. */
+export const KNOWN_STABLE_SYMBOLS: ReadonlyArray<KnownStableSymbol> = ['USDC', 'USDT', 'USDG'];
+
+/**
+ * Look up a known token by ticker symbol (case-insensitive) on a given
+ * network. Useful for translating a user-facing currency dropdown into the
+ * underlying mint address required by x402 `AssetAmount` prices.
+ */
+export function lookupTokenBySymbol(symbol: string, network: TokenNetwork): KnownToken | undefined {
+  const upper = symbol.trim().toUpperCase();
+  return KNOWN_TOKENS[network].find((t) => t.symbol.toUpperCase() === upper);
+}
+
+/**
+ * Reverse-lookup a currency ticker for an asset mint. Falls back to `'USDC'`
+ * (the v0.1 default settlement currency) when the mint is unknown — buyer
+ * receipts surface a usable label even if the seller advertises a token the
+ * Leash registry hasn't catalogued yet.
+ */
+export function currencyForAsset(asset: string | null | undefined, network: TokenNetwork): string {
+  if (!asset) return 'USDC';
+  return lookupToken(asset, network)?.symbol ?? 'USDC';
+}
+
+/**
  * Mints we always want to render in a treasury UI even when the agent
  * holds zero — the headline stables. Other tokens only appear once the
  * agent actually holds a balance.

@@ -3,9 +3,13 @@ import type { Context as UmiContext } from '@metaplex-foundation/umi';
 import type { ReceiptV1 } from '@leash/schemas';
 import {
   finalizeReceipt,
+  KNOWN_STABLE_SYMBOLS,
+  lookupTokenBySymbol,
   networkFromCaip2,
   paymentRequirementsHash,
   requestHash,
+  type KnownStableSymbol,
+  type TokenNetwork,
 } from '@leash/core';
 import { paymentMiddlewareFromHTTPServer } from '@x402/hono';
 import { x402HTTPResourceServer } from '@x402/core/server';
@@ -15,6 +19,7 @@ import type {
   HTTPTransportContext,
   RouteConfig,
 } from '@x402/core/server';
+import type { PaymentOption } from '@x402/core/http';
 import {
   caip2ForSellerNetwork,
   createSvmResourceServer,
@@ -27,13 +32,29 @@ import { parsePrice } from '../receipts/price.js';
 export type SellerRouteConfig = {
   description: string;
   /**
-   * Display price e.g. `"$0.001"`, `"0.01 USDC"`, or `"0.5"`. Forwarded to
-   * `@x402/svm`'s `ExactSvmScheme.parsePrice`, which converts to USDC atomic
-   * units on the configured network. The same string is also parsed locally
-   * via `parsePrice()` and copied into every `earn` receipt as
-   * `{ amount, currency }` so explorers can render it without re-parsing.
+   * Display price e.g. `"$0.001"`, `"0.01 USDC"`, or `"0.5"`. Parsed locally
+   * via {@link parsePrice} into atomic units against the route's `currency`
+   * (defaults to `'USDC'`), then advertised on the wire as an
+   * `AssetAmount` payment option so the facilitator settles in exactly that
+   * stablecoin. The same parsed `{ amount, currency, asset }` is stamped onto
+   * every `earn` `ReceiptV1` so explorers can render the correct value
+   * without re-parsing.
    */
   price: string;
+  /**
+   * Settlement currency for the price. Must be a Leash-known stablecoin
+   * (`USDC` / `USDT` / `USDG`) so the seller-kit can resolve a real mint via
+   * `@leash/core/tokens`. Defaults to `'USDC'`.
+   */
+  currency?: KnownStableSymbol;
+  /**
+   * Additional stablecoins this route also accepts. When set, the runner
+   * advertises an `accepts[]` of equivalent payment options (same dollar
+   * amount across each stable, since v0.1 treats them as 1:1 USD pegs) so a
+   * paying agent can choose which token to debit. The route's primary
+   * `currency` is always included implicitly.
+   */
+  acceptsCurrencies?: KnownStableSymbol[];
   /** Optional MIME type for the response. Defaults to `application/json`. */
   mimeType?: string;
 };
@@ -111,21 +132,27 @@ export function createSeller(app: Hono, opts: CreateSellerOptions): Seller {
       ? opts.facilitator
       : (facilitatorUrl ?? DEFAULT_FACILITATOR_URL);
 
+  const tokenNetwork: TokenNetwork =
+    networkAliasFor(sellerNetwork) === 'solana-mainnet' ? 'mainnet' : 'devnet';
+
   const routes: Record<string, RouteConfig> = {};
   for (const [routeKey, cfg] of Object.entries(opts.routes)) {
     const [method, path] = routeKey.split(/\s+/, 2);
     if (!method || !path) {
       throw new Error(`Invalid route key: ${routeKey}`);
     }
+    const accepts = buildAccepts({
+      payTo,
+      networkCaip2,
+      tokenNetwork,
+      priceString: cfg.price,
+      currency: cfg.currency ?? 'USDC',
+      extraCurrencies: cfg.acceptsCurrencies ?? [],
+    });
     routes[`${method.toUpperCase()} ${path}`] = {
       description: cfg.description,
       mimeType: cfg.mimeType ?? 'application/json',
-      accepts: {
-        scheme: 'exact',
-        network: networkCaip2,
-        payTo,
-        price: cfg.price,
-      },
+      accepts: accepts.length === 1 ? accepts[0] : accepts,
     };
   }
 
@@ -134,6 +161,10 @@ export function createSeller(app: Hono, opts: CreateSellerOptions): Seller {
   /**
    * `onAfterSettle` fires once the facilitator has confirmed the SPL
    * transfer. The `result.transaction` is the real Solana signature.
+   *
+   * The receipt's `price` is sourced from the **settled** payment
+   * requirements (so multi-currency endpoints stamp the actual debited
+   * token), then enriched with the friendly Leash network slug.
    */
   server.onAfterSettle(async ({ requirements, result, transportContext }) => {
     if (!result.success) return;
@@ -142,14 +173,16 @@ export function createSeller(app: Hono, opts: CreateSellerOptions): Seller {
     const method = reqCtx?.method ?? 'POST';
     const url = reqCtx?.adapter.getUrl?.() ?? reqCtx?.path ?? '';
     const route = findRouteForPath(opts.routes, reqCtx);
-    const price = route ? parsePrice(route.price) : null;
-    const enrichedPrice = price
-      ? {
-          ...price,
-          network: networkFromCaip2(networkCaip2) ?? sellerNetwork,
-          asset: requirements.asset,
-        }
-      : null;
+    const settledCurrency =
+      lookupTokenBySymbol('USDC', tokenNetwork)?.mint === requirements.asset
+        ? 'USDC'
+        : (lookupCurrencyBySymbol(requirements.asset, tokenNetwork) ?? route?.currency ?? 'USDC');
+    const enrichedPrice: ReceiptV1['price'] = {
+      amount: requirements.amount,
+      currency: settledCurrency,
+      network: networkFromCaip2(networkCaip2) ?? sellerNetwork,
+      asset: requirements.asset,
+    };
     await emitEarnReceipt({
       state,
       agent,
@@ -190,6 +223,64 @@ function findRouteForPath(
   }
   const first = Object.values(routes)[0];
   return first ?? null;
+}
+
+/**
+ * Build the x402 `accepts[]` payment options for a route. The primary
+ * `currency` always comes first; any `extraCurrencies` are appended at
+ * the same dollar-equivalent amount (1:1 USD assumption is fine for v0.1
+ * since we only support 6-dec USD-pegged stables in the registry).
+ *
+ * Each option is encoded as an `AssetAmount` so the facilitator settles
+ * in exactly the buyer-chosen mint — no implicit USDC fallback.
+ */
+function buildAccepts(args: {
+  payTo: string;
+  networkCaip2: string;
+  tokenNetwork: TokenNetwork;
+  priceString: string;
+  currency: KnownStableSymbol;
+  extraCurrencies: KnownStableSymbol[];
+}): PaymentOption[] {
+  const all = uniq<KnownStableSymbol>([args.currency, ...args.extraCurrencies]);
+  return all.map((currency) => {
+    const parsed = parsePrice(args.priceString, {
+      network: args.tokenNetwork,
+      defaultCurrency: currency,
+    });
+    if (!parsed) {
+      throw new Error(
+        `Invalid price "${args.priceString}" for currency ${currency} on ${args.tokenNetwork}.`,
+      );
+    }
+    return {
+      scheme: 'exact',
+      network: args.networkCaip2 as PaymentOption['network'],
+      payTo: args.payTo,
+      price: { asset: parsed.asset!, amount: parsed.amount, extra: {} },
+    };
+  });
+}
+
+function uniq<T>(arr: ReadonlyArray<T>): T[] {
+  return Array.from(new Set(arr));
+}
+
+/** Reverse-resolve a stablecoin symbol from a settled mint, if known. */
+function lookupCurrencyBySymbol(asset: string, network: TokenNetwork): KnownStableSymbol | null {
+  for (const sym of KNOWN_STABLE_SYMBOLS) {
+    if (lookupTokenBySymbol(sym, network)?.mint === asset) return sym;
+  }
+  return null;
+}
+
+/**
+ * v0.1 collapses `solana-testnet` → `solana-devnet` for the token registry
+ * lookup. Mirrors {@link networkAlias} from `../x402/svm-server.ts` but
+ * exists locally to avoid a circular import in barrel files.
+ */
+function networkAliasFor(net: LeashSellerNetwork): 'solana-mainnet' | 'solana-devnet' {
+  return net === 'solana-mainnet' ? 'solana-mainnet' : 'solana-devnet';
 }
 
 async function emitEarnReceipt(args: {

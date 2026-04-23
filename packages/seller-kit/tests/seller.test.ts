@@ -221,17 +221,59 @@ describe('createSeller — earn receipts', () => {
 });
 
 describe('parsePrice', () => {
-  it('parses dollar shorthand as USDC', () => {
-    expect(parsePrice('$0.001')).toEqual({ amount: '0.001', currency: 'USDC' });
-    expect(parsePrice('$ 1.5')).toEqual({ amount: '1.5', currency: 'USDC' });
+  // Devnet USDC mint — must match `@leash/core/tokens` so format helpers
+  // can reverse-resolve decimals correctly.
+  const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+  const USDT_DEVNET = 'EcFc2cMyZxaKBkFK1XooxiyDyCPneLXiMwSJiVY6eTad';
+  const USDG_DEVNET = '4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7';
+
+  it('parses dollar shorthand as USDC and returns atomic units', () => {
+    expect(parsePrice('$0.001')).toEqual({
+      amount: '1000',
+      currency: 'USDC',
+      asset: USDC_DEVNET,
+    });
+    expect(parsePrice('$1')).toEqual({
+      amount: '1000000',
+      currency: 'USDC',
+      asset: USDC_DEVNET,
+    });
+    expect(parsePrice('$ 1.5')).toEqual({
+      amount: '1500000',
+      currency: 'USDC',
+      asset: USDC_DEVNET,
+    });
   });
   it('parses suffixed currency', () => {
-    expect(parsePrice('0.01 USDC')).toEqual({ amount: '0.01', currency: 'USDC' });
-    expect(parsePrice('5USDT')).toEqual({ amount: '5', currency: 'USDT' });
-    expect(parsePrice('1 USD')).toEqual({ amount: '1', currency: 'USDC' });
+    expect(parsePrice('0.01 USDC')).toEqual({
+      amount: '10000',
+      currency: 'USDC',
+      asset: USDC_DEVNET,
+    });
+    expect(parsePrice('5USDT')).toEqual({
+      amount: '5000000',
+      currency: 'USDT',
+      asset: USDT_DEVNET,
+    });
+    expect(parsePrice('1 USD')).toEqual({
+      amount: '1000000',
+      currency: 'USDC',
+      asset: USDC_DEVNET,
+    });
   });
-  it('treats bare numbers as USDC', () => {
-    expect(parsePrice('0.5')).toEqual({ amount: '0.5', currency: 'USDC' });
+  it('honours an explicit defaultCurrency', () => {
+    expect(parsePrice('$1', { defaultCurrency: 'USDG' })).toEqual({
+      amount: '1000000',
+      currency: 'USDG',
+      asset: USDG_DEVNET,
+    });
+  });
+  it('treats bare numbers as the default currency', () => {
+    expect(parsePrice('0.5')).toEqual({
+      amount: '500000',
+      currency: 'USDC',
+      asset: USDC_DEVNET,
+    });
   });
   it('returns null for garbage', () => {
     expect(parsePrice('')).toBeNull();

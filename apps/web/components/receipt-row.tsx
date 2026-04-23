@@ -11,7 +11,7 @@ import { transactionExplorerUrl } from '@/lib/solscan';
 
 export function ReceiptRow({ receipt }: { receipt: ReceiptV1 }) {
   const [open, setOpen] = React.useState(false);
-  const { kind, decision, request, price, ts, nonce, receipt_hash, tx_sig } = receipt;
+  const { kind, decision, request, price, ts, receipt_hash, tx_sig } = receipt;
   // Default to devnet when the receipt didn't carry a network (older
   // receipts pre-`price.network`). Devnet is the only supported playground
   // cluster today so this is the safe assumption.
@@ -54,12 +54,6 @@ export function ReceiptRow({ receipt }: { receipt: ReceiptV1 }) {
               {formatReceiptPriceUsd(price)}
             </span>
           ) : null}
-          <span
-            className="font-mono"
-            title="Buyer-side monotonic counter (nth call this agent has made in its lifetime)."
-          >
-            call #{nonce + 1}
-          </span>
           <span title={new Date(ts).toISOString()}>{formatReceiptTs(ts)}</span>
         </span>
       </button>
@@ -94,26 +88,18 @@ export function ReceiptRow({ receipt }: { receipt: ReceiptV1 }) {
 }
 
 /**
- * "Apr 22, 21:57" today, "Apr 19" earlier this year, "Apr 19, 2025" otherwise.
+ * Always include year + month + day so receipts feed at-a-glance
+ * disambiguates payments across calendar years (e.g. "22 Apr 2026, 22:01").
  * Tooltip on the row keeps the full ISO string for power users.
  */
 function formatReceiptTs(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.valueOf())) return iso;
-  const now = new Date();
-  const sameDay =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
-  if (sameDay) {
-    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  }
-  const sameYear = d.getFullYear() === now.getFullYear();
   return d.toLocaleString(undefined, {
-    month: 'short',
     day: 'numeric',
+    month: 'short',
+    year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-    ...(sameYear ? {} : { year: 'numeric' }),
   });
 }

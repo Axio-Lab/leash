@@ -1,20 +1,25 @@
 import type { ReceiptV1, RulesV1 } from '@leash/schemas';
 import {
   createSvmBuyerFetch,
+  currencyForAsset,
   decodePaymentResponseHeader,
   defaultFacilitatorFor,
   deriveAgentTreasuryAta,
   evaluate,
   finalizeReceipt,
   inspectSplTokenAccount,
+  KNOWN_STABLE_SYMBOLS,
+  lookupTokenBySymbol,
   networkFromCaip2,
   paymentRequirementsHash,
   requestHash,
   type ClientSvmSigner,
+  type KnownStableSymbol,
   type LeashFetch,
   type LeashX402Network,
   type PaymentRequirements,
   type PolicyState,
+  type TokenNetwork,
 } from '@leash/core';
 
 export type BuyerConfig = {
@@ -68,6 +73,15 @@ export type BuyerConfig = {
    * for testing with a mock facilitator).
    */
   fetch?: LeashFetch;
+  /**
+   * Preferred stablecoin (`'USDC' | 'USDT' | 'USDG'`) to settle in when the
+   * seller advertises multiple `accepts[]` entries for the same route. The
+   * buyer picks the matching `paymentRequirement` (by mint), so a USDC-
+   * priced endpoint can be paid in USDG as long as the seller advertised
+   * USDG as an alternative. Falls back to the first matching network entry
+   * when no preferred currency match is found.
+   */
+  preferredCurrency?: KnownStableSymbol;
 };
 
 export type BuyerCallResult = {
@@ -105,6 +119,11 @@ export type Buyer = {
 export function createBuyer(cfg: BuyerConfig): Buyer {
   const networks = cfg.networks ?? (['solana-devnet'] as LeashX402Network[]);
   const facilitator = cfg.facilitator ?? defaultFacilitatorFor(networks);
+  // Resolve the preferred currency to a concrete mint address so the x402
+  // client selector can match seller-advertised `accepts[]` entries by asset.
+  // Picks the network of the first configured cluster — buyer-kit only
+  // registers schemes for `cfg.networks` so this is safe.
+  const preferredAsset = resolvePreferredAsset(cfg.preferredCurrency, networks);
   const paidFetch =
     cfg.fetch ??
     createSvmBuyerFetch({
@@ -112,6 +131,7 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
       networks,
       ...(cfg.rpcUrl ? { rpcUrl: cfg.rpcUrl } : {}),
       ...(cfg.sourceTokenAccount ? { sourceTokenAccount: cfg.sourceTokenAccount } : {}),
+      ...(preferredAsset ? { preferredAsset } : {}),
     });
 
   const state: PolicyState = {
@@ -353,7 +373,7 @@ function parseSettlement(response: Response): Settlement | null {
   const price: ReceiptV1['price'] = requirements
     ? {
         amount: requirements.amount,
-        currency: 'USDC',
+        currency: currencyForAsset(requirements.asset, tokenNetworkFromCaip2(requirements.network)),
         network: networkFromCaip2(requirements.network) ?? requirements.network,
         asset: requirements.asset,
       }
@@ -428,7 +448,7 @@ async function parsePaymentRequired(
   const price: ReceiptV1['price'] = chosen
     ? {
         amount: chosen.amount,
-        currency: 'USDC',
+        currency: currencyForAsset(chosen.asset, tokenNetworkFromCaip2(chosen.network)),
         network: networkFromCaip2(chosen.network) ?? chosen.network,
         asset: chosen.asset,
       }
@@ -491,6 +511,36 @@ function decodeBase64Json(input: string): unknown {
       : Buffer.from(padded, 'base64').toString('utf8');
   return JSON.parse(raw);
 }
+
+/**
+ * Map a CAIP-2 chain id ("solana:5eykt4u…", "solana-devnet") to the
+ * `TokenNetwork` bucket used by the registry. Falls back to `'devnet'`
+ * because the playground default is devnet — pinning unknowns to mainnet
+ * could trigger an incorrect mint lookup.
+ */
+function tokenNetworkFromCaip2(input: string | null | undefined): TokenNetwork {
+  const slug = networkFromCaip2(input);
+  if (slug === 'solana-mainnet') return 'mainnet';
+  return 'devnet';
+}
+
+/**
+ * Resolve a buyer-supplied `preferredCurrency` (e.g. `'USDG'`) to the mint
+ * address on the first configured network. Returns `null` when the mint
+ * isn't in the registry for that network — the underlying x402 client will
+ * then fall back to the default selector (first matching `accepts[]`).
+ */
+function resolvePreferredAsset(
+  symbol: KnownStableSymbol | undefined,
+  networks: LeashX402Network[],
+): string | null {
+  if (!symbol) return null;
+  const network = networks[0] === 'solana-mainnet' ? 'mainnet' : 'devnet';
+  return lookupTokenBySymbol(symbol, network)?.mint ?? null;
+}
+
+// Touched to silence "unused import" when consumers strip-tree-shake.
+void KNOWN_STABLE_SYMBOLS;
 
 async function emitReceipt(onReceipt: BuyerConfig['onReceipt'], receipt: ReceiptV1): Promise<void> {
   if (!onReceipt) return;

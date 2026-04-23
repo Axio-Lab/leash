@@ -143,6 +143,8 @@ function buildApp(endpoint: EndpointV1, pathname: string): Hono {
       [`${endpoint.method} ${pathname}`]: {
         description: endpoint.label,
         price: endpoint.price,
+        currency: endpoint.currency,
+        acceptsCurrencies: endpoint.accepts_currencies,
         mimeType: endpoint.response.mimeType,
       },
     },
@@ -194,6 +196,8 @@ function buildDiscoveryPayload(req: Request, endpoint: EndpointV1): PaymentLinkM
       description: endpoint.description ?? null,
       method: endpoint.method,
       price: endpoint.price,
+      currency: endpoint.currency,
+      accepts_currencies: endpoint.accepts_currencies,
       network: endpoint.network,
       owner_agent: endpoint.owner_agent,
       response: {

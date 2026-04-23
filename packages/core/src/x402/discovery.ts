@@ -5,6 +5,13 @@ export type PaymentLinkMetaEndpoint = {
   method: 'GET' | 'POST';
   url: string;
   price: string;
+  /** Primary settlement currency (USDC by default). */
+  currency: 'USDC' | 'USDT' | 'USDG';
+  /**
+   * Other stablecoins this endpoint accepts at the equivalent dollar
+   * amount. Empty array when the endpoint is single-currency.
+   */
+  accepts_currencies: ReadonlyArray<'USDC' | 'USDT' | 'USDG'>;
   network: string;
   owner_agent: string;
   payTo: string | null;
@@ -46,6 +53,10 @@ export type BuildPaymentLinkMetaInput = {
     description?: string | null;
     method: 'GET' | 'POST';
     price: string;
+    /** Primary settlement currency. Defaults to `'USDC'` when omitted. */
+    currency?: 'USDC' | 'USDT' | 'USDG';
+    /** Additional accepted stablecoins. Defaults to `[]` when omitted. */
+    accepts_currencies?: ReadonlyArray<'USDC' | 'USDT' | 'USDG'>;
     network: string;
     owner_agent: string;
     response: {
@@ -91,6 +102,8 @@ export function buildPaymentLinkMeta(input: BuildPaymentLinkMetaInput): PaymentL
       method: endpoint.method,
       url: linkUrl,
       price: endpoint.price,
+      currency: endpoint.currency ?? 'USDC',
+      accepts_currencies: endpoint.accepts_currencies ?? [],
       network: endpoint.network,
       owner_agent: endpoint.owner_agent,
       payTo,
@@ -212,6 +225,8 @@ function parsePaymentLinkMeta(input: unknown, source: string): PaymentLinkMeta {
       method,
       url: asString(endpointObj.url, 'endpoint.url', source),
       price: asString(endpointObj.price, 'endpoint.price', source),
+      currency: parseCurrency(endpointObj.currency, 'endpoint.currency', source),
+      accepts_currencies: parseAcceptsCurrencies(endpointObj.accepts_currencies, source),
       network: asString(endpointObj.network, 'endpoint.network', source),
       owner_agent: asString(endpointObj.owner_agent, 'endpoint.owner_agent', source),
       payTo:
@@ -288,4 +303,38 @@ function asBoolean(value: unknown, field: string, source: string): boolean {
     throw new Error(`invalid payment-link metadata from ${source}: ${field} must be boolean`);
   }
   return value;
+}
+
+const KNOWN_DISCOVERY_CURRENCIES = ['USDC', 'USDT', 'USDG'] as const;
+type DiscoveryCurrency = (typeof KNOWN_DISCOVERY_CURRENCIES)[number];
+
+/**
+ * Parse a currency tag from a discovery payload. Defaults to `'USDC'` when
+ * the field is missing so older `/x/<id>` responses (pre multi-currency)
+ * still parse cleanly.
+ */
+function parseCurrency(value: unknown, field: string, source: string): DiscoveryCurrency {
+  if (value == null) return 'USDC';
+  if (typeof value !== 'string') {
+    throw new Error(`invalid payment-link metadata from ${source}: ${field} must be a string`);
+  }
+  const upper = value.toUpperCase();
+  if (!(KNOWN_DISCOVERY_CURRENCIES as ReadonlyArray<string>).includes(upper)) {
+    throw new Error(
+      `invalid payment-link metadata from ${source}: ${field} must be one of ${KNOWN_DISCOVERY_CURRENCIES.join(', ')}`,
+    );
+  }
+  return upper as DiscoveryCurrency;
+}
+
+function parseAcceptsCurrencies(value: unknown, source: string): ReadonlyArray<DiscoveryCurrency> {
+  if (value == null) return [];
+  if (!Array.isArray(value)) {
+    throw new Error(
+      `invalid payment-link metadata from ${source}: endpoint.accepts_currencies must be an array`,
+    );
+  }
+  return value.map((entry, idx) =>
+    parseCurrency(entry, `endpoint.accepts_currencies[${idx}]`, source),
+  );
 }
