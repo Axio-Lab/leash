@@ -3,8 +3,10 @@ import {
   createSvmBuyerFetch,
   decodePaymentResponseHeader,
   defaultFacilitatorFor,
+  deriveAgentTreasuryAta,
   evaluate,
   finalizeReceipt,
+  inspectSplTokenAccount,
   networkFromCaip2,
   paymentRequirementsHash,
   requestHash,
@@ -205,15 +207,72 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
           ? await parsePaymentRequired(response.clone(), networks)
           : null;
 
-      const failureReason = settlement ? null : (quote?.error ?? networkError ?? null);
+      const sellerReason = settlement ? null : (quote?.error ?? networkError ?? null);
 
-      // The call **was** rejected if the policy gate let it through but the
-      // request itself failed: 402 with no PAYMENT-RESPONSE (settlement
-      // didn't happen), any 4xx/5xx, or a transport-layer error. A 2xx with
-      // no payment header is a legitimate "the seller didn't gate this
-      // route" success — those stay `allow`. We surface this in the
-      // `decision` field so explorers can colour failed receipts red
-      // without introspecting `tx_sig === null`.
+      // Reclassify a generic facilitator/seller error into something the UI
+      // can act on (top up the treasury vs. raise the allowance vs. pop the
+      // signer again). We do this when:
+      //   - the seller failed at 402 (no PAYMENT-RESPONSE),
+      //   - we know the demanded price (quote.price.amount), and
+      //   - we have an RPC URL to read state from.
+      //
+      // The source token account is resolved in this order so callers don't
+      // have to plumb it manually:
+      //   1. `cfg.sourceTokenAccount` (explicit override; fastest path)
+      //   2. Derived from `cfg.agent` + `quote.price.asset` via
+      //      {@link deriveAgentTreasuryAta} (kit-native PDA derivation;
+      //      identical to what `setSpendDelegation` writes to on-chain).
+      // Falling back to (2) means brand-new agents that never had their ATA
+      // cached client-side still get the precise diagnostic on a 402 — UI no
+      // longer surfaces the seller's raw "transaction_simulation" string.
+      let preflightReason: string | null = null;
+      if (!settlement && quote?.price?.amount && cfg.rpcUrl && response.status === 402) {
+        let sourceAta: string | null = cfg.sourceTokenAccount ?? null;
+        if (!sourceAta && quote.price.asset && cfg.agent) {
+          try {
+            const { ata } = await deriveAgentTreasuryAta({
+              asset: cfg.agent,
+              mint: quote.price.asset,
+            });
+            sourceAta = String(ata);
+          } catch {
+            /* malformed asset/agent string — fall through, no preflight */
+          }
+        }
+        if (sourceAta) {
+          try {
+            const tokenState = await inspectSplTokenAccount({
+              rpcUrl: cfg.rpcUrl,
+              address: sourceAta,
+            });
+            const required = BigInt(quote.price.amount);
+            if (!tokenState) {
+              preflightReason = 'ata_missing';
+            } else if (tokenState.amount < required) {
+              preflightReason = 'insufficient_balance';
+            } else if (!tokenState.delegate) {
+              preflightReason = 'no_delegate';
+            } else if (tokenState.delegate !== String(cfg.signer.address)) {
+              preflightReason = 'wrong_delegate';
+            } else if (tokenState.delegatedAmount < required) {
+              preflightReason = 'insufficient_allowance';
+            }
+          } catch {
+            /* RPC hiccup — keep the seller-reported reason */
+          }
+        }
+      }
+
+      // When pre-flight is more specific than the seller, prefer it but keep
+      // the seller string as breadcrumb (e.g. "insufficient_balance:
+      // transaction_simulation"). UI panels match on the prefix so the
+      // suffix is purely diagnostic.
+      const failureReason = preflightReason
+        ? sellerReason && sellerReason !== preflightReason
+          ? `${preflightReason}: ${sellerReason}`
+          : preflightReason
+        : sellerReason;
+
       const settled = settlement?.txSig != null && settlement.txSig.length > 0;
       const callFailed =
         networkError != null || response.status === 402 || (response.status >= 400 && !settled);

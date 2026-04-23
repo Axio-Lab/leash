@@ -33,10 +33,10 @@ stores your `EndpointV1` descriptors and the Next.js app exposes them at
 
 Once a buyer pays, the seller has two orthogonal ways to react:
 
-| Hook            | When you'd use it                                                         |
-| --------------- | ------------------------------------------------------------------------- |
-| `webhook_url`   | Hand the response to a downstream agent without making the buyer poll.    |
-| `wrap_receipt`  | Caller wants the receipt inline (e.g. autonomous agents chaining calls).  |
+| Hook           | When you'd use it                                                        |
+| -------------- | ------------------------------------------------------------------------ |
+| `webhook_url`  | Hand the response to a downstream agent without making the buyer poll.   |
+| `wrap_receipt` | Caller wants the receipt inline (e.g. autonomous agents chaining calls). |
 
 ### `X-Leash-*` response headers (always set)
 
@@ -72,10 +72,10 @@ each settlement the runner will POST a versioned `WebhookPayload`:
     "facilitator": "https://facilitator.svmacc.tech",
     "explorer": {
       "tx": "https://solscan.io/tx/5J7…?cluster=devnet",
-      "agent": "https://yourapp/agents/33Qv…"
-    }
+      "agent": "https://yourapp/agents/33Qv…",
+    },
   },
-  "response": "<your endpoint response body>"
+  "response": "<your endpoint response body>",
 }
 ```
 
@@ -92,7 +92,7 @@ import { parseWebhookPayload } from '@leash/core';
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const event = parseWebhookPayload(body);    // throws on shape mismatch
+  const event = parseWebhookPayload(body); // throws on shape mismatch
   // event.payment.tx_sig, event.payment.amount.currency, event.response …
 }
 ```
@@ -147,10 +147,9 @@ curl https://yourapp/x/<id>
 ```
 
 <Tip>
-  The discovery view only fires for `GET` probes that don't carry an
-  `X-PAYMENT` header on a method-mismatched route. A buyer that sends the
-  configured method **with** payment headers always hits the real x402
-  middleware and pays as expected.
+  The discovery view only fires for `GET` probes that don't carry an `X-PAYMENT` header on a
+  method-mismatched route. A buyer that sends the configured method **with** payment headers always
+  hits the real x402 middleware and pays as expected.
 </Tip>
 
 ## What the runner stores
@@ -167,12 +166,12 @@ curl https://yourapp/x/<id>
   "response": {
     "status": 200,
     "mimeType": "application/json",
-    "body": { "ok": true, "hello": "leash" }
+    "body": { "ok": true, "hello": "leash" },
   },
-  "webhook_url": "https://your-agent.com/cb",         // optional
-  "wrap_receipt": true,                                // optional
+  "webhook_url": "https://your-agent.com/cb", // optional
+  "wrap_receipt": true, // optional
   "created_at": "2026-04-21T11:06:20.906Z",
-  "updated_at": "2026-04-21T11:06:20.906Z"
+  "updated_at": "2026-04-21T11:06:20.906Z",
 }
 ```
 

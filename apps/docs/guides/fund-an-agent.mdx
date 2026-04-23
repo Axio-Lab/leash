@@ -44,9 +44,9 @@ facilitator landscape "just works" while funds stay agent-owned.
    3. Wraps an `SPL.Approve` in `mpl-core::Execute` and signs once.
 2. Top up: send USDC on devnet (mint
    `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`,
-   <a href="https://faucet.circle.com">faucet.circle.com</a>) directly to the
-   treasury PDA. Because the ATA is already provisioned, the deposit lands
-   in one tx without any extra setup from the sender.
+   <a href="https://faucet.circle.com">faucet.circle.com</a>) directly to the treasury PDA. Because
+   the ATA is already provisioned, the deposit lands in one tx without any extra setup from the
+   sender.
 3. Adjust or revoke at any time on the agent profile
    (`/agents/<mint>` → "Spend allowance" card). Re-approving overwrites the
    cap; revoking clears it (`delegate = None`, `delegated_amount = 0`).
@@ -76,13 +76,12 @@ const umi = createUmi('https://api.devnet.solana.com').use(mplCore());
 umi.use(keypairIdentity(myKeypair)); // owner of the agent
 
 // Approve $5 USDC of spend authority for `executiveWallet`.
-const { signature, treasury, sourceTokenAccount, delegatedAmount } =
-  await setSpendDelegation(umi, {
-    agentAsset: 'CoreAss…Asset',
-    mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', // devnet USDC
-    executive: executiveWallet.address,
-    amount: 5_000_000n, // 5 USDC (6 decimals)
-  });
+const { signature, treasury, sourceTokenAccount, delegatedAmount } = await setSpendDelegation(umi, {
+  agentAsset: 'CoreAss…Asset',
+  mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', // devnet USDC
+  executive: executiveWallet.address,
+  amount: 5_000_000n, // 5 USDC (6 decimals)
+});
 
 // Verify on-chain.
 const status = await getSpendDelegation(umi, {

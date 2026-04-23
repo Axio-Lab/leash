@@ -1,4 +1,5 @@
 export * from './agent/agent.js';
+export * from './agent/treasury-pda.js';
 export * from './policy/evaluate.js';
 export * from './policy/state.js';
 export * from './receipt/hash.js';
@@ -13,6 +14,7 @@ export * from './x402/headers.js';
 export * from './x402/parse.js';
 export * from './x402/webhook.js';
 export * from './treasury/balance.js';
+export * from './treasury/inspect-token-account.js';
 export * from './treasury/list-balances.js';
 export * from './treasury/pause.js';
 export * from './tokens/index.js';

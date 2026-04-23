@@ -8,6 +8,10 @@ seller kits. It contains:
 
 - **Agent + treasury** — `treasuryPda(asset)` derives the Asset Signer PDA
   used as `payTo` and the on-chain owner of the agent's funds.
+  `deriveAgentTreasuryAddress(asset)` and `deriveAgentTreasuryAta({ asset, mint })`
+  do the same derivations using `@solana/kit` only (no Umi runtime), so
+  buyer/seller code can resolve the treasury + token ATA without dragging in
+  Metaplex's Umi context.
 - **Policy** — `evaluate(rules, request, ledger, pause)` returns a pure
   decision (`allow` / `deny` + `reason`). Buyer/seller kits also stamp
   `rejected` on receipts when the gate allowed a call but the payment did
@@ -58,6 +62,33 @@ seller kits. It contains:
 - **Treasury helpers** — `getTreasuryBalance`, `buildWithdrawTx` (stub for
   v0.1).
 
+## Agent treasury PDA
+
+Resolve an agent's on-chain treasury (Asset Signer PDA) and its token ATA
+without dragging in the Umi runtime. Useful inside `@leash/buyer-kit`'s
+auto-preflight and for any caller that needs to sign on behalf of an agent
+with `@solana/kit` only.
+
+```ts
+import { deriveAgentTreasuryAddress, deriveAgentTreasuryAta } from '@leash/core';
+
+const treasury = await deriveAgentTreasuryAddress(
+  '33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR',
+);
+
+// Resolve the USDC ATA the agent treasury would receive into.
+const { treasury: t, ata } = await deriveAgentTreasuryAta({
+  asset: '33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR',
+  mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', // USDC devnet
+});
+```
+
+The seeds (`["mpl-core-execute", asset]`) and program id
+(`CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d`) match Metaplex Core's
+`findAssetSignerPda` exactly. Pass
+`{ tokenProgram: TOKEN_2022_PROGRAM_ADDRESS }` for Token-2022 mints; the
+default is the legacy SPL Token program.
+
 ## Why a separate adapter?
 
 `@x402/fetch` is transport-agnostic — it doesn't know which chain or
@@ -70,7 +101,7 @@ adapter is also where we set the default network list (`solana-devnet`,
 import { createSvmBuyerFetch } from '@leash/core/x402';
 
 const paidFetch = createSvmBuyerFetch({
-  signer,                                  // @solana/kit TransactionPartialSigner
+  signer, // @solana/kit TransactionPartialSigner
   networks: ['solana-devnet'],
   rpcUrl: 'https://api.devnet.solana.com',
 });
@@ -87,8 +118,8 @@ const metaA = await fetchPaymentLinkMeta('https://yourapp.com/x/uhnb6e1zm');
 // Variant 2: base host + endpoint id
 const metaB = await fetchPaymentLinkMeta('https://yourapp.com', 'uhnb6e1zm');
 
-console.log(metaA.endpoint.price);   // "$0.001"
-console.log(metaB.endpoint.method);  // "POST"
+console.log(metaA.endpoint.price); // "$0.001"
+console.log(metaB.endpoint.method); // "POST"
 ```
 
 ## Settlement envelope, headers, and webhooks
@@ -135,11 +166,11 @@ import {
   transactionExplorerUrl,
 } from '@leash/core';
 
-const usdc = defaultUsdcMint('devnet');                    // canonical mint
-const meta = lookupToken(usdc.mint, 'devnet');             // { decimals: 6, ... }
+const usdc = defaultUsdcMint('devnet'); // canonical mint
+const meta = lookupToken(usdc.mint, 'devnet'); // { decimals: 6, ... }
 
-formatTokenBalance('1500000', usdc.mint, 'devnet');        // "1.5"
-formatReceiptPriceUsd({ amount: '2', currency: 'USDC' });  // "$0.000002"
+formatTokenBalance('1500000', usdc.mint, 'devnet'); // "1.5"
+formatReceiptPriceUsd({ amount: '2', currency: 'USDC' }); // "$0.000002"
 
 const balances = await listSplBalances({
   owner: 'CTd5VBFYJnGDGv5DbhWfPmrQ96G5ibvmZiyRPURXNyox',

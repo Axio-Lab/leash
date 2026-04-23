@@ -28,6 +28,7 @@ import { PageHeader } from '@/components/page-header';
 import { InlineCode } from '@/components/ui/code';
 import { useToast } from '@/components/ui/toast';
 import { Pager, usePagedItems } from '@/components/ui/pager';
+import { SOLANA_NETWORK } from '@/lib/env';
 import { ReceiptRow } from '@/components/receipt-row';
 import { listAgents, type StoredAgent } from '@/lib/agent-storage';
 
@@ -149,9 +150,12 @@ export default function SellerPage() {
     setSubmitting(true);
     try {
       const idCandidate = customId.trim().toLowerCase();
+
       const ownerStored = agents.find((a) => a.mint === ownerAgent);
       const network =
-        ownerStored?.network === 'solana-mainnet' ? 'solana-mainnet' : 'solana-devnet';
+        ownerStored?.network === 'solana-mainnet' || ownerStored?.network === 'solana-devnet'
+          ? ownerStored.network
+          : SOLANA_NETWORK;
       const res = await fetch(ENDPOINTS_KEY, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -217,7 +221,7 @@ export default function SellerPage() {
 
       <section className="grid gap-4 md:grid-cols-4">
         <InfoCard label="Surface" value="POST/GET /x/<id>" />
-        <InfoCard label="Network" value="solana-devnet" />
+        <InfoCard label="Network" value={SOLANA_NETWORK} />
         <InfoCard label="Facilitator" value="facilitator.svmacc.tech" />
         <InfoCard label="Receives at" value="Asset Signer PDA (auto)" />
       </section>

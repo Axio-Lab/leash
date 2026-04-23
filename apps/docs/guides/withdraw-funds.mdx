@@ -75,12 +75,12 @@ that's the connected Privy embedded wallet — pass `authority` /
 
 ```ts
 {
-  signature: string;                  // base58 tx sig — link out via Solscan
-  treasury: string;                   // Asset Signer PDA
-  sourceTokenAccount: string;         // treasury USDC ATA (debited)
-  destinationTokenAccount: string;    // destination USDC ATA (credited)
-  amount: bigint;                     // atomic units that moved
-  destination: string;                // destination wallet (not its ATA)
+  signature: string; // base58 tx sig — link out via Solscan
+  treasury: string; // Asset Signer PDA
+  sourceTokenAccount: string; // treasury USDC ATA (debited)
+  destinationTokenAccount: string; // destination USDC ATA (credited)
+  amount: bigint; // atomic units that moved
+  destination: string; // destination wallet (not its ATA)
 }
 ```
 
@@ -118,10 +118,10 @@ Treasury balance and remaining-allowance tiles refresh automatically.
 
 These solve different problems and you usually want both:
 
-| Action | What it does | When to use |
-| --- | --- | --- |
+| Action                  | What it does                                                          | When to use                              |
+| ----------------------- | --------------------------------------------------------------------- | ---------------------------------------- |
 | `revokeSpendDelegation` | Drops the executive's SPL delegation. Funds stay on the treasury PDA. | Lock down spending without moving money. |
-| `withdrawTreasury` | Moves stablecoins out of the treasury to a destination wallet. | Agent retired; you want the funds back. |
+| `withdrawTreasury`      | Moves stablecoins out of the treasury to a destination wallet.        | Agent retired; you want the funds back.  |
 
 Belt-and-braces during incident response: revoke first (instant, zero
 funds at risk if the executive key was leaked), then withdraw to a

@@ -30,7 +30,7 @@ import { useToast } from '@/components/ui/toast';
 import { usePrivySvmSigner } from '@/lib/privy-svm-signer';
 import { usePrivyUmi } from '@/lib/privy-umi';
 import { transactionExplorerUrl } from '@/lib/solscan';
-import { SOLANA_RPC } from '@/lib/env';
+import { SOLANA_NETWORK, SOLANA_RPC } from '@/lib/env';
 import { WalletBalanceBadge } from '@/components/wallet-balance-badge';
 import {
   effectiveRules,
@@ -318,11 +318,15 @@ export default function BuyerPage() {
     setResult(null);
     try {
       const target = new URL(url, window.location.origin).toString();
+      const network =
+        agentRecord?.network === 'solana-mainnet' || agentRecord?.network === 'solana-devnet'
+          ? agentRecord.network
+          : SOLANA_NETWORK;
       const buyer = createBuyer({
         agent: selectedAgent,
         rules,
         signer,
-        networks: ['solana-devnet'],
+        networks: [network],
         rpcUrl: SOLANA_RPC,
         onReceipt: shipReceipt,
         ...(agentRecord?.sourceTokenAccount
@@ -332,11 +336,7 @@ export default function BuyerPage() {
       const headers: Record<string, string> = {};
       if (method === 'POST' && body) headers['content-type'] = 'application/json';
       if (callbackUrl.trim()) headers['x-leash-callback'] = callbackUrl.trim();
-      // Let the browser follow any 3xx automatically. The seller's `/x/<id>`
-      // route doesn't redirect today (the `redirect_url` hook was removed in
-      // favour of just `wrap_receipt` + `webhook_url` + `X-Leash-*`
-      // headers), but if a buyer-side proxy sits in front we still read
-      // `response.url` query params as a defensive fallback below.
+
       const init: RequestInit = { method };
       if (Object.keys(headers).length > 0) init.headers = headers;
       if (method === 'POST' && body) init.body = body;
@@ -417,13 +417,11 @@ export default function BuyerPage() {
         }
       })();
 
-      // Cheap-and-correct reclassification: even when the pre-flight didn't
-      // fire (because /api/endpoints hadn't loaded yet, or the URL was
-      // cross-origin), we now know exactly what the seller asked for. If it
-      // exceeds what we can actually spend, surface that as the headline
-      // failure instead of a generic "transaction_simulation".
+      const reasonPrefix = (callResult.failureReason ?? '').split(':')[0]?.trim() ?? '';
       let insufficient: 'balance' | 'allowance' | null = null;
-      if (live && quotedAtomicFromSeller != null) {
+      if (reasonPrefix === 'insufficient_balance') insufficient = 'balance';
+      else if (reasonPrefix === 'insufficient_allowance') insufficient = 'allowance';
+      if (!insufficient && live && quotedAtomicFromSeller != null) {
         if (live.balance < quotedAtomicFromSeller) insufficient = 'balance';
         else if (live.delegatedAmount < quotedAtomicFromSeller) insufficient = 'allowance';
       }
@@ -453,11 +451,6 @@ export default function BuyerPage() {
         const reason = callResult.failureReason ?? 'no failure reason returned by the seller';
         toast.error(`Settlement failed${quoted ? ` (asked ${quoted})` : ''}`, reason);
       } else if (settled) {
-        // Refresh delegation in the background so the new remaining allowance
-        // and treasury balance appear without a manual page reload. Devnet
-        // RPCs are occasionally laggy right after settlement, so re-poll a
-        // couple of times with a small backoff to catch the post-settle
-        // state instead of the pre-settle snapshot.
         void (async () => {
           await refreshDelegation();
           await new Promise((r) => window.setTimeout(r, 1500));
@@ -566,7 +559,7 @@ export default function BuyerPage() {
                           <em>(none)</em>
                         )}
                       </span>
-                      <Badge variant="brand">solana-devnet</Badge>
+                      <Badge variant="brand">{SOLANA_NETWORK}</Badge>
                       <Badge variant="success">facilitator.svmacc.tech</Badge>
                     </div>
                     <WalletBalanceBadge owner={owner} label="Executive (Privy)" />
@@ -865,7 +858,13 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
     }
   })();
   let insufficient: 'balance' | 'allowance' | null = null;
-  if (settlementFailed && result.treasury && quotedAtomic != null) {
+  // First trust the receipt's own classification (set by buyer-kit's
+  // pre-flight). Fall back to a local treasury-vs-quote comparison so older
+  // call sites without RPC access still light up the right panel.
+  const reasonPrefix = (result.failureReason ?? '').split(':')[0]?.trim() ?? '';
+  if (reasonPrefix === 'insufficient_balance') insufficient = 'balance';
+  else if (reasonPrefix === 'insufficient_allowance') insufficient = 'allowance';
+  if (!insufficient && settlementFailed && result.treasury && quotedAtomic != null) {
     if (result.treasury.balanceAtomic < quotedAtomic) insufficient = 'balance';
     else if (result.treasury.delegatedAtomic < quotedAtomic) insufficient = 'allowance';
   }

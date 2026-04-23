@@ -23,8 +23,8 @@ const buyer = createBuyer({
     hosts: { allow: ['api.example.com'] },
     triggers: [{ type: 'interval', seconds: 30 }],
   },
-  signer,                         // Solana Kit TransactionPartialSigner
-  networks: ['solana-devnet'],    // CAIP-2 alias; mainnet works the same
+  signer, // Solana Kit TransactionPartialSigner
+  networks: ['solana-devnet'], // CAIP-2 alias; mainnet works the same
   rpcUrl: 'https://api.devnet.solana.com',
   onReceipt: async (r) => {
     await fetch(`http://localhost:8787/a/${r.agent}/receipts`, {
@@ -88,7 +88,7 @@ type BuyerConfig = {
    * mainnet; the env var `LEASH_FACILITATOR_URL` overrides both.
    */
   facilitator?: string;
-  fetch?: typeof globalThis.fetch;     // injection point for tests
+  fetch?: typeof globalThis.fetch; // injection point for tests
   onReceipt?: (r: ReceiptV1) => unknown;
 };
 
@@ -107,6 +107,35 @@ When `sourceTokenAccount` is set the buyer-kit registers
 `@x402/svm` exact scheme — wire-compatible with every facilitator (the
 on-chain instruction is still a plain SPL `TransferChecked`), but with the
 **agent treasury** as the source instead of the executive's own ATA.
+
+## Automatic failure classification
+
+When the seller returns `402` without settling, the kit reads the on-chain
+state of the source token account and stamps the receipt's `reason` with one
+of:
+
+| Reason                      | Meaning                                                                        | Fix                                              |
+| --------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------ |
+| `insufficient_balance`      | Treasury holds less than the seller demanded.                                  | Top up the agent's treasury ATA.                 |
+| `insufficient_allowance`    | Delegate cap is below the demanded price.                                      | Re-run `setSpendDelegation` with a higher cap.   |
+| `no_delegate`               | The treasury ATA exists but no SPL delegate is set.                            | Run `setSpendDelegation` from `@leash/registry-utils`. |
+| `wrong_delegate`            | The set delegate is not the executive that signed.                             | Re-approve with the current executive.           |
+| `ata_missing`               | The agent has never held this mint.                                            | Send any amount of the mint to mint the ATA.     |
+
+The full receipt reason takes the form `<classified>: <seller breadcrumb>`
+(e.g. `insufficient_balance: transaction_simulation`). UI panels match on the
+prefix; the suffix is purely diagnostic.
+
+The source ATA is resolved in this order:
+
+1. `cfg.sourceTokenAccount` if you pass it (fastest path).
+2. Derived from `cfg.agent + quote.price.asset` via
+   [`deriveAgentTreasuryAta`](/sdk/core#agent-treasury-pda) — kit-native PDA
+   derivation that mirrors `mpl-core`'s `findAssetSignerPda`. Brand-new
+   agents that have never been delegated still get the precise diagnostic.
+
+Both paths require `cfg.rpcUrl` to be set so the kit can issue a single
+`getAccountInfo` against the source ATA.
 
 See [`Real x402 on Solana`](/standards/x402-on-solana) for the protocol-level
 walkthrough and [`Fund an agent`](/guides/fund-an-agent) for the wiring

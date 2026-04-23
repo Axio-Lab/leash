@@ -7,6 +7,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const SIGNER_ADDRESS = 'SignerExecutiveAddrXXXXXXXXXXXXXXXXXXXXXXXXX';
+const stubSignerWithAddress = { address: SIGNER_ADDRESS } as unknown as ClientSvmSigner;
+
 const rules = {
   v: '0.1' as const,
   budget: { daily: '10', perCall: '0.01', currency: 'USDC' as const },
@@ -186,6 +189,230 @@ describe('createBuyer', () => {
     expect(result.receipt.price?.amount).toBe('50000');
     expect(result.receipt.reason).toBe('transaction_simulation_failed');
     expect(result.failureReason).toBe('transaction_simulation_failed');
+  });
+
+  it('reclassifies a generic 402 as insufficient_balance using the source ATA pre-flight', async () => {
+    const paymentRequired = {
+      x402Version: 2,
+      error: 'Payment required',
+      resource: { url: 'http://merchant.test/tag', description: 'Premium' },
+      accepts: [
+        {
+          scheme: 'exact',
+          network: 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1',
+          amount: '100000000',
+          asset: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+          payTo: 'CTd5VBFYJnGDGv5DbhWfPmrQ96G5ibvmZiyRPURXNyox',
+          maxTimeoutSeconds: 300,
+          extra: { feePayer: 'FYB56sVBW2r4Ka7W9kdJWTPY9FKQLxbT6h4Ysr6aLPZD' },
+        },
+      ],
+    };
+    const headerB64 = Buffer.from(JSON.stringify(paymentRequired), 'utf8').toString('base64');
+    const stubFetch: LeashFetch = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'transaction_simulation' }), {
+        status: 402,
+        headers: { 'content-type': 'application/json', 'payment-required': headerB64 },
+      }),
+    );
+    // The pre-flight in buyer-kit uses `globalThis.fetch` to read the source
+    // token account via JSON-RPC. Mock it to return 5 USDC balance against a
+    // 100 USDC quote — the receipt reason should flip to insufficient_balance.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              result: {
+                value: {
+                  owner: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+                  data: {
+                    program: 'spl-token',
+                    parsed: {
+                      type: 'account',
+                      info: {
+                        mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+                        owner: 'TreasuryPda1111111111111111111111111111111111',
+                        tokenAmount: { amount: '5000000', decimals: 6 },
+                        delegate: SIGNER_ADDRESS,
+                        delegatedAmount: { amount: '5000000', decimals: 6 },
+                      },
+                    },
+                  },
+                },
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+    const buyer = createBuyer({
+      agent: 'A1',
+      rules,
+      signer: stubSignerWithAddress,
+      fetch: stubFetch,
+      rpcUrl: 'https://api.devnet.solana.com',
+      sourceTokenAccount: 'AgentTreasuryUsdcAtaXXXXXXXXXXXXXXXXXXXXXXX',
+    });
+    const result = await buyer.fetch('http://merchant.test/tag', { method: 'POST' });
+    expect(result.receipt.decision).toBe('rejected');
+    // Pre-flight prefix wins; the seller's "transaction_simulation" string is
+    // appended as a breadcrumb after the colon.
+    expect(result.receipt.reason).toBe('insufficient_balance: transaction_simulation');
+    expect(result.failureReason).toBe('insufficient_balance: transaction_simulation');
+  });
+
+  it('reclassifies a generic 402 as insufficient_allowance when the delegate is set but small', async () => {
+    const paymentRequired = {
+      x402Version: 2,
+      error: 'Payment required',
+      resource: { url: 'http://merchant.test/tag' },
+      accepts: [
+        {
+          scheme: 'exact',
+          network: 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1',
+          amount: '50000000',
+          asset: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+          payTo: 'CTd5VBFYJnGDGv5DbhWfPmrQ96G5ibvmZiyRPURXNyox',
+          maxTimeoutSeconds: 300,
+        },
+      ],
+    };
+    const headerB64 = Buffer.from(JSON.stringify(paymentRequired), 'utf8').toString('base64');
+    const stubFetch: LeashFetch = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'transaction_simulation' }), {
+        status: 402,
+        headers: { 'content-type': 'application/json', 'payment-required': headerB64 },
+      }),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              result: {
+                value: {
+                  owner: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+                  data: {
+                    program: 'spl-token',
+                    parsed: {
+                      type: 'account',
+                      info: {
+                        mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+                        owner: 'TreasuryPda1111111111111111111111111111111111',
+                        tokenAmount: { amount: '500000000', decimals: 6 },
+                        delegate: SIGNER_ADDRESS,
+                        delegatedAmount: { amount: '1000000', decimals: 6 },
+                      },
+                    },
+                  },
+                },
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+    const buyer = createBuyer({
+      agent: 'A1',
+      rules,
+      signer: stubSignerWithAddress,
+      fetch: stubFetch,
+      rpcUrl: 'https://api.devnet.solana.com',
+      sourceTokenAccount: 'AgentTreasuryUsdcAtaXXXXXXXXXXXXXXXXXXXXXXX',
+    });
+    const result = await buyer.fetch('http://merchant.test/tag', { method: 'POST' });
+    expect(result.receipt.reason).toBe('insufficient_allowance: transaction_simulation');
+  });
+
+  it('auto-derives the source ATA from agent + quoted asset when the caller omits it', async () => {
+    // Agent + USDC mint where we know the on-chain ATA derivation will land
+    // somewhere deterministic. The point of this test is the *path*: even
+    // without `sourceTokenAccount`, the kit derives the treasury ATA from
+    // the agent + quoted mint and runs preflight against it.
+    //
+    // Use a real-looking devnet asset address and the canonical USDC devnet
+    // mint so `deriveAgentTreasuryAta` succeeds. The RPC stub captures the
+    // *actual* derived ATA via the request body so we can assert it was
+    // queried (versus the seller's reason being passed through unchanged).
+    const AGENT_ASSET = '33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR';
+    const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+    const paymentRequired = {
+      x402Version: 2,
+      error: 'Payment required',
+      resource: { url: 'http://merchant.test/tag' },
+      accepts: [
+        {
+          scheme: 'exact',
+          network: 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1',
+          amount: '100000000',
+          asset: USDC_DEVNET,
+          payTo: 'CTd5VBFYJnGDGv5DbhWfPmrQ96G5ibvmZiyRPURXNyox',
+          maxTimeoutSeconds: 300,
+        },
+      ],
+    };
+    const headerB64 = Buffer.from(JSON.stringify(paymentRequired), 'utf8').toString('base64');
+    const stubFetch: LeashFetch = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'transaction_simulation' }), {
+        status: 402,
+        headers: { 'content-type': 'application/json', 'payment-required': headerB64 },
+      }),
+    );
+    const rpcCalls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init?: RequestInit) => {
+        const body = init?.body ? String(init.body) : '';
+        rpcCalls.push(body);
+        return new Response(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            result: {
+              value: {
+                owner: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+                data: {
+                  program: 'spl-token',
+                  parsed: {
+                    type: 'account',
+                    info: {
+                      mint: USDC_DEVNET,
+                      owner: 'TreasuryPda1111111111111111111111111111111111',
+                      tokenAmount: { amount: '5000000', decimals: 6 },
+                      delegate: SIGNER_ADDRESS,
+                      delegatedAmount: { amount: '5000000', decimals: 6 },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }),
+    );
+    // No `sourceTokenAccount` passed — buyer-kit must derive it.
+    const buyer = createBuyer({
+      agent: AGENT_ASSET,
+      rules,
+      signer: stubSignerWithAddress,
+      fetch: stubFetch,
+      rpcUrl: 'https://api.devnet.solana.com',
+    });
+    const result = await buyer.fetch('http://merchant.test/tag', { method: 'POST' });
+    expect(result.receipt.decision).toBe('rejected');
+    expect(result.receipt.reason).toBe('insufficient_balance: transaction_simulation');
+    expect(rpcCalls.length).toBeGreaterThan(0);
+    // Verify the kit actually queried via JSON-RPC `getAccountInfo` (the
+    // helper used by inspectSplTokenAccount) — proof the derivation path ran.
+    expect(rpcCalls[0]).toMatch(/getAccountInfo/);
   });
 
   it('emits a deny receipt without calling fetch when the host is denied', async () => {

@@ -13,12 +13,12 @@ buyer or stand up a seller, see the SDK pages for
 
 ## The cast
 
-| Role | What it signs | Holds funds in | Pays gas |
-| --- | --- | --- | --- |
-| **Executive** (Privy wallet, Node keypair, TEE) | The SPL transfer (as **delegate** of the buyer agent treasury) | — | Pays the buyer-side fee on the transfer |
-| **Buyer agent** (Core asset) | Nothing — passive owner | Asset Signer PDA → SPL token ATA | — |
-| **Seller** (`@leash/seller-kit` middleware) | Nothing | Asset Signer PDA (`payTo`) | — |
-| **Facilitator** (`facilitator.svmacc.tech` devnet, `facilitator.payai.network` mainnet) | Nothing | — | Pays the **network fee** to broadcast `payTo` |
+| Role                                                                                    | What it signs                                                  | Holds funds in                   | Pays gas                                      |
+| --------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------- | --------------------------------------------- |
+| **Executive** (Privy wallet, Node keypair, TEE)                                         | The SPL transfer (as **delegate** of the buyer agent treasury) | —                                | Pays the buyer-side fee on the transfer       |
+| **Buyer agent** (Core asset)                                                            | Nothing — passive owner                                        | Asset Signer PDA → SPL token ATA | —                                             |
+| **Seller** (`@leash/seller-kit` middleware)                                             | Nothing                                                        | Asset Signer PDA (`payTo`)       | —                                             |
+| **Facilitator** (`facilitator.svmacc.tech` devnet, `facilitator.payai.network` mainnet) | Nothing                                                        | —                                | Pays the **network fee** to broadcast `payTo` |
 
 Both parties address themselves via Core Asset Signer PDAs. Funds land in
 the seller agent's treasury directly, and they leave the buyer agent's
@@ -65,17 +65,19 @@ configured payment route. Example payload (decoded):
 ```json
 {
   "x402Version": 2,
-  "accepts": [{
-    "scheme": "exact",
-    "network": "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
-    "amount": "1000",
-    "asset": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-    "payTo": "<seller agent's Asset Signer PDA>",
-    "feePayer": "facilitator.svmacc.tech",
-    "extra": { "feePayer": "<facilitator pubkey>" },
-    "maxTimeoutSeconds": 30,
-    "description": "Tag a payload"
-  }]
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+      "amount": "1000",
+      "asset": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      "payTo": "<seller agent's Asset Signer PDA>",
+      "feePayer": "facilitator.svmacc.tech",
+      "extra": { "feePayer": "<facilitator pubkey>" },
+      "maxTimeoutSeconds": 30,
+      "description": "Tag a payload"
+    }
+  ]
 }
 ```
 
@@ -108,10 +110,10 @@ into the corresponding `ReceiptV1` so explorers can chain the buyer's
 
 Any HTTPS x402 facilitator works. The defaults Leash ships with:
 
-| Network | Default facilitator | Notes |
-| --- | --- | --- |
-| `solana-devnet` | `https://facilitator.svmacc.tech` | Free, gas-sponsored, supports Token-2022. Used by the playground. |
-| `solana-mainnet` | `https://facilitator.payai.network` | Gas-sponsored mainnet exact-scheme facilitator. |
+| Network          | Default facilitator                 | Notes                                                             |
+| ---------------- | ----------------------------------- | ----------------------------------------------------------------- |
+| `solana-devnet`  | `https://facilitator.svmacc.tech`   | Free, gas-sponsored, supports Token-2022. Used by the playground. |
+| `solana-mainnet` | `https://facilitator.payai.network` | Gas-sponsored mainnet exact-scheme facilitator.                   |
 
 Override per-process by setting `LEASH_FACILITATOR_URL`, or per-seller via
 `facilitator: '…'`:
@@ -131,10 +133,10 @@ records the facilitator URL on every receipt for explorer cross-checking.
 
 ## Choosing a network
 
-| Alias | CAIP-2 | Default USDC mint |
-| --- | --- | --- |
+| Alias            | CAIP-2                                    | Default USDC mint                              |
+| ---------------- | ----------------------------------------- | ---------------------------------------------- |
 | `solana-mainnet` | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
-| `solana-devnet` | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
+| `solana-devnet`  | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
 
 You can pass either form anywhere a network id is accepted. The
 playground always shows the resolved CAIP-2 id in the receipt.
