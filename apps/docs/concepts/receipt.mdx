@@ -10,7 +10,8 @@ Every gated call yields a `ReceiptV1`:
   - `allow` — policy gate passed **and** (for spend receipts) payment settled. `tx_sig` is set.
   - `deny` — policy gate denied the call before any payment was attempted. No fetch was made.
   - `rejected` — policy gate allowed the call but settlement failed (insufficient balance, facilitator/RPC error, 402 with no `PAYMENT-RESPONSE`, etc). `reason` carries the failure cause; `tx_sig` is `null`.
-- **`reason`** — human-readable explanation when `decision !== 'allow'` (e.g. `insufficient_funds`, `transaction_simulation`, `replay`, `denyHost`, `Network error — …`).
+- **`reason`** — human-readable explanation when `decision !== 'allow'` (e.g. `insufficient_balance`, `insufficient_allowance`, `preferred_asset_unavailable: …`, `transaction_simulation`, `replay`, `denyHost`, `Network error — …`).
+- **`price`** — when present, `amount` is the **atomic** integer string for the SPL mint in `asset` (use `@leash/core` format helpers); `currency` is the human ticker (USDC / USDT / USDG) for the settled or quoted mint.
 - **`price.network`** — friendly Leash slug (`solana-devnet`, `solana-mainnet`, `solana-testnet`) — never the raw CAIP-2 chain id (`solana:<genesis>`).
 - **`nonce`** — gapless, per-agent, monotonically increasing from 0.
 - **`prev_receipt_hash`** — `null` at genesis, otherwise the previous receipt's hash.

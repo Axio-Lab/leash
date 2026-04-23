@@ -26,6 +26,15 @@ const buyer = createBuyer({
   signer, // Solana Kit TransactionPartialSigner
   networks: ['solana-devnet'], // CAIP-2 alias; mainnet works the same
   rpcUrl: 'https://api.devnet.solana.com',
+  /**
+   * When the seller advertises multiple `accepts[]` mints (e.g. USDC + USDG),
+   * pick which one to pay with. Under the hood this becomes `preferredAsset`
+   * on `createSvmBuyerFetch` — **strict**: if the seller does not offer this
+   * mint, the fetch throws before settling (receipt `reason` begins with
+   * `preferred_asset_unavailable`). There is no silent fallback to another
+   * stablecoin.
+   */
+  preferredCurrency: 'USDC',
   onReceipt: async (r) => {
     await fetch(`http://localhost:8787/a/${r.agent}/receipts`, {
       method: 'POST',
@@ -75,13 +84,21 @@ type BuyerConfig = {
   networks?: ('solana-mainnet' | 'solana-devnet' | string)[];
   rpcUrl?: string;
   /**
-   * Optional. The agent treasury's USDC ATA, returned by `setSpendDelegation`
-   * from `@leash/registry-utils`. When set, every settled call signs as the
-   * SPL **delegate** of this account so funds debit from the agent treasury
-   * rather than from the executive's wallet. Recommended for production —
-   * see "Fund an agent" guide.
+   * Optional. The agent treasury **SPL token account** (ATA) to spend from,
+   * returned by `setSpendDelegation` from `@leash/registry-utils`. Its mint
+   * must match the asset the seller will demand **and** the stable you intend
+   * to pay with (e.g. pass the treasury's USDG ATA when
+   * `preferredCurrency: 'USDG'`). When set, every settled call signs as the
+   * SPL **delegate** of this account. Recommended for production — see
+   * [Fund an agent](/guides/fund-an-agent).
    */
   sourceTokenAccount?: string;
+  /**
+   * Preferred settlement stable: `'USDC' | 'USDT' | 'USDG'`. Resolved to a
+   * mint on the first entry in `networks` and passed to the x402 client
+   * selector. Omitted = default selector (first compatible `accepts[]`).
+   */
+  preferredCurrency?: 'USDC' | 'USDT' | 'USDG';
   /**
    * Override the default x402 facilitator URL. Defaults to
    * `facilitator.svmacc.tech` on devnet and `facilitator.payai.network` on
@@ -114,13 +131,14 @@ When the seller returns `402` without settling, the kit reads the on-chain
 state of the source token account and stamps the receipt's `reason` with one
 of:
 
-| Reason                   | Meaning                                             | Fix                                                    |
-| ------------------------ | --------------------------------------------------- | ------------------------------------------------------ |
-| `insufficient_balance`   | Treasury holds less than the seller demanded.       | Top up the agent's treasury ATA.                       |
-| `insufficient_allowance` | Delegate cap is below the demanded price.           | Re-run `setSpendDelegation` with a higher cap.         |
-| `no_delegate`            | The treasury ATA exists but no SPL delegate is set. | Run `setSpendDelegation` from `@leash/registry-utils`. |
-| `wrong_delegate`         | The set delegate is not the executive that signed.  | Re-approve with the current executive.                 |
-| `ata_missing`            | The agent has never held this mint.                 | Send any amount of the mint to mint the ATA.           |
+| Reason                        | Meaning                                                                   | Fix                                                               |
+| ----------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `preferred_asset_unavailable` | You set `preferredCurrency` but the seller's `accepts[]` omits that mint. | Pick a currency the link advertises, or ask the seller to add it. |
+| `insufficient_balance`        | Treasury holds less than the seller demanded (for the quoted mint).       | Top up the agent's treasury ATA for that mint.                    |
+| `insufficient_allowance`      | Delegate cap is below the demanded price.                                 | Re-run `setSpendDelegation` with a higher cap for that mint.      |
+| `no_delegate`                 | The treasury ATA exists but no SPL delegate is set.                       | Run `setSpendDelegation` from `@leash/registry-utils`.            |
+| `wrong_delegate`              | The set delegate is not the executive that signed.                        | Re-approve with the current executive.                            |
+| `ata_missing`                 | The agent has never held this mint.                                       | Send any amount of the mint to mint the ATA.                      |
 
 The full receipt reason takes the form `<classified>: <seller breadcrumb>`
 (e.g. `insufficient_balance: transaction_simulation`). UI panels match on the

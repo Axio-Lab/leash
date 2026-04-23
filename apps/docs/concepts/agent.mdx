@@ -10,9 +10,10 @@ A Leash agent is a **single MPL Core asset** that follows Metaplex's [MIP-104 / 
 1. **Create** — mint a Core asset and attach an `AgentIdentity` plugin in one tx. Use `createAgent` from `@leash/registry-utils` (see [Create an agent](/guides/create-an-agent)) or the BYO equivalent (`createCollection` → `create` → `registerAgentIdentity`).
 2. **Read** — `getAgentIdentityStatus(umi, asset)` returns whether the identity is registered and the agent's treasury PDA. The on-chain registration URI lives on the `AgentIdentity` plugin and points to off-chain JSON.
 3. **Run** — to let an executive submit transactions for the agent, call `registerExecutive` once per wallet, then `delegateExecution` per asset. The executive then signs Core `Execute` instructions on the agent's behalf.
+4. **Fund** — call `setSpendDelegation` per stable mint (USDC / USDT / USDG) the agent should be able to spend. Optionally pre-create every supported stable ATA in one shot with `provisionTreasuryAtas` so wallets and faucets can target the treasury without an "ATA missing" round-trip. See [Fund an agent](/guides/fund-an-agent).
 
 ## Runtime surface
 
-- `@leash/core` — `Agent`, `treasuryPda`, policy + receipt machinery.
-- `@leash/registry-utils` — `createAgent`, `getAgentIdentityStatus`, `registerExecutive`, `delegateExecution`, plus Pinata + ERC-8004 helpers.
+- `@leash/core` — `Agent`, `treasuryPda`, `deriveAgentTreasuryAddress`, `deriveAgentTreasuryAta`, policy + receipt machinery.
+- `@leash/registry-utils` — `createAgent`, `getAgentIdentityStatus`, `registerExecutive`, `delegateExecution`, `setSpendDelegation`, `provisionTreasuryAtas`, `withdrawTreasury`, plus Pinata + ERC-8004 helpers.
 - `@leash/seller-kit` / `@leash/buyer-kit` — capability layers over the same asset.

@@ -1,6 +1,6 @@
 ---
 title: Build a buyer
-description: Script an agent that pays an x402 endpoint with real USDC on Solana.
+description: Script an agent that pays an x402 endpoint with real SPL stables (USDC, USDT, USDG) on Solana.
 ---
 
 `@leash/buyer-kit` is the smallest possible "scriptable buyer". You give
@@ -33,10 +33,14 @@ const buyer = createBuyer({
   rpcUrl: 'https://api.devnet.solana.com',
 
   // Recommended: spend from the agent treasury, not the executive's wallet.
-  // Set this to the `sourceTokenAccount` returned by `setSpendDelegation`
-  // (see "Fund an agent"). When omitted, the buyer-kit falls back to spending
-  // from the executive's own USDC ATA — useful for smoke tests, not for prod.
+  // Pass the treasury **ATA for the mint you intend to pay with** (same mint
+  // as `preferredCurrency`). When omitted, buyer-kit can still derive the ATA
+  // from `agent` + quoted `asset` on failures, but passing it explicitly avoids
+  // ambiguity. See [Fund an agent](./fund-an-agent).
   sourceTokenAccount: process.env.LEASH_BUYER_SOURCE_TOKEN_ACCOUNT,
+
+  // When the seller lists multiple stables in `accepts[]`, pick one.
+  preferredCurrency: 'USDC',
 
   onReceipt: (r) =>
     fetch(`http://localhost:8787/a/${r.agent}/receipts`, {
@@ -55,9 +59,11 @@ console.log(receipt.tx_sig); // real Solana signature
 
 In agent-funded mode the executive needs a tiny amount of **devnet SOL** for
 the network fee (the facilitator pays the rest), the **agent treasury** holds
-the USDC being moved, and the executive must already be the SPL delegate of
-the agent's USDC ATA — see [Fund an agent](./fund-an-agent). In legacy mode
-(no `sourceTokenAccount`) the signer wallet itself needs both SOL and USDC.
+the stablecoin being moved (USDC / USDT / USDG depending on
+`preferredCurrency` and what the seller accepts), and the executive must
+already be the SPL delegate of **that mint's** treasury ATA — see
+[Fund an agent](./fund-an-agent). In legacy mode (no `sourceTokenAccount`) the
+signer wallet itself needs SOL plus the token being paid.
 
 See [`Real x402 on Solana`](/standards/x402-on-solana) for the wire-level
 header walkthrough and the facilitator landscape.
@@ -80,6 +86,9 @@ The web playground at `apps/web/buyer` ships this exact flow as a UI:
 4. Behaviour rules captured at agent creation are fed straight into
    `createBuyer({ rules })`, so the policy gate enforces them before
    every call.
+5. **Pay with** selects the settlement stable; treasury balance and allowance
+   panels re-read that mint's ATA. If discovery shows the link does not accept
+   the chosen currency, **Fire request** stays disabled.
 
 No private keys ever leave the browser, and the same `BuyerKit` API
 backs both the headless CLI and the browser cockpit.

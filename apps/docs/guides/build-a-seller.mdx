@@ -20,7 +20,14 @@ const app = new Hono();
 createSeller(app, {
   umi,
   sellerAgent: { asset: process.env.AGENT_ASSET! },
-  routes: { 'POST /tag': { price: '$0.001', description: 'Tag a payload' } },
+  routes: {
+    'POST /tag': {
+      price: '$0.001',
+      description: 'Tag a payload',
+      currency: 'USDC',
+      acceptsCurrencies: [], // optional: e.g. ['USDG'] to also accept USDG
+    },
+  },
   onReceipt: (r) =>
     fetch(`http://localhost:8787/a/${r.agent}/receipts`, {
       method: 'POST',

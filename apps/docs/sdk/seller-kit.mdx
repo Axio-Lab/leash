@@ -20,7 +20,14 @@ createSeller(app, {
   umi,
   sellerAgent: { asset: '<your Core asset mint>' },
   routes: {
-    'POST /tag': { price: '$0.001', description: 'Tag a payload' },
+    // Primary settlement currency + optional extra stables in x402 `accepts[]`.
+    // Buyers can pay in any listed mint (same atomic amount per option).
+    'POST /tag': {
+      price: '$0.001',
+      description: 'Tag a payload',
+      currency: 'USDC',
+      acceptsCurrencies: ['USDG'], // also accept USDG on the same route
+    },
   },
   onReceipt: async (r) => {
     await fetch(`http://localhost:8787/a/${r.agent}/receipts`, {
@@ -47,8 +54,11 @@ app.post('/tag', (c) => c.json({ tagged: true }));
 3. Registers `paymentMiddlewareFromHTTPServer` from `@x402/hono` for each
    route. Unauthenticated requests get
    `402 Payment Required` with a base64-encoded `PAYMENT-REQUIRED`
-   header that lists the `accepts[]` (asset mint, amount, payTo, fee
-   payer, scheme).
+   header that lists the `accepts[]` (one entry per accepted stablecoin:
+   asset mint, atomic `amount`, `payTo`, fee payer, scheme). When you set
+   `currency` plus `acceptsCurrencies`, the seller advertises multiple mints
+   at the same price so buyers can pick e.g. USDG while the link is priced in
+   USDC.
 4. After settlement, the `onAfterSettle` hook produces an `earn`
    `ReceiptV1` with the real `tx_sig` + `payment_requirements_hash` and
    ships it via your `onReceipt` callback.

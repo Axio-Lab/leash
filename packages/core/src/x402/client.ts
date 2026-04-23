@@ -97,12 +97,16 @@ export function createSvmBuyerFetch(opts: CreateSvmBuyerClientOptions): LeashFet
   const preferredAsset = opts.preferredAsset?.trim();
   // The default selector picks `paymentRequirements[0]`. We override it to
   // honour the buyer's preferred mint when the seller advertises multiple
-  // `accepts[]` (e.g. a USDC link that also accepts USDG / USDT). Falling
-  // back to the first entry keeps single-currency endpoints unaffected.
+  // `accepts[]` (e.g. a USDC link that also accepts USDG / USDT).
+
   const client = preferredAsset
     ? new x402Client((_v, reqs) => {
         const match = reqs.find((r) => r.asset === preferredAsset);
-        return match ?? reqs[0];
+        if (match) return match;
+        const offered = Array.from(new Set(reqs.map((r) => r.asset).filter(Boolean))).join(', ');
+        throw new Error(
+          `preferred_asset_unavailable: requested ${preferredAsset}; seller offers ${offered || '<none>'}`,
+        );
       })
     : new x402Client();
   for (const n of networks) {

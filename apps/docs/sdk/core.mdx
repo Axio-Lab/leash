@@ -23,11 +23,14 @@ seller kits. It contains:
   `paymentRequirementsHash`, `computeReceiptHash`, `finalizeReceipt`,
   `verifyReceiptChain`. All hashing uses `@noble/hashes` so it runs in any
   JS environment (Node, browser, edge).
-- **x402 client adapter** — `createSvmBuyerFetch({ signer, networks, rpcUrl })`
-  wraps `wrapFetchWithPayment` from `@x402/fetch` with `ExactSvmScheme` from
-  `@x402/svm` and a `ClientSvmSigner` derived from a `@solana/kit`
-  `TransactionPartialSigner`. This is what `@leash/buyer-kit` uses
-  internally; you usually don't need to touch it.
+- **x402 client adapter** — `createSvmBuyerFetch({ signer, networks, rpcUrl, preferredAsset?, sourceTokenAccount? })`
+  wraps `wrapFetchWithPayment` from `@x402/fetch` with `ExactSvmScheme` (or
+  `LeashDelegateExactSvmScheme` when `sourceTokenAccount` is set) and a
+  `ClientSvmSigner`. Optional **`preferredAsset`** (SPL mint string) selects
+  which `accepts[]` row to pay when the seller lists several stables; if set
+  and no row matches, the client **throws** (`preferred_asset_unavailable`)
+  instead of silently paying a different mint. `@leash/buyer-kit` wires this
+  via `preferredCurrency` (`USDC` / `USDT` / `USDG`).
 - **Payment-link discovery** — `fetchPaymentLinkMeta()` fetches and type-checks
   the browser-friendly `GET /x/<id>` metadata payload exposed by the web app;
   `buildPaymentLinkMeta()` produces it on the server.
@@ -44,8 +47,10 @@ seller kits. It contains:
   to `endpoint.webhook_url`. Versioned (`v: '0.1'`) and discriminated
   (`kind: 'leash.payment.settled'`) so downstream agents can route safely.
 - **Token registry** — `KNOWN_TOKENS`, `lookupToken(mint, network)`,
-  `pinnedMints(network)`, `defaultUsdcMint(network)`. Stables on mainnet +
-  devnet plus a few bluechips, indexed for UI surfaces.
+  `lookupTokenBySymbol(symbol, network)`, `KNOWN_STABLE_SYMBOLS`,
+  `currencyForAsset(mint, network)`, `pinnedMints(network)`,
+  `defaultUsdcMint(network)`. Stables on mainnet + devnet plus a few
+  bluechips, indexed for UI surfaces.
 - **Format helpers** — `atomicToDecimal`, `decimalToAtomic`,
   `formatTokenBalance`, `formatReceiptPrice`, `formatReceiptPriceUsd`. Use
   these instead of hand-rolled `*1_000_000` math; they pull decimals from
@@ -102,6 +107,9 @@ const paidFetch = createSvmBuyerFetch({
   signer, // @solana/kit TransactionPartialSigner
   networks: ['solana-devnet'],
   rpcUrl: 'https://api.devnet.solana.com',
+  // Optional: SPL mint to prefer when the seller sends multiple `accepts[]`.
+  // Must match one of those rows or the next paid fetch throws.
+  // preferredAsset: '4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7', // devnet USDG
 });
 
 const res = await paidFetch('https://api.example.com/quote');
@@ -117,8 +125,14 @@ const metaA = await fetchPaymentLinkMeta('https://yourapp.com/x/uhnb6e1zm');
 const metaB = await fetchPaymentLinkMeta('https://yourapp.com', 'uhnb6e1zm');
 
 console.log(metaA.endpoint.price); // "$0.001"
+console.log(metaA.endpoint.currency); // "USDC"
+console.log(metaA.endpoint.accepts_currencies); // e.g. ["USDG"]
 console.log(metaB.endpoint.method); // "POST"
 ```
+
+Discovery JSON includes `endpoint.currency` (primary settlement ticker) and
+`endpoint.accepts_currencies` (extra stables the seller added). The playground
+buyer uses these to pre-check that **Pay with** matches what the link accepts.
 
 ## Settlement envelope, headers, and webhooks
 

@@ -19,12 +19,14 @@ settles vanilla SPL `TransferChecked` transactions. Wrapping the transfer in
 control. Instead Leash uses a **one-time `SPL.Approve`** wrapped in
 `mpl-core::Execute`:
 
-- The **agent's Asset Signer PDA** is the on-chain owner of the USDC ATA.
-- The **executive** (your wallet) becomes the SPL **delegate** of that ATA,
-  authorised to move up to `delegated_amount` units.
+- The **agent's Asset Signer PDA** is the on-chain owner of one ATA per
+  stable mint (USDC, USDT, USDG).
+- The **executive** (your wallet) becomes the SPL **delegate** of each
+  approved ATA, authorised to move up to `delegated_amount` units of **that
+  mint**. Allowances are per-mint — approving USDC does not approve USDG.
 - Every settled call emits a vanilla `TransferChecked` signed by the executive
-  acting as a delegate. The SPL token program automatically debits the
-  treasury and reduces the remaining allowance.
+  acting as a delegate of the mint the seller demanded. The SPL token program
+  automatically debits the treasury and reduces the remaining allowance.
 
 This keeps the on-chain transfer shape identical to plain x402, so the entire
 facilitator landscape "just works" while funds stay agent-owned.
@@ -138,8 +140,10 @@ const buyer = createBuyer({
 ```
 
 When `sourceTokenAccount` is omitted the buyer-kit falls back to spending
-from the executive's own USDC ATA. Useful for headless smoke tests; not what
-you want in production.
+from the executive's own ATA for the quoted mint. Useful for headless smoke
+tests; not what you want in production. To pay in a non-USDC stable, run
+`setSpendDelegation` once per mint and pass the matching `sourceTokenAccount`
+plus `preferredCurrency` (`'USDC' | 'USDT' | 'USDG'`) on `createBuyer`.
 
 ## On-chain shape
 
@@ -155,9 +159,10 @@ spl-token --url devnet account-info <sourceTokenAccount>
 ```
 
 Every settled x402 call decrements `Delegated` by the call price. When it hits
-zero the next call returns `402 + insufficient_funds` and the buyer-kit
-records that reason on the `ReceiptV1` so your cockpit can surface "top up
-needed" without guessing.
+zero the next call returns `402` and the buyer-kit's pre-flight reclassifies
+the failure as `insufficient_balance` or `insufficient_allowance` (depending
+on which floor was hit) on the `ReceiptV1` so your cockpit can surface "top
+up needed" or "raise allowance" without guessing.
 
 ## See also
 

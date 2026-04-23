@@ -37,8 +37,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Sidebar />
             <div className="flex flex-1 min-w-0 flex-col">
               <Topbar />
-              <main className="flex-1 px-6 py-8 md:px-10">
-                <div className="mx-auto w-full max-w-6xl">{children}</div>
+              <main className="flex-1 px-3 py-4 sm:px-5 sm:py-6 md:px-8 md:py-7">
+                {/*
+                 * Hard pixel cap (1500px) instead of `max-w-6xl`. With the
+                 * tightened 14px root font + collapsible sidebar the legacy
+                 * 6xl cap (1008px) left ~30%+ empty gutters on standard
+                 * laptop/monitor widths and made cards feel marooned in a
+                 * narrow center column. 1500px lets the grid layouts on
+                 * /buyer, /seller, and /agents/[mint] actually breathe out
+                 * to fill the viewport, while still keeping line-lengths
+                 * readable on ultra-wide displays (>2K).
+                 */}
+                <div className="mx-auto w-full max-w-[1500px]">{children}</div>
               </main>
             </div>
           </div>

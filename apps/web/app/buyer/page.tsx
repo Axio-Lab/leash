@@ -5,7 +5,13 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import { ExternalLink, Plus, Receipt, Send, Shield, ShieldOff, Trash2, Wallet } from 'lucide-react';
 import { createBuyer, type BuyerCallResult } from '@leash/buyer-kit';
-import { fetchPaymentLinkMeta, KNOWN_STABLE_SYMBOLS, type KnownStableSymbol } from '@leash/core';
+import {
+  deriveAgentTreasuryAta,
+  fetchPaymentLinkMeta,
+  KNOWN_STABLE_SYMBOLS,
+  lookupTokenBySymbol,
+  type KnownStableSymbol,
+} from '@leash/core';
 import type { EndpointV1, ReceiptV1, RulesV1 } from '@leash/schemas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
@@ -104,6 +110,12 @@ export default function BuyerPage() {
   const [url, setUrl] = React.useState('/x/');
   const [method, setMethod] = React.useState<'GET' | 'POST'>('POST');
   const [body, setBody] = React.useState('{}');
+  // Most x402 paywalls are tiny GETs; only POST users typically care about a
+  // request body. Hide the textarea behind an explicit opt-in so the panel
+  // doesn't shout "you owe me JSON" at users who just want to fire a GET.
+  // Auto-flips on when a pasted URL carries a `?body=` param (see
+  // `handleUrlChange`).
+  const [includeBody, setIncludeBody] = React.useState(false);
   const [callbackUrl, setCallbackUrl] = React.useState('');
   const [payCurrency, setPayCurrency] = React.useState<KnownStableSymbol>('USDC');
 
@@ -161,11 +173,60 @@ export default function BuyerPage() {
     }
   }, [discoveredLinkMeta, method, parsedTargetUrl]);
 
-  // The mint the agent funds calls from (USDC, network-aware).
+  /**
+   * The mint the *current* call will spend. Driven by the buyer's chosen
+   * `payCurrency` (USDC / USDT / USDG) — NOT the agent's saved fundingMint
+   * (which is just a default seed at agent-creation time).
+   *
+   * This is the load-bearing detail behind "I selected USDG but it spent
+   * USDC": prior to this fix, treasury reads, source-ATA derivation, and
+   * the seller selector all keyed off USDC regardless of what the user
+   * picked. Now everything downstream — delegation reads, source-ATA
+   * derivation, balance/allowance display — re-derives whenever the
+   * dropdown changes.
+   */
+  const tokenNetwork = agentRecord?.network === 'solana-mainnet' ? 'mainnet' : 'devnet';
+  const payCurrencyToken = React.useMemo(
+    () => lookupTokenBySymbol(payCurrency, tokenNetwork) ?? null,
+    [payCurrency, tokenNetwork],
+  );
   const fundingMint = React.useMemo(() => {
+    if (payCurrencyToken) return payCurrencyToken.mint;
     if (agentRecord?.fundingMint) return agentRecord.fundingMint;
     return agentRecord?.network === 'solana-mainnet' ? USDC_MAINNET : USDC_DEVNET;
-  }, [agentRecord]);
+  }, [payCurrencyToken, agentRecord]);
+
+  // Re-derive the treasury source ATA from `(agent_treasury_pda, fundingMint)`
+  // every time the user switches currency, so we never spend out of a USDC
+  // ATA when they asked to pay in USDG. Falls back to the agent's saved
+  // ATA only when its mint matches the current funding mint.
+  const [derivedSourceAta, setDerivedSourceAta] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!selectedAgent || !fundingMint) {
+      setDerivedSourceAta(null);
+      return;
+    }
+    void (async () => {
+      try {
+        const { ata } = await deriveAgentTreasuryAta({
+          asset: selectedAgent,
+          mint: fundingMint,
+        });
+        if (!cancelled) setDerivedSourceAta(String(ata));
+      } catch {
+        if (!cancelled) setDerivedSourceAta(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAgent, fundingMint]);
+
+  const sourceTokenAccountForFire =
+    derivedSourceAta ??
+    (agentRecord?.fundingMint === fundingMint ? agentRecord?.sourceTokenAccount : undefined) ??
+    undefined;
 
   const [delegation, setDelegation] = React.useState<SpendDelegationStatus | null>(null);
   const [delegationLoading, setDelegationLoading] = React.useState(false);
@@ -198,13 +259,14 @@ export default function BuyerPage() {
 
   // Quoted price for the link the user is currently aiming at — used to gate
   // the Fire button when the delegation is too small to cover the call.
+  // All Leash-supported stables (USDC/USDT/USDG) share 6 decimals so the
+  // atomic conversion is currency-independent; if we ever add a non-6dp
+  // stable this will need to key off `decimalToAtomic(s, token.decimals)`.
   const quotedAtomic: bigint | null = React.useMemo(() => {
     const fromDiscovery = discoveredLinkMeta?.endpoint.price;
     if (fromDiscovery) {
       const m = fromDiscovery.match(/^([\d.]+)\s*([A-Z]+)$/);
-      if (m && m[2] === 'USDC') {
-        return decimalToAtomicUsdc(m[1]);
-      }
+      if (m) return decimalToAtomicUsdc(m[1]);
     }
     try {
       const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://x');
@@ -212,14 +274,30 @@ export default function BuyerPage() {
       if (!m) return null;
       const ep = allLinks.find((e) => e.id === m[1]);
       if (!ep?.price) return null;
-      // Endpoint price strings look like "0.05 USDC" or "5 USDC".
       const priceMatch = ep.price.match(/^([\d.]+)\s*([A-Z]+)$/);
-      if (!priceMatch || priceMatch[2] !== 'USDC') return null;
+      if (!priceMatch) return null;
       return decimalToAtomicUsdc(priceMatch[1]);
     } catch {
       return null;
     }
   }, [url, allLinks, discoveredLinkMeta]);
+
+  /**
+   * Pre-flight check: does the seller actually accept the buyer's chosen
+   * settlement currency? Drives the `Fire request` button disabled state
+   * AND surfaces an inline message right under the "Pay with" dropdown so
+   * users know *before* signing why the call would be rejected.
+   *
+   * Only runs when we have a discovered payment-link meta (`/x/<id>`
+   * routes); for arbitrary x402 URLs we can't know up-front, so the SDK's
+   * selector throws `preferred_asset_unavailable` at fire-time and the
+   * receipt records the reason.
+   */
+  const sellerAcceptsPayCurrency = React.useMemo(() => {
+    if (!discoveredLinkMeta) return null;
+    const ep = discoveredLinkMeta.endpoint;
+    return ep.currency === payCurrency || ep.accepts_currencies.includes(payCurrency);
+  }, [discoveredLinkMeta, payCurrency]);
 
   const insufficientDelegation =
     delegation != null &&
@@ -260,9 +338,27 @@ export default function BuyerPage() {
       return;
     }
 
-    // Pre-flight: re-read on-chain delegation right before firing so the gate
-    // reflects reality (the user might have just topped up in another tab) and
-    // we never burn a Privy popup on a call we already know will revert.
+    // Pre-flight A — currency acceptance: if discovery told us the seller
+    // only accepts USDC and the user picked USDG, refuse to even open the
+    // signer popup. Without this gate the SDK selector would throw
+    // `preferred_asset_unavailable` mid-fetch which is a worse UX
+    // (delayed feedback, harder-to-read receipt) for what is really a
+    // configuration mistake the UI already knows about.
+    if (sellerAcceptsPayCurrency === false && discoveredLinkMeta) {
+      const offered = [
+        discoveredLinkMeta.endpoint.currency,
+        ...discoveredLinkMeta.endpoint.accepts_currencies,
+      ].join(', ');
+      const msg = `This payment link doesn't accept ${payCurrency}. The seller settles in ${offered}. Switch the "Pay with" dropdown to one of those.`;
+      setResult({ ok: false, error: msg });
+      toast.error(`Seller doesn't accept ${payCurrency}`, msg);
+      return;
+    }
+
+    // Pre-flight B — re-read on-chain delegation right before firing so the
+    // gate reflects reality (the user might have just topped up in another
+    // tab) and we never burn a Privy popup on a call we already know will
+    // revert.
     let live: SpendDelegationStatus | null = delegation;
     try {
       if (privyUmi) {
@@ -280,22 +376,21 @@ export default function BuyerPage() {
       if (live.balance < quotedAtomic) {
         const have = (Number(live.balance) / 1_000_000).toFixed(6);
         const need = (Number(quotedAtomic) / 1_000_000).toFixed(6);
-        const msg = `Treasury holds ${have} USDC but the seller wants ${need} USDC.`;
+        const msg = `Treasury holds ${have} ${payCurrency} but the seller wants ${need} ${payCurrency}.`;
         setResult({ ok: false, error: msg });
-        toast.error('Insufficient treasury balance', msg);
+        toast.error(`Insufficient ${payCurrency} balance`, msg);
         return;
       }
       if (live.delegatedAmount < quotedAtomic) {
         const have = (Number(live.delegatedAmount) / 1_000_000).toFixed(6);
         const need = (Number(quotedAtomic) / 1_000_000).toFixed(6);
-        const msg = `Executive is approved for ${have} USDC but this call needs ${need} USDC. Re-approve a higher allowance on the agent profile.`;
+        const msg = `Executive is approved for ${have} ${payCurrency} but this call needs ${need} ${payCurrency}. Re-approve a higher allowance on the agent profile.`;
         setResult({ ok: false, error: msg });
         toast.error('Insufficient allowance', msg);
         return;
       }
       if (!live.delegate) {
-        const msg =
-          'No delegate set on this agent. Open the agent profile and run "Set allowance" first.';
+        const msg = `No ${payCurrency} delegate set on this agent. Open the agent profile and run "Set allowance" for ${payCurrency} first.`;
         setResult({ ok: false, error: msg });
         toast.error('Delegation missing', msg);
         return;
@@ -318,17 +413,20 @@ export default function BuyerPage() {
         rpcUrl: SOLANA_RPC,
         onReceipt: shipReceipt,
         preferredCurrency: payCurrency,
-        ...(agentRecord?.sourceTokenAccount
-          ? { sourceTokenAccount: agentRecord.sourceTokenAccount }
-          : {}),
+        // Per-currency source ATA. `derivedSourceAta` is computed from
+        // `(agent_treasury_pda, fundingMint)` whenever the user changes
+        // the "Pay with" dropdown, so spending USDG never accidentally
+        // debits the USDC ATA.
+        ...(sourceTokenAccountForFire ? { sourceTokenAccount: sourceTokenAccountForFire } : {}),
       });
+      const sendBody = method === 'POST' && includeBody && body.trim().length > 0;
       const headers: Record<string, string> = {};
-      if (method === 'POST' && body) headers['content-type'] = 'application/json';
+      if (sendBody) headers['content-type'] = 'application/json';
       if (callbackUrl.trim()) headers['x-leash-callback'] = callbackUrl.trim();
 
       const init: RequestInit = { method };
       if (Object.keys(headers).length > 0) init.headers = headers;
-      if (method === 'POST' && body) init.body = body;
+      if (sendBody) init.body = body;
       const callResult: BuyerCallResult = await buyer.fetch(target, init);
       const text = await callResult.response.text();
       let parsed: unknown = text;
@@ -478,6 +576,9 @@ export default function BuyerPage() {
         parsed.searchParams.get('request_body') ??
         parsed.searchParams.get('requestBody');
       if (!raw) return;
+      // Pasted URL carries a body — surface the textarea automatically so
+      // the user actually sees the value that's about to be sent.
+      setIncludeBody(true);
       try {
         const asJson = JSON.parse(raw) as unknown;
         setBody(JSON.stringify(asJson, null, 2));
@@ -604,17 +705,39 @@ export default function BuyerPage() {
                       Buyer-kit will pick the matching currency.
                     </span>
                   )}
+                  {sellerAcceptsPayCurrency === false && (
+                    <span className="text-[11px] text-danger">
+                      ⚠ This link does not accept {payCurrency}
+                    </span>
+                  )}
                 </Field>
               </div>
 
               {method === 'POST' && (
-                <Field label="Body">
-                  <Textarea
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                    placeholder="{}"
-                  />
-                </Field>
+                <div className="flex flex-col gap-2">
+                  <label className="flex items-center gap-2 text-xs text-fg-muted cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={includeBody}
+                      onChange={(e) => setIncludeBody(e.target.checked)}
+                      className="size-3.5 accent-brand"
+                    />
+                    Include a JSON request body
+                  </label>
+                  {includeBody && (
+                    <Field label="Body">
+                      <Textarea
+                        value={body}
+                        onChange={(e) => setBody(e.target.value)}
+                        placeholder="{}"
+                      />
+                      <span className="text-[11px] text-fg-subtle">
+                        Sent with <InlineCode>content-type: application/json</InlineCode>. Leave the
+                        box unchecked to fire the POST without a body.
+                      </span>
+                    </Field>
+                  )}
+                </div>
               )}
 
               <Field label="Forward response to (optional)">
@@ -678,15 +801,23 @@ export default function BuyerPage() {
 
               <Button
                 onClick={fire}
-                disabled={loading || !signer || !selectedAgent || insufficientDelegation}
+                disabled={
+                  loading ||
+                  !signer ||
+                  !selectedAgent ||
+                  insufficientDelegation ||
+                  sellerAcceptsPayCurrency === false
+                }
                 size="lg"
               >
                 <Send />{' '}
                 {loading
                   ? 'Signing & paying…'
-                  : insufficientDelegation
-                    ? 'Insufficient treasury / allowance'
-                    : 'Fire request'}
+                  : sellerAcceptsPayCurrency === false
+                    ? `Seller doesn't accept ${payCurrency}`
+                    : insufficientDelegation
+                      ? `Insufficient ${payCurrency} treasury / allowance`
+                      : `Fire request (${payCurrency})`}
               </Button>
             </CardContent>
           </Card>
@@ -698,9 +829,10 @@ export default function BuyerPage() {
                   <Wallet className="size-4 text-brand" /> Agent treasury &amp; allowance
                 </CardTitle>
                 <CardDescription>
-                  How much USDC the agent holds and how much your executive wallet is approved to
-                  spend on its behalf. Both are read straight from the agent&apos;s on-chain SPL
-                  ATA.
+                  How much {payCurrency} the agent holds and how much your executive wallet is
+                  approved to spend on its behalf. Both are read straight from the agent&apos;s
+                  on-chain {payCurrency} ATA — switching the &quot;Pay with&quot; dropdown above
+                  re-reads the correct token.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-2 text-xs">
@@ -714,13 +846,13 @@ export default function BuyerPage() {
                   <>
                     <div className="grid grid-cols-2 gap-2">
                       <Stat
-                        label="Treasury balance"
-                        value={`${(Number(delegation.balance) / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDC`}
+                        label={`${payCurrency} balance`}
+                        value={`${(Number(delegation.balance) / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${payCurrency}`}
                         sub={delegation.sourceExists ? 'ATA initialised' : 'ATA not yet created'}
                       />
                       <Stat
                         label="Remaining allowance"
-                        value={`${(Number(delegation.delegatedAmount) / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDC`}
+                        value={`${(Number(delegation.delegatedAmount) / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${payCurrency}`}
                         sub={
                           delegation.delegate
                             ? `delegate ${delegation.delegate.slice(0, 6)}…${delegation.delegate.slice(-4)}`
@@ -728,12 +860,11 @@ export default function BuyerPage() {
                         }
                       />
                     </div>
-                    {!agentRecord?.sourceTokenAccount && (
+                    {!sourceTokenAccountForFire && (
                       <p className="text-warning">
-                        This agent doesn&apos;t have a saved <code>sourceTokenAccount</code> on this
-                        device. The buyer-kit will fall back to spending from your Privy
-                        wallet&apos;s own USDC ATA (legacy mode). Open the agent profile and{' '}
-                        <em>Set allowance</em> to wire up the treasury.
+                        Could not derive a {payCurrency} treasury ATA for this agent. Open the agent
+                        profile and run <em>Set allowance</em> for {payCurrency} to wire up the
+                        treasury.
                       </p>
                     )}
                     {insufficientDelegation && (
@@ -874,6 +1005,14 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
     if (result.treasury.balanceAtomic < quotedAtomic) insufficient = 'balance';
     else if (result.treasury.delegatedAtomic < quotedAtomic) insufficient = 'allowance';
   }
+  // The currency we *attempted* to spend in. Comes from either the
+  // settlement receipt (truth, when settled) or the seller-quoted price on
+  // a failed 402. Falls back to "tokens" so generic copy still reads
+  // correctly when neither is present.
+  const settledOrQuotedCurrency =
+    (result.receipt.price?.currency as string | undefined) ??
+    (result.quotedPrice?.currency as string | undefined) ??
+    'tokens';
   const haveBalanceUsdc = result.treasury
     ? (Number(result.treasury.balanceAtomic) / 1_000_000).toLocaleString(undefined, {
         minimumFractionDigits: 2,
@@ -887,6 +1026,13 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
       })
     : null;
   const needPretty = formatReceiptPriceWithCurrency(result.quotedPrice);
+
+  // Special-case: the SDK selector threw because the seller doesn't accept
+  // the buyer's chosen currency. We surface this as its own panel because
+  // it's a configuration mismatch, not a balance/allowance/funding issue.
+  const preferredAssetUnavailable = (result.failureReason ?? '').startsWith(
+    'preferred_asset_unavailable',
+  );
   // Anything else that's not a settlement and not 402 is treated as
   // "endpoint didn't ask for payment" (e.g. /x/<id> is free, or returned
   // a 5xx after settlement). We render a neutral note rather than a green
@@ -956,17 +1102,36 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
         </div>
       )}
 
-      {settlementFailed && insufficient === 'balance' && (
+      {preferredAssetUnavailable && (
+        <div className="rounded-md border border-danger/40 bg-danger/5 p-3 text-xs text-fg-subtle">
+          <p className="text-sm text-fg">
+            Seller doesn&apos;t accept your chosen settlement currency.
+          </p>
+          <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
+            <dt className="text-fg-muted">Reason</dt>
+            <dd className="text-fg break-all">{result.failureReason}</dd>
+          </dl>
+          <p className="mt-2">
+            Switch the <strong>Pay with</strong> dropdown to a currency this link advertises in its{' '}
+            <InlineCode>accepts[]</InlineCode>, then re-fire.
+          </p>
+        </div>
+      )}
+
+      {settlementFailed && !preferredAssetUnavailable && insufficient === 'balance' && (
         <div className="rounded-md border border-danger/40 bg-danger/5 p-3 text-xs text-fg-subtle">
           <p className="text-sm text-fg">Insufficient balance to complete payment.</p>
           <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
             <dt className="text-fg-muted">Treasury holds</dt>
-            <dd className="text-fg font-mono">{haveBalanceUsdc} USDC</dd>
+            <dd className="text-fg font-mono">
+              {haveBalanceUsdc} {settledOrQuotedCurrency}
+            </dd>
             <dt className="text-fg-muted">Seller requires</dt>
             <dd className="text-fg font-mono">{needPretty ?? 'unknown'}</dd>
           </dl>
           <p className="mt-2">
-            Top up the agent&apos;s USDC ATA, then click <strong>Fire request</strong> again.
+            Top up the agent&apos;s {settledOrQuotedCurrency} ATA, then click{' '}
+            <strong>Fire request</strong> again.
           </p>
           <ul className="ml-4 mt-1 list-disc space-y-0.5">
             <li>
@@ -987,23 +1152,25 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
         </div>
       )}
 
-      {settlementFailed && insufficient === 'allowance' && (
+      {settlementFailed && !preferredAssetUnavailable && insufficient === 'allowance' && (
         <div className="rounded-md border border-danger/40 bg-danger/5 p-3 text-xs text-fg-subtle">
           <p className="text-sm text-fg">Insufficient allowance to complete payment.</p>
           <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
             <dt className="text-fg-muted">Executive approved for</dt>
-            <dd className="text-fg font-mono">{haveAllowanceUsdc} USDC</dd>
+            <dd className="text-fg font-mono">
+              {haveAllowanceUsdc} {settledOrQuotedCurrency}
+            </dd>
             <dt className="text-fg-muted">Seller requires</dt>
             <dd className="text-fg font-mono">{needPretty ?? 'unknown'}</dd>
           </dl>
           <p className="mt-2">
-            Open the agent profile and run <strong>Set allowance</strong> with a higher cap before
-            re-firing.
+            Open the agent profile and run <strong>Set allowance</strong> for{' '}
+            {settledOrQuotedCurrency} with a higher cap before re-firing.
           </p>
         </div>
       )}
 
-      {settlementFailed && insufficient == null && (
+      {settlementFailed && !preferredAssetUnavailable && insufficient == null && (
         <div className="rounded-md border border-warning/40 bg-warning/5 p-3 text-xs text-fg-subtle">
           <p className="text-sm text-fg">Seller returned 402 — payment did not settle.</p>
           <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">

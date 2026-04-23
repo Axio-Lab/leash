@@ -122,10 +122,17 @@ You can also add custom labels (e.g. `audit-firm-x`, `proof-of-humanity`) when y
 
 The Next.js playground (`apps/web`) wraps all of this in a UI **signed by your connected Privy wallet** — there is no shared hot key:
 
-- `/agents/new` — Create Agent form. Two metadata modes:
-  - **Pin to Pinata for me** (default): the form builds `{ name, description, image? }`, POSTs it to `/api/registry/pin` (server-side `PINATA_JWT`), and uses the returned IPFS gateway URL as the on-chain Core URI. Set `PINATA_JWT` in `apps/web/.env.local` to enable.
-  - **I have a URI**: paste an existing publicly-fetchable JSON URL (Arweave / IPFS / HTTPS) and skip the upload step.
-  - Trust models are checkboxes (Reputation, Crypto-economic, TEE, ZK proof) plus a custom-add input — see "What 'Supported trust' means" above.
+- `/agents/new` — Create Agent form, presented as a **two-step tabbed wizard**
+  ("Identity" → "Funding & policy"):
+  - **Step 1 — Identity.** Two metadata modes:
+    - **Pin to Pinata for me** (default): the form builds `{ name, description, image? }`, POSTs it to `/api/registry/pin` (server-side `PINATA_JWT`), and uses the returned IPFS gateway URL as the on-chain Core URI. Set `PINATA_JWT` in `apps/web/.env.local` to enable.
+    - **I have a URI**: paste an existing publicly-fetchable JSON URL (Arweave / IPFS / HTTPS) and skip the upload step.
+    - Trust models are checkboxes (Reputation, Crypto-economic, TEE, ZK proof) plus a custom-add input — see "What 'Supported trust' means" above.
+  - **Step 2 — Funding & policy.** Pick a stablecoin (USDC on devnet; USDC,
+    USDT, USDG on mainnet) and an initial spend allowance. Submitting runs
+    `createAgent` → `delegateExecution` → `setSpendDelegation` → optional
+    `provisionTreasuryAtas` so the new agent ships with a working executive
+    - capped delegation in a single click.
 - `/agents/[mint]` → **Identity** tab — auto-resolves the on-chain registration URI from the AgentIdentity plugin.
 - `/agents/[mint]` → **Execute** tab — buttons for `registerExecutiveV1` + `delegateExecutionV1`, signed by the same Privy wallet.
 

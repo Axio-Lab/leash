@@ -33,6 +33,18 @@
     border-color: var(--color-border);
   }
 
+  /*
+   * Drop the root font-size from the browser default of 16px → 14px so every
+   * Tailwind `text-*` / `p-*` / `gap-*` utility (which are all `rem`-based)
+   * scales down proportionally. This gives the playground a denser,
+   * "dashboard-grade" feel without having to retrofit every component.
+   * Spacing utilities scale too: `p-4` becomes 14px instead of 16px, which
+   * pairs nicely with the slimmer collapsible sidebar.
+   */
+  html {
+    font-size: 14px;
+  }
+
   html,
   body {
     height: 100%;

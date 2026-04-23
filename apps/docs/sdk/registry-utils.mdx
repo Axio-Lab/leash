@@ -19,10 +19,12 @@ description: Pinata uploads, BYO URI resolution, leash-block helpers.
 
 The agent treasury (an Asset Signer PDA) physically owns the funds. To let an
 executive wallet move them via x402, approve a **capped SPL delegation** on
-the agent's USDC ATA. Implemented as an `SPL.Approve` wrapped in
-`mpl-core::Execute` so the PDA can authorise it via CPI; the resulting
-delegation is wire-compatible with every existing x402 facilitator (the
-on-chain transfer is plain `TransferChecked`).
+the agent's ATA for **each stable mint** you want to spend (USDC, USDT,
+USDG). Implemented as an `SPL.Approve` wrapped in `mpl-core::Execute` so the
+PDA can authorise it via CPI; the resulting delegation is wire-compatible
+with every existing x402 facilitator (the on-chain transfer is plain
+`TransferChecked`). Allowances are per-mint — re-run `setSpendDelegation`
+once per stable you intend to settle in.
 
 - `setSpendDelegation(umi, { agentAsset, mint, executive, amount, payer?, authority?, tokenProgram? })` — defensively inspects the agent's ATA and approves `executive` for up to `amount` atomic units. If the ATA already exists with the correct mint + owner the create step is skipped (single `Execute(Approve)` tx); if the ATA is absent it's created via `CreateIdempotent`; if it exists with a mismatched owner you get a precise error rather than the generic `"Provided owner is not allowed"`. Returns `{ signature, treasury, sourceTokenAccount, delegatedAmount, delegate }`.
 - `revokeSpendDelegation(umi, { agentAsset, mint, payer?, authority?, tokenProgram? })` — drops `delegate` and `delegated_amount` to zero.

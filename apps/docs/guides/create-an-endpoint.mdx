@@ -20,7 +20,9 @@ stores your `EndpointV1` descriptors and the Next.js app exposes them at
    - **Label** — what the explorer / payer sees.
    - **Description** (optional) — longer context.
    - **Method** — `GET` or `POST`.
-   - **Price** — any `@x402/svm`-parseable string (`$0.001`, `0.01 USDC`, `0.5`).
+   - **Settlement currency** — primary stable the price is quoted in (`USDC`, `USDT`, or `USDG`).
+   - **Also accept** (optional) — extra stables buyers may pay in; each becomes another row in x402 `accepts[]` at the same atomic amount.
+   - **Price** — dollar-style (`$0.001`), suffixed (`0.01 USDC`), or bare decimal (uses settlement currency).
    - **Custom slug** (optional) — the bit after `/x/`.
    - **Response body** — JSON returned verbatim after settlement.
    - **Post-payment hooks** (all optional, see below):
@@ -141,7 +143,15 @@ curl https://yourapp/x/<id>
 # {
 #   "ok": true,
 #   "kind": "leash.payment-link",
-#   "endpoint": { "id":"…","method":"POST","price":"$0.001","payTo":"…", … },
+#   "endpoint": {
+#     "id":"…",
+#     "method":"POST",
+#     "price":"$0.001",
+#     "currency":"USDC",
+#     "accepts_currencies":["USDG"],
+#     "payTo":"…",
+#     …
+#   },
 #   "facilitator": "https://facilitator.svmacc.tech"
 # }
 ```
@@ -162,6 +172,8 @@ curl https://yourapp/x/<id>
   "owner_agent": "33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR",
   "method": "POST",
   "price": "$0.001",
+  "currency": "USDC",
+  "accepts_currencies": ["USDG"],
   "network": "solana-devnet",
   "response": {
     "status": 200,
@@ -190,6 +202,7 @@ curl 'http://localhost:8787/endpoints?owner_agent=<mint>'
 curl -X POST http://localhost:8787/endpoints \
   -H 'content-type: application/json' \
   -d '{"label":"Echo","owner_agent":"<mint>","method":"POST","price":"$0.001",
+       "currency":"USDC","accepts_currencies":["USDG"],
        "response":{"status":200,"body":{"ok":true}}}'
 
 # Delete

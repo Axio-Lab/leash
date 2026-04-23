@@ -1,11 +1,12 @@
 ---
 title: 'Real x402 on Solana'
-description: How Leash uses x402 + a Solana facilitator to settle agent traffic in real USDC.
+description: How Leash uses x402 + a Solana facilitator to settle agent traffic in real SPL stables (USDC, USDT, USDG).
 ---
 
-Leash settles every agent ↔ agent (or agent ↔ API) request in real USDC
-on Solana using the [x402](https://x402.org) HTTP payment protocol and an
-HTTPS-compatible **facilitator**. This page documents the wire format,
+Leash settles every agent ↔ agent (or agent ↔ API) request in real SPL
+stablecoins on Solana (registry-backed **USDC**, **USDT**, **USDG**) using the
+[x402](https://x402.org) HTTP payment protocol and an HTTPS-compatible
+**facilitator**. This page documents the wire format,
 the headers, and how to swap facilitators. If you only want to fire a
 buyer or stand up a seller, see the SDK pages for
 [`@leash/buyer-kit`](/sdk/buyer-kit) and
@@ -59,8 +60,10 @@ x402 uses three HTTP headers, all base64-encoded JSON:
 
 ### `PAYMENT-REQUIRED` (server → client, 402)
 
-The seller's offer. Leash always sends an `accepts[]` with one entry per
-configured payment route. Example payload (decoded):
+The seller's offer. Leash sends an `accepts[]` with **one object per accepted
+mint** on the route (primary `currency` plus any `accepts_currencies` from the
+payment link or `createSeller` route config). Each row carries the same atomic
+`amount` but a different `asset` mint. Example payload (decoded, two stables):
 
 ```json
 {
@@ -76,10 +79,31 @@ configured payment route. Example payload (decoded):
       "extra": { "feePayer": "<facilitator pubkey>" },
       "maxTimeoutSeconds": 30,
       "description": "Tag a payload"
+    },
+    {
+      "scheme": "exact",
+      "network": "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+      "amount": "1000",
+      "asset": "4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7",
+      "payTo": "<seller agent's Asset Signer PDA>",
+      "feePayer": "facilitator.svmacc.tech",
+      "extra": { "feePayer": "<facilitator pubkey>" },
+      "maxTimeoutSeconds": 30,
+      "description": "Tag a payload"
     }
   ]
 }
 ```
+
+### Buyer mint choice (no silent fallback)
+
+`@leash/core`'s `createSvmBuyerFetch` accepts optional `preferredAsset` (mint).
+`@leash/buyer-kit` maps `preferredCurrency` (`USDC` | `USDT` | `USDG`) to that
+mint on the buyer's configured cluster. If the buyer names a mint the seller
+did **not** include in `accepts[]`, the client **throws** before building a
+transfer — Leash does not fall back to a different stable. Integrations should
+surface that error or validate against discovery metadata
+(`fetchPaymentLinkMeta`) first.
 
 Notes:
 
@@ -127,9 +151,10 @@ const server = createSvmResourceServer({
 });
 ```
 
-There is **no** facilitator config required on the buyer side — the buyer
-pays whatever the seller advertises, so the seller chooses. The buyer-kit
-records the facilitator URL on every receipt for explorer cross-checking.
+There is **no** facilitator config required on the buyer side — within the
+seller's advertised `accepts[]`, the buyer chooses which row to pay (via
+`preferredCurrency` / `preferredAsset`). The buyer-kit records the facilitator
+URL on every receipt for explorer cross-checking.
 
 ## Choosing a network
 
@@ -143,14 +168,19 @@ playground always shows the resolved CAIP-2 id in the receipt.
 
 ## Devnet faucets
 
-Buyers need devnet SOL **and** devnet USDC. Two faucets we recommend:
+Buyers need devnet SOL **and** whichever stable they will pay with (commonly
+USDC). Two faucets we recommend:
 
 - SOL: [faucet.solana.com](https://faucet.solana.com)
 - USDC: [faucet.circle.com](https://faucet.circle.com) (mint
-  `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` to your buyer pubkey)
+  `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` to the **treasury ATA** for
+  agent-funded flows)
 
-The buyer playground in the web app surfaces the connected wallet's
-balance and links to both faucets when it sees zero.
+Fund separate ATAs (or use the playground **Provision stable ATAs**) if you
+also pay in USDT / USDG — each mint has its own treasury ATA and delegation.
+
+The buyer playground surfaces treasury balance for the **selected Pay with**
+currency and links to faucets when it sees zero.
 
 ## End-to-end flow (sequence)
 
