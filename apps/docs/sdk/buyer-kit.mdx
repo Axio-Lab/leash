@@ -114,13 +114,13 @@ When the seller returns `402` without settling, the kit reads the on-chain
 state of the source token account and stamps the receipt's `reason` with one
 of:
 
-| Reason                      | Meaning                                                                        | Fix                                              |
-| --------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------ |
-| `insufficient_balance`      | Treasury holds less than the seller demanded.                                  | Top up the agent's treasury ATA.                 |
-| `insufficient_allowance`    | Delegate cap is below the demanded price.                                      | Re-run `setSpendDelegation` with a higher cap.   |
-| `no_delegate`               | The treasury ATA exists but no SPL delegate is set.                            | Run `setSpendDelegation` from `@leash/registry-utils`. |
-| `wrong_delegate`            | The set delegate is not the executive that signed.                             | Re-approve with the current executive.           |
-| `ata_missing`               | The agent has never held this mint.                                            | Send any amount of the mint to mint the ATA.     |
+| Reason                   | Meaning                                             | Fix                                                    |
+| ------------------------ | --------------------------------------------------- | ------------------------------------------------------ |
+| `insufficient_balance`   | Treasury holds less than the seller demanded.       | Top up the agent's treasury ATA.                       |
+| `insufficient_allowance` | Delegate cap is below the demanded price.           | Re-run `setSpendDelegation` with a higher cap.         |
+| `no_delegate`            | The treasury ATA exists but no SPL delegate is set. | Run `setSpendDelegation` from `@leash/registry-utils`. |
+| `wrong_delegate`         | The set delegate is not the executive that signed.  | Re-approve with the current executive.                 |
+| `ata_missing`            | The agent has never held this mint.                 | Send any amount of the mint to mint the ATA.           |
 
 The full receipt reason takes the form `<classified>: <seller breadcrumb>`
 (e.g. `insufficient_balance: transaction_simulation`). UI panels match on the

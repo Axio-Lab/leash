@@ -116,4 +116,10 @@ export const EndpointCreateInputSchema = EndpointV1Schema.omit({
   id: EndpointIdSchema.optional(),
 });
 
-export type EndpointCreateInput = z.infer<typeof EndpointCreateInputSchema>;
+/**
+ * Use {@link z.input} (not `z.infer` / `z.output`) so callers can omit
+ * fields that have a Zod `.default(...)` (e.g. `currency`,
+ * `accepts_currencies`, `network`, `wrap_receipt`). The runner backfills
+ * them via `EndpointCreateInputSchema.parse(...)` before persisting.
+ */
+export type EndpointCreateInput = z.input<typeof EndpointCreateInputSchema>;

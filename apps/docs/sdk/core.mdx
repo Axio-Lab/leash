@@ -72,9 +72,7 @@ with `@solana/kit` only.
 ```ts
 import { deriveAgentTreasuryAddress, deriveAgentTreasuryAta } from '@leash/core';
 
-const treasury = await deriveAgentTreasuryAddress(
-  '33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR',
-);
+const treasury = await deriveAgentTreasuryAddress('33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR');
 
 // Resolve the USDC ATA the agent treasury would receive into.
 const { treasury: t, ata } = await deriveAgentTreasuryAta({

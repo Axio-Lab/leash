@@ -3,17 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
-import {
-  Bot,
-  ExternalLink,
-  Plus,
-  Receipt,
-  Send,
-  Shield,
-  ShieldOff,
-  Trash2,
-  Wallet,
-} from 'lucide-react';
+import { ExternalLink, Plus, Receipt, Send, Shield, ShieldOff, Trash2, Wallet } from 'lucide-react';
 import { createBuyer, type BuyerCallResult } from '@leash/buyer-kit';
 import { fetchPaymentLinkMeta, KNOWN_STABLE_SYMBOLS, type KnownStableSymbol } from '@leash/core';
 import type { EndpointV1, ReceiptV1, RulesV1 } from '@leash/schemas';
@@ -31,7 +21,6 @@ import { usePrivySvmSigner } from '@/lib/privy-svm-signer';
 import { usePrivyUmi } from '@/lib/privy-umi';
 import { transactionExplorerUrl } from '@/lib/solscan';
 import { SOLANA_NETWORK, SOLANA_RPC } from '@/lib/env';
-import { WalletBalanceBadge } from '@/components/wallet-balance-badge';
 import {
   effectiveRules,
   isLimitless,
@@ -163,9 +152,7 @@ export default function BuyerPage() {
   );
   React.useEffect(() => {
     if (!discoveredLinkMeta?.endpoint) return;
-    // Make the discovery payload the single source of truth for method/URL
-    // when the user pastes a Leash payment-link (`/x/<id>`). This avoids
-    // stale local assumptions (e.g. defaulting to POST on a GET-priced link).
+
     if (discoveredLinkMeta.endpoint.method !== method) {
       setMethod(discoveredLinkMeta.endpoint.method);
     }
@@ -353,10 +340,7 @@ export default function BuyerPage() {
       const h = callResult.response.headers;
       const redirected = callResult.response.redirected;
       const finalUrl = callResult.response.url || target;
-      // Defensive: if any caller-installed proxy ever rewrites the response
-      // URL with `?leash_tx&leash_receipt&leash_agent` query params, prefer
-      // those over a missing X-Leash-* header. The seller-kit doesn't
-      // produce these today; this is purely a graceful-degradation hook.
+
       let urlLeash: {
         tx_sig: string | null;
         receipt_hash: string | null;
@@ -460,9 +444,7 @@ export default function BuyerPage() {
           await new Promise((r) => window.setTimeout(r, 2500));
           await refreshDelegation();
         })();
-        // Clear the firing-line so the next call starts from a clean slate.
-        // Keep the agent + URL pre-selected so users can re-fire quickly,
-        // and only reset transient inputs (request body + per-call callback).
+
         setBody('{}');
         setCallbackUrl('');
         toast.success(
@@ -483,12 +465,6 @@ export default function BuyerPage() {
       setLoading(false);
     }
   }
-
-  const owner = wallet?.address;
-  const ownerShort = owner ? `${owner.slice(0, 4)}…${owner.slice(-4)}` : null;
-  const agentShort = selectedAgent
-    ? `${selectedAgent.slice(0, 4)}…${selectedAgent.slice(-4)}`
-    : null;
 
   function handleUrlChange(nextUrl: string) {
     setUrl(nextUrl);
@@ -553,18 +529,9 @@ export default function BuyerPage() {
                 {ready && wallet && (
                   <>
                     <div className="flex flex-wrap items-center gap-2 text-sm text-fg">
-                      <span>
-                        Executive <span className="font-mono">{ownerShort}</span> · agent{' '}
-                        {agentShort ? (
-                          <span className="font-mono">{agentShort}</span>
-                        ) : (
-                          <em>(none)</em>
-                        )}
-                      </span>
                       <Badge variant="brand">{SOLANA_NETWORK}</Badge>
                       <Badge variant="success">facilitator.svmacc.tech</Badge>
                     </div>
-                    <WalletBalanceBadge owner={owner} label="Executive (Privy)" />
                   </>
                 )}
               </div>
@@ -634,7 +601,7 @@ export default function BuyerPage() {
                     </span>
                   ) : (
                     <span className="text-[11px] text-fg-subtle">
-                      Buyer-kit will pick the matching <InlineCode>accepts[]</InlineCode> entry.
+                      Buyer-kit will pick the matching currency.
                     </span>
                   )}
                 </Field>
@@ -1084,17 +1051,6 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
           </ul>
         </div>
       )}
-      {result.receipt.tx_sig && result.receipt.price?.network && (
-        <a
-          href={transactionExplorerUrl(result.receipt.price.network, result.receipt.tx_sig)}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs text-brand hover:underline w-fit font-mono"
-        >
-          <ExternalLink className="size-3" />
-          Inspect tx {result.receipt.tx_sig.slice(0, 8)}… on Solscan
-        </a>
-      )}
       {leash.redirected_to && (
         <a
           href={leash.redirected_to}
@@ -1106,12 +1062,28 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
           <ExternalLink className="size-3" /> Follow seller redirect →
         </a>
       )}
-      <Link
-        href={`/agents/${encodeURIComponent(result.receipt.agent)}`}
-        className="inline-flex items-center gap-1.5 text-xs text-brand hover:underline w-fit"
-      >
-        <Bot className="size-3" /> View receipts for this agent
-      </Link>
+
+      {result.receipt.tx_sig ? (
+        <a
+          href={
+            leash.tx_explorer?.trim() ||
+            transactionExplorerUrl(
+              result.receipt.price?.network ?? SOLANA_NETWORK,
+              result.receipt.tx_sig,
+            )
+          }
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 text-xs text-brand hover:underline w-fit font-mono"
+          title={result.receipt.tx_sig}
+        >
+          <ExternalLink className="size-3" />
+          View txn on explorer
+          <span className="text-fg-subtle">
+            ({result.receipt.tx_sig.slice(0, 8)}…{result.receipt.tx_sig.slice(-4)})
+          </span>
+        </a>
+      ) : null}
       <div>
         <Label className="mb-1 block">Leash response headers (X-Leash-*)</Label>
         <JsonViewer data={leash} maxHeight="10rem" />
