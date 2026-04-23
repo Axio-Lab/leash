@@ -14,6 +14,18 @@ Leash agents follow Metaplex's [MIP-104 / Agent Identity](https://www.metaplex.c
 
 Both paths produce the **same on-chain shape**: an `AgentIdentityV1` PDA derived from the asset's pubkey, with `Listen` lifecycle hooks on `Transfer`, `Update`, and `Execute`. The only difference is who hosts the registration JSON.
 
+## Pick who signs
+
+`createAgent` doesn't care _how_ `umi.identity` is set up — only that it can sign. There are three common choices, all wire-compatible with the rest of the SDK:
+
+| Signer                                            | Where it lives                                    | Use when                                                                                  |
+| ------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Privy embedded wallet**                         | The user's browser, recoverable via email / OAuth | You're building a browser-first agent with a human user (the playground default)          |
+| **BYO local keypair**                             | A `solana-keygen` JSON file you back up yourself  | Headless scripts, CI, long-lived agents whose owner key shouldn't depend on a third party |
+| **Server env var** (`LEASH_DEV_PAYER_SECRET_KEY`) | Process memory on a Node server                   | Cron, internal tools, the playground's headless `POST /api/agents/create` route           |
+
+Whichever you pick, the wallet that signs the mint **becomes the agent owner** — the only key authorised to call `mpl-core::Execute` against the asset (withdraw, set delegation, set agent token, etc.). For the full mental model — owner vs. executive vs. operator — see [Identities](/concepts/identities). For the non-Privy paths in detail, see [Bring your own keypair](/guides/bring-your-own-keypair).
+
 ## SDK call
 
 ```ts
@@ -53,6 +65,8 @@ const prepared = await prepareAgentMint(umi, {
 // inspect prepared.transaction, add priority fees, etc.
 const signature = await sendPreparedAgentMint(umi, prepared);
 ```
+
+Every other mutating helper in `@leash/registry-utils` (`setSpendDelegation`, `withdrawTreasury`, `delegateExecution`, …) ships a matching `prepare*` function that returns an unsigned `TransactionBuilder` plus echo fields, so the same pattern works end-to-end. See [Prepare/Send split](/sdk/registry-utils#preparesend-split) for the full surface.
 
 ## After minting
 
@@ -138,4 +152,4 @@ The Next.js playground (`apps/web`) wraps all of this in a UI **signed by your c
 
 Configure `NEXT_PUBLIC_PRIVY_APP_ID` in `apps/web/.env.local`, log in via the wallet button (top-right), and fund your embedded wallet on devnet (`solana airdrop 1 <pubkey> --url devnet`). The bridge is `apps/web/lib/privy-umi.ts` — `usePrivyUmi()` wraps the Privy `ConnectedSolanaWallet` in Metaplex's `walletAdapterIdentity` so any `@leash/registry-utils` SDK call works straight from a React component.
 
-> The `LEASH_DEV_PAYER_SECRET_KEY` env variable is **optional** and only used by the headless server fallback routes (`POST /api/agents/create`, `POST /api/agents/executive`) — useful for CI / cron / non-Privy callers, not the demo.
+> The `LEASH_DEV_PAYER_SECRET_KEY` env variable is **optional** and only used by the headless server fallback routes (`POST /api/agents/create`, `POST /api/agents/executive`) — useful for CI / cron / non-Privy callers, not the demo. Full walkthrough in [Bring your own keypair](/guides/bring-your-own-keypair).

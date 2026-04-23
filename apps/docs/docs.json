@@ -3,6 +3,11 @@
   "name": "Leash",
   "description": "An open rail for agents that spend on the open internet.",
   "theme": "maple",
+  "favicon": "/leash_icon.svg",
+  "logo": {
+    "light": "/leash_icon.svg",
+    "dark": "/leash_icon.svg"
+  },
   "colors": {
     "primary": "#9b8cff",
     "light": "#bca8ff",
@@ -29,6 +34,7 @@
             "group": "Concepts",
             "pages": [
               "concepts/agent",
+              "concepts/identities",
               "concepts/treasury",
               "concepts/policy",
               "concepts/receipt",
@@ -39,12 +45,14 @@
             "group": "Guides",
             "pages": [
               "guides/create-an-agent",
+              "guides/bring-your-own-keypair",
               "guides/fund-an-agent",
               "guides/create-an-endpoint",
               "guides/build-a-seller",
               "guides/build-a-buyer",
               "guides/build-a-merged-agent",
               "guides/withdraw-funds",
+              "guides/launch-agent-token",
               "guides/pause-an-agent",
               "guides/run-a-facilitator"
             ]

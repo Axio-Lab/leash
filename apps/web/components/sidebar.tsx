@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -165,9 +166,14 @@ export function Sidebar() {
             className="flex items-center gap-2"
             title={collapsed ? 'Leash Playground' : undefined}
           >
-            <div className="size-7 rounded-md bg-linear-to-br from-brand to-brand-strong shadow-inner shadow-black/20 flex items-center justify-center text-bg font-bold text-[13px]">
-              L
-            </div>
+            <Image
+              src="/images/leash_icon.svg"
+              alt="Leash"
+              width={48}
+              height={48}
+              priority
+              className="size-7 rounded-md shadow-inner shadow-black/20"
+            />
             {!collapsed && (
               <div className="flex flex-col leading-tight">
                 <span className="text-[12px] font-semibold tracking-tight">Leash</span>
@@ -224,9 +230,14 @@ export function Sidebar() {
       >
         <div className="flex items-center justify-between shrink-0">
           <Link href="/" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
-            <div className="size-7 rounded-md bg-linear-to-br from-brand to-brand-strong shadow-inner shadow-black/20 flex items-center justify-center text-bg font-bold text-[13px]">
-              L
-            </div>
+            <Image
+              src="/images/leash_icon.svg"
+              alt="Leash"
+              width={28}
+              height={28}
+              priority
+              className="size-7 rounded-md shadow-inner shadow-black/20"
+            />
             <div className="flex flex-col leading-tight">
               <span className="text-[12px] font-semibold tracking-tight">Leash</span>
               <span className="text-[9px] uppercase tracking-widest text-fg-subtle">

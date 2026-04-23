@@ -84,9 +84,15 @@ export const KNOWN_STABLES: Record<
       tokenProgram: SPL_TOKEN_PROGRAM_ID,
     },
     {
+      // USDG (Global Dollar by Paxos) is a **Token-2022 mint** with a
+      // transfer-hook extension, so its ATAs MUST be created via the
+      // Token-2022 program. Using the classic SPL Token program here
+      // makes `createIdempotentAssociatedToken` fail with
+      // `IncorrectProgramId` during simulation. Keep this in sync with
+      // `KNOWN_TOKENS` in `@leash/core/tokens`.
       symbol: 'USDG',
       mint: publicKey('2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH'),
-      tokenProgram: SPL_TOKEN_PROGRAM_ID,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
     },
   ],
   'solana-devnet': [
@@ -101,9 +107,11 @@ export const KNOWN_STABLES: Record<
       tokenProgram: SPL_TOKEN_PROGRAM_ID,
     },
     {
+      // Devnet USDG mirrors the mainnet shape — Token-2022 mint. Same
+      // reasoning as the mainnet entry above.
       symbol: 'USDG',
       mint: publicKey('4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7'),
-      tokenProgram: SPL_TOKEN_PROGRAM_ID,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
     },
   ],
 };
@@ -207,6 +215,89 @@ function toPk(input: string | PublicKey): PublicKey {
   return typeof input === 'string' ? publicKey(input) : input;
 }
 
+export type PrepareSetSpendDelegationResult = {
+  /** Unsigned `mpl-core::Execute(SPL.Approve)` builder, possibly with a CreateIdempotent prepended. */
+  builder: TransactionBuilderLike;
+  /** Agent treasury (Asset Signer PDA). */
+  treasury: string;
+  /** Agent's ATA for `mint`. This is what the buyer signer uses as `source`. */
+  sourceTokenAccount: string;
+  /** Echo of the cap (atomic units). */
+  delegatedAmount: bigint;
+  /** Echo of the delegate (executive). */
+  delegate: string;
+  /**
+   * `true` when the builder includes a leading `CreateIdempotent` for the
+   * source ATA (i.e. the on-chain account didn't exist at prepare time).
+   * Useful for fee estimation.
+   */
+  willCreateAta: boolean;
+};
+
+/**
+ * Build (but do not send) the `mpl-core::Execute(SPL.Approve)` transaction
+ * that grants `executive` spend authority over the agent's `mint` ATA.
+ *
+ * Same async pre-flight as {@link setSpendDelegation} (inspects the ATA on
+ * RPC and prepends a `CreateIdempotent` if it doesn't exist), so callers
+ * get the exact same on-chain shape — they just sign + send themselves.
+ */
+export async function prepareSetSpendDelegation(
+  umi: Umi,
+  args: SetSpendDelegationArgs,
+): Promise<PrepareSetSpendDelegationResult> {
+  const asset = toPk(args.agentAsset);
+  const mint = toPk(args.mint);
+  const delegate = toPk(args.executive);
+  const tokenProgram = args.tokenProgram ?? SPL_TOKEN_PROGRAM_ID;
+
+  const [treasury] = findAssetSignerPda(umi, { asset });
+  const [sourceAta] = findAssociatedTokenPda(umi, {
+    mint,
+    owner: treasury,
+    tokenProgramId: tokenProgram,
+  });
+
+  const ataState = await inspectTokenAccount(umi, {
+    address: sourceAta,
+    expectedMint: mint,
+    expectedOwner: treasury,
+    expectedTokenProgram: tokenProgram,
+  });
+
+  let builder = transactionBuilderFromMaybeApprove(umi, {
+    sourceAta,
+    delegate,
+    ownerPda: treasury,
+    amount: args.amount,
+    tokenProgram,
+    asset,
+    payer: args.payer,
+    authority: args.authority,
+  });
+
+  const willCreateAta = !ataState.exists;
+  if (willCreateAta) {
+    const create = createIdempotentAssociatedToken(umi, {
+      mint,
+      owner: treasury,
+      ata: sourceAta,
+      tokenProgram,
+      ...(args.payer ? { payer: args.payer } : {}),
+    });
+    builder = create.add(builder);
+  }
+
+  return {
+    builder,
+    treasury: String(treasury),
+    sourceTokenAccount: String(sourceAta),
+    delegatedAmount: args.amount,
+    delegate: String(delegate),
+    willCreateAta,
+  };
+}
+
 /**
  * Approve `amount` (in atomic units) of `mint` from the agent's treasury
  * ATA to `executive`. Idempotently creates the agent's ATA if missing.
@@ -229,71 +320,14 @@ export async function setSpendDelegation(
   umi: Umi,
   args: SetSpendDelegationArgs,
 ): Promise<SetSpendDelegationResult> {
-  const asset = toPk(args.agentAsset);
-  const mint = toPk(args.mint);
-  const delegate = toPk(args.executive);
-  const tokenProgram = args.tokenProgram ?? SPL_TOKEN_PROGRAM_ID;
-
-  const [treasury] = findAssetSignerPda(umi, { asset });
-  const [sourceAta] = findAssociatedTokenPda(umi, {
-    mint,
-    owner: treasury,
-    tokenProgramId: tokenProgram,
-  });
-
-  // Defensive ATA pre-flight. The SPL ATA program throws
-  //   "Provided owner is not allowed"
-  // when the on-chain account at `sourceAta` is not owned by the SPL Token
-  // program (e.g. it was allocated to a different program by accident, or
-  // the address derivation we expect doesn't actually match what was
-  // funded). `CreateIdempotent` only succeeds when the existing account is
-  // a real token account whose internal mint+owner fields match what we'd
-  // create. We replicate that validation here so users get a precise
-  // diagnostic instead of a generic simulation failure.
-  const ataState = await inspectTokenAccount(umi, {
-    address: sourceAta,
-    expectedMint: mint,
-    expectedOwner: treasury,
-    expectedTokenProgram: tokenProgram,
-  });
-
-  let builder = transactionBuilderFromMaybeApprove(umi, {
-    sourceAta,
-    delegate,
-    ownerPda: treasury,
-    amount: args.amount,
-    tokenProgram,
-    asset,
-    payer: args.payer,
-    authority: args.authority,
-  });
-
-  if (!ataState.exists) {
-    // No account at the canonical address yet — prepend a CreateIdempotent
-    // so freshly minted agents that haven't received funds yet still get a
-    // delegation. The signer (umi.payer or args.payer) covers the ~2k
-    // lamport rent.
-    const create = createIdempotentAssociatedToken(umi, {
-      mint,
-      owner: treasury,
-      ata: sourceAta,
-      tokenProgram,
-      ...(args.payer ? { payer: args.payer } : {}),
-    });
-    builder = create.add(builder);
-  }
-  // If `ataState.exists && ataState.valid`, we skip the create step
-  // entirely. This is the common case for agents whose treasury has
-  // already been provisioned (either by `provisionTreasuryAtas` at
-  // creation time, or by a USDC transfer landing first).
-
-  const result = await builder.sendAndConfirm(umi);
+  const prepared = await prepareSetSpendDelegation(umi, args);
+  const result = await prepared.builder.sendAndConfirm(umi);
   return {
     signature: base58.deserialize(result.signature)[0],
-    treasury: String(treasury),
-    sourceTokenAccount: String(sourceAta),
-    delegatedAmount: args.amount,
-    delegate: String(delegate),
+    treasury: prepared.treasury,
+    sourceTokenAccount: prepared.sourceTokenAccount,
+    delegatedAmount: prepared.delegatedAmount,
+    delegate: prepared.delegate,
   };
 }
 
@@ -330,8 +364,12 @@ function transactionBuilderFromMaybeApprove(
   });
 }
 
-/** Sub-type of mpl-toolbox's TransactionBuilder we actually need here. */
-type TransactionBuilderLike = ReturnType<typeof execute>;
+/**
+ * Sub-type of mpl-toolbox's TransactionBuilder we actually need here.
+ * Exported so the `prepare*` helpers' return types are reachable from
+ * downstream callers without re-deriving via `ReturnType<typeof execute>`.
+ */
+export type TransactionBuilderLike = ReturnType<typeof execute>;
 
 type AtaState =
   | { exists: false }
@@ -429,30 +467,43 @@ export type ProvisionTreasuryAtasResult = {
   }>;
 };
 
+export type PrepareProvisionTreasuryAtasResult = {
+  /** Agent treasury (Asset Signer PDA). */
+  treasury: string;
+  /**
+   * `null` when every requested ATA already exists on-chain (no
+   * transaction needed). Otherwise an unsigned `CreateIdempotent` bundle
+   * for each missing ATA.
+   */
+  builder: TransactionBuilderLike | null;
+  /**
+   * One entry per requested mint, in the same order as `args.mints`
+   * (or {@link KNOWN_STABLES} for the network). `created` is `true` for
+   * mints that the builder will create; `false` for mints whose ATA was
+   * already on-chain at prepare time.
+   */
+  atas: Array<{
+    mint: string;
+    symbol?: string;
+    address: string;
+    tokenProgram: string;
+    created: boolean;
+  }>;
+};
+
 /**
- * Idempotently create the agent treasury's Associated Token Accounts for a
- * curated set of mints (defaults to {@link KNOWN_STABLES}).
+ * Build (but do not send) the `CreateIdempotent` bundle for the agent
+ * treasury's missing Associated Token Accounts. Same RPC pre-flight as
+ * {@link provisionTreasuryAtas}; same idempotent semantics.
  *
- * Why pre-create? Two reasons.
- *
- * 1. **Predictable funding UX.** Users typically fund the agent through a
- *    faucet or wallet send. Most wallets refuse to send to an
- *    address that doesn't yet have an ATA, or they auto-create one and
- *    silently fund the *sender's* ATA (not the agent's). Provisioning the
- *    ATA up front means "send USDC to this address" Just Works.
- *
- * 2. **Cleaner Approve flow.** When the ATA already exists,
- *    {@link setSpendDelegation} skips the CreateIdempotent step and only
- *    sends a single `mpl-core::Execute(SPL.Approve)` — fewer surfaces for
- *    "Provided owner is not allowed" to fire.
- *
- * Returns one entry per mint. Idempotent: re-running is a no-op (and
- * doesn't even broadcast a transaction) once every ATA is already valid.
+ * `builder === null` is the "nothing to do" signal — every requested ATA
+ * already exists. Callers should skip submission and just return the
+ * `atas` echo to the user.
  */
-export async function provisionTreasuryAtas(
+export async function prepareProvisionTreasuryAtas(
   umi: Umi,
   args: ProvisionTreasuryAtasArgs,
-): Promise<ProvisionTreasuryAtasResult> {
+): Promise<PrepareProvisionTreasuryAtasResult> {
   const asset = toPk(args.agentAsset);
   const [treasury] = findAssetSignerPda(umi, { asset });
 
@@ -480,8 +531,6 @@ export async function provisionTreasuryAtas(
     };
   });
 
-  // Inspect all ATAs first; only create the ones missing. Throw on
-  // mismatch (same diagnostic policy as setSpendDelegation).
   const inspected = await Promise.all(
     resolved.map(async (r) => {
       const state = await inspectTokenAccount(umi, {
@@ -494,22 +543,19 @@ export async function provisionTreasuryAtas(
     }),
   );
 
+  const atas = inspected.map((r) => ({
+    mint: String(r.mintPk),
+    symbol: r.symbol,
+    address: String(r.ata),
+    tokenProgram: String(r.tokenProgram),
+    created: !r.exists,
+  }));
+
   const missing = inspected.filter((r) => !r.exists);
   if (missing.length === 0) {
-    return {
-      treasury: String(treasury),
-      atas: inspected.map((r) => ({
-        mint: String(r.mintPk),
-        symbol: r.symbol,
-        address: String(r.ata),
-        tokenProgram: String(r.tokenProgram),
-        created: false,
-      })),
-    };
+    return { treasury: String(treasury), builder: null, atas };
   }
 
-  // Bundle every CreateIdempotent into a single tx — typically 1–2 ATAs,
-  // well under the 1232-byte tx size limit.
   let builder: TransactionBuilderLike | null = null;
   for (const r of missing) {
     const ix = createIdempotentAssociatedToken(umi, {
@@ -521,19 +567,45 @@ export async function provisionTreasuryAtas(
     });
     builder = builder ? builder.add(ix) : ix;
   }
-  // `builder` is non-null here because `missing.length > 0`.
-  const result = await builder!.sendAndConfirm(umi);
-  const signature = base58.deserialize(result.signature)[0];
 
+  return { treasury: String(treasury), builder, atas };
+}
+
+/**
+ * Idempotently create the agent treasury's Associated Token Accounts for a
+ * curated set of mints (defaults to {@link KNOWN_STABLES}).
+ *
+ * Why pre-create? Two reasons.
+ *
+ * 1. **Predictable funding UX.** Users typically fund the agent through a
+ *    faucet or wallet send. Most wallets refuse to send to an
+ *    address that doesn't yet have an ATA, or they auto-create one and
+ *    silently fund the *sender's* ATA (not the agent's). Provisioning the
+ *    ATA up front means "send USDC to this address" Just Works.
+ *
+ * 2. **Cleaner Approve flow.** When the ATA already exists,
+ *    {@link setSpendDelegation} skips the CreateIdempotent step and only
+ *    sends a single `mpl-core::Execute(SPL.Approve)` — fewer surfaces for
+ *    "Provided owner is not allowed" to fire.
+ *
+ * Returns one entry per mint. Idempotent: re-running is a no-op (and
+ * doesn't even broadcast a transaction) once every ATA is already valid.
+ */
+export async function provisionTreasuryAtas(
+  umi: Umi,
+  args: ProvisionTreasuryAtasArgs,
+): Promise<ProvisionTreasuryAtasResult> {
+  const prepared = await prepareProvisionTreasuryAtas(umi, args);
+  if (prepared.builder == null) {
+    return { treasury: prepared.treasury, atas: prepared.atas };
+  }
+  const result = await prepared.builder.sendAndConfirm(umi);
+  const signature = base58.deserialize(result.signature)[0];
   return {
-    treasury: String(treasury),
-    atas: inspected.map((r) => ({
-      mint: String(r.mintPk),
-      symbol: r.symbol,
-      address: String(r.ata),
-      tokenProgram: String(r.tokenProgram),
-      created: !r.exists,
-      ...(r.exists ? {} : { signature }),
+    treasury: prepared.treasury,
+    atas: prepared.atas.map((a) => ({
+      ...a,
+      ...(a.created ? { signature } : {}),
     })),
   };
 }
@@ -546,15 +618,23 @@ export type RevokeSpendDelegationArgs = {
   tokenProgram?: PublicKey;
 };
 
+export type PrepareRevokeSpendDelegationResult = {
+  /** Unsigned `mpl-core::Execute(SPL.Revoke)` builder. */
+  builder: TransactionBuilderLike;
+  /** Agent treasury (Asset Signer PDA). */
+  treasury: string;
+  /** Agent's ATA for `mint`. */
+  sourceTokenAccount: string;
+};
+
 /**
- * Drop any active delegation on the agent's `mint` ATA. After this lands,
- * the executive can no longer move funds (`delegate = None`,
- * `delegated_amount = 0`).
+ * Build (but do not send) the `mpl-core::Execute(SPL.Revoke)` transaction
+ * that drops any active delegation on the agent's `mint` ATA.
  */
-export async function revokeSpendDelegation(
+export function prepareRevokeSpendDelegation(
   umi: Umi,
   args: RevokeSpendDelegationArgs,
-): Promise<{ signature: string; treasury: string; sourceTokenAccount: string }> {
+): PrepareRevokeSpendDelegationResult {
   const asset = toPk(args.agentAsset);
   const mint = toPk(args.mint);
   const tokenProgram = args.tokenProgram ?? SPL_TOKEN_PROGRAM_ID;
@@ -578,11 +658,28 @@ export async function revokeSpendDelegation(
     ...(args.authority ? { authority: args.authority } : {}),
   });
 
-  const result = await builder.sendAndConfirm(umi);
   return {
-    signature: base58.deserialize(result.signature)[0],
+    builder,
     treasury: String(treasury),
     sourceTokenAccount: String(sourceAta),
+  };
+}
+
+/**
+ * Drop any active delegation on the agent's `mint` ATA. After this lands,
+ * the executive can no longer move funds (`delegate = None`,
+ * `delegated_amount = 0`).
+ */
+export async function revokeSpendDelegation(
+  umi: Umi,
+  args: RevokeSpendDelegationArgs,
+): Promise<{ signature: string; treasury: string; sourceTokenAccount: string }> {
+  const prepared = prepareRevokeSpendDelegation(umi, args);
+  const result = await prepared.builder.sendAndConfirm(umi);
+  return {
+    signature: base58.deserialize(result.signature)[0],
+    treasury: prepared.treasury,
+    sourceTokenAccount: prepared.sourceTokenAccount,
   };
 }
 

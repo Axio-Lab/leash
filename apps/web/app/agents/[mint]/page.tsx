@@ -6,7 +6,6 @@ import useSWR from 'swr';
 import {
   ArrowDownToLine,
   ArrowLeft,
-  ArrowRight,
   Coins,
   Cog,
   ExternalLink,
@@ -18,12 +17,7 @@ import {
   Loader2,
   RefreshCw,
   Copy,
-  PlusCircle,
-  Send,
-  ShieldOff,
-  Sparkles,
   TriangleAlert,
-  Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
 import type { ReceiptV1 } from '@leash/schemas';
@@ -48,10 +42,16 @@ import {
   provisionTreasuryAtas,
   withdrawTreasury,
   withdrawTreasuryAll,
+  withdrawTreasurySol,
+  withdrawTreasurySolAll,
+  TOKEN_2022_PROGRAM_ID,
   type ProvisionTreasuryAtasResult,
   type SpendDelegationStatus,
 } from '@leash/registry-utils';
+import { publicKey as toPubkey } from '@metaplex-foundation/umi';
+import { KNOWN_TOKENS, KNOWN_STABLE_SYMBOLS, type KnownStableSymbol } from '@leash/core';
 import { transactionExplorerUrl } from '@/lib/solscan';
+import { LaunchTokenCard } from '@/components/launch-token-card';
 import { loadAgent, saveAgent, type StoredAgent } from '@/lib/agent-storage';
 import { useToast } from '@/components/ui/toast';
 
@@ -369,6 +369,77 @@ export default function AgentPage() {
   const [withdrawBusy, setWithdrawBusy] = React.useState<null | 'amount' | 'all'>(null);
   const [withdrawLastSig, setWithdrawLastSig] = React.useState<string | null>(null);
   const [withdrawDestinationConfirmed, setWithdrawDestinationConfirmed] = React.useState(false);
+  // `'SOL'` is a synthetic entry — it's not in `KNOWN_STABLE_SYMBOLS`
+  // because the registry tracks SPL mints, not native lamports. We
+  // special-case it through every consumer below so the withdraw card
+  // can drain Genesis creator fees (which accrue as raw SOL on the
+  // treasury PDA) without spinning up a parallel UI.
+  type WithdrawSymbol = KnownStableSymbol | 'SOL';
+  const [withdrawCurrency, setWithdrawCurrency] = React.useState<WithdrawSymbol>('USDC');
+  const isSolWithdraw = withdrawCurrency === 'SOL';
+
+  // Resolve the active withdraw token from the (network-aware) registry.
+  // Defaults to the network's USDC entry if the user picked a symbol not
+  // catalogued on the current cluster (rare, but possible if devnet
+  // entries diverge from mainnet). When the user picks SOL we synthesize
+  // a token-shaped object so the rest of the form (amount input,
+  // balance pill, etc.) stays uniform.
+  const withdrawToken = React.useMemo(() => {
+    const network = balance?.network ?? 'devnet';
+    if (withdrawCurrency === 'SOL') {
+      return {
+        symbol: 'SOL' as const,
+        // No SPL mint for native SOL; consumers must check `isSolWithdraw`
+        // before reading `mint`.
+        mint: '',
+        decimals: 9,
+        program: 'native' as const,
+      };
+    }
+    const entry =
+      KNOWN_TOKENS[network].find((t) => t.symbol.toUpperCase() === withdrawCurrency) ??
+      KNOWN_TOKENS[network].find((t) => t.symbol === 'USDC')!;
+    return {
+      symbol: entry.symbol,
+      mint: entry.mint,
+      decimals: entry.decimals,
+      program: entry.program,
+    };
+  }, [balance?.network, withdrawCurrency]);
+
+  // Read the agent's balance for the chosen withdraw token from the
+  // /api/agents/balance feed (which lists every SPL stable held by the
+  // treasury PDA, plus the SOL lamport count). Falls back to
+  // `delegation.balance` for USDC because that's the legacy code path
+  // and is more responsive after a fresh approve/withdraw cycle.
+  const withdrawBalanceUi = React.useMemo(() => {
+    if (isSolWithdraw) return balance?.sol ?? 0;
+    if (withdrawToken.symbol === 'USDC' && delegation) {
+      return Number(delegation.balance) / 10 ** withdrawToken.decimals;
+    }
+    const tok = balance?.tokens.find((t) => t.mint === withdrawToken.mint);
+    return tok?.ui ?? 0;
+  }, [isSolWithdraw, balance?.sol, withdrawToken, delegation, balance?.tokens]);
+  const withdrawBalanceAtomic = React.useMemo(() => {
+    if (isSolWithdraw) {
+      // `/api/agents/balance` returns lamports as a string for lossless
+      // round-trip — parse to bigint here to keep the "withdraw all"
+      // gate accurate even at large balances.
+      try {
+        return BigInt(balance?.lamports ?? '0');
+      } catch {
+        return 0n;
+      }
+    }
+    if (withdrawToken.symbol === 'USDC' && delegation) return delegation.balance;
+    const tok = balance?.tokens.find((t) => t.mint === withdrawToken.mint);
+    if (!tok) return 0n;
+    try {
+      return BigInt(tok.amount);
+    } catch {
+      return 0n;
+    }
+  }, [isSolWithdraw, balance?.lamports, withdrawToken, delegation, balance?.tokens]);
 
   // Default the destination to the connected (owner) wallet whenever it
   // changes. The user can still type a different address — we surface a
@@ -404,39 +475,82 @@ export default function AgentPage() {
     setWithdrawBusy(mode);
     setWithdrawLastSig(null);
     try {
-      let res;
-      if (mode === 'all') {
-        res = await withdrawTreasuryAll(privyUmi, {
-          agentAsset: mint,
-          mint: usdcInfo.mint,
-          destination,
-        });
-        if (!res) {
-          toast.info('Nothing to withdraw', 'Treasury balance is 0.');
-          return;
+      // Dispatch on currency: SOL routes through `withdrawTreasurySol*`
+      // (mpl-core::Execute wrapping a raw System.Transfer); SPL stables
+      // continue to use the TransferChecked path.
+      let signature: string;
+      let sentDecimal: number;
+      if (isSolWithdraw) {
+        if (mode === 'all') {
+          const r = await withdrawTreasurySolAll(privyUmi, {
+            agentAsset: mint,
+            destination,
+          });
+          if (!r) {
+            toast.info(
+              'Nothing to withdraw',
+              'Treasury SOL balance is below the rent-exempt safety reserve.',
+            );
+            return;
+          }
+          signature = r.signature;
+          sentDecimal = Number(r.lamports) / 1_000_000_000;
+        } else {
+          const decimal = Number(withdrawAmountDraft);
+          if (!Number.isFinite(decimal) || decimal <= 0) {
+            toast.error('Invalid amount', 'Enter a positive SOL amount.');
+            return;
+          }
+          const lamports = BigInt(Math.round(decimal * 1_000_000_000));
+          const r = await withdrawTreasurySol(privyUmi, {
+            agentAsset: mint,
+            destination,
+            lamports,
+          });
+          signature = r.signature;
+          sentDecimal = decimal;
         }
       } else {
-        const decimal = Number(withdrawAmountDraft);
-        if (!Number.isFinite(decimal) || decimal <= 0) {
-          toast.error('Invalid amount', `Enter a positive ${usdcInfo.label} amount.`);
-          return;
+        const tokenProgram =
+          withdrawToken.program === 'spl-token-2022' ? TOKEN_2022_PROGRAM_ID : undefined;
+        let res;
+        if (mode === 'all') {
+          res = await withdrawTreasuryAll(privyUmi, {
+            agentAsset: mint,
+            mint: toPubkey(withdrawToken.mint),
+            destination,
+            ...(tokenProgram ? { tokenProgram, decimals: withdrawToken.decimals } : {}),
+          });
+          if (!res) {
+            toast.info('Nothing to withdraw', `Treasury ${withdrawToken.symbol} balance is 0.`);
+            return;
+          }
+        } else {
+          const decimal = Number(withdrawAmountDraft);
+          if (!Number.isFinite(decimal) || decimal <= 0) {
+            toast.error('Invalid amount', `Enter a positive ${withdrawToken.symbol} amount.`);
+            return;
+          }
+          const factor = 10 ** withdrawToken.decimals;
+          const atomic = BigInt(Math.round(decimal * factor));
+          res = await withdrawTreasury(privyUmi, {
+            agentAsset: mint,
+            mint: toPubkey(withdrawToken.mint),
+            destination,
+            amount: atomic,
+            ...(tokenProgram ? { tokenProgram, decimals: withdrawToken.decimals } : {}),
+          });
         }
-        const atomic = BigInt(Math.round(decimal * 1_000_000));
-        res = await withdrawTreasury(privyUmi, {
-          agentAsset: mint,
-          mint: usdcInfo.mint,
-          destination,
-          amount: atomic,
-        });
+        signature = res.signature;
+        sentDecimal = Number(res.amount) / 10 ** withdrawToken.decimals;
       }
-      setWithdrawLastSig(res.signature);
-      const sentUsdc = Number(res.amount) / 1_000_000;
+      setWithdrawLastSig(signature);
       toast.success(
         'Withdrawal confirmed',
-        `${sentUsdc.toLocaleString(undefined, {
+        `${sentDecimal.toLocaleString(undefined, {
           minimumFractionDigits: 2,
-          maximumFractionDigits: 6,
-        })} ${usdcInfo.label} sent to ${destination.slice(0, 8)}\u2026${destination.slice(-4)}.`,
+          maximumFractionDigits: 9,
+        })} ${withdrawToken.symbol} sent to ${destination.slice(0, 8)}\u2026${destination.slice(-4)}.`,
       );
       // Surface the new (lower) treasury balance immediately rather than
       // waiting on the next 8s poll.
@@ -670,7 +784,11 @@ export default function AgentPage() {
               size="sm"
               onClick={handleProvisionAtas}
               disabled={provisionBusy || !privyWallet}
-              title="Idempotently create the agent treasury's USDC / USDT ATAs"
+              title={
+                'Pre-creates the agent treasury\u2019s SPL token accounts (ATAs) for ' +
+                'USDC, USDT, and USDG. One signed transaction; idempotent. Re-run if a ' +
+                'wallet says \u201CRecipient has no token account\u201D when sending stables.'
+              }
             >
               {provisionBusy && <Loader2 className="size-3.5 animate-spin" />}
               Provision stable ATAs
@@ -748,7 +866,12 @@ export default function AgentPage() {
                         </span>
                         <div className="flex flex-col min-w-0">
                           <span className="text-sm font-medium truncate">{display}</span>
-                          {t.program === 'spl-token-2022' && (
+                          {t.program === 'spl-token-2022' && !t.known && (
+                            // Only surface the Token-2022 chip for unknown
+                            // mints where it acts as a diagnostic. For
+                            // known stables (USDG etc.) the program is
+                            // implicit in the registry and the badge is
+                            // visual noise.
                             <Badge variant="outline" className="self-start mt-0.5">
                               Token-2022
                             </Badge>
@@ -785,9 +908,7 @@ export default function AgentPage() {
             </CardTitle>
             <CardDescription>
               How much of the agent treasury your wallet (the executive) is allowed to move per x402
-              call. Backed by an SPL <code className="font-mono text-xs">Approve</code> on the
-              agent&apos;s USDC ATA — funds physically live on the agent treasury PDA, the executive
-              just signs. Re-approve to top up; revoke to lock everything down.
+              call. Re-approve to top up; revoke to lock everything down.
             </CardDescription>
           </div>
           <Button variant="ghost" size="icon" onClick={refreshDelegation} title="Refresh">
@@ -913,45 +1034,45 @@ export default function AgentPage() {
                     </div>
                   )}
 
-                  {/* What's next — actionable hints based on current state. */}
-                  <NextSteps
-                    delegation={delegation}
-                    balanceUsdc={balanceUsdc}
-                    remainingUsdc={remainingUsdc}
-                    capUsdc={capUsdc}
-                    mint={mint}
-                    usdcLabel={usdcInfo.label}
-                  />
-
-                  <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="allowance" className="text-xs">
-                        New allowance ({usdcInfo.label})
-                      </Label>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="allowance" className="text-xs">
+                      New allowance ({usdcInfo.label})
+                    </Label>
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
                       <Input
                         id="allowance"
                         value={allowanceDraft}
                         onChange={(e) => setAllowanceDraft(e.target.value)}
                         inputMode="decimal"
                         placeholder="5.00"
-                        className="font-mono"
+                        className="font-mono h-9 w-full md:min-w-0 md:flex-1"
                       />
-                      <span className="text-[11px] text-fg-subtle">
-                        Sets the cap (overwrites any existing one). Top up by re-approving.
-                      </span>
+                      <div className="flex shrink-0 flex-row flex-wrap gap-2 md:justify-end">
+                        <Button
+                          className="h-9 shrink-0"
+                          onClick={handleSetAllowance}
+                          disabled={allowanceBusy != null}
+                        >
+                          {allowanceBusy === 'set' && <Loader2 className="size-4 animate-spin" />}
+                          Set allowance
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          className="h-9 shrink-0"
+                          onClick={handleRevokeAllowance}
+                          disabled={allowanceBusy != null || !delegation.delegate}
+                        >
+                          {allowanceBusy === 'revoke' && (
+                            <Loader2 className="size-4 animate-spin" />
+                          )}
+                          Revoke
+                        </Button>
+                      </div>
                     </div>
-                    <Button onClick={handleSetAllowance} disabled={allowanceBusy != null}>
-                      {allowanceBusy === 'set' && <Loader2 className="size-4 animate-spin" />}
-                      Set allowance
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      onClick={handleRevokeAllowance}
-                      disabled={allowanceBusy != null || !delegation.delegate}
-                    >
-                      {allowanceBusy === 'revoke' && <Loader2 className="size-4 animate-spin" />}
-                      Revoke
-                    </Button>
+                    <span className="text-[11px] text-fg-subtle">
+                      Sets the cap (overwrites any existing one). Top up by re-approving. Use the
+                      Revoke button to set the cap to 0 (freeze spending).
+                    </span>
                   </div>
 
                   {delegation.sourceExists && delegation.balance === 0n && (
@@ -999,14 +1120,12 @@ export default function AgentPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <ArrowDownToLine className="size-4 text-brand" /> Withdraw treasury ({usdcInfo.label})
+            <ArrowDownToLine className="size-4 text-brand" /> Withdraw treasury (
+            {withdrawToken.symbol})
           </CardTitle>
           <CardDescription>
-            Move {usdcInfo.label} out of the agent treasury. The connected wallet (the agent
-            <strong> owner</strong>) signs an{' '}
-            <code className="font-mono text-xs">mpl-core::Execute</code> instruction that CPI-signs
-            an SPL <code className="font-mono text-xs">TransferChecked</code> on the treasury PDA.
-            The destination ATA is created automatically if it doesn&apos;t exist.
+            Withdraw any of the agent&apos;s SPL stables or native SOL (creator fees from a Genesis
+            token launch route here) out of its treasury.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -1033,9 +1152,19 @@ export default function AgentPage() {
                     placeholder={privyWallet.address}
                   />
                   <span className="text-[11px] text-fg-subtle">
-                    Defaults to your owner wallet. We send to this address&apos;s{' '}
-                    <code className="font-mono">{usdcInfo.label}</code> ATA — created on the fly if
-                    missing.
+                    Defaults to your owner wallet.{' '}
+                    {isSolWithdraw ? (
+                      <>
+                        Native SOL is sent directly via{' '}
+                        <code className="font-mono">SystemProgram.Transfer</code> — no ATA needed.
+                      </>
+                    ) : (
+                      <>
+                        We send to this address&apos;s{' '}
+                        <code className="font-mono">{withdrawToken.symbol}</code> ATA — created on
+                        the fly if missing.
+                      </>
+                    )}
                   </span>
                 </div>
                 {isWithdrawDestinationOwner ? (
@@ -1070,47 +1199,76 @@ export default function AgentPage() {
                 </div>
               )}
 
-              <div className="grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="withdraw-amount" className="text-xs">
-                    Amount ({usdcInfo.label})
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
+                <div className="flex w-full flex-col gap-1.5 md:w-46 md:shrink-0">
+                  <Label htmlFor="withdraw-currency" className="text-xs">
+                    Token
                   </Label>
-                  <Input
-                    id="withdraw-amount"
-                    value={withdrawAmountDraft}
-                    onChange={(e) => setWithdrawAmountDraft(e.target.value)}
-                    inputMode="decimal"
-                    placeholder="1.00"
-                    className="font-mono"
-                  />
+                  <select
+                    id="withdraw-currency"
+                    value={withdrawCurrency}
+                    onChange={(e) => {
+                      setWithdrawCurrency(e.target.value as WithdrawSymbol);
+                      setWithdrawAmountDraft('');
+                    }}
+                    className="h-9 w-full rounded-md border border-border bg-bg-elev px-3 text-sm"
+                    disabled={withdrawBusy != null}
+                  >
+                    {KNOWN_STABLE_SYMBOLS.map((sym) => (
+                      <option key={sym} value={sym}>
+                        {sym}
+                      </option>
+                    ))}
+                    {/* Native SOL is appended last so the SPL stables
+                        keep their familiar ordering at the top of the
+                        list. */}
+                    <option value="SOL">SOL (native)</option>
+                  </select>
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <Label htmlFor="withdraw-amount" className="text-xs">
+                    Amount ({withdrawToken.symbol})
+                  </Label>
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+                    <Input
+                      id="withdraw-amount"
+                      value={withdrawAmountDraft}
+                      onChange={(e) => setWithdrawAmountDraft(e.target.value)}
+                      inputMode="decimal"
+                      placeholder="1.00"
+                      className="font-mono h-9 w-full md:min-w-0 md:flex-1"
+                    />
+                    <div className="flex shrink-0 flex-row flex-wrap gap-2 md:justify-end">
+                      <Button
+                        className="h-9 shrink-0"
+                        onClick={() => handleWithdraw('amount')}
+                        disabled={withdrawBusy != null || !withdrawAmountDraft}
+                      >
+                        {withdrawBusy === 'amount' && <Loader2 className="size-4 animate-spin" />}
+                        Withdraw
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="h-9 shrink-0"
+                        onClick={() => handleWithdraw('all')}
+                        disabled={withdrawBusy != null || withdrawBalanceAtomic === 0n}
+                      >
+                        {withdrawBusy === 'all' && <Loader2 className="size-4 animate-spin" />}
+                        Withdraw all
+                      </Button>
+                    </div>
+                  </div>
                   <span className="text-[11px] text-fg-subtle">
                     Treasury balance:{' '}
                     <strong className="text-fg-muted">
-                      {delegation
-                        ? (Number(delegation.balance) / 1_000_000).toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 6,
-                          })
-                        : '—'}{' '}
-                      {usdcInfo.label}
+                      {withdrawBalanceUi.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 6,
+                      })}{' '}
+                      {withdrawToken.symbol}
                     </strong>
                   </span>
                 </div>
-                <Button
-                  onClick={() => handleWithdraw('amount')}
-                  disabled={withdrawBusy != null || !withdrawAmountDraft}
-                >
-                  {withdrawBusy === 'amount' && <Loader2 className="size-4 animate-spin" />}
-                  Withdraw
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => handleWithdraw('all')}
-                  disabled={withdrawBusy != null || !delegation || delegation.balance === 0n}
-                >
-                  {withdrawBusy === 'all' && <Loader2 className="size-4 animate-spin" />}
-                  Withdraw all
-                </Button>
               </div>
 
               {withdrawLastSig && (
@@ -1215,6 +1373,7 @@ export default function AgentPage() {
           <TabsTrigger value="receipts">Receipts</TabsTrigger>
           <TabsTrigger value="identity">Identity (registration)</TabsTrigger>
           <TabsTrigger value="executive">Execute (delegation)</TabsTrigger>
+          <TabsTrigger value="token">Token (Genesis)</TabsTrigger>
         </TabsList>
 
         <TabsContent value="receipts">
@@ -1445,6 +1604,15 @@ export default function AgentPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="token">
+          <LaunchTokenCard
+            agentMint={mint}
+            umi={privyUmi ?? null}
+            wallet={privyWallet}
+            network={balance?.network}
+          />
+        </TabsContent>
       </Tabs>
     </div>
   );
@@ -1476,167 +1644,4 @@ function computeCap(stored: string | undefined, currentRemaining: bigint): bigin
   if (storedCap === 0n) return currentRemaining;
   if (currentRemaining > storedCap) return currentRemaining;
   return storedCap;
-}
-
-/**
- * Stateful "what should I do next?" panel for the spend-allowance card.
- *
- * Picks 1–3 actionable suggestions based on whether the agent has a
- * delegate, treasury balance, and remaining allowance. Each suggestion is
- * a real link (deep-link into /buyer pre-filled with this agent, faucet,
- * etc.) so users aren't left wondering "ok now what".
- */
-function NextSteps(props: {
-  delegation: SpendDelegationStatus;
-  balanceUsdc: number;
-  remainingUsdc: number;
-  capUsdc: number;
-  mint: string;
-  usdcLabel: string;
-}) {
-  const { delegation, balanceUsdc, remainingUsdc, capUsdc, mint, usdcLabel } = props;
-  type Step = {
-    icon: React.ReactNode;
-    title: string;
-    body: React.ReactNode;
-    tone: 'brand' | 'warning' | 'success';
-  };
-  const steps: Step[] = [];
-
-  if (!delegation.delegate) {
-    steps.push({
-      tone: 'brand',
-      icon: <KeyRound className="size-4" />,
-      title: 'Set an allowance',
-      body: (
-        <>
-          The agent can&apos;t spend until you approve a cap. Use the form below — start with
-          something small like <code className="font-mono">5.00 {usdcLabel}</code>.
-        </>
-      ),
-    });
-  }
-
-  if (delegation.sourceExists && balanceUsdc <= 0) {
-    steps.push({
-      tone: 'warning',
-      icon: <Wallet className="size-4" />,
-      title: 'Fund the treasury',
-      body: (
-        <>
-          Treasury balance is <strong>0 {usdcLabel}</strong>. Send {usdcLabel} to{' '}
-          <code className="font-mono break-all">{delegation.sourceTokenAccount}</code>. Devnet?{' '}
-          <a
-            className="text-brand hover:underline"
-            href="https://faucet.circle.com/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Circle faucet ↗
-          </a>
-        </>
-      ),
-    });
-  }
-
-  if (delegation.delegate && remainingUsdc <= 0) {
-    steps.push({
-      tone: 'warning',
-      icon: <PlusCircle className="size-4" />,
-      title: 'Re-approve to top up',
-      body: (
-        <>
-          Cap is exhausted ({capUsdc.toFixed(2)} {usdcLabel} all spent). Re-run{' '}
-          <strong>Set allowance</strong> below to extend it.
-        </>
-      ),
-    });
-  }
-
-  if (delegation.delegate && remainingUsdc > 0 && balanceUsdc > 0) {
-    steps.push({
-      tone: 'success',
-      icon: <Send className="size-4" />,
-      title: 'Try a real x402 call',
-      body: (
-        <>
-          Open the buyer cockpit and fire a request — the agent will sign with the executive and
-          settle from the treasury.{' '}
-          <Link
-            href={`/buyer?agent=${mint}`}
-            className="inline-flex items-center gap-1 text-brand hover:underline"
-          >
-            Go to buyer <ArrowRight className="size-3" />
-          </Link>
-        </>
-      ),
-    });
-  }
-
-  if (delegation.delegate && remainingUsdc > 0 && capUsdc > 0 && remainingUsdc / capUsdc < 0.2) {
-    steps.push({
-      tone: 'warning',
-      icon: <Sparkles className="size-4" />,
-      title: 'Running low',
-      body: (
-        <>
-          Less than 20% of the original cap left ({remainingUsdc.toFixed(4)} {usdcLabel}). Consider
-          re-approving before the next big spend.
-        </>
-      ),
-    });
-  }
-
-  if (delegation.delegate) {
-    steps.push({
-      tone: 'brand',
-      icon: <ShieldOff className="size-4" />,
-      title: 'Lock everything down',
-      body: (
-        <>
-          Use the <strong>Revoke</strong> button to set the cap to 0 and freeze spending.
-        </>
-      ),
-    });
-  }
-
-  if (steps.length === 0) return null;
-
-  return (
-    <div className="rounded-md border border-border bg-bg-elev/40 p-3 flex flex-col gap-2">
-      <span className="text-[11px] uppercase tracking-wider text-fg-subtle">What&apos;s next</span>
-      <ul className="flex flex-col gap-2">
-        {steps.slice(0, 3).map((s, i) => (
-          <li
-            key={i}
-            className={
-              'flex items-start gap-2.5 rounded-md border p-2.5 text-xs leading-relaxed ' +
-              (s.tone === 'success'
-                ? 'border-success/30 bg-success/5 text-fg-default'
-                : s.tone === 'warning'
-                  ? 'border-warning/30 bg-warning/5 text-fg-default'
-                  : 'border-brand/30 bg-brand/5 text-fg-default')
-            }
-          >
-            <span
-              className={
-                'mt-0.5 ' +
-                (s.tone === 'success'
-                  ? 'text-success'
-                  : s.tone === 'warning'
-                    ? 'text-warning'
-                    : 'text-brand')
-              }
-            >
-              {s.icon}
-            </span>
-            <div className="flex flex-col gap-0.5 min-w-0">
-              <span className="font-medium">{s.title}</span>
-              <span className="text-fg-muted">{s.body}</span>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
 }

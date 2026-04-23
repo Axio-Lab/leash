@@ -20,6 +20,18 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'Leash · Playground',
   description: 'A wallet, a leash, and a public receipt for every AI agent.',
+  // Next routes /icon.svg to the file in `public/images/` via this
+  // metadata entry — single source of truth for the brand mark, no
+  // duplicate file in `app/`. The PNG is registered as a fallback for
+  // browsers that ignore SVG favicons (e.g. older Safari).
+  icons: {
+    icon: [
+      { url: '/images/leash_icon.svg', type: 'image/svg+xml' },
+      { url: '/images/leash_icon.png', type: 'image/png', sizes: 'any' },
+    ],
+    shortcut: '/images/leash_icon.svg',
+    apple: '/images/leash_icon.png',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

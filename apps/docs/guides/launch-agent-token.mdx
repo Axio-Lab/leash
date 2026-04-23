@@ -1,0 +1,226 @@
+---
+title: 'Launch an agent token'
+description: 'Launch the canonical bonding-curve token for a Leash agent via Metaplex Genesis. Creator fees route to the agent treasury PDA automatically.'
+---
+
+> An **agent token** is the one canonical token for a Leash agent.
+> Genesis routes its creator fees to the agent's Asset Signer PDA (the
+> treasury) and wraps the launch transactions in `mpl-core::Execute` so
+> the agent itself executes them on-chain. The Leash SDK
+> (`@leash/registry-utils`) ships a thin, typed wrapper plus a one-click
+> playground UI on `/agents/[mint]`. Mirrors the Metaplex
+> [Create an Agent Token](https://www.metaplex.com/docs/agents/create-agent-token)
+> guide.
+
+## What this guide covers
+
+- Launching a token from an existing registered agent using
+  `launchAgentToken`.
+- The web playground flow on `/agents/<mint>` → **Token (Genesis)** tab.
+- Reading the on-chain agent → token binding with `getAgentToken`.
+- Binding an existing Genesis token to an agent later via
+  `setAgentToken` (the docs' "Set Agent Token" snippet).
+
+You need a registered Leash agent first — see [Create an agent](/guides/create-an-agent).
+The launching wallet pays the launch fees (~0.02 SOL on devnet, plus
+the optional `firstBuyAmount`) and **must be the agent's owner**.
+
+## One-shot launch
+
+```ts
+import { launchAgentToken } from '@leash/registry-utils';
+
+const result = await launchAgentToken(umi, {
+  agentAsset: '<Core asset address>',
+  network: 'solana-devnet',
+  // setToken: true is PERMANENT. Default to false for previews.
+  setToken: false,
+  token: {
+    name: 'Plexpert Token',
+    symbol: 'PLX',
+    image: 'https://gateway.irys.xyz/<id>', // MUST be Irys
+    description: 'The official token of Plexpert.',
+    externalLinks: { website: 'https://plexpert.example' },
+  },
+  launch: {
+    // Optional fee-free first swap reserved for the agent PDA.
+    firstBuyAmount: 0.1, // SOL
+  },
+});
+
+console.log(result.mintAddress); // base58 mint
+console.log(result.launch.link); // metaplex.com landing page
+console.log(result.signatures); // base58 tx sigs (1-2)
+```
+
+The returned shape includes `agentTokenSet: boolean` so callers can
+unambiguously check whether the on-chain bind happened (it only does
+when `setToken: true` and the bundle confirms cleanly).
+
+### Required inputs (from the Metaplex API)
+
+| Field  | Notes                                                                                                     |
+| ------ | --------------------------------------------------------------------------------------------------------- |
+| name   | 1–32 characters                                                                                           |
+| symbol | 1–10 characters                                                                                           |
+| image  | Must be `https://gateway.irys.xyz/<id>`. The Metaplex API rejects every other host. Upload to Irys first. |
+
+`description` (≤250 chars) and `externalLinks` (`website`, `twitter`,
+`telegram`) are optional.
+
+> **About the image host.** The Metaplex API explicitly rejects Pinata,
+> IPFS, S3, GitHub Pages, and any non-`gateway.irys.xyz` URL on the
+> `image` field — even though those hosts are perfectly valid for the
+> agent's `RegistrationV1` blob. The playground works around this by
+> exposing `POST /api/irys/upload-image` (server-side `@irys/upload` +
+> `@irys/upload-solana`) so the user can pick a file in the UI and get
+> back a usable Irys gateway URL in one click. Files under 100 KiB
+> upload free on Irys mainnet; larger files require a small SOL balance
+> on the configured `IRYS_FUNDING_SECRET_KEY` wallet (~0.001 SOL / MB).
+> Set `IRYS_NETWORK=devnet` to use the free, ephemeral devnet for
+> testing.
+
+## Two-step variant
+
+For hardware wallets, custom priority fees, or "inspect-then-send"
+flows:
+
+```ts
+import { prepareAgentTokenLaunch, sendPreparedAgentTokenLaunch } from '@leash/registry-utils';
+
+const prepared = await prepareAgentTokenLaunch(umi, {
+  /* same input */
+});
+// Inspect / modify prepared.transactions here if needed.
+const result = await sendPreparedAgentTokenLaunch(umi, prepared);
+```
+
+## Read agent → token state
+
+```ts
+import { getAgentToken, hasAgentToken } from '@leash/registry-utils';
+
+const status = await getAgentToken(umi, '<Core asset>');
+// {
+//   agentAsset, treasury, hasToken, mint,
+//   source: 'v1' | 'v2' | 'none',
+// }
+
+if (await hasAgentToken(umi, '<Core asset>')) {
+  // The agent already has a permanent token.
+}
+```
+
+`source` tells you which Identity flavour was read. `'v1'` agents
+predate the `agentToken` field — they always return `hasToken: false`
+and need a manual `setAgentToken` upgrade after launching, even if
+the Genesis registry shows them as having a token.
+
+## Bind an existing Genesis launch
+
+If you launched a token outside Leash and now want to associate it
+with an agent (the "Set Agent Token" path from the Metaplex docs):
+
+```ts
+import { setAgentToken } from '@leash/registry-utils';
+
+const { signature } = await setAgentToken(umi, {
+  agentAsset: '<Core asset>',
+  genesisAccount: '<Genesis PDA from your earlier launch>',
+  collection: '<agent collection>', // recommended; mpl-core::Execute is cheaper with it
+});
+```
+
+Wraps `setAgentTokenV1` in `mpl-core::Execute` with the asset signer
+PDA as the inner authority — same pattern Leash uses for spend
+delegation and withdraws.
+
+> **Permanence reminder.** Each agent can only ever be bound to one
+> token. There is no instruction to change, replace, or unset it.
+
+## The web playground flow
+
+The agent profile page (`/agents/<mint>`) ships a **Token (Genesis)**
+tab that wires `launchAgentToken` + `getAgentToken` directly to the
+connected Privy embedded wallet:
+
+1. The card reads `getAgentToken` on mount and shows the current
+   binding (linked + mint, or "no token yet"), the treasury PDA where
+   creator fees will accrue, and which identity flavour is on-chain.
+2. The **Image** picker takes a local file and shows an immediate
+   preview thumbnail. The actual upload to Irys is **deferred until you
+   click Launch token** — until then you can swap the file as many
+   times as you want without burning Irys credits or polluting permanent
+   storage with discarded thumbnails. On launch the card uploads the
+   final image to `/api/irys/upload-image`, pins the gateway URL into
+   `form.image`, then runs `launchAgentToken` in the same async flow
+   (the button label switches between **Uploading image…** and
+   **Launching…** so you see exactly which step is in flight). An
+   "Advanced" disclosure exposes a raw URL input for callers who
+   already uploaded out-of-band; pasting a non-Irys URL surfaces an
+   inline warning since the Metaplex API rejects everything else.
+3. The **Permanently bind** checkbox defaults to **off**. A second
+   warning appears if you tick it on an agent that already has a
+   token.
+4. After a successful launch the card prints the mint address, the
+   Genesis launch link, and every base58 signature with a Solscan
+   link, then re-runs `getAgentToken` so the "linked" badge updates
+   in place.
+
+The playground server never sees a signing key — every transaction is
+signed by `umi.identity` (the user's connected wallet).
+
+## CLI demo
+
+`apps/agent-token-demo` is an end-to-end CLI that drives
+`launchAgentToken` from a Solana keypair. Useful as a copy-paste
+template for ops scripts and CI smoke tests.
+
+```bash
+pnpm --filter @leash/agent-token-demo build
+
+LEASH_OWNER_SECRET_KEY='[1,2,3,...,64]' \
+LEASH_AGENT_ASSET='<Core asset>' \
+LEASH_TOKEN_IMAGE='https://gateway.irys.xyz/<id>' \
+LEASH_TOKEN_NAME='Plexpert' LEASH_TOKEN_SYMBOL='PLX' \
+LEASH_NETWORK='solana-devnet' \
+pnpm --filter @leash/agent-token-demo start
+```
+
+The script:
+
+1. Reads the agent's current `getAgentToken` state and refuses to
+   re-launch with `setToken: true` if one is already bound (the bind
+   is irreversible — re-running would just waste fees).
+2. Calls `launchAgentToken` with the env-provided metadata.
+3. Prints every signature with a Solscan deep link.
+4. Re-reads `getAgentToken` after the launch and warns if `setToken`
+   was true but the on-chain field hasn't caught up yet (RPC lag).
+
+Set `LEASH_SET_TOKEN=true` only when you're certain this is the
+final token for the agent. Defaults to `false`.
+
+## Errors
+
+The Genesis SDK exposes typed errors so callers can branch precisely:
+
+| Error      | Guard                      | Cause                                            |
+| ---------- | -------------------------- | ------------------------------------------------ |
+| Validation | `isGenesisValidationError` | Bad input (non-Irys image URL, name too long, …) |
+| Network    | `isGenesisApiNetworkError` | Cannot reach `https://api.metaplex.com`          |
+| API 4xx    | `isGenesisApiError`        | Rejected by the API; check `err.responseBody`    |
+| API 5xx    | `isGenesisApiError`        | Metaplex API unavailable; retry with back-off    |
+
+Re-import the guards from `@metaplex-foundation/genesis` directly when
+you need them — Leash doesn't wrap them.
+
+## Related
+
+- [Create an agent](/guides/create-an-agent) — required pre-step.
+- [Withdraw treasury funds](/guides/withdraw-funds) — drain creator
+  fees out of the treasury PDA once they accrue. Genesis fees land as
+  **native SOL**, so use `withdrawTreasurySol{,All}` (or pick
+  `SOL (native)` in the playground's withdraw card).
+- [Run an agent](/sdk/registry-utils#execute-delegation) — executive
+  delegation flow that lets the agent spend received fees via x402.
+- Metaplex docs: [Create an Agent Token](https://www.metaplex.com/docs/agents/create-agent-token).

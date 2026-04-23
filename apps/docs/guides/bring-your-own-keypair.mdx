@@ -1,0 +1,152 @@
+---
+title: Bring your own keypair
+description: Mint and run an agent without Privy — using a local Solana keypair, a server-side env var, or a generated operator keypair.
+---
+
+The web playground (`apps/web`) signs everything with a connected Privy embedded wallet because that's the lowest-friction path for trying Leash from a browser. The SDK itself has no Privy dependency — `@leash/registry-utils` only cares that `umi.identity` can sign Solana transactions. This guide shows the three production-grade alternatives.
+
+## Pick a signer style
+
+| Style                                                  | Custody                             | Recovery                              | Best for                                                           |
+| ------------------------------------------------------ | ----------------------------------- | ------------------------------------- | ------------------------------------------------------------------ |
+| **Privy embedded wallet**                              | Privy holds an encrypted shard      | Email / OAuth                         | Browser-first agents with human users                              |
+| **BYO local keypair** (`solana-keygen` JSON)           | You hold the 64-byte secret         | None — back it up yourself            | Headless scripts, CI, "I just want to play without an account"     |
+| **Server-side env var** (`LEASH_DEV_PAYER_SECRET_KEY`) | The Node process holds it in memory | Whatever your secret manager provides | Cron jobs, internal tools, the playground's headless `POST` routes |
+| **KMS / TEE / hardware wallet**                        | A managed signer service            | Provider-specific                     | Production agents managing real money                              |
+
+The first three all reduce to the same SDK pattern: build a Umi, install a `keypairIdentity` plugin, then call `@leash/registry-utils` exactly the same way. Only the source of bytes differs.
+
+## BYO local keypair
+
+Generate one with the Solana CLI (`solana-keygen new -o agent-owner.json`) or with the SDK's portable helper:
+
+```ts
+import { writeFileSync } from 'node:fs';
+import { generateOperatorKeypair, exportOperatorJson } from '@leash/registry-utils';
+
+const kp = generateOperatorKeypair();
+writeFileSync('agent-owner.json', exportOperatorJson(kp));
+console.log('owner pubkey:', kp.pubkey);
+```
+
+`generateOperatorKeypair` produces a Solana-compatible 64-byte secret (`secret(32) || public(32)`) — byte-identical to what `solana-keygen` writes — so any tool in the Solana ecosystem can read it. There is **no Solana RPC dependency**, so the same call works in Node, the browser, and edge runtimes.
+
+Fund the new pubkey with a tiny bit of SOL on whichever cluster you're targeting (`solana airdrop 1 <pubkey> --url devnet`) before continuing — the mint, ATA provisioning, and delegation steps all need rent.
+
+Then mint an agent with that keypair as `umi.identity`:
+
+```ts
+import { readFileSync } from 'node:fs';
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
+import { keypairIdentity } from '@metaplex-foundation/umi';
+import { mplAgentIdentity } from '@metaplex-foundation/mpl-agent-registry';
+import { createAgent, importOperatorJson } from '@leash/registry-utils';
+
+const owner = importOperatorJson(readFileSync('agent-owner.json', 'utf-8'));
+
+const umi = createUmi('https://api.devnet.solana.com').use(mplAgentIdentity());
+umi.use(keypairIdentity(umi.eddsa.createKeypairFromSecretKey(owner.secretKey)));
+
+const { assetAddress, signature, network } = await createAgent(umi, {
+  wallet: String(umi.identity.publicKey),
+  network: 'solana-devnet',
+  name: 'My headless agent',
+  description: 'Agent owned by a local keypair, no Privy involved.',
+  uri: 'https://gateway.pinata.cloud/ipfs/<your-cid>',
+});
+```
+
+Whoever holds `agent-owner.json` is now the owner — they alone can sign withdrawals, change delegations, set the agent token, etc. Lose the file, lose the agent. Back it up.
+
+## Server-side env var
+
+The headless server routes (`POST /api/agents/create`, `POST /api/agents/executive`) and any custom Node service can use this pattern. Drop a base58 (or JSON-array) secret key into `LEASH_DEV_PAYER_SECRET_KEY` and the playground's `getServerUmi()` will load it as `umi.identity`:
+
+```ts
+// apps/web/lib/umi.ts (excerpt)
+const secret = process.env.LEASH_DEV_PAYER_SECRET_KEY;
+const umi = createUmi(rpcUrl).use(mplAgentIdentity());
+umi.use(keypairIdentity(umi.eddsa.createKeypairFromSecretKey(decodeSecret(secret))));
+```
+
+This is the right shape for CI, cron, and "an internal tool that mints test agents on every deploy" — the secret never touches a browser, but it does sit in your environment, so use whatever secret manager you'd use for any other production credential (1Password Secrets Automation, AWS Secrets Manager, Vault, Doppler, etc.).
+
+## Splitting owner and executive
+
+For production agents we strongly recommend **two different keypairs** — see [Identities](/concepts/identities) for why. The setup is two `keypairIdentity` swaps in sequence:
+
+```ts
+// 1. Mint as the cold owner.
+const ownerUmi = createUmi(rpc).use(mplAgentIdentity());
+ownerUmi.use(keypairIdentity(ownerKeypair));
+const { assetAddress } = await createAgent(ownerUmi, {
+  /* … */
+});
+
+// 2. Re-derive a Umi tied to the hot executive and bootstrap it.
+const execUmi = createUmi(rpc).use(mplAgentIdentity());
+execUmi.use(keypairIdentity(executiveKeypair));
+await registerExecutive(execUmi); // one-time per executive
+
+// 3. Switch back to the owner to grant the executive on-chain rights.
+await delegateExecution(ownerUmi, {
+  agentAsset: assetAddress,
+  executiveAuthority: String(execUmi.identity.publicKey),
+});
+
+// 4. Owner-signed SPL allowance — caps how much the executive can move.
+await setSpendDelegation(ownerUmi, {
+  agentAsset: assetAddress,
+  mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', // devnet USDC
+  executive: String(execUmi.identity.publicKey),
+  amount: 5_000_000n,
+});
+```
+
+After step 4 the executive can settle x402 calls without the owner ever signing again. The owner only needs to come back online to top up the allowance, rotate the executive, withdraw from the treasury, or change the agent's identity / token.
+
+## Generating an operator keypair too
+
+The owner / executive split above covers funds. The **operator** is a separate concern — the agent's own off-chain signing identity. You generate it the same way and optionally advertise it on-chain inside the agent's metadata:
+
+```ts
+import { generateOperatorKeypair, operatorRegistration } from '@leash/registry-utils';
+
+const operator = generateOperatorKeypair();
+
+await createAgent(ownerUmi, {
+  wallet: String(ownerUmi.identity.publicKey),
+  network: 'solana-devnet',
+  name: 'My agent',
+  description: '…',
+  uri: '<ipfs uri>',
+  registrations: [operatorRegistration(operator.pubkey)],
+});
+
+// Persist the secret somewhere only the agent process can read it.
+fs.writeFileSync('operator.json', exportOperatorJson(operator));
+```
+
+The agent process loads `operator.json` at boot, signs receipts and attestations with `signWithOperator(operator.secretKey, message)`, and any peer can verify the binding by reading the on-chain `AgentMetadata.registrations` and matching the advertised pubkey.
+
+## Two-step signing (hardware wallets, priority fees, custom retries)
+
+When `umi.identity` is a hardware wallet or you need to add priority fees / custom retries, swap the one-shot helpers for their `prepare*` siblings:
+
+```ts
+import { prepareAgentMint, sendPreparedAgentMint } from '@leash/registry-utils';
+
+const prepared = await prepareAgentMint(umi, {
+  /* same input */
+});
+// inspect prepared.transaction, add priority fees, hand to a Ledger, etc.
+const signature = await sendPreparedAgentMint(umi, prepared);
+```
+
+Every mutating helper in `@leash/registry-utils` ships a matching `prepare*` function that returns an unsigned `TransactionBuilder` plus echo fields, so you can sign and submit on your own terms. See the [Prepare/Send split](/sdk/registry-utils#preparesend-split) section in the SDK reference for the full list — this is the same surface the upcoming HTTP API speaks.
+
+## See also
+
+- [Identities](/concepts/identities) — when each keypair is involved and what it signs.
+- [Create an agent](/guides/create-an-agent) — full walkthrough of the mint flow.
+- [Fund an agent](/guides/fund-an-agent) — per-mint SPL allowances for the executive.

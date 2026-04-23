@@ -50,6 +50,46 @@ Mirrors the Metaplex [Run an Agent](https://www.metaplex.com/docs/agents/run-an-
 - `verifyDelegation(umi, { agentAsset, executiveAuthority })` → `{ delegateRecord, exists }`. Derives the `ExecutionDelegateRecordV1` PDA and runs the docs' `umi.rpc.getAccount(...).exists` check.
 - `isExecutionDelegated(umi, { agentAsset, executiveAuthority })` — boolean shortcut around `verifyDelegation`.
 
+### Withdraw
+
+Owner-driven drain of treasury funds — both **SPL stables** and
+**native SOL** (Genesis creator fees). Both paths share one
+`mpl-core::Execute` wrap so the Asset Signer PDA can authorise the
+inner instruction via CPI; only the inner instruction differs (SPL
+`TransferChecked` vs `SystemProgram.Transfer`). Same wire-shape works
+for classic SPL Token, Token-2022, and the System program. Full guide:
+[Withdraw treasury funds](/guides/withdraw-funds).
+
+**SPL stables**
+
+- `withdrawTreasury(umi, { agentAsset, mint, destination, amount, payer?, authority?, tokenProgram? })` — moves `amount` atomic units to `destination`. Bundles a `CreateIdempotent` ATA in front when the destination has no ATA yet.
+- `withdrawTreasuryAll(umi, { agentAsset, mint, destination, ... })` — reads the on-chain balance and drains it. Returns `null` (no tx broadcast) when the treasury is empty.
+- `getTreasuryBalance(umi, { agentAsset, mint, tokenProgram? })` — read-only "what's the max I can pull" helper.
+
+**Native SOL** (creator fees from a Genesis token launch land here)
+
+- `withdrawTreasurySol(umi, { agentAsset, destination, lamports, payer?, authority? })` — moves exactly `lamports` to `destination` via a hand-rolled `SystemProgram.Transfer` wrapped in `mpl-core::Execute`. No ATA needed.
+- `withdrawTreasurySolAll(umi, { agentAsset, destination, reserveLamports?, ... })` — reads the PDA's lamport balance, subtracts a configurable reserve (default `5_000` lamports), and transfers the rest. Returns `null` when the spendable amount is zero.
+- `getTreasurySolBalance(umi, { agentAsset, reserveLamports? })` → `{ treasury, lamports, sol, spendableLamports, spendableSol }` for UI gating.
+- `SYSTEM_PROGRAM_ID`, `DEFAULT_SOL_RESERVE_LAMPORTS` — re-exported constants for advanced consumers.
+
+### Agent token (Metaplex Genesis)
+
+Wraps the [Genesis](https://www.metaplex.com/docs/agents/create-agent-token)
+SDK so an agent can launch its canonical token in one call. Creator
+fees route to the agent's Asset Signer PDA (the treasury), and the
+launch transactions are wrapped in `mpl-core::Execute` so the agent
+itself executes them on-chain. Full guide: [Launch an agent token](/guides/launch-agent-token).
+
+- `launchAgentToken(umi, { agentAsset, network?, setToken?, token, launch?, wallet?, ... })` — one-shot `createAndRegisterLaunch`. Returns `{ mintAddress, genesisAccount, signatures, launch, token, agentAsset, network, agentTokenSet }` with base58-encoded signatures. **`setToken: true` is permanent** — once an agent's token is bound it cannot be changed, replaced, or unset.
+- `prepareAgentTokenLaunch(umi, input)` / `sendPreparedAgentTokenLaunch(umi, prepared, opts?)` — two-step variant for hardware wallets, custom retries, or inspecting the unsigned bundle before sending.
+- `setAgentToken(umi, { agentAsset, genesisAccount, collection?, payer?, authority? })` — wraps `setAgentTokenV1` in `mpl-core::Execute`. Use this when you launched a Genesis token outside Leash and want to bind it to your agent later (the docs' "Set Agent Token" snippet).
+- `getAgentToken(umi, agentAsset)` → `{ agentAsset, treasury, hasToken, mint, source }` where `source` is `'v1' | 'v2' | 'none'`.
+- `hasAgentToken(umi, agentAsset)` — boolean shortcut.
+
+Re-exports the Genesis types callers most often need: `TokenMetadata`,
+`BondingCurveLaunchInput`, `GenesisApiConfig`, `SvmNetwork`.
+
 ### Off-chain hosting
 
 - `pinJson(json, opts?)` — uploads to Pinata; `PINATA_JWT` from env.
@@ -57,3 +97,83 @@ Mirrors the Metaplex [Run an Agent](https://www.metaplex.com/docs/agents/run-an-
 - `resolveOrUpload({ uri | json })` — combined entrypoint.
 - `verifyGatewayCid(gatewayUrl)` — HTTP 200 smoke check (full CIDv1 verify lands in v0.2).
 - `parseLeashBlock(input)` — Zod parse helper for `LeashBlockV1`.
+
+### Operator keypair
+
+Pure Ed25519 helpers for the **agent's own off-chain signing identity** — independent of the owner / executive on-chain wallets. Bytes are Solana-compatible (`secret(32) || public(32)`, same shape as `solana-keygen`), so the same secret can be loaded by any tool in the ecosystem. **No Solana RPC dependency** — runs in Node, the browser, and edge runtimes. See [Identities](/concepts/identities) for when to use this vs. an owner / executive wallet.
+
+- `generateOperatorKeypair()` → `{ publicKey, secretKey, pubkey }` — fresh keypair from the platform's CSPRNG.
+- `operatorFromSeed(seed)` — deterministic derivation from a 32-byte seed (tests, KMS, mnemonic-derived flows).
+- `signWithOperator(secretKey, message)` — Ed25519 signature over an arbitrary payload (typically a 32-byte digest).
+- `exportOperatorJson(kp)` / `importOperatorJson(raw)` — round-trip the secret as a `solana-keygen`-style JSON byte array.
+- `operatorPublicId(kp)` → `{ pubkey, fingerprint }` — public-only summary safe for logs and UI.
+- `pubkeyToBytes(pubkey)` — base58 → 32-byte `Uint8Array` (throws on invalid input).
+- `operatorRegistration(pubkey)` → `AgentRegistration` entry (`leash:operator` / `solana:<pubkey>`) ready to drop into `createAgent({ registrations: [...] })`.
+- `readOperatorRegistration(reg)` — inverse: extracts the operator pubkey from an on-chain registration entry, or `null` if it isn't one.
+
+### Prepare/Send split
+
+Every mutating helper in this package ships in two flavours:
+
+1. **One-shot** (`createAgent`, `setSpendDelegation`, `withdrawTreasury`, …) — builds, signs with `umi.identity`, and submits. Returns the signature plus echo fields. Use this when the SDK runs in the same process as the signer.
+2. **`prepare*`** — builds an unsigned `TransactionBuilder` (or returns `null` when there's nothing to do) plus the same echo fields. Pair with `await prepared.builder.sendAndConfirm(umi)` to sign and submit later. Use this when the signer lives elsewhere (hardware wallet, browser extension, remote RPC, the upcoming Leash HTTP API), when you need to add priority fees / custom retries, or when you want to inspect the tx before broadcasting.
+
+The two-step `prepareAgentMint` + `sendPreparedAgentMint` and `prepareAgentTokenLaunch` + `sendPreparedAgentTokenLaunch` pairs are slightly different — they go through the Metaplex hosted Agent / Genesis APIs rather than building a Umi `TransactionBuilder` locally — so they keep their own send helpers. Everything else returns a builder you can finish off with `.sendAndConfirm(umi)` directly.
+
+| One-shot                 | Prepare sibling                                            | Notes                                                                               |
+| ------------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `createAgent`            | `prepareAgentMint` + `sendPreparedAgentMint`               | Goes through Metaplex's hosted mint API, not a local builder.                       |
+| `registerAgentIdentity`  | `prepareRegisterAgentIdentity`                             | BYO Core asset.                                                                     |
+| `setSpendDelegation`     | `prepareSetSpendDelegation`                                | Returns `willCreateAta` so callers can size fees correctly.                         |
+| `revokeSpendDelegation`  | `prepareRevokeSpendDelegation`                             | Pure builder — no RPC pre-flight.                                                   |
+| `provisionTreasuryAtas`  | `prepareProvisionTreasuryAtas`                             | Returns `null` when every requested ATA already exists.                             |
+| `registerExecutive`      | `prepareRegisterExecutive`                                 | One-time per executive wallet.                                                      |
+| `delegateExecution`      | `prepareDelegateExecution`                                 | Owner-signed grant.                                                                 |
+| `withdrawTreasury`       | `prepareWithdrawTreasury`                                  | Bundles a `CreateIdempotent` for the destination ATA when needed.                   |
+| `withdrawTreasuryAll`    | `prepareWithdrawTreasuryAll`                               | Returns `null` when the treasury ATA balance is zero.                               |
+| `withdrawTreasurySol`    | `prepareWithdrawTreasurySol`                               | Pure builder — `lamports` is taken at face value.                                   |
+| `withdrawTreasurySolAll` | `prepareWithdrawTreasurySolAll`                            | Returns `null` when the spendable lamport amount (after `reserveLamports`) is zero. |
+| `setAgentToken`          | `prepareSetAgentToken`                                     | Bind a Genesis token to an existing agent.                                          |
+| `launchAgentToken`       | `prepareAgentTokenLaunch` + `sendPreparedAgentTokenLaunch` | Genesis multi-tx bundle.                                                            |
+
+Example — defer signing to a Ledger:
+
+```ts
+import { prepareSetSpendDelegation } from '@leash/registry-utils';
+
+const prepared = await prepareSetSpendDelegation(umi, {
+  agentAsset: 'CoreAss…Asset',
+  mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', // devnet USDC
+  executive: executiveWallet.address,
+  amount: 5_000_000n,
+});
+
+if (prepared.willCreateAta) {
+  console.log('budget for an extra CreateIdempotent in your fee math');
+}
+
+// `prepared.builder` is an unsigned Umi TransactionBuilder.
+// Hand it to your signer of choice and call `.sendAndConfirm(umi)` when ready.
+const result = await prepared.builder.sendAndConfirm(umi);
+```
+
+Example — drain everything safely, no-op when empty:
+
+```ts
+import { prepareWithdrawTreasuryAll } from '@leash/registry-utils';
+
+const prepared = await prepareWithdrawTreasuryAll(umi, {
+  agentAsset: 'CoreAss…Asset',
+  mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+  destination: ownerWallet.address,
+});
+
+if (prepared === null) {
+  console.log('nothing to withdraw');
+} else {
+  console.log('draining', prepared.amount.toString(), 'atomic units');
+  await prepared.builder.sendAndConfirm(umi);
+}
+```
+
+This is the contract the upcoming Leash HTTP API speaks: every mutating endpoint returns `{ unsignedTransaction, echo }` from the corresponding `prepare*` function so the caller stays in control of signing and broadcasting.

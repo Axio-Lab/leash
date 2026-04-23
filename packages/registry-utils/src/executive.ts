@@ -27,6 +27,37 @@ import type { PublicKey, Signer, Umi } from '@metaplex-foundation/umi';
 import { publicKey } from '@metaplex-foundation/umi';
 import { base58 } from '@metaplex-foundation/umi/serializers';
 
+export type PrepareRegisterExecutiveResult = {
+  /** Unsigned `registerExecutiveV1` builder. */
+  builder: ReturnType<typeof registerExecutiveV1>;
+  /** Derived `ExecutiveProfileV1` PDA. */
+  profile: string;
+};
+
+/**
+ * Build (but do not send) the `registerExecutiveV1` instruction. Useful
+ * for HTTP / remote-signer flows where the on-chain submission happens
+ * in a different process than the one assembling the transaction.
+ *
+ * Pair with `umi.transactions.serialize(builder.build(umi))` to hand the
+ * raw bytes to the caller for signing, or use {@link registerExecutive}
+ * which signs + sends in-process.
+ */
+export async function prepareRegisterExecutive(
+  umi: Umi,
+  opts?: { payer?: Signer; authority?: Signer },
+): Promise<PrepareRegisterExecutiveResult> {
+  const payer = opts?.payer ?? umi.payer;
+  const authority = opts?.authority;
+  const builder = registerExecutiveV1(umi, {
+    payer,
+    ...(authority ? { authority } : {}),
+  });
+  const authorityKey = authority?.publicKey ?? umi.identity.publicKey;
+  const [profile] = findExecutiveProfileV1Pda(umi, { authority: authorityKey });
+  return { builder, profile: String(profile) };
+}
+
 /**
  * Register the caller as an Executive in the `mpl-agent-tools` program.
  * One-time setup per wallet — the PDA is derived from
@@ -43,15 +74,9 @@ export async function registerExecutive(
   umi: Umi,
   opts?: { payer?: Signer; authority?: Signer },
 ): Promise<{ signature: string; profile: string }> {
-  const payer = opts?.payer ?? umi.payer;
-  const authority = opts?.authority;
-  const result = await registerExecutiveV1(umi, {
-    payer,
-    ...(authority ? { authority } : {}),
-  }).sendAndConfirm(umi);
-  const authorityKey = authority?.publicKey ?? umi.identity.publicKey;
-  const [profile] = findExecutiveProfileV1Pda(umi, { authority: authorityKey });
-  return { signature: base58.deserialize(result.signature)[0], profile: String(profile) };
+  const prepared = await prepareRegisterExecutive(umi, opts);
+  const result = await prepared.builder.sendAndConfirm(umi);
+  return { signature: base58.deserialize(result.signature)[0], profile: prepared.profile };
 }
 
 /** Returns true if an executive profile is already registered for the wallet. */
@@ -62,6 +87,65 @@ export async function hasExecutiveProfile(
   const auth = typeof authority === 'string' ? publicKey(authority) : authority;
   const account = await safeFetchExecutiveProfileV1FromSeeds(umi, { authority: auth });
   return account != null;
+}
+
+export type PrepareDelegateExecutionResult = {
+  /** Unsigned `delegateExecutionV1` builder. */
+  builder: ReturnType<typeof delegateExecutionV1>;
+  /** Derived `ExecutionDelegateRecordV1` PDA. */
+  delegateRecord: string;
+  /** Echo of the agent asset address. */
+  agentAsset: string;
+  /** Derived `AgentIdentityV1` PDA. */
+  agentIdentity: string;
+  /** Derived `ExecutiveProfileV1` PDA. */
+  executiveProfile: string;
+};
+
+/**
+ * Build (but do not send) the `delegateExecutionV1` instruction. Same
+ * arg shape as {@link delegateExecution} — the only difference is that
+ * the returned builder hasn't been broadcast yet, so callers can
+ * serialise it for a remote signer.
+ */
+export async function prepareDelegateExecution(
+  umi: Umi,
+  args: {
+    agentAsset: string | PublicKey;
+    executiveAuthority: string | PublicKey;
+    payer?: Signer;
+    authority?: Signer;
+  },
+): Promise<PrepareDelegateExecutionResult> {
+  const asset = typeof args.agentAsset === 'string' ? publicKey(args.agentAsset) : args.agentAsset;
+  const authorityKey =
+    typeof args.executiveAuthority === 'string'
+      ? publicKey(args.executiveAuthority)
+      : args.executiveAuthority;
+
+  const [agentIdentity] = findAgentIdentityV1Pda(umi, { asset });
+  const [executiveProfile] = findExecutiveProfileV1Pda(umi, { authority: authorityKey });
+
+  const builder = delegateExecutionV1(umi, {
+    agentAsset: asset,
+    agentIdentity,
+    executiveProfile,
+    ...(args.payer ? { payer: args.payer } : {}),
+    ...(args.authority ? { authority: args.authority } : {}),
+  });
+
+  const [delegateRecord] = findExecutionDelegateRecordV1Pda(umi, {
+    executiveProfile,
+    agentAsset: asset,
+  });
+
+  return {
+    builder,
+    delegateRecord: String(delegateRecord),
+    agentAsset: String(asset),
+    agentIdentity: String(agentIdentity),
+    executiveProfile: String(executiveProfile),
+  };
 }
 
 /**
@@ -85,30 +169,11 @@ export async function delegateExecution(
     authority?: Signer;
   },
 ): Promise<{ signature: string; delegateRecord: string }> {
-  const asset = typeof args.agentAsset === 'string' ? publicKey(args.agentAsset) : args.agentAsset;
-  const authorityKey =
-    typeof args.executiveAuthority === 'string'
-      ? publicKey(args.executiveAuthority)
-      : args.executiveAuthority;
-
-  const [agentIdentity] = findAgentIdentityV1Pda(umi, { asset });
-  const [executiveProfile] = findExecutiveProfileV1Pda(umi, { authority: authorityKey });
-
-  const result = await delegateExecutionV1(umi, {
-    agentAsset: asset,
-    agentIdentity,
-    executiveProfile,
-    ...(args.payer ? { payer: args.payer } : {}),
-    ...(args.authority ? { authority: args.authority } : {}),
-  }).sendAndConfirm(umi);
-
-  const [delegateRecord] = findExecutionDelegateRecordV1Pda(umi, {
-    executiveProfile,
-    agentAsset: asset,
-  });
+  const prepared = await prepareDelegateExecution(umi, args);
+  const result = await prepared.builder.sendAndConfirm(umi);
   return {
     signature: base58.deserialize(result.signature)[0],
-    delegateRecord: String(delegateRecord),
+    delegateRecord: prepared.delegateRecord,
   };
 }
 

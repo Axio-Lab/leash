@@ -1,14 +1,14 @@
 ---
 title: 'Withdraw treasury funds'
-description: 'Owner-driven withdraw of stablecoins from the agent treasury (Asset Signer PDA) to any destination wallet.'
+description: 'Owner-driven withdraw of stablecoins (USDC / USDT / USDG) and native SOL from the agent treasury (Asset Signer PDA) to any destination wallet.'
 ---
 
 > The agent **owner** is sovereign. Withdraws bypass the executive
-> delegation entirely — the owner signs an
-> `mpl-core::Execute(SPL.TransferChecked)` that CPI-signs the transfer on
-> behalf of the agent's Asset Signer PDA. v0.2 ships the implementation
-> in `@leash/registry-utils` and exposes a one-click flow in the web
-> playground.
+> delegation entirely — the owner signs one
+> `mpl-core::Execute(...)` that CPI-signs the transfer on behalf of the
+> agent's Asset Signer PDA. v0.2 ships the SPL stable path in
+> `@leash/registry-utils`; v0.2.1 adds the native-SOL path so creator
+> fees from a Genesis token launch can be drained the same way.
 
 ## What withdrawing actually does
 
@@ -96,20 +96,80 @@ const balance = await getTreasuryBalance(umi, {
 // e.g. 12_345_000n -> "12.345 USDC available"
 ```
 
+## Withdrawing native SOL (Genesis creator fees)
+
+Agent token launches via Metaplex Genesis route **creator fees as raw
+lamports** to the same Asset Signer PDA that holds the treasury's SPL
+stables. To withdraw those lamports we need a path that doesn't rely on
+SPL — `withdrawTreasurySol{,All}` wraps a hand-rolled
+`SystemProgram.Transfer` in `mpl-core::Execute` so the PDA can sign via
+CPI exactly the way the SPL flow does.
+
+```ts
+import {
+  withdrawTreasurySol,
+  withdrawTreasurySolAll,
+  getTreasurySolBalance,
+} from '@leash/registry-utils';
+
+// Specific lamport amount
+await withdrawTreasurySol(umi, {
+  agentAsset: 'CoreAss…Asset',
+  destination: ownerWallet.address,
+  lamports: 1_000_000n, // 0.001 SOL
+});
+
+// Withdraw all lamports above the safety reserve. Returns null when there's
+// nothing to withdraw — safe to wire to a one-click button.
+await withdrawTreasurySolAll(umi, {
+  agentAsset: asset,
+  destination: rescueWallet,
+  // Optional — defaults to 5_000 lamports (~0.000005 SOL). Bump it if
+  // you want the PDA to keep enough SOL for its own future tx fees.
+  reserveLamports: 100_000n,
+});
+
+// Read the balance + spendable amount (post-reserve) for UI gating
+const sol = await getTreasurySolBalance(umi, { agentAsset: asset });
+// {
+//   treasury: 'AssetSigner…',
+//   lamports: 12_500_000n,
+//   sol: 0.0125,
+//   spendableLamports: 12_495_000n,
+//   spendableSol: 0.012495,
+// }
+```
+
+The wire-shape mirrors the SPL flow: one transaction, one signature
+from the owner, mpl-core CPI-signs the inner instruction. The two
+helpers are different code paths only because the inner instruction
+(System.Transfer vs SPL.TransferChecked) differs — every other concern
+(asset/PDA derivation, fee payer override, authority override) is
+identical.
+
 ## The web playground flow
 
 The agent detail page (`/agents/<mint>`) ships a **Withdraw treasury**
 card right under the spend allowance section.
 
+- **Currency** dropdown lets the owner pick any stablecoin in
+  `KNOWN_STABLE_SYMBOLS` (USDC, USDT, USDG) **or `SOL (native)`** for
+  Genesis creator fees. The selected token's mint, decimals, and program
+  (classic SPL Token vs Token-2022 vs native System) are wired through
+  to the SDK automatically — no separate UI for Token-2022 mints, and
+  no separate "withdraw SOL" card. Picking SOL hides the ATA copy in
+  the destination hint (System transfers don't need one).
 - **Destination** input defaults to the connected owner wallet. Edit it
   to any valid Solana address; the UI flips to a yellow "external"
   badge and requires you to tick a confirmation box before the button
   unlocks. This is the rescue path for compromised executives —
   withdraw to a fresh wallet you control before rotating.
-- **Amount** in `USDC` (decimal). The badge below shows the current
-  treasury balance, so "what's the max I can pull" is a glance away.
+- **Amount** in the selected token (decimal). The badge below shows the
+  current treasury balance for that token, so "what's the max I can
+  pull" is a glance away. Switching the currency dropdown updates both
+  the input symbol and the available-balance pill in place.
 - **Withdraw all** reads the on-chain balance and drains it in one tx.
-  Disabled when the treasury is at zero.
+  Disabled when the treasury is at zero for the selected token.
 
 Successful txs surface a **Tx confirmed** card with a Solscan link.
 Treasury balance and remaining-allowance tiles refresh automatically.
@@ -118,10 +178,11 @@ Treasury balance and remaining-allowance tiles refresh automatically.
 
 These solve different problems and you usually want both:
 
-| Action                  | What it does                                                          | When to use                              |
-| ----------------------- | --------------------------------------------------------------------- | ---------------------------------------- |
-| `revokeSpendDelegation` | Drops the executive's SPL delegation. Funds stay on the treasury PDA. | Lock down spending without moving money. |
-| `withdrawTreasury`      | Moves stablecoins out of the treasury to a destination wallet.        | Agent retired; you want the funds back.  |
+| Action                  | What it does                                                          | When to use                                   |
+| ----------------------- | --------------------------------------------------------------------- | --------------------------------------------- |
+| `revokeSpendDelegation` | Drops the executive's SPL delegation. Funds stay on the treasury PDA. | Lock down spending without moving money.      |
+| `withdrawTreasury`      | Moves stablecoins out of the treasury to a destination wallet.        | Agent retired; you want the SPL stables back. |
+| `withdrawTreasurySol`   | Moves native SOL out of the treasury to a destination wallet.         | Drain Genesis creator fees / reclaim rent.    |
 
 Belt-and-braces during incident response: revoke first (instant, zero
 funds at risk if the executive key was leaked), then withdraw to a
@@ -129,9 +190,6 @@ clean wallet.
 
 ## What's not covered yet
 
-- **Multi-mint withdraw in one tx.** v0.2 withdraws one mint per call.
-  If you need to drain USDC and USDT in one click, call
-  `withdrawTreasuryAll` twice (the playground will batch this in v0.3).
 - **Closing empty ATAs.** The treasury holds onto its empty ATAs after a
   full withdraw (~2k lamports of rent each). Closing requires a
   separate `mpl-core::Execute(SPL.CloseAccount)` — coming in v0.3.

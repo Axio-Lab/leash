@@ -68,18 +68,8 @@ export default function DashboardPage() {
 
       <section className="grid gap-4 md:grid-cols-3">
         <KillSwitchCard pause={pause} />
-        <StatCard
-          title="Runner endpoint"
-          value="LEASH_RUNNER_URL"
-          hint="Configured in .env.local"
-          tone="default"
-        />
-        <StatCard
-          title="Network"
-          value="Solana devnet"
-          hint="Switch via NEXT_PUBLIC_SOLANA_RPC"
-          tone="default"
-        />
+        <StatCard title="Runner endpoint" value="LEASH_RUNNER_URL" hint="" tone="default" />
+        <StatCard title="Network" value="Solana devnet" hint="" tone="default" />
       </section>
 
       <section className="flex flex-col gap-3">
@@ -199,9 +189,6 @@ function KillSwitchCard({ pause }: { pause?: PauseRes }) {
           Live
           <Badge variant="success">source: {pause.source}</Badge>
         </CardTitle>
-        <p className="text-xs text-fg-muted">
-          env_kill = <span className="font-mono">{String(pause.env_kill)}</span>
-        </p>
       </CardHeader>
     </Card>
   );

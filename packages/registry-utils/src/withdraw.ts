@@ -177,30 +177,42 @@ export type WithdrawTreasuryResult = {
   destination: string;
 };
 
+export type PrepareWithdrawTreasuryResult = {
+  /** Unsigned `mpl-core::Execute(SPL.TransferChecked)` builder, possibly with a CreateIdempotent prepended. */
+  builder: ReturnType<typeof execute>;
+  /** Agent treasury (Asset Signer PDA). */
+  treasury: string;
+  /** Source ATA the funds will be debited from (treasury's ATA for `mint`). */
+  sourceTokenAccount: string;
+  /** Destination ATA the funds will be credited to. */
+  destinationTokenAccount: string;
+  /** Echo of the withdrawn amount in atomic units. */
+  amount: bigint;
+  /** Echo of the destination wallet (not its ATA). */
+  destination: string;
+  /**
+   * `true` when the builder includes a leading `CreateIdempotent` for
+   * the destination ATA. Useful for fee estimation.
+   */
+  willCreateDestinationAta: boolean;
+  /** Decimals byte the `TransferChecked` instruction was encoded with. */
+  decimals: number;
+};
+
 /**
- * Withdraw `amount` (in atomic units) of `mint` from the agent treasury
- * to `destination`'s ATA. Sends and confirms the transaction.
+ * Build (but do not send) the `mpl-core::Execute(SPL.TransferChecked)`
+ * transaction for a treasury withdrawal. Same async pre-flight as
+ * {@link withdrawTreasury} (reads the destination ATA from RPC and
+ * prepends a `CreateIdempotent` if missing, plus `mint.decimals` if not
+ * supplied).
  *
- * The agent owner (`authority`, defaults to `umi.identity`) signs once;
- * the mpl-core `Execute` instruction CPI-signs the inner SPL
- * `TransferChecked` on behalf of the asset signer PDA. Spend allowance
- * delegations to executives are unaffected — withdraws bypass the
- * delegation slot because the owner is signing directly.
- *
- * @example
- * ```ts
- * await withdrawTreasury(umi, {
- *   agentAsset: 'CoreAss…Asset',
- *   mint: USDC_DEVNET,
- *   destination: ownerWallet.address,
- *   amount: 5_000_000n, // $5 USDC
- * });
- * ```
+ * Useful for HTTP / remote-signer flows: serialise `prepared.builder` and
+ * hand the raw bytes to the caller for signing.
  */
-export async function withdrawTreasury(
+export async function prepareWithdrawTreasury(
   umi: Umi,
   args: WithdrawTreasuryArgs,
-): Promise<WithdrawTreasuryResult> {
+): Promise<PrepareWithdrawTreasuryResult> {
   if (args.amount <= 0n) throw new Error('withdraw amount must be positive');
   const asset = toPk(args.agentAsset);
   const mint = toPk(args.mint);
@@ -238,9 +250,7 @@ export async function withdrawTreasury(
     ...(args.authority ? { authority: args.authority } : {}),
   });
 
-  // Optionally bundle CreateIdempotent for the destination ATA so
-  // owners can withdraw to a brand-new wallet without a separate
-  // "create my ATA" step.
+  let willCreateDestinationAta = false;
   if (args.createDestinationAtaIfMissing !== false) {
     const destAcct = await umi.rpc.getAccount(destinationAta);
     if (!destAcct.exists) {
@@ -253,21 +263,95 @@ export async function withdrawTreasury(
         ...(args.payer ? { payer: args.payer } : {}),
       });
       builder = create.add(builder);
+      willCreateDestinationAta = true;
     }
   }
 
-  const result = await builder.sendAndConfirm(umi);
   return {
-    signature: base58.deserialize(result.signature)[0],
+    builder,
     treasury: String(treasury),
     sourceTokenAccount: String(sourceAta),
     destinationTokenAccount: String(destinationAta),
     amount: args.amount,
     destination: String(destinationOwner),
+    willCreateDestinationAta,
+    decimals,
+  };
+}
+
+/**
+ * Withdraw `amount` (in atomic units) of `mint` from the agent treasury
+ * to `destination`'s ATA. Sends and confirms the transaction.
+ *
+ * The agent owner (`authority`, defaults to `umi.identity`) signs once;
+ * the mpl-core `Execute` instruction CPI-signs the inner SPL
+ * `TransferChecked` on behalf of the asset signer PDA. Spend allowance
+ * delegations to executives are unaffected — withdraws bypass the
+ * delegation slot because the owner is signing directly.
+ *
+ * @example
+ * ```ts
+ * await withdrawTreasury(umi, {
+ *   agentAsset: 'CoreAss…Asset',
+ *   mint: USDC_DEVNET,
+ *   destination: ownerWallet.address,
+ *   amount: 5_000_000n, // $5 USDC
+ * });
+ * ```
+ */
+export async function withdrawTreasury(
+  umi: Umi,
+  args: WithdrawTreasuryArgs,
+): Promise<WithdrawTreasuryResult> {
+  const prepared = await prepareWithdrawTreasury(umi, args);
+  const result = await prepared.builder.sendAndConfirm(umi);
+  return {
+    signature: base58.deserialize(result.signature)[0],
+    treasury: prepared.treasury,
+    sourceTokenAccount: prepared.sourceTokenAccount,
+    destinationTokenAccount: prepared.destinationTokenAccount,
+    amount: prepared.amount,
+    destination: prepared.destination,
   };
 }
 
 export type WithdrawTreasuryAllArgs = Omit<WithdrawTreasuryArgs, 'amount'>;
+
+/**
+ * Build (but do not send) a "withdraw everything" transaction. Reads the
+ * treasury ATA balance and constructs an unsigned `TransferChecked` for
+ * the full amount.
+ *
+ * Returns `null` when the treasury ATA is uninitialised or empty — same
+ * "skip submission" semantics as {@link prepareProvisionTreasuryAtas}.
+ */
+export async function prepareWithdrawTreasuryAll(
+  umi: Umi,
+  args: WithdrawTreasuryAllArgs,
+): Promise<PrepareWithdrawTreasuryResult | null> {
+  const asset = toPk(args.agentAsset);
+  const mint = toPk(args.mint);
+  const tokenProgram = args.tokenProgram ?? SPL_TOKEN_PROGRAM_ID;
+  const [treasury] = findAssetSignerPda(umi, { asset });
+  const [sourceAta] = findAssociatedTokenPda(umi, {
+    mint,
+    owner: treasury,
+    tokenProgramId: tokenProgram,
+  });
+
+  const account = await umi.rpc.getAccount(sourceAta);
+  if (!account.exists) return null;
+  if (account.data.length < 72) {
+    throw new Error(
+      `treasury ATA ${String(sourceAta)} has unexpected length ${account.data.length}`,
+    );
+  }
+  const dv = new DataView(account.data.buffer, account.data.byteOffset, account.data.byteLength);
+  const balance = dv.getBigUint64(64, true);
+  if (balance === 0n) return null;
+
+  return prepareWithdrawTreasury(umi, { ...args, amount: balance });
+}
 
 /**
  * Convenience wrapper that reads the current treasury balance for `mint`
@@ -283,29 +367,17 @@ export async function withdrawTreasuryAll(
   umi: Umi,
   args: WithdrawTreasuryAllArgs,
 ): Promise<WithdrawTreasuryResult | null> {
-  const asset = toPk(args.agentAsset);
-  const mint = toPk(args.mint);
-  const tokenProgram = args.tokenProgram ?? SPL_TOKEN_PROGRAM_ID;
-  const [treasury] = findAssetSignerPda(umi, { asset });
-  const [sourceAta] = findAssociatedTokenPda(umi, {
-    mint,
-    owner: treasury,
-    tokenProgramId: tokenProgram,
-  });
-
-  const account = await umi.rpc.getAccount(sourceAta);
-  if (!account.exists) return null;
-  // First 64 bytes are mint+owner; bytes 64..72 are the u64 LE amount.
-  if (account.data.length < 72) {
-    throw new Error(
-      `treasury ATA ${String(sourceAta)} has unexpected length ${account.data.length}`,
-    );
-  }
-  const dv = new DataView(account.data.buffer, account.data.byteOffset, account.data.byteLength);
-  const balance = dv.getBigUint64(64, true);
-  if (balance === 0n) return null;
-
-  return withdrawTreasury(umi, { ...args, amount: balance });
+  const prepared = await prepareWithdrawTreasuryAll(umi, args);
+  if (prepared == null) return null;
+  const result = await prepared.builder.sendAndConfirm(umi);
+  return {
+    signature: base58.deserialize(result.signature)[0],
+    treasury: prepared.treasury,
+    sourceTokenAccount: prepared.sourceTokenAccount,
+    destinationTokenAccount: prepared.destinationTokenAccount,
+    amount: prepared.amount,
+    destination: prepared.destination,
+  };
 }
 
 /**

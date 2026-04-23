@@ -14,6 +14,19 @@ The Asset Signer PDA derived from the MPL Core asset is the agent treasury. It h
   executive holds a **per-mint capped SPL delegation** on the treasury ATA;
   approving USDC does not approve USDG. See
   [`Fund an agent`](/guides/fund-an-agent) for the full delegation flow.
+- **Withdrawing** stables back to the owner (or any rescue wallet) is
+  an `Execute(SPL.TransferChecked)`; **withdrawing native SOL** (e.g.
+  Genesis creator fees) is the same pattern with
+  `Execute(SystemProgram.Transfer)` instead. Only the owner can
+  authorise either, and the same PDA-via-CPI wrap works across classic
+  SPL Token, Token-2022, and the System program. See
+  [`Withdraw treasury funds`](/guides/withdraw-funds).
+- **Creator fees** from the agent's Genesis token (if you launched one
+  via [`Launch an agent token`](/guides/launch-agent-token)) accrue
+  directly to this PDA as **native SOL**. Drain them with
+  `withdrawTreasurySol` / `withdrawTreasurySolAll` from
+  `@leash/registry-utils` (or one click in the playground's withdraw
+  card — pick `SOL (native)` from the currency dropdown).
 
 `@leash/core` exposes `deriveAgentTreasuryAddress`,
 `deriveAgentTreasuryAta({ asset, mint })`, `listSplBalances`, and
