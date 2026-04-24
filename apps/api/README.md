@@ -121,3 +121,87 @@ If you're on the team and need to bring this up locally for testing,
 look at `bootstrap.ts`, `dev.ts`, and the env vars referenced in
 `config.ts`. This README intentionally does not document a self-host
 flow because the API is not open source.
+
+### One shared SQLite file (development)
+
+Use a **single absolute `file:` URL** for every process (API, indexer,
+explorer) so nobody reads `file:./…` from a different working directory.
+
+1. Pick a path, e.g. `file:/Users/you/leash-data/leash-dev.db` (create
+   the parent folder once).
+2. In `apps/api/.env` (copy from `.env.example`), set:
+
+   ```bash
+   LEASH_API_DB_URL=file:/Users/you/leash-data/leash-dev.db
+   ```
+
+3. In `apps/explorer/.env.local`, set the **same** database (explorer
+   also accepts `LEASH_DB_URL`):
+
+   ```bash
+   LEASH_DB_URL=file:/Users/you/leash-data/leash-dev.db
+   ```
+
+4. Build the API package once (`pnpm --filter @leash/api build`) so the
+   explorer can import `@leash/api`.
+
+5. Start the API from `apps/api` with env loaded (Node 20.6+):
+
+   ```bash
+   cd apps/api
+   node --env-file=.env ./node_modules/.bin/tsx ./src/dev.ts
+   ```
+
+   Or export the vars in your shell (`set -a && source .env && set +a`,
+   [direnv](https://direnv.net/), etc.) and run `pnpm dev` — `createConfig()`
+   only reads `process.env`, it does not load `.env` by itself.
+
+The first API or indexer start runs `runMigrations` and creates tables.
+The explorer also runs migrations on first connect if the file is new.
+
+### Starting the chain indexer
+
+The indexer is **`@leash/api`**’s standalone loop: same DB + RPC as the
+API, writes decoded rows into `events` / indexer tables and runs the
+receipt-pull pass. It does **not** go through HTTP.
+
+From the **monorepo root**:
+
+```bash
+pnpm --filter @leash/api build
+pnpm --filter @leash/api indexer
+```
+
+That runs `node dist/indexer/cli.js` with your current shell env. From
+`apps/api` with a `.env` file (Node 20.6+):
+
+```bash
+cd apps/api
+pnpm build
+node --env-file=.env dist/indexer/cli.js
+```
+
+For TypeScript without a rebuild on every change:
+
+```bash
+cd apps/api
+node --env-file=.env ./node_modules/.bin/tsx ./src/indexer/cli.ts
+```
+
+…or export env and run **`pnpm indexer:dev`** from `apps/api` (same as
+`tsx ./src/indexer/cli.ts`).
+
+Useful env vars (all optional; see `src/indexer/cli.ts`):
+
+| Variable                                         | Purpose                              |
+| ------------------------------------------------ | ------------------------------------ |
+| `LEASH_API_DB_URL`                               | Same libsql/SQLite URL as the API    |
+| `LEASH_API_DB_AUTH_TOKEN`                        | Turso token when URL is `libsql://…` |
+| `LEASH_API_RPC_DEVNET` / `LEASH_API_RPC_MAINNET` | RPC endpoints                        |
+| `LEASH_INDEXER_INTERVAL_MS`                      | Tick interval (default 15000)        |
+| `LEASH_INDEXER_DISABLE_DEVNET` / `…_MAINNET`     | Set to `1` to skip a network         |
+| `LEASH_INDEXER_DISABLE_PULL`                     | Set to `1` to skip receipt-pull      |
+
+Typical local layout: **terminal 1** API, **terminal 2** indexer,
+**terminal 3** `pnpm --filter @leash/explorer dev` — all three share
+`LEASH_API_DB_URL` / `LEASH_DB_URL` to the same file.
