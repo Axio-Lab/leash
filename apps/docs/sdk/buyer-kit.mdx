@@ -74,15 +74,33 @@ Provide any `TransactionPartialSigner` from `@solana/kit`. The web playground
 adapts a Privy embedded wallet via `apps/web/lib/privy-svm-signer.ts` —
 copy that file as a starting point for your own dApp.
 
+## Receipts by default
+
+You no longer need to pass `onReceipt` — when `LEASH_API_URL` /
+`LEASH_API_KEY` (or `LEASH_RUNNER_URL`) are set in the environment,
+`createBuyer` resolves a fan-out sink that POSTs every receipt to
+each destination. Pass `onReceipt: false` to disable forwarding
+entirely, or `receipts: { runnerUrl, apiUrl, apiKey, fetch }` to
+configure explicitly. See [Receipts by default](/concepts/receipt#receipts-by-default).
+
 ## API
 
 ```ts
+type ReceiptForwardConfig = {
+  runnerUrl?: string;
+  apiUrl?: string;
+  apiKey?: string;
+  fetch?: typeof globalThis.fetch;
+};
+
 type BuyerConfig = {
   agent: string;
   rules: RulesV1;
   signer: ClientSvmSigner;
   networks?: ('solana-mainnet' | 'solana-devnet' | string)[];
   rpcUrl?: string;
+  /** Override or disable the default receipt fan-out. */
+  receipts?: ReceiptForwardConfig;
   /**
    * Optional. The agent treasury **SPL token account** (ATA) to spend from,
    * returned by `setSpendDelegation` from `@leash/registry-utils`. Its mint
@@ -106,7 +124,12 @@ type BuyerConfig = {
    */
   facilitator?: string;
   fetch?: typeof globalThis.fetch; // injection point for tests
-  onReceipt?: (r: ReceiptV1) => unknown;
+  /**
+   * Receipt sink. Function = explicit handler. `false` = opt out of all
+   * forwarding (including environment defaults). Omitted = use the
+   * default fan-out resolved from `receipts` / env vars.
+   */
+  onReceipt?: ((r: ReceiptV1) => void | Promise<void>) | false;
 };
 
 type BuyerCallResult = {

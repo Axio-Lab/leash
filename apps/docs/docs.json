@@ -58,6 +58,25 @@
             ]
           },
           {
+            "group": "API",
+            "pages": [
+              "api/overview",
+              "api/auth",
+              "api/prepare-submit",
+              "api/monetize-api",
+              "api/receipts",
+              "api/indexer",
+              "api/idempotency",
+              "api/rate-limits",
+              "api/errors",
+              "api/reference"
+            ]
+          },
+          {
+            "group": "Explorer",
+            "pages": ["explorer/overview"]
+          },
+          {
             "group": "SDK reference",
             "pages": [
               "sdk/core",

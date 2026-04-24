@@ -1,0 +1,105 @@
+---
+title: 'Authentication'
+description: API keys, prefix-driven network binding, idempotency, and rate limits.
+---
+
+Every API call is authenticated with a single header:
+
+```http
+Authorization: Bearer <your-api-key>
+```
+
+Anonymous access is limited to two endpoints (`GET /v1/health`,
+`GET /v1/version`, and `GET /openapi.json`). Everything else is
+401 without a key.
+
+## Key prefixes pick the network
+
+The first segment of a key encodes the cluster it can act on. The API
+loads the right RPC, scopes every database query, and rejects any
+attempt to reach across networks.
+
+| Prefix       | Network          | Use this when…                                                      |
+| ------------ | ---------------- | ------------------------------------------------------------------- |
+| `lsh_test_*` | `solana-devnet`  | Building, integration tests, CI, demos. Free RPC, faucet stables.   |
+| `lsh_live_*` | `solana-mainnet` | Production. Real money, mainnet RPC, mainnet receipts and explorer. |
+
+Examples:
+
+```text
+lsh_test_3o7N4WvR…wA      # devnet
+lsh_live_aQ12dpL8…vK      # mainnet
+```
+
+A `lsh_test_*` key cannot see a mainnet event, mainnet receipt, or
+mainnet agent. A `lsh_live_*` key cannot see anything from devnet.
+Searching a devnet signature with a `lsh_live_*` key returns `404`
+even though the signature exists on devnet — this is the explorer's
+isolation guarantee.
+
+## Issuing keys
+
+In the playground today, keys are issued out-of-band — talk to us in
+[Discord](https://leash.market) and we'll mint one for the right
+network. The hosted dashboard for self-service issuance ships in the
+same release as billing.
+
+Programmatically, key bytes are random `crypto.randomUUID()`-derived
+material; the prefix is purely a routing hint. A separate hash is
+stored in `api_keys` so plaintext is never written to disk.
+
+## Per-request context
+
+Two optional headers (or body fields, where supported) flow into every
+event row and receipt for traceability:
+
+| Field                  | Where it lives                                                   | Purpose                                                                                  |
+| ---------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `Idempotency-Key`      | Header, on `POST` only                                           | Replays the prior response if the same key is reused. See [Idempotency](/api/idempotency). |
+| `X-Leash-Client-Ref`   | Header, any method                                               | Free-form caller reference. Stored on the event row, returned on lookup, surfaced in the explorer. |
+| `client_reference`     | Body field on every prepare and submit endpoint                  | Same as the header. Body wins when both are set.                                         |
+
+Example wiring:
+
+```bash
+curl -X POST https://api.leash.market/v1/agents/$MINT/delegation/prepare \
+  -H "Authorization: Bearer $LEASH_API_KEY" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "X-Leash-Client-Ref: order-42" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "executive": "9XQ2…",
+    "stable_symbol": "USDC",
+    "allowance": "100",
+    "client_reference": "order-42"
+  }'
+```
+
+## Rate limits
+
+Each API key gets a sliding-window quota that resets every minute.
+The default is generous and split per route family so a noisy
+`POST /v1/receipts` flow can't starve your `prepare` traffic.
+
+Headers on every response:
+
+```http
+X-RateLimit-Limit: 600
+X-RateLimit-Remaining: 591
+X-RateLimit-Reset: 2026-04-23T12:01:00.000Z
+```
+
+Going over returns `429` with the same headers and a `retry_after`
+field in the JSON body. The Redis-backed limiter is global to all API
+nodes; in a fully Redis-less dev environment it falls back to an
+in-memory bucket per node.
+
+## Rotating and revoking
+
+- **Rotate** — issue a new key, deploy it, then have us revoke the
+  old one. There's no client-side rotation flow yet.
+- **Revoke** — keys can be flipped to `revoked_at = NOW()` at any
+  time. The next call returns `401 invalid_api_key`.
+- **Audit** — every authenticated call writes the (hashed) key id and
+  `client_reference` onto the event row. Deleting a key does not
+  delete its history.

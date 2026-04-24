@@ -21,6 +21,23 @@ Wire on-chain pause via
   validates against `ReceiptV1Schema` and rejects payloads where
   `receipt.agent !== :mint`.
 
+### Forward to the Leash API
+
+When `LEASH_API_URL` and `LEASH_API_KEY` are set, the runner mirrors
+every accepted receipt to the API in the background:
+
+```bash
+LEASH_API_URL=https://api.leash.market \
+LEASH_API_KEY=lsh_live_... \
+node packages/runner/dist/cli.js
+```
+
+The forward is fire-and-forget — `POST /a/:mint/receipts` still
+returns `200` immediately even if the API is unreachable, and
+errors are logged with `console.warn`. The same receipt lands in
+`api.leash.market`, `explorer.leash.market`, and your local
+`receipts.jsonl` file with no extra wiring.
+
 ## Payment-link endpoints
 
 The runner stores `EndpointV1` descriptors that back the playground's

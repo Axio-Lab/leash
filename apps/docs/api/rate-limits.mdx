@@ -1,0 +1,73 @@
+---
+title: 'Rate limits'
+description: Per-key sliding windows, route-family buckets, and how to interpret the headers.
+---
+
+Every API key has a sliding-window quota enforced in Redis (with an
+in-memory fallback for solo dev). Limits are shared across API
+nodes, scoped per key, and split per route family so a noisy
+endpoint can't starve the rest.
+
+## Defaults
+
+| Bucket           | Window | Limit (per key) | Routes covered                                    |
+| ---------------- | ------ | --------------- | ------------------------------------------------- |
+| `prepare`        | 60s    | 600             | All `POST /v1/.../prepare` endpoints              |
+| `submit`         | 60s    | 600             | `POST /v1/submit`                                 |
+| `receipts.write` | 60s    | 1200            | `POST /v1/receipts/{agent}`                       |
+| `receipts.read`  | 60s    | 600             | `GET /v1/receipts/*`                              |
+| `events.read`    | 60s    | 600             | `GET /v1/events/*`                                |
+| `agents.read`    | 60s    | 300             | `GET /v1/agents/*`, treasury balances             |
+| `indexer.read`   | 60s    | 60              | `GET /v1/indexer/status`                          |
+| `meta`           | 60s    | 60              | `GET /v1/health`, `GET /v1/version`               |
+
+`lsh_live_*` keys ship with the same defaults. We bump per-account
+ceilings on request — talk to us in [Discord](https://leash.market)
+if your workload is steady-state above the defaults.
+
+## Headers on every response
+
+```http
+X-RateLimit-Limit:      600
+X-RateLimit-Remaining:  591
+X-RateLimit-Reset:      2026-04-23T12:01:00.000Z
+X-RateLimit-Bucket:     prepare
+```
+
+A `429 Too Many Requests` body always includes:
+
+```json
+{
+  "error": "rate_limited",
+  "bucket": "prepare",
+  "retry_after_ms": 1234,
+  "reset": "2026-04-23T12:01:00.000Z"
+}
+```
+
+Honour `retry_after_ms` (or `Retry-After` in seconds, also set on
+`429`). Combined with [`Idempotency-Key`](/api/idempotency) you can
+treat `429` as "try again in N ms" without worrying about double
+spends.
+
+## Burst behaviour
+
+The window is **sliding**, not fixed. The limiter records every hit
+with a millisecond timestamp and counts hits in the trailing 60s.
+This means:
+
+- A burst of 600 in 100ms is allowed once, then the bucket is empty
+  for ~60s.
+- A steady 10/s never trips.
+- A spike to 700/s gets throttled at request 601.
+
+Concurrency-bounded clients (HTTP keep-alive with a small pool) tend
+to slide nicely under this model. Fan-out workers should add jitter.
+
+## Free dev tier
+
+`lsh_test_*` keys use the same defaults. Devnet RPC has its own
+external rate limiting on top — if you saturate the test bucket and
+get 429s from the API, the next layer down may also start rejecting.
+For sustained load testing, tell us and we'll point you at a higher
+tier or a dedicated devnet RPC.

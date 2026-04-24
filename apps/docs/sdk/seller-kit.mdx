@@ -61,7 +61,17 @@ app.post('/tag', (c) => c.json({ tagged: true }));
    USDC.
 4. After settlement, the `onAfterSettle` hook produces an `earn`
    `ReceiptV1` with the real `tx_sig` + `payment_requirements_hash` and
-   ships it via your `onReceipt` callback.
+   ships it through the resolved receipt sink (see below).
+
+## Receipts by default
+
+`onReceipt` is now optional. When `LEASH_API_URL` + `LEASH_API_KEY`
+(or `LEASH_RUNNER_URL`) are set in the environment, every `earn`
+receipt is forwarded automatically to those destinations. Pass
+`onReceipt: false` to opt out, or set `receipts: { runnerUrl,
+apiUrl, apiKey }` to override. The full defaulting logic is shared
+with the buyer kit and documented in
+[Receipts by default](/concepts/receipt#receipts-by-default).
 
 ## Probing without paying
 

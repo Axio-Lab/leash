@@ -11,10 +11,30 @@ and a chained receipt feed (`ReceiptV1`) — all settled through real
 Solana, via any compatible facilitator. Drop it in front of any agent and it
 can buy, get paid, and prove every transfer happened.
 
+## The three surfaces
+
+| Surface                                               | Lives at                            | What it's for                                                                       |
+| ----------------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------- |
+| **SDK** — `@leash/*`                                  | npm + this repo                     | TypeScript-first kits for buyers, sellers, agents, runner, schemas, and testing.    |
+| **API** — REST + OpenAPI                              | [`api.leash.market`](https://api.leash.market) | Polyglot HTTP surface. Prepare/submit Solana txs, ingest receipts, monetise APIs.   |
+| **Explorer** — protocol UI                            | [`explorer.leash.market`](https://explorer.leash.market) | Solscan-style search across agents, transactions, receipts, and events. Dual-network. |
+
+Pick whichever fits the layer you're building. They all read and write
+the same on-chain state, the same receipt schema, and the same event
+model.
+
 ## Monorepo
 
 - **Packages** — `@leash/schemas`, `@leash/core`, `@leash/registry-utils`, `@leash/seller-kit`, `@leash/buyer-kit`, `@leash/runner`, `@leash/testing`
-- **Apps** — `web` (explorer + playground), `docs` (this site), `seller-demo`, `buyer-demo`, `merged-demo`, `agent-token-demo`
+- **Apps** — `web` (playground), `docs` (this site), `explorer`, `api`, `seller-demo`, `buyer-demo`, `merged-demo`, `agent-token-demo`
 - **Scripts** — `fund-devnet`, `upload-registration`, `e2e-demo`, `gen-schema-docs`
+
+## Where to start
+
+- **Quickstart** — local stack in 5 minutes ([Quickstart](/quickstart)).
+- **API** — drive the protocol from any language ([Leash API](/api/overview)).
+- **Monetise an API you already host** — pay-per-call in two HTTP calls ([Monetise an existing API](/api/monetize-api)).
+- **Build an agent end-to-end** — the SDK walkthrough ([Create an agent](/guides/create-an-agent)).
+- **Explorer** — what `explorer.leash.market` shows and how to deeplink ([Leash Explorer](/explorer/overview)).
 
 See the repo `README.md` for the 5-minute demo and environment variables.

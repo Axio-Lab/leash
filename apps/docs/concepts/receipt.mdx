@@ -18,3 +18,33 @@ Every gated call yields a `ReceiptV1`:
 - **`receipt_hash`** — `sha256(canonicalJson(receipt without receipt_hash))`.
 
 Verify any feed with `@leash/core` `verifyReceiptChain` or the `leash-conformance` CLI shipped from `@leash/testing`.
+
+## Receipts by default
+
+In v0.2 the SDK publishes receipts automatically. You no longer have
+to write the `onReceipt` plumbing yourself — `createBuyer` and
+`createSeller` resolve a receipt sink at startup using this fall-back
+chain:
+
+1. `onReceipt: (r) => …` — explicit function. Always wins.
+2. `onReceipt: false` — explicit opt-out. No forwarding, no errors.
+3. `receipts: { runnerUrl, apiUrl, apiKey }` — config object.
+4. Environment defaults:
+   - `LEASH_RUNNER_URL` — POST to `/a/<mint>/receipts` on the local runner.
+   - `LEASH_API_URL` + `LEASH_API_KEY` — POST to `/v1/receipts/<mint>`.
+   - `LEASH_RECEIPTS_DISABLED=1` — global kill switch (overrides everything).
+
+When more than one destination is configured, the kit fans out. A
+failure in one sink never blocks settlement — the buyer still gets
+its `Response`, the seller still gets `200`. Failures are logged via
+`console.warn`.
+
+The agent's on-chain identity also advertises a default
+`services.receipts` URL of `https://api.leash.market/v1/receipts/{agent}`
+so any explorer or third-party indexer can find the feed without
+out-of-band coordination. Override with `receiptsUrl` on `createAgent`,
+the `LEASH_RECEIPTS_URL` env, or `LEASH_NO_RECEIPTS_URL=1` to disable.
+
+See [Receipts API](/api/receipts) for the API surface and
+[`@leash/buyer-kit`](/sdk/buyer-kit) / [`@leash/seller-kit`](/sdk/seller-kit)
+for the kit-level options.

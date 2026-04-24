@@ -1,0 +1,41 @@
+---
+title: 'API reference'
+description: Generated from /openapi.json — every route, schema, and example.
+openapi: 'https://api.leash.market/openapi.json'
+---
+
+The full OpenAPI 3.1 specification is hosted at
+[`api.leash.market/openapi.json`](https://api.leash.market/openapi.json).
+Mintlify renders the spec into the navigation tree on the left.
+
+## Generated SDKs
+
+The same spec drives client generation. Phase 6 ships first-party
+clients for:
+
+- **TypeScript** — published as `@leash/api-client`. Already used
+  by `apps/web` and `apps/explorer`.
+- **Python** — `pip install leash-api`. `httpx`-based, async-first.
+- **Go** — `github.com/metaplex-foundation/leash-api-go`.
+- **Rust** — `leash-api` on crates.io. `reqwest` + `serde`.
+- **Java** — Maven coordinates `market.leash:leash-api`.
+
+Until those land, any standard OpenAPI 3.1 generator on the spec
+above works. We test against `openapi-generator-cli` and `oapi-codegen`.
+
+## Local export
+
+```bash
+curl https://api.leash.market/openapi.json > leash-openapi.json
+openapi-generator-cli generate \
+  -i leash-openapi.json \
+  -g typescript-fetch \
+  -o ./gen/leash
+```
+
+## Versioning
+
+The path prefix is `/v1`. Breaking changes get a new `/vN` prefix;
+the OpenAPI spec at `/openapi.json` always reflects the latest
+stable version. Past versions live at `/openapi.v1.json`,
+`/openapi.v2.json`, etc.

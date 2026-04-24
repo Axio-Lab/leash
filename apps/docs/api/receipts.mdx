@@ -1,0 +1,152 @@
+---
+title: 'Receipts API'
+description: Push receipts in, pull receipts out, register pull targets the indexer will poll.
+---
+
+The Leash API is the canonical receipt index for every agent it knows
+about. There are three ways receipts get in:
+
+1. **Pushed from your code** — the SDK's `createBuyer` / `createSeller`
+   forwards every `ReceiptV1` to the API by default (see
+   [Receipts by default](/concepts/receipt#receipts-by-default)).
+2. **Forwarded from a Leash runner** — when `LEASH_API_URL` and
+   `LEASH_API_KEY` are set on the runner, every accepted receipt is
+   mirrored to the API in the background.
+3. **Pulled from a URL you register** — for agents that publish their
+   receipt feed on their own domain, `POST /v1/agents/{mint}/pull-target`
+   registers it and the indexer polls it on a fixed cadence.
+
+Once stored, receipts are queryable per-agent or by hash, paginated
+with stable cursors, and join 1:1 to the matching on-chain
+transaction in the explorer.
+
+## Push: `POST /v1/receipts/{agent}`
+
+Idempotent on `(network, receipt_hash)`. Re-posting the same receipt
+returns `200 { ok, duplicate: true, event_id: null }`.
+
+```bash
+curl -X POST https://api.leash.market/v1/receipts/$MINT \
+  -H "Authorization: Bearer $LEASH_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "$(cat receipt.json)"
+```
+
+```json
+{
+  "ok": true,
+  "receipt_hash": "9a3f…",
+  "duplicate": false,
+  "event_id": "01HVTQX4GZTH8XK1F2JZ7N5WJ4"
+}
+```
+
+Side effects on a non-duplicate ingest:
+
+- Validated against `ReceiptV1Schema`.
+- `(receipt.agent, derived treasury PDA)` is added to the
+  [indexer watchlist](/api/indexer#watchlist) so future on-chain
+  activity for this agent is captured automatically.
+- A `receipt.published` event is written to the `events` table and is
+  visible in the explorer's per-agent timeline.
+
+`receipt.agent` must equal the URL path `{agent}` or the API rejects
+with `422 receipt_agent_mismatch`. This is the same guarantee the
+runner enforces.
+
+## Read: `GET /v1/receipts/{agent}`
+
+Cursor-based, `nonce DESC` by default, `limit` defaults to 50, max 200.
+
+```bash
+curl "https://api.leash.market/v1/receipts/$MINT?limit=50" \
+  -H "Authorization: Bearer $LEASH_API_KEY"
+```
+
+```json
+{
+  "items": [
+    {
+      "v": "0.1",
+      "kind": "spend",
+      "decision": "allow",
+      "agent": "9pK9…",
+      "nonce": 137,
+      "tx_sig": "5xY7…",
+      "price": { "amount": "10000", "currency": "USDC", "asset": "EPjF…", "network": "solana-mainnet" },
+      "request_hash": "7c1a…",
+      "prev_receipt_hash": "8ad3…",
+      "receipt_hash": "9a3f…",
+      "ts": "2026-04-23T12:01:02.000Z"
+    }
+  ],
+  "cursor": "01HVTQX4GZTH8XK1F2JZ7N5WJ4",
+  "has_more": true
+}
+```
+
+Filters supported via query string: `?kind=spend|earn`,
+`?decision=allow|deny|rejected`, `?since=<ISO8601>`,
+`?cursor=<opaque>`. The receipt chain is fully verifiable; load all
+items and call `verifyReceiptChain` from `@leash/core` to confirm
+linkage.
+
+## Read: `GET /v1/receipts/by-hash/{hash}`
+
+Direct lookup. Returns the single receipt and a `network` field so
+the explorer can deep-link.
+
+```bash
+curl https://api.leash.market/v1/receipts/by-hash/9a3f… \
+  -H "Authorization: Bearer $LEASH_API_KEY"
+```
+
+A `lsh_test_*` key looking up a mainnet hash returns `404` even though
+the row exists — same network-isolation rule as the rest of the API.
+
+## Pull targets: `POST /v1/agents/{mint}/pull-target`
+
+Some agents host their own receipts feed (e.g. self-hosted runner,
+GitHub Pages, S3). Register the URL and the indexer's pull worker
+fetches it on every tick, idempotently ingests anything new, and
+writes a `receipt.pulled` event per accepted item.
+
+```bash
+curl -X POST https://api.leash.market/v1/agents/$MINT/pull-target \
+  -H "Authorization: Bearer $LEASH_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://my-agent.example.com/receipts.jsonl",
+    "format": "jsonl"
+  }'
+```
+
+| Field      | Type                  | Default   | Notes                                                                  |
+| ---------- | --------------------- | --------- | ---------------------------------------------------------------------- |
+| `url`      | `string` (https only) | required  | Public, no auth. The pull worker does plain `GET`.                     |
+| `format`   | `"json" \| "jsonl"`   | `jsonl`   | `json` expects an array of `ReceiptV1` objects.                        |
+| `interval_seconds` | `number`     | `60`      | Worker honours per-target cadence with a global floor.                |
+
+Listing and removing pull targets is on the same path
+(`GET`, `DELETE`). One target per `(network, agent, url)`.
+
+## Receipts by default in the SDK
+
+`createBuyer` / `createSeller` will publish receipts to the API
+without any extra wiring as long as both env vars are set:
+
+```bash
+export LEASH_API_URL=https://api.leash.market
+export LEASH_API_KEY=lsh_live_...
+```
+
+Or pass an explicit `receipts: { apiUrl, apiKey, runnerUrl }` config.
+Set `onReceipt: false` to disable forwarding entirely. The full
+defaulting tree lives in [Receipts by default](/concepts/receipt#receipts-by-default).
+
+The agent's on-chain identity registration also advertises a
+`services.receipts` URL by default (`https://api.leash.market/v1/receipts/{agent}`),
+so any explorer or third-party client can find your feed without
+out-of-band coordination. Override with `receiptsUrl` on
+`createAgent`, the `LEASH_RECEIPTS_URL` env, or
+`LEASH_NO_RECEIPTS_URL=1` to opt out entirely.

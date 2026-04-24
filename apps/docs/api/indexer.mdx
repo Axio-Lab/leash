@@ -1,0 +1,145 @@
+---
+title: 'Indexer'
+description: Dual-network watchlist-driven worker that turns on-chain activity into queryable events.
+---
+
+The Leash indexer (`leash-indexer`) is a sidecar to `api.leash.market`
+that turns on-chain agent activity into rows in the same `events`
+table the API writes prepare/submit transitions to. It runs against
+**devnet and mainnet at the same time**, with strict per-network
+cursors, and powers the explorer's per-agent timeline.
+
+It does not full-scan the cluster. It walks a watchlist seeded by
+the API itself.
+
+## Watchlist
+
+Two roles are tracked per address:
+
+| Kind       | What it is                                                | When it gets added                                                       |
+| ---------- | --------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `asset`    | The Core asset pubkey (the agent mint)                    | First `prepare*` call against the agent, or first receipt ingest.        |
+| `treasury` | The Asset Signer PDA derived from the asset                | Same trigger; computed via `findAssetSignerPda`.                         |
+
+Anything reachable through `getSignaturesForAddress(address)` is
+fair game. Adding to the watchlist is automatic; the API calls
+`ensureWatched(...)` whenever a new agent crosses its surface.
+
+You can list the watchlist (subset of your network) via
+`GET /v1/indexer/status`. Manual adds are not exposed in v1 — the
+goal is to keep the indexer scope strictly tied to "agents Leash has
+seen", which matches the explorer's product surface.
+
+## Cursors
+
+`indexer_cursors(network, address, kind)` stores:
+
+- `last_signature` — newest signature already ingested for the row.
+- `last_slot` — slot of `last_signature`.
+- `last_run_at` — wall-clock timestamp of the most recent tick.
+- `backfill_complete` — `0` while the row is paging *backwards*,
+  `1` once it has reached its origin.
+
+A tick walks `getSignaturesForAddress` in pages of 100. New rows page
+backwards until they hit the registry's deploy slot or a configurable
+`backfill_floor`. Once `backfill_complete = 1`, every subsequent tick
+is forward-only: list new signatures since `last_signature`, page
+until empty, advance the cursor.
+
+This is identical behaviour on both networks, with two distinct cursor
+rows so a devnet replay never moves a mainnet pointer.
+
+## Decoding
+
+Decoding is log-driven. The indexer fetches each transaction with
+`getTransaction(signature, { jsonParsed, maxSupportedTransactionVersion: 0 })`
+and matches program logs against a known table:
+
+| Program                                  | Logs we match                                  | EventKind                                                    |
+| ---------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------ |
+| `mpl-agent-identity`                     | `CreateIdentity`, `SetAgentToken`              | `agent.identity.register`, `agent.token.set`                 |
+| `mpl-agent-tools`                        | `CreateExecutive`, `Delegate`, `Revoke`        | `agent.executive.register`, `agent.executive.delegate`       |
+| `mpl-core` (`Execute` wrapping SPL/Sys)  | `Approve`, `TransferChecked`, lamport delta    | `agent.delegation.set`, `agent.treasury.withdraw[_sol]`      |
+| SPL Token / Token-2022                   | `Approve`, `Revoke`, `TransferChecked`         | Same as above when wrapped in `Execute` for an asset signer  |
+
+Amounts are taken from the parsed instruction data (for SPL) or the
+`postTokenBalances` / `postBalances` deltas keyed to the treasury
+PDA (for Core `Execute`). Failed transactions are still ingested,
+flagged in `metadata.failed = true`, and counted in
+`/v1/indexer/status.events_last_hour`.
+
+Single signatures can produce multiple events (e.g. a multi-mint
+provision). The `(network, signature, kind, mint)` tuple is the
+deduplication key so re-runs are safe.
+
+## Receipt pull worker
+
+The same process runs `runReceiptPullTick` on a (slower) cadence:
+
+1. Iterate every row in `pull_targets` for the active network.
+2. `GET <url>` and parse JSON or JSONL.
+3. For each item, call the same `ingestReceipt` the public API uses.
+4. On a non-duplicate, write a `receipt.pulled` event linked to the
+   agent.
+
+The puller respects per-target `interval_seconds` and a global floor
+(default 30s) so a misconfigured target can't hammer your origin.
+
+## Networks
+
+- `LEASH_API_NETWORKS=devnet,mainnet` (default) — runs both, in
+  parallel goroutines per network.
+- Per-network knobs:
+  - `LEASH_API_RPC_DEVNET` / `LEASH_API_RPC_MAINNET` — RPC URL
+    (defaults to Helius if `LEASH_HELIUS_API_KEY` is set).
+  - `LEASH_API_INDEXER_INTERVAL_MS` — tick cadence (default `5000`).
+  - `LEASH_API_INDEXER_PAGE_SIZE` — `getSignaturesForAddress` limit
+    (default `100`, max `1000`).
+
+## Health: `GET /v1/indexer/status`
+
+```bash
+curl https://api.leash.market/v1/indexer/status \
+  -H "Authorization: Bearer $LEASH_API_KEY"
+```
+
+```json
+{
+  "network": "solana-mainnet",
+  "watchlist_size": 1342,
+  "cursors": {
+    "total": 2684,
+    "last_run_at": "2026-04-23T12:01:55.318Z"
+  },
+  "events_last_hour": {
+    "agent.identity.register": 4,
+    "agent.delegation.set": 22,
+    "agent.treasury.withdraw": 11,
+    "receipt.published": 1284,
+    "receipt.pulled": 39
+  }
+}
+```
+
+If `last_run_at` is older than `LEASH_API_INDEXER_INTERVAL_MS * 5`,
+something is wrong with the worker. The endpoint is scoped by API
+key prefix so you only see your network.
+
+## Running it locally
+
+The worker ships in the same package as the API:
+
+```bash
+pnpm --filter @leash/api build
+node apps/api/dist/indexer/cli.js
+# or in dev:
+pnpm --filter @leash/api indexer:dev
+```
+
+Required env (matches the API):
+
+```bash
+export LEASH_DB_URL=file:./.leash/api.sqlite      # or libsql://… for Turso
+export LEASH_REDIS_URL=redis://localhost:6379     # optional, falls back to in-memory
+export LEASH_HELIUS_API_KEY=...                   # or set LEASH_API_RPC_*
+```

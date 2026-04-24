@@ -1,0 +1,122 @@
+---
+title: 'Leash API'
+description: One HTTPS surface for prepare → submit → track, receipts, and the indexer that powers the explorer.
+---
+
+The **Leash API** at [`api.leash.market`](https://api.leash.market) is the
+fastest way to monetise an existing API on a per-call basis, run an
+agent treasury without operating Solana RPC yourself, and watch every
+event your agents produce show up in [`explorer.leash.market`](https://explorer.leash.market) automatically.
+
+It's the same machinery our SDKs use, just exposed as REST + OpenAPI 3.1
+so you can call it from any language. You bring the signer, the API
+brings everything else: prepare unsigned transactions, broadcast signed
+ones, ingest receipts, expose them on a paged feed, and index the
+matching on-chain activity into a normalised event stream.
+
+## Why use the API instead of just the SDK
+
+The SDK runs in your process. The API runs on ours.
+
+- **Polyglot.** The SDK is TypeScript-only. The API is HTTP + OpenAPI,
+  so you can drive it from Python, Go, Rust, Java, or any language with
+  `curl`.
+- **No Solana ops.** You never need to run an RPC node, manage Helius
+  rate limits, or patch a `umi-bundle-defaults`. The API uses our pool
+  on devnet and mainnet.
+- **Receipt + event surface for free.** Every prepare, every submit,
+  every receipt your agents push lands in one queryable feed scoped to
+  your account.
+- **Explorer integration.** Anything the API sees (or anything our chain
+  indexer sees on your watched agents) shows up in the explorer with no
+  extra work.
+
+The SDK is still the right choice when you want client-side custody
+with no remote dependency, or when you're shipping libraries other
+people will install.
+
+## Subdomain layout
+
+| Subdomain                | What it serves                                                          |
+| ------------------------ | ----------------------------------------------------------------------- |
+| `api.leash.market`       | This API. Hono + zod-openapi behind Cloudflare. JSON 3.1 spec at `/openapi.json`. |
+| `docs.leash.market`      | This site (Mintlify). API reference is generated from the same spec.    |
+| `explorer.leash.market`  | Standalone protocol explorer; reads from `api.leash.market` only.       |
+
+## Prepare → Sign → Submit → Track
+
+The API never touches your private keys. Every state-changing call uses
+a strict prepare/sign/submit split that mirrors the SDK's
+`prepare*` / `send*` boundary:
+
+```mermaid
+sequenceDiagram
+  participant You
+  participant API as api.leash.market
+  participant Signer as Your wallet
+  participant Chain as Solana
+
+  You->>API: POST /v1/agents/{mint}/delegation/prepare
+  API->>API: createPreparedEvent  (phase=prepared)
+  API-->>You: { event_id, transaction.base64, echo: { ... } }
+  You->>Signer: sign(transaction.base64)
+  Signer-->>You: signed tx (base64)
+  You->>API: POST /v1/submit { event_id, transaction }
+  API->>Chain: sendRawTransaction
+  API->>API: markSubmitted (phase=submitted)
+  API-->>You: { signature }
+  Note over API: background poller flips to confirmed/failed
+  You->>API: GET /v1/events/{id}
+  API-->>You: { phase: "confirmed", signature, ... }
+```
+
+That same `event_id` later joins to anything the chain indexer picks
+up: agents you prepare for are auto-watched and any subsequent
+on-chain activity for them shows up in `/v1/events` and on the
+explorer's per-agent timeline.
+
+## Network binding via the API key prefix
+
+The API key prefix encodes the network. There is **no per-request
+network parameter** — picking the right key picks the right cluster.
+
+| Prefix       | Network          | Default RPC                      |
+| ------------ | ---------------- | -------------------------------- |
+| `lsh_test_*` | `solana-devnet`  | `LEASH_API_RPC_DEVNET`           |
+| `lsh_live_*` | `solana-mainnet` | `LEASH_API_RPC_MAINNET`          |
+
+Cross-network reads are impossible by construction: a `lsh_test_*`
+key cannot see a mainnet event row, and a transaction signature that
+exists only on devnet returns `404` on a `lsh_live_*` lookup. The same
+isolation applies to receipts (`(network, receipt_hash)` is the
+storage primary key) and to indexer cursors.
+
+See [Authentication](/api/auth) for issuing keys, the
+[Idempotency-Key](/api/idempotency) header for safe retries, and
+[Rate limits](/api/rate-limits) for the per-key sliding-window ceiling.
+
+## Endpoint surface (v1)
+
+| Group        | Endpoints                                                                                                |
+| ------------ | -------------------------------------------------------------------------------------------------------- |
+| Health       | `GET /v1/health`, `GET /v1/version`                                                                      |
+| Agents       | `GET /v1/agents/{mint}`, `GET /v1/agents/{mint}/treasury/balances`                                       |
+| Prepare      | 13 routes mapped 1:1 to the SDK's `prepare*` helpers — see [Prepare → Submit](/api/prepare-submit)       |
+| Submit       | `POST /v1/submit` (signed tx → broadcast)                                                                |
+| Events       | `GET /v1/events/{id}`, `GET /v1/events?kind=&agent=&cursor=`                                             |
+| Receipts     | `POST /v1/receipts/{agent}`, `GET /v1/receipts/{agent}`, `GET /v1/receipts/by-hash/{hash}`               |
+| Pull targets | `POST /v1/agents/{mint}/pull-target` — register an off-API receipts URL the indexer will poll            |
+| Indexer      | `GET /v1/indexer/status`                                                                                 |
+| OpenAPI      | `GET /openapi.json` — full 3.1 spec (also rendered at [API reference](/api/reference))                   |
+
+## What's next
+
+- [Authentication](/api/auth) — issuing and rotating keys, prefix
+  semantics, and rate limits.
+- [Prepare → Submit lifecycle](/api/prepare-submit) — the contract
+  every state-changing call follows, with a worked example.
+- [Monetise an existing API](/api/monetize-api) — the pattern for
+  charging per-call on a SaaS endpoint you already host.
+- [Receipts API](/api/receipts) — the push, pull, and feed surface.
+- [Indexer](/api/indexer) — what the dual-network worker does and
+  how to know it's caught up.

@@ -1,0 +1,121 @@
+---
+title: 'Idempotency & retries'
+description: How Idempotency-Key, event ids, and the prepare/submit split make every state-changing call safe to retry.
+---
+
+The Leash API is built on the assumption that callers retry. Every
+state-changing endpoint is safe to call twice, and the contract is
+deterministic.
+
+## `Idempotency-Key`
+
+Pass a UUID (or anything ≤ 64 chars) on any `POST`. The API caches the
+first response for 24h keyed on
+`(api_key_id, route, idempotency_key)`. A retry with the same key
+returns the same body, the same status, and the same `event_id`.
+
+```bash
+curl -X POST https://api.leash.market/v1/agents/$MINT/delegation/prepare \
+  -H "Authorization: Bearer $LEASH_API_KEY" \
+  -H "Idempotency-Key: a4d6f64e-…" \
+  -H "Content-Type: application/json" \
+  -d '{ ... }'
+```
+
+If the body of the retry differs from the cached call, the API
+returns `409 idempotency_body_mismatch` so you don't accidentally
+think a divergent call landed.
+
+## Event ids are the canonical handle
+
+Even without `Idempotency-Key`, every prepare and submit returns an
+`event_id`. That id is durable, scoped to your API key, and visible
+across the entire surface:
+
+- `GET /v1/events/{id}` — current phase, signature, error.
+- `GET /v1/events?...&id=...` — same row in the filterable feed.
+- Explorer link — `https://explorer.leash.market/event/<id>` deep
+  links to the timeline view.
+
+Persist `event_id` next to your domain object the moment prepare
+returns. It's the cheapest and safest way to recover from a crash
+between prepare and submit.
+
+## Submit is idempotent on `event_id`
+
+`POST /v1/submit` ignores duplicate signed transactions for the same
+`event_id`. Concretely:
+
+- First call lands the tx, returns `202 { signature }`.
+- Second call with the same `event_id` returns `200 { signature, replayed: true }`
+  with no extra RPC traffic and no double-spend risk.
+- A second call with a *different* signed transaction for the same
+  `event_id` returns `409 event_already_submitted`.
+
+The same rule lets you use `event_id` as the dedup key in your job
+queue: workers can retry "submit this" forever and the chain only
+sees one transaction.
+
+## Receipt ingest is idempotent on `(network, receipt_hash)`
+
+`POST /v1/receipts/{agent}` returns `{ duplicate: true, event_id: null }`
+on the second hit. No new event is written. Buyers and sellers can
+reposting the same receipt is therefore free.
+
+## Retry strategy that just works
+
+```ts
+async function withBackoff<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      last = err;
+      if (!isRetryable(err)) throw err;
+      await new Promise((r) => setTimeout(r, 200 * 2 ** i + Math.random() * 100));
+    }
+  }
+  throw last;
+}
+
+const idempotencyKey = crypto.randomUUID();
+const prep = await withBackoff(() =>
+  fetch('https://api.leash.market/v1/agents/' + mint + '/delegation/prepare', {
+    method: 'POST',
+    headers: {
+      'authorization': 'Bearer ' + key,
+      'idempotency-key': idempotencyKey,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  }).then((r) => (r.ok ? r.json() : Promise.reject(r))),
+);
+
+// Sign locally, then submit with a stable event id.
+const submit = await withBackoff(() =>
+  fetch('https://api.leash.market/v1/submit', {
+    method: 'POST',
+    headers: {
+      'authorization': 'Bearer ' + key,
+      'idempotency-key': prep.event_id,        // reuse — submit dedups on event_id too
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ event_id: prep.event_id, transaction: signed }),
+  }).then((r) => (r.ok ? r.json() : Promise.reject(r))),
+);
+```
+
+`isRetryable` should match `429`, `5xx`, and network errors. Do **not**
+retry `4xx` other than `429` — those signal a contract violation, not
+flakiness.
+
+## What about confirmation?
+
+Confirmation is a background job, not the response. After submit:
+
+- Poll `GET /v1/events/{id}` every ~5s until `phase` is `confirmed`
+  or `failed`. Cheap, cached.
+- Or subscribe to webhooks (Phase 6) — `event.confirmed`,
+  `event.failed`, `receipt.published` are pushed to your endpoint
+  with a Leash signature header.
