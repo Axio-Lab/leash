@@ -23,7 +23,9 @@ export type EventKind =
   | 'agent.treasury.withdraw'
   | 'agent.treasury.withdraw_sol'
   | 'agent.token.set'
-  | 'submit.raw';
+  | 'submit.raw'
+  | 'receipt.published'
+  | 'receipt.pulled';
 
 export type EventPhase = 'prepared' | 'submitted' | 'confirmed' | 'failed';
 

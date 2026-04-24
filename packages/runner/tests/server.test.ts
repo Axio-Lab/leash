@@ -93,4 +93,45 @@ describe('runner http', () => {
     });
     expect(post.status).toBe(422);
   });
+
+  it('forwards accepted receipts to the configured Leash API in the background', async () => {
+    const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const fetchSpy = async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      return new Response('ok', { status: 200 });
+    };
+    const app = createHttpServer(createMemoryStore(), {
+      forward: { apiUrl: 'https://api.example.test', apiKey: 'lsh_test_dummy', fetch: fetchSpy },
+    });
+    const receipt = sampleReceipt();
+    const post = await app.request(`http://localhost/a/${MINT}/receipts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(receipt),
+    });
+    expect(post.status).toBe(200);
+    // The forward is fire-and-forget; give the microtask queue a tick.
+    await new Promise((r) => setTimeout(r, 10));
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe(`https://api.example.test/v1/receipts/${MINT}`);
+    const headers = new Headers(calls[0]!.init!.headers);
+    expect(headers.get('authorization')).toBe('Bearer lsh_test_dummy');
+    expect(headers.get('content-type')).toBe('application/json');
+  });
+
+  it('keeps returning 200 even when the forwarder errors', async () => {
+    const fetchSpy = async () => {
+      throw new Error('boom');
+    };
+    const app = createHttpServer(createMemoryStore(), {
+      forward: { apiUrl: 'https://api.example.test', apiKey: 'lsh_test_dummy', fetch: fetchSpy },
+    });
+    const receipt = sampleReceipt();
+    const post = await app.request(`http://localhost/a/${MINT}/receipts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(receipt),
+    });
+    expect(post.status).toBe(200);
+  });
 });

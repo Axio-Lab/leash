@@ -428,4 +428,60 @@ describe('createBuyer', () => {
     expect(receipt.decision).toBe('deny');
     expect(stubFetch).not.toHaveBeenCalled();
   });
+
+  it('fans receipts out to the default runner + API URLs when onReceipt is omitted', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const sinkFetch = async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(input), ...(init ? { init } : {}) });
+      return new Response('ok', { status: 200 });
+    };
+    const stubFetch: LeashFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const buyer = createBuyer({
+      agent: 'A1',
+      rules,
+      signer: stubSigner,
+      fetch: stubFetch,
+      receipts: {
+        runnerUrl: 'http://runner.test',
+        apiUrl: 'https://api.example.test',
+        apiKey: 'lsh_test_dummy',
+        fetch: sinkFetch,
+      },
+    });
+    await buyer.fetch('http://merchant.test/tag', { method: 'POST' });
+    // Both destinations should have been hit.
+    expect(calls.map((c) => c.url).sort()).toEqual(
+      ['http://runner.test/a/A1/receipts', 'https://api.example.test/v1/receipts/A1'].sort(),
+    );
+    const apiCall = calls.find((c) => c.url.startsWith('https://api'));
+    const headers = new Headers(apiCall?.init?.headers);
+    expect(headers.get('authorization')).toBe('Bearer lsh_test_dummy');
+  });
+
+  it('honours onReceipt: false even when receipt forwarders are configured', async () => {
+    const sinkFetch = vi.fn(async () => new Response('ok', { status: 200 }));
+    const stubFetch: LeashFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const buyer = createBuyer({
+      agent: 'A1',
+      rules,
+      signer: stubSigner,
+      fetch: stubFetch,
+      onReceipt: false,
+      receipts: {
+        runnerUrl: 'http://runner.test',
+        apiUrl: 'https://api.example.test',
+        apiKey: 'lsh_test_dummy',
+        fetch: sinkFetch,
+      },
+    });
+    const { receipt } = await buyer.fetch('http://merchant.test/tag', { method: 'POST' });
+    // Receipt is still constructed and returned to the caller…
+    expect(receipt.receipt_hash).toMatch(/^[0-9a-f]{64}$/);
+    // …but it must NOT be forwarded anywhere when onReceipt is false.
+    expect(sinkFetch).not.toHaveBeenCalled();
+  });
 });

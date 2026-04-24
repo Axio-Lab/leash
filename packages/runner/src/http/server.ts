@@ -15,6 +15,26 @@ import {
   type EndpointStore,
 } from '../storage/endpoints.js';
 
+export type RunnerForwardConfig = {
+  /**
+   * Base URL of the Leash API (e.g. `https://api.leash.market`). The
+   * runner POSTs every accepted receipt to `${url}/v1/receipts/${agent}`.
+   */
+  apiUrl: string;
+  /**
+   * API key used to authenticate the forwarded POST. If missing or it
+   * does not parse as `lsh_test_*` / `lsh_live_*`, the runner skips
+   * forwarding (a misconfigured forwarder must never break local dev).
+   */
+  apiKey: string;
+  /**
+   * Optional `fetch` override. Default is the global fetch. Tests pass
+   * a stub that records the calls so the runner doesn't accidentally
+   * reach a real network.
+   */
+  fetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+};
+
 export type RunnerHttpOptions = {
   /**
    * Resolves the current pause state. Defaults to `createPauseResolver({})`,
@@ -29,6 +49,14 @@ export type RunnerHttpOptions = {
    * survive restarts.
    */
   endpoints?: EndpointStore;
+  /**
+   * If set, every accepted receipt is forwarded to the Leash API in the
+   * background so explorer + dashboards see runner traffic without the
+   * caller needing to know about both surfaces. Forward errors are
+   * logged but swallowed: the local runner remains the source of truth
+   * for the in-memory feed.
+   */
+  forward?: RunnerForwardConfig;
 };
 
 function defaultResolver(): () => Promise<PauseState> {
@@ -40,6 +68,8 @@ function defaultResolver(): () => Promise<PauseState> {
 export function createHttpServer(store: ReceiptStore, opts?: RunnerHttpOptions): Hono {
   const resolvePause = opts?.resolvePause ?? defaultResolver();
   const endpoints = opts?.endpoints ?? createEndpointStore();
+  const forward = opts?.forward ?? null;
+  const forwardFetch = forward?.fetch ?? globalThis.fetch;
   const app = new Hono();
   app.get('/health', async (c) => {
     const state = await resolvePause();
@@ -83,6 +113,15 @@ export function createHttpServer(store: ReceiptStore, opts?: RunnerHttpOptions):
       );
     }
     appendLine(store, mint, JSON.stringify(parsed.data));
+    // Best-effort forward to the Leash API so the explorer and per-key
+    // metrics see runner traffic. We `void` the promise to keep the
+    // runner's request latency bounded by the local append.
+    if (forward) {
+      void forwardReceipt(forward, forwardFetch, mint, parsed.data).catch((err: unknown) => {
+        // eslint-disable-next-line no-console -- runner is a local dev sidecar; surface errors loudly.
+        console.warn('[runner] receipt forward failed:', (err as Error).message);
+      });
+    }
     return c.json({ ok: true, receipt_hash: parsed.data.receipt_hash });
   });
 
@@ -143,4 +182,30 @@ export function createHttpServer(store: ReceiptStore, opts?: RunnerHttpOptions):
   });
 
   return app;
+}
+
+/**
+ * Forward an accepted receipt to `${apiUrl}/v1/receipts/{agent}` using the
+ * `Authorization: Bearer <apiKey>` header. Errors throw upward to the
+ * caller's `void` site so the runner request keeps returning 200.
+ */
+async function forwardReceipt(
+  forward: RunnerForwardConfig,
+  fetchImpl: NonNullable<RunnerForwardConfig['fetch']>,
+  agent: string,
+  receipt: unknown,
+): Promise<void> {
+  const url = `${forward.apiUrl.replace(/\/+$/, '')}/v1/receipts/${encodeURIComponent(agent)}`;
+  const res = await fetchImpl(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${forward.apiKey}`,
+    },
+    body: JSON.stringify(receipt),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`POST /v1/receipts/${agent} -> ${res.status}: ${detail.slice(0, 200)}`);
+  }
 }

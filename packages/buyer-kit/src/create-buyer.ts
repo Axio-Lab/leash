@@ -65,8 +65,23 @@ export type BuyerConfig = {
    * ship receipts to the Leash runner — e.g.
    * `onReceipt: (r) => fetch(`${RUNNER}/a/${r.agent}/receipts`, { method: 'POST', body: JSON.stringify(r) })`.
    * Errors thrown here are swallowed so a runner outage never breaks a buyer call.
+   *
+   * Pass `false` to explicitly disable receipt publishing, even if env-
+   * level defaults (LEASH_RUNNER_URL / LEASH_API_URL) are configured.
+   * The receipt object is **always** still returned on
+   * `BuyerCallResult.receipt` regardless of this setting.
    */
-  onReceipt?: (receipt: ReceiptV1) => void | Promise<void>;
+  onReceipt?: ((receipt: ReceiptV1) => void | Promise<void>) | false;
+  /**
+   * Optional fan-out destinations applied when `onReceipt` is undefined
+   * (the implicit default). Either or both can be set; Leash also looks
+   * at process env vars `LEASH_RUNNER_URL`, `LEASH_API_URL`, and
+   * `LEASH_API_KEY` so the most common dev/prod setup needs zero code
+   * changes — drop in a key and receipts start flowing.
+   *
+   * Setting `LEASH_RECEIPTS_DISABLED=1` is the global kill switch.
+   */
+  receipts?: ReceiptForwardConfig;
   /**
    * Optional `fetch` override (defaults to a payment-wrapped `globalThis.fetch`).
    * Pass a pre-built one when you've already constructed the x402 client (e.g.
@@ -105,6 +120,36 @@ export type Buyer = {
   fetch(url: string, init?: RequestInit): Promise<BuyerCallResult>;
 };
 
+/**
+ * Implicit forwarding destinations used when `onReceipt` is not set on
+ * a `createBuyer` / `createSeller` call. Either or both may be omitted;
+ * the kit also reads env vars (see `resolveDefaultReceiptSink`).
+ *
+ * Receipt forwarding is best-effort: a failure here never breaks the
+ * caller's payment flow. Each fan-out target is invoked with its own
+ * `try/catch` so one outage cannot starve the other.
+ */
+export type ReceiptForwardConfig = {
+  /**
+   * Leash runner base URL (e.g. `http://localhost:8787`). When set, the
+   * buyer/seller POSTs receipts to `${url}/a/${agent}/receipts`.
+   */
+  runnerUrl?: string;
+  /**
+   * Leash API base URL (e.g. `https://api.leash.market`). When set
+   * together with `apiKey`, the buyer/seller POSTs receipts to
+   * `${url}/v1/receipts/${agent}` with a Bearer token.
+   */
+  apiUrl?: string;
+  /** API key used for the API fan-out. Required if `apiUrl` is set. */
+  apiKey?: string;
+  /**
+   * Optional `fetch` override. Test harnesses and bundlers without a
+   * global fetch can supply one; production code can leave this unset.
+   */
+  fetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+};
+
 // Imported from @leash/core. Re-resolved on every createBuyer call so the
 // LEASH_FACILITATOR_URL env override applies even when buyer-kit is bundled
 // without process polyfills (the helper guards `typeof process`).
@@ -119,6 +164,14 @@ export type Buyer = {
 export function createBuyer(cfg: BuyerConfig): Buyer {
   const networks = cfg.networks ?? (['solana-devnet'] as LeashX402Network[]);
   const facilitator = cfg.facilitator ?? defaultFacilitatorFor(networks);
+  // Build the actual receipt sink. Precedence:
+  //   1. Explicit `false` => no publishing, never. Receipt is still
+  //      returned on `BuyerCallResult.receipt`.
+  //   2. User-supplied function => used as-is (no env fallback so the
+  //      author keeps total control).
+  //   3. Default fan-out built from `cfg.receipts` and process env vars.
+  //      Either runner, API, or both can be configured.
+  const receiptSink = resolveReceiptSink(cfg.onReceipt, cfg.receipts);
   // Resolve the preferred currency to a concrete mint address so the x402
   // client selector can match seller-advertised `accepts[]` entries by asset.
   // Picks the network of the first configured cluster — buyer-kit only
@@ -168,7 +221,7 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
           prev_receipt_hash: null,
         };
         const receipt = finalizeReceipt(draft);
-        await emitReceipt(cfg.onReceipt, receipt);
+        await receiptSink(receipt);
         return {
           response: new Response(JSON.stringify({ error: pol.reason }), { status: 403 }),
           receipt,
@@ -327,7 +380,7 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
         prev_receipt_hash: null,
       };
       const receipt = finalizeReceipt(draft);
-      await emitReceipt(cfg.onReceipt, receipt);
+      await receiptSink(receipt);
       return {
         response,
         receipt,
@@ -542,11 +595,115 @@ function resolvePreferredAsset(
 // Touched to silence "unused import" when consumers strip-tree-shake.
 void KNOWN_STABLE_SYMBOLS;
 
-async function emitReceipt(onReceipt: BuyerConfig['onReceipt'], receipt: ReceiptV1): Promise<void> {
-  if (!onReceipt) return;
-  try {
-    await onReceipt(receipt);
-  } catch {
-    // Intentionally swallowed: a runner outage must not surface as a buyer-side error.
+/**
+ * Resolve the effective `(receipt) => void` sink given the
+ * buyer/seller's `onReceipt` field and any explicit `ReceiptForwardConfig`.
+ * Lives here (not in `@leash/core`) so the buyer/seller kits can drop
+ * the env fallback at bundle time when targeted at the browser.
+ *
+ * The returned function:
+ *   - Returns immediately when receipts are explicitly disabled
+ *     (`onReceipt: false` or `LEASH_RECEIPTS_DISABLED=1`).
+ *   - Calls a user-provided callback when one is set.
+ *   - Otherwise fans out to every configured destination
+ *     (runner + API). All fan-outs are best-effort; an outage on one
+ *     never blocks the other.
+ */
+export function resolveReceiptSink(
+  onReceipt: ((receipt: ReceiptV1) => void | Promise<void>) | false | undefined,
+  forward: ReceiptForwardConfig | undefined,
+): (receipt: ReceiptV1) => Promise<void> {
+  if (onReceipt === false || envFlag('LEASH_RECEIPTS_DISABLED')) {
+    return async () => {};
   }
+  if (typeof onReceipt === 'function') {
+    return async (receipt) => {
+      try {
+        await onReceipt(receipt);
+      } catch {
+        // Intentionally swallowed.
+      }
+    };
+  }
+  const env = readEnvForwardConfig();
+  const merged: ReceiptForwardConfig = {
+    runnerUrl: forward?.runnerUrl ?? env.runnerUrl,
+    apiUrl: forward?.apiUrl ?? env.apiUrl,
+    apiKey: forward?.apiKey ?? env.apiKey,
+    ...(forward?.fetch ? { fetch: forward.fetch } : {}),
+  };
+  const fetchImpl = merged.fetch ?? globalThis.fetch;
+  return async (receipt) => {
+    const tasks: Promise<unknown>[] = [];
+    if (merged.runnerUrl) {
+      tasks.push(forwardToRunner(merged.runnerUrl, fetchImpl, receipt));
+    }
+    if (merged.apiUrl && merged.apiKey) {
+      tasks.push(forwardToApi(merged.apiUrl, merged.apiKey, fetchImpl, receipt));
+    }
+    if (tasks.length === 0) return;
+    const settled = await Promise.allSettled(tasks);
+    for (const r of settled) {
+      if (r.status === 'rejected') {
+        // Best-effort: log to console for local dev diagnostics, but
+        // never propagate. Runner/API outages must not poison a buyer
+        // call that already debited USDC.
+        // eslint-disable-next-line no-console
+        console.warn('[buyer-kit] receipt forward failed:', (r.reason as Error).message);
+      }
+    }
+  };
+}
+
+function forwardToRunner(
+  runnerUrl: string,
+  fetchImpl: NonNullable<ReceiptForwardConfig['fetch']>,
+  receipt: ReceiptV1,
+): Promise<void> {
+  const url = `${runnerUrl.replace(/\/+$/, '')}/a/${encodeURIComponent(receipt.agent)}/receipts`;
+  return doPost(fetchImpl, url, receipt);
+}
+
+function forwardToApi(
+  apiUrl: string,
+  apiKey: string,
+  fetchImpl: NonNullable<ReceiptForwardConfig['fetch']>,
+  receipt: ReceiptV1,
+): Promise<void> {
+  const url = `${apiUrl.replace(/\/+$/, '')}/v1/receipts/${encodeURIComponent(receipt.agent)}`;
+  return doPost(fetchImpl, url, receipt, { authorization: `Bearer ${apiKey}` });
+}
+
+async function doPost(
+  fetchImpl: NonNullable<ReceiptForwardConfig['fetch']>,
+  url: string,
+  receipt: ReceiptV1,
+  extraHeaders: Record<string, string> = {},
+): Promise<void> {
+  const res = await fetchImpl(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...extraHeaders },
+    body: JSON.stringify(receipt),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`POST ${url} -> ${res.status}: ${detail.slice(0, 200)}`);
+  }
+}
+
+function readEnvForwardConfig(): ReceiptForwardConfig {
+  if (typeof process === 'undefined' || !process.env) return {};
+  const env = process.env;
+  return {
+    ...(env.LEASH_RUNNER_URL ? { runnerUrl: env.LEASH_RUNNER_URL } : {}),
+    ...(env.LEASH_API_URL ? { apiUrl: env.LEASH_API_URL } : {}),
+    ...(env.LEASH_API_KEY ? { apiKey: env.LEASH_API_KEY } : {}),
+  };
+}
+
+function envFlag(name: string): boolean {
+  if (typeof process === 'undefined' || !process.env) return false;
+  const raw = process.env[name];
+  if (!raw) return false;
+  return raw === '1' || raw.toLowerCase() === 'true';
 }

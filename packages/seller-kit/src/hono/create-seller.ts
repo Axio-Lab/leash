@@ -84,10 +84,28 @@ export type CreateSellerOptions = {
    * `onReceipt: (r) => fetch(`${RUNNER}/a/${r.agent}/receipts`, { method: 'POST', body: JSON.stringify(r) })`.
    * Errors thrown here are swallowed so a runner outage never breaks a
    * paying customer's request.
+   *
+   * Pass `false` to explicitly disable receipt publishing, even if env-
+   * level defaults (LEASH_RUNNER_URL / LEASH_API_URL) are configured.
    */
-  onReceipt?: (receipt: ReceiptV1) => void | Promise<void>;
+  onReceipt?: ((receipt: ReceiptV1) => void | Promise<void>) | false;
+  /**
+   * Optional fan-out destinations applied when `onReceipt` is undefined.
+   * Either or both can be set; `process.env.LEASH_RUNNER_URL`,
+   * `LEASH_API_URL`, and `LEASH_API_KEY` are also read so the most
+   * common production setup needs zero seller-kit code changes.
+   * Setting `LEASH_RECEIPTS_DISABLED=1` is the global kill switch.
+   */
+  receipts?: SellerReceiptForwardConfig;
   /** Override the policy version stamped onto receipts. Defaults to `'0.1'`. */
   policyVersion?: string;
+};
+
+export type SellerReceiptForwardConfig = {
+  runnerUrl?: string;
+  apiUrl?: string;
+  apiKey?: string;
+  fetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 };
 
 export type Seller = {
@@ -121,6 +139,9 @@ export function createSeller(app: Hono, opts: CreateSellerOptions): Seller {
   const sellerNetwork: LeashSellerNetwork = opts.network ?? 'solana-devnet';
   const networkCaip2 = caip2ForSellerNetwork(sellerNetwork);
   const state: SellerState = { nonce: 0, prevReceiptHash: null };
+  // Same precedence as buyer-kit: explicit `false` => off, function =>
+  // user controls the sink, undefined => env + opts fan-out.
+  const receiptSink = resolveSellerReceiptSink(opts.onReceipt, opts.receipts);
 
   const { server, facilitatorUrl } = createSvmResourceServer({
     networks: [sellerNetwork],
@@ -195,7 +216,7 @@ export function createSeller(app: Hono, opts: CreateSellerOptions): Seller {
       facilitator: recordedFacilitator,
       paymentReqHash: paymentRequirementsHash(requirements),
       price: enrichedPrice,
-      onReceipt: opts.onReceipt,
+      sink: receiptSink,
     });
   });
 
@@ -295,9 +316,13 @@ async function emitEarnReceipt(args: {
   facilitator: string;
   paymentReqHash: string | null;
   price: ReceiptV1['price'];
-  onReceipt: CreateSellerOptions['onReceipt'];
+  sink: (receipt: ReceiptV1) => Promise<void>;
 }): Promise<void> {
-  if (!args.onReceipt) return;
+  // The sink is always callable; it short-circuits internally when the
+  // user passed `onReceipt: false` or `LEASH_RECEIPTS_DISABLED=1`.
+  // We still build the receipt in that case so the chain (`prev_receipt_hash`)
+  // stays consistent across calls — disabling publishing must not mutate
+  // the receipt graph.
   const draft = {
     v: '0.1' as const,
     kind: 'earn' as const,
@@ -324,10 +349,100 @@ async function emitEarnReceipt(args: {
   const receipt = finalizeReceipt(draft);
   args.state.nonce += 1;
   args.state.prevReceiptHash = receipt.receipt_hash;
-  try {
-    await args.onReceipt(receipt);
-  } catch {
-    // Intentionally swallowed: a runner outage must not surface as a paying
-    // customer's HTTP error.
+  await args.sink(receipt);
+}
+
+/**
+ * Resolver shared with `@leash/buyer-kit`. Lives here as a small inline
+ * copy (instead of importing from buyer-kit) so the seller package stays
+ * server-only and doesn't pull in the buyer's `@solana/kit` dependency.
+ */
+export function resolveSellerReceiptSink(
+  onReceipt: CreateSellerOptions['onReceipt'],
+  forward: SellerReceiptForwardConfig | undefined,
+): (receipt: ReceiptV1) => Promise<void> {
+  if (onReceipt === false || envFlag('LEASH_RECEIPTS_DISABLED')) {
+    return async () => {};
   }
+  if (typeof onReceipt === 'function') {
+    return async (receipt) => {
+      try {
+        await onReceipt(receipt);
+      } catch {
+        // Intentionally swallowed.
+      }
+    };
+  }
+  const env = readEnvForwardConfig();
+  const merged: SellerReceiptForwardConfig = {
+    runnerUrl: forward?.runnerUrl ?? env.runnerUrl,
+    apiUrl: forward?.apiUrl ?? env.apiUrl,
+    apiKey: forward?.apiKey ?? env.apiKey,
+    ...(forward?.fetch ? { fetch: forward.fetch } : {}),
+  };
+  const fetchImpl = merged.fetch ?? globalThis.fetch;
+  return async (receipt) => {
+    const tasks: Promise<unknown>[] = [];
+    if (merged.runnerUrl) {
+      tasks.push(
+        doPost(
+          fetchImpl,
+          `${merged.runnerUrl.replace(/\/+$/, '')}/a/${encodeURIComponent(receipt.agent)}/receipts`,
+          receipt,
+        ),
+      );
+    }
+    if (merged.apiUrl && merged.apiKey) {
+      tasks.push(
+        doPost(
+          fetchImpl,
+          `${merged.apiUrl.replace(/\/+$/, '')}/v1/receipts/${encodeURIComponent(receipt.agent)}`,
+          receipt,
+          { authorization: `Bearer ${merged.apiKey}` },
+        ),
+      );
+    }
+    if (tasks.length === 0) return;
+    const settled = await Promise.allSettled(tasks);
+    for (const r of settled) {
+      if (r.status === 'rejected') {
+        // eslint-disable-next-line no-console
+        console.warn('[seller-kit] receipt forward failed:', (r.reason as Error).message);
+      }
+    }
+  };
+}
+
+async function doPost(
+  fetchImpl: NonNullable<SellerReceiptForwardConfig['fetch']>,
+  url: string,
+  receipt: ReceiptV1,
+  extraHeaders: Record<string, string> = {},
+): Promise<void> {
+  const res = await fetchImpl(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...extraHeaders },
+    body: JSON.stringify(receipt),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`POST ${url} -> ${res.status}: ${detail.slice(0, 200)}`);
+  }
+}
+
+function readEnvForwardConfig(): SellerReceiptForwardConfig {
+  if (typeof process === 'undefined' || !process.env) return {};
+  const env = process.env;
+  return {
+    ...(env.LEASH_RUNNER_URL ? { runnerUrl: env.LEASH_RUNNER_URL } : {}),
+    ...(env.LEASH_API_URL ? { apiUrl: env.LEASH_API_URL } : {}),
+    ...(env.LEASH_API_KEY ? { apiKey: env.LEASH_API_KEY } : {}),
+  };
+}
+
+function envFlag(name: string): boolean {
+  if (typeof process === 'undefined' || !process.env) return false;
+  const raw = process.env[name];
+  if (!raw) return false;
+  return raw === '1' || raw.toLowerCase() === 'true';
 }

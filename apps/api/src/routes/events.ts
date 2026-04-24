@@ -25,6 +25,8 @@ const EVENT_KINDS = [
   'agent.treasury.withdraw_sol',
   'agent.token.set',
   'submit.raw',
+  'receipt.published',
+  'receipt.pulled',
 ] as const satisfies readonly EventKind[];
 
 const EventResponseSchema = z.object({

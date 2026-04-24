@@ -30,6 +30,26 @@ export type CreateAgentInput = {
   supportedTrust?: string[];
   /** Override default `type: 'agent'` schema id if you need a custom one. */
   type?: string;
+  /**
+   * Receipt feed disclosure on the agent's on-chain `services` block.
+   * By default Leash injects a `services` entry of the form
+   * `{ name: 'receipts', endpoint: '<resolved-url>' }` so the explorer
+   * (and any other indexer) can self-discover where to pull this
+   * agent's receipts from.
+   *
+   * Resolution precedence:
+   *   1. `receiptsUrl: '...'`   (explicit override; used as-is)
+   *   2. `LEASH_RECEIPTS_URL`   (env override; useful for staging)
+   *   3. `https://api.leash.market/v1/receipts/{agent}` (default)
+   *
+   * Pass `receiptsUrl: false` (or `LEASH_NO_RECEIPTS_URL=1`) to skip
+   * the injection entirely — typically only needed for self-hosted
+   * deployments that don't run the Leash API.
+   *
+   * If the caller already includes a `services[]` entry whose `name`
+   * is `'receipts'`, the auto-inject is skipped (caller wins).
+   */
+  receiptsUrl?: string | false;
 };
 
 export type CreateAgentResult = {
@@ -39,12 +59,40 @@ export type CreateAgentResult = {
   network: SvmNetwork;
 };
 
+/**
+ * Default URL pattern published as `services.receipts.endpoint` so any
+ * indexer or explorer can discover where to pull receipts from. The
+ * literal `{agent}` placeholder is left in place: clients substitute
+ * the freshly-minted asset address client-side. This avoids needing to
+ * know the asset address at metadata-build time (it's only finalised
+ * by Metaplex during `mintAgent`).
+ */
+const DEFAULT_RECEIPTS_URL_TEMPLATE = 'https://api.leash.market/v1/receipts/{agent}';
+
+function resolveReceiptsUrl(input: CreateAgentInput): string | null {
+  if (input.receiptsUrl === false) return null;
+  if (typeof input.receiptsUrl === 'string' && input.receiptsUrl.length > 0) {
+    return input.receiptsUrl;
+  }
+  if (typeof process !== 'undefined' && process.env) {
+    if (process.env.LEASH_NO_RECEIPTS_URL === '1') return null;
+    if (process.env.LEASH_RECEIPTS_URL) return process.env.LEASH_RECEIPTS_URL;
+  }
+  return DEFAULT_RECEIPTS_URL_TEMPLATE;
+}
+
 function buildMetadata(input: CreateAgentInput): AgentMetadata {
+  const userServices = input.services ?? [];
+  const callerHasReceipts = userServices.some((s) => s.name === 'receipts');
+  const receiptsUrl = callerHasReceipts ? null : resolveReceiptsUrl(input);
+  const services: AgentService[] = receiptsUrl
+    ? [...userServices, { name: 'receipts', endpoint: receiptsUrl }]
+    : userServices;
   return {
     type: input.type ?? 'agent',
     name: input.name,
     description: input.description,
-    services: input.services ?? [],
+    services,
     registrations: input.registrations ?? [],
     supportedTrust: input.supportedTrust ?? [],
   };
