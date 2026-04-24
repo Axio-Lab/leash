@@ -35,6 +35,10 @@ export function mountOpenApi(app: OpenAPIHono): void {
       { name: 'token', description: 'Agent → token association prepares.' },
       { name: 'submit', description: 'Signed-transaction broadcast and tracking.' },
       { name: 'events', description: 'Event lifecycle reads.' },
+      { name: 'receipts', description: 'x402 receipt ingestion + reads.' },
+      { name: 'indexer', description: 'Indexer status (watchlist + cursor health).' },
+      { name: 'webhooks', description: 'Outbound webhook subscriptions and deliveries.' },
+      { name: 'metrics', description: 'Per-key usage and event rollups.' },
     ],
   });
 }

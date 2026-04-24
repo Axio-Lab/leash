@@ -81,6 +81,10 @@ export async function createPreparedEvent(
       JSON.stringify(input.metadata ?? {}),
     ],
   );
+  // The `prepared` phase is a meaningful event for webhook
+  // subscribers — they want to know a tx is in flight even before it
+  // settles on chain.
+  await fanoutEvent(db, id);
   return id;
 }
 
@@ -91,6 +95,7 @@ export async function markSubmitted(db: DbClient, id: string, signature: string)
        WHERE id = ? AND phase IN ('prepared','submitted')`,
     [signature, id],
   );
+  await fanoutEvent(db, id);
 }
 
 export async function markConfirmed(db: DbClient, id: string): Promise<void> {
@@ -100,6 +105,7 @@ export async function markConfirmed(db: DbClient, id: string): Promise<void> {
        WHERE id = ?`,
     [id],
   );
+  await fanoutEvent(db, id);
 }
 
 export async function markFailed(
@@ -112,8 +118,27 @@ export async function markFailed(
     db,
     `UPDATE events SET phase = 'failed', error_code = ?, error_message = ?, failed_at = datetime('now')
        WHERE id = ?`,
-    [id, errorCode, errorMessage],
+    [errorCode, errorMessage, id],
   );
+  await fanoutEvent(db, id);
+}
+
+/**
+ * Best-effort webhook fanout for an event id. Looks the row up and
+ * enqueues one delivery per matching subscription. Errors are
+ * swallowed — webhook plumbing must never fail the underlying API
+ * call. The lazy import keeps the events module free of a hard
+ * dependency on the webhooks subsystem.
+ */
+async function fanoutEvent(db: DbClient, id: string): Promise<void> {
+  try {
+    const row = await getEventById(db, id);
+    if (!row) return;
+    const { enqueueDeliveriesForEvent } = await import('./webhooks.js');
+    await enqueueDeliveriesForEvent(db, row);
+  } catch {
+    // intentionally swallowed
+  }
 }
 
 export async function getEventById(db: DbClient, id: string): Promise<EventRow | null> {
@@ -207,6 +232,7 @@ export async function ingestChainEvent(
       phase,
     ],
   );
+  await fanoutEvent(db, id);
   return { eventId: id, duplicate: false };
 }
 

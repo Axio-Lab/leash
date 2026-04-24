@@ -133,6 +133,46 @@ const SCHEMA_SQL: readonly string[] = [
     PRIMARY KEY (network, address, kind)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_indexer_watchlist_agent ON indexer_watchlist(agent_asset)`,
+
+  // Outbound webhook subscriptions (Phase 6). One row per
+  // (api_key_id, url) pair. `secret` is a random base64 string the
+  // sender HMAC-signs each delivery with — receivers verify it via
+  // the X-Leash-Signature header. `events` is a JSON array of
+  // EventKind strings; `null` / empty = subscribe to all kinds.
+  `CREATE TABLE IF NOT EXISTS webhooks (
+    id TEXT PRIMARY KEY,
+    api_key_id TEXT NOT NULL,
+    network TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    url TEXT NOT NULL,
+    secret TEXT NOT NULL,
+    events_json TEXT NOT NULL DEFAULT '[]',
+    disabled_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (api_key_id, url),
+    FOREIGN KEY (api_key_id) REFERENCES api_keys(id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_webhooks_network ON webhooks(network) WHERE disabled_at IS NULL`,
+
+  // Per-delivery state with retry book-keeping. Created when an
+  // event lands in webhook_deliveries_pending; the worker advances
+  // attempts and either marks delivered=1 or schedules next_attempt_at
+  // with exponential backoff. Deliveries are pruned after 7 days.
+  `CREATE TABLE IF NOT EXISTS webhook_deliveries (
+    id TEXT PRIMARY KEY,
+    webhook_id TEXT NOT NULL,
+    event_id TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    delivered INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_status INTEGER,
+    last_error TEXT,
+    last_attempt_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (webhook_id) REFERENCES webhooks(id),
+    UNIQUE (webhook_id, event_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_pending ON webhook_deliveries(next_attempt_at) WHERE delivered = 0`,
 ];
 
 let cached: Client | null = null;

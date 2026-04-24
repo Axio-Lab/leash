@@ -23,7 +23,11 @@ export type TestRig = {
 export async function createTestRig(overrides: Partial<LeashApiConfig> = {}): Promise<TestRig> {
   _resetDbForTests();
   _resetCacheForTests();
-  const db = createClient({ url: 'file::memory:?cache=shared' });
+  // Each rig gets its own anonymous in-memory DB so state never bleeds
+  // across tests in the same process. The previous shared-cache URL
+  // (`file::memory:?cache=shared`) was a single global DB that every
+  // rig wrote into, which made counting assertions impossible.
+  const db = createClient({ url: ':memory:' });
   const config: LeashApiConfig = {
     host: '127.0.0.1',
     port: 0,
@@ -31,7 +35,7 @@ export async function createTestRig(overrides: Partial<LeashApiConfig> = {}): Pr
       'solana-devnet': 'https://api.devnet.solana.com',
       'solana-mainnet': 'https://api.mainnet-beta.solana.com',
     },
-    db: { url: 'file::memory:?cache=shared' },
+    db: { url: ':memory:' },
     redisUrl: null,
     rateLimitRpm: 5,
     ...overrides,

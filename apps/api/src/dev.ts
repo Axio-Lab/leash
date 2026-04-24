@@ -13,6 +13,7 @@ import { createConfig } from './config.js';
 import { createLeashApiApp } from './server.js';
 import { getCache } from './storage/redis.js';
 import { getDb } from './storage/turso.js';
+import { startWebhookWorker } from './webhooks/worker.js';
 
 const config = createConfig();
 const db = getDb(config);
@@ -21,10 +22,20 @@ const cache = getCache(config);
 await boot({ db, config });
 
 const app = createLeashApiApp({ config, db, cache });
+const webhookHandle = startWebhookWorker(db);
 
 serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
   // eslint-disable-next-line no-console
   console.log(`[leash-api] dev server on http://${config.host}:${info.port}`);
   // eslint-disable-next-line no-console
   console.log(`[leash-api] OpenAPI:  http://${config.host}:${info.port}/openapi.json`);
+  // eslint-disable-next-line no-console
+  console.log(`[leash-api] webhook delivery worker started (every 2s)`);
 });
+
+const shutdown = () => {
+  webhookHandle.stop();
+  process.exit(0);
+};
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

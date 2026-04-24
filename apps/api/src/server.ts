@@ -14,6 +14,7 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 
 import { apiKeyAuth, type AuthDeps } from './auth/api-key.js';
+import { usageLogger } from './auth/usage-log.js';
 import type { AuthVariables } from './auth/types.js';
 import { ApiError, internal, jsonError } from './util/errors.js';
 import { mountOpenApi } from './openapi/doc.js';
@@ -28,6 +29,8 @@ import { buildSubmitRoutes } from './routes/submit.js';
 import { buildEventRoutes } from './routes/events.js';
 import { buildReceiptRoutes } from './routes/receipts.js';
 import { buildIndexerRoutes } from './routes/indexer.js';
+import { buildWebhookRoutes } from './routes/webhooks.js';
+import { buildMetricsRoutes } from './routes/metrics.js';
 
 export type CreateLeashApiArgs = AuthDeps;
 
@@ -50,6 +53,7 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
 
   const authed = new OpenAPIHono<{ Variables: AuthVariables }>();
   authed.use('*', apiKeyAuth(deps));
+  authed.use('*', usageLogger({ db: deps.db }));
   authed.route('/', buildAgentRoutes(deps));
   authed.route('/', buildIdentityRoutes(deps));
   authed.route('/', buildExecutiveRoutes(deps));
@@ -60,6 +64,8 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   authed.route('/', buildEventRoutes(deps));
   authed.route('/', buildReceiptRoutes(deps));
   authed.route('/', buildIndexerRoutes(deps));
+  authed.route('/', buildWebhookRoutes(deps));
+  authed.route('/', buildMetricsRoutes(deps));
   app.route('/', authed);
 
   return app;
