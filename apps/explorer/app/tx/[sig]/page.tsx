@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ExternalLink } from 'lucide-react';
-import { apiFetch, type EventPage, type EventRow } from '@/lib/api';
+import { DbUnavailableError, listEventsForSignature } from '@/lib/db';
+import type { EventRow } from '@/lib/types';
 import { getNetwork } from '@/lib/server-network';
-import { networkToSlug } from '@/lib/network';
+import { networkToSlug, type Network } from '@/lib/network';
 import { describeEvent } from '@/lib/event-label';
 import { EventBadge, PhaseBadge } from '@/components/event-badge';
-import { ApiUnreachable } from '@/components/empty';
+import { DbUnreachable } from '@/components/empty';
 import { Mono } from '@/components/mono';
 import { solscanTxUrl, solscanAddrUrl } from '@/lib/solscan';
 import { formatTs, formatRelative } from '@/lib/format';
@@ -19,14 +20,16 @@ export default async function TxPage({ params }: Props) {
   const { sig } = await params;
   const network = await getNetwork();
 
-  // The events feed has signature uniqueness only at the (network,signature,kind,mint)
-  // level — a single tx can produce multiple decoded events. Pull them all.
-  const res = await apiFetch<EventPage>(network, `/v1/events?limit=200`);
-  if (!res.ok) {
-    return <ApiUnreachable network={network} message={res.message} />;
+  let matches: EventRow[];
+  try {
+    matches = await listEventsForSignature(network, sig);
+  } catch (err) {
+    if (err instanceof DbUnavailableError) {
+      return <DbUnreachable network={network} message={err.message} />;
+    }
+    throw err;
   }
 
-  const matches = res.data.items.filter((r) => r.signature === sig);
   if (matches.length === 0) {
     notFound();
   }
@@ -68,13 +71,7 @@ export default async function TxPage({ params }: Props) {
   );
 }
 
-function DecodedRow({
-  row,
-  network,
-}: {
-  row: EventRow;
-  network: Awaited<ReturnType<typeof getNetwork>>;
-}) {
+function DecodedRow({ row, network }: { row: EventRow; network: Network }) {
   const desc = describeEvent(row);
   return (
     <div className="card px-5 py-4">

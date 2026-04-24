@@ -21,6 +21,10 @@ export const metadata: Metadata = {
   title: 'Leash Explorer',
   description: 'Search agents, transactions, receipts, and events on the Leash protocol.',
   metadataBase: new URL('https://explorer.leash.market'),
+  icons: {
+    icon: [{ url: '/leash-svg.png', type: 'image/png' }],
+    apple: '/leash-svg.png',
+  },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

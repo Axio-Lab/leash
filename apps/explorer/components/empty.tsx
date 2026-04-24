@@ -22,11 +22,29 @@ export function Empty({
   );
 }
 
-export function ApiUnreachable({ network, message }: { network: string; message: string }) {
+/**
+ * Rendered when a Turso/libsql read fails. The explorer is co-located
+ * with the API in our infra, so the only realistic cause is a
+ * misconfigured `LEASH_DB_URL` or a genuinely-down DB — both
+ * operator-side problems, not API-key problems.
+ */
+export function DbUnreachable({ network, message }: { network: string; message: string }) {
   return (
     <Empty
-      title="Cannot reach the Leash API"
-      description={`(${network}) ${message}. Check LEASH_API_URL and LEASH_EXPLORER_API_KEY_${network.toUpperCase()}.`}
+      title="Cannot reach the Leash database"
+      description={`(${network}) ${message}. Check LEASH_DB_URL on the explorer process.`}
+    />
+  );
+}
+
+/**
+ * Rendered when a Solana RPC read fails on the agent page.
+ */
+export function RpcUnreachable({ network, message }: { network: string; message: string }) {
+  return (
+    <Empty
+      title="Cannot reach the Solana RPC"
+      description={`(${network}) ${message}. Check LEASH_RPC_${network.toUpperCase()}.`}
     />
   );
 }

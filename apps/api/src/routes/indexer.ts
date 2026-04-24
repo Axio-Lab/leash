@@ -10,7 +10,9 @@
  *   - per-kind event counts in the last hour, useful for noticing
  *     whether new on-chain activity is being picked up
  *
- * Network is bound to the API key prefix as everywhere else.
+ * Network is bound to the API key prefix as everywhere else. The
+ * underlying read lives in `storage/indexer-status.ts` so the
+ * explorer can call it directly.
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
@@ -18,7 +20,7 @@ import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import type { AuthVariables } from '../auth/types.js';
 import type { LeashApiConfig } from '../config.js';
 import type { DbClient } from '../storage/turso.js';
-import { execute } from '../storage/turso.js';
+import { getIndexerStatus } from '../storage/indexer-status.js';
 import { NetworkSchema } from '../openapi/common.js';
 
 const StatusResponseSchema = z.object({
@@ -51,41 +53,8 @@ export function buildIndexerRoutes(deps: {
       },
     }),
     async (c) => {
-      const network = c.var.network;
-      const watch = await execute(
-        deps.db,
-        `SELECT COUNT(*) AS n FROM indexer_watchlist WHERE network = ?`,
-        [network],
-      );
-      const cur = await execute(
-        deps.db,
-        `SELECT COUNT(*) AS n, MAX(last_run_at) AS last_run_at
-           FROM indexer_cursors WHERE network = ?`,
-        [network],
-      );
-      const ev = await execute(
-        deps.db,
-        `SELECT kind, COUNT(*) AS n FROM events
-           WHERE network = ? AND ts >= datetime('now','-1 hour')
-           GROUP BY kind`,
-        [network],
-      );
-      const eventsLastHour: Record<string, number> = {};
-      for (const row of ev.rows) {
-        eventsLastHour[String(row.kind)] = Number(row.n);
-      }
-      return c.json(
-        {
-          network,
-          watchlist_size: Number(watch.rows[0]?.n ?? 0),
-          cursors: {
-            total: Number(cur.rows[0]?.n ?? 0),
-            last_run_at: cur.rows[0]?.last_run_at ? String(cur.rows[0].last_run_at) : null,
-          },
-          events_last_hour: eventsLastHour,
-        },
-        200,
-      );
+      const status = await getIndexerStatus(deps.db, c.var.network);
+      return c.json(status, 200);
     },
   );
 

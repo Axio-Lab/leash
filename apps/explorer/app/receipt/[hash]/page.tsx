@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ExternalLink } from 'lucide-react';
-import { apiFetch, type ReceiptRow } from '@/lib/api';
+import { DbUnavailableError, getReceiptByHash } from '@/lib/db';
+import type { ReceiptRow } from '@/lib/types';
 import { getNetwork } from '@/lib/server-network';
 import { networkToSlug } from '@/lib/network';
-import { ApiUnreachable } from '@/components/empty';
+import { DbUnreachable } from '@/components/empty';
 import { Mono } from '@/components/mono';
 import { solscanTxUrl } from '@/lib/solscan';
 import { formatTs, formatRelative } from '@/lib/format';
@@ -13,25 +14,20 @@ export const dynamic = 'force-dynamic';
 
 type Props = { params: Promise<{ hash: string }> };
 
-type ByHashResponse = ReceiptRow | { receipt: ReceiptRow; network?: string };
-
 export default async function ReceiptPage({ params }: Props) {
   const { hash } = await params;
   const network = await getNetwork();
 
-  const res = await apiFetch<ByHashResponse>(
-    network,
-    `/v1/receipts/by-hash/${encodeURIComponent(hash)}`,
-  );
-  if (!res.ok) {
-    if (res.code === 'not_found') notFound();
-    return <ApiUnreachable network={network} message={res.message} />;
+  let r: ReceiptRow | null;
+  try {
+    r = await getReceiptByHash(network, hash);
+  } catch (err) {
+    if (err instanceof DbUnavailableError) {
+      return <DbUnreachable network={network} message={err.message} />;
+    }
+    throw err;
   }
-
-  const r =
-    typeof (res.data as { receipt?: unknown }).receipt === 'object'
-      ? (res.data as { receipt: ReceiptRow }).receipt
-      : (res.data as ReceiptRow);
+  if (!r) notFound();
 
   return (
     <div className="space-y-8">
@@ -72,7 +68,18 @@ export default async function ReceiptPage({ params }: Props) {
           ) : null}
           {r.price ? <Field label="Price">{`${r.price.amount} ${r.price.currency}`}</Field> : null}
           {r.reason ? <Field label="Reason">{r.reason}</Field> : null}
-          <Field label="Request hash">{r.request_hash}</Field>
+          <Field label="Request">
+            <span className="break-all">
+              {r.request.method} {r.request.url}
+            </span>
+          </Field>
+          {r.request.body_hash ? <Field label="Request body">{r.request.body_hash}</Field> : null}
+          {r.response ? (
+            <Field label="Response">
+              {r.response.status}
+              {r.response.body_hash ? ` · ${r.response.body_hash.slice(0, 12)}…` : ''}
+            </Field>
+          ) : null}
           {r.payment_requirements_hash ? (
             <Field label="Payment requirements">{r.payment_requirements_hash}</Field>
           ) : null}

@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ExternalLink } from 'lucide-react';
-import { apiFetch, type EventRow } from '@/lib/api';
+import { DbUnavailableError, getEventById } from '@/lib/db';
+import type { EventRow } from '@/lib/types';
 import { getNetwork } from '@/lib/server-network';
 import { networkToSlug } from '@/lib/network';
 import { describeEvent } from '@/lib/event-label';
 import { EventBadge, PhaseBadge } from '@/components/event-badge';
-import { ApiUnreachable } from '@/components/empty';
+import { DbUnreachable } from '@/components/empty';
 import { Mono } from '@/components/mono';
 import { solscanTxUrl, solscanAddrUrl } from '@/lib/solscan';
 import { formatTs, formatRelative } from '@/lib/format';
@@ -19,13 +20,17 @@ export default async function EventPage({ params }: Props) {
   const { id } = await params;
   const network = await getNetwork();
 
-  const res = await apiFetch<EventRow>(network, `/v1/events/${encodeURIComponent(id)}`);
-  if (!res.ok) {
-    if (res.code === 'not_found') notFound();
-    return <ApiUnreachable network={network} message={res.message} />;
+  let row: EventRow | null;
+  try {
+    row = await getEventById(network, id);
+  } catch (err) {
+    if (err instanceof DbUnavailableError) {
+      return <DbUnreachable network={network} message={err.message} />;
+    }
+    throw err;
   }
+  if (!row) notFound();
 
-  const row = res.data;
   const desc = describeEvent(row);
 
   return (

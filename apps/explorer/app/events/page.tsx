@@ -1,8 +1,9 @@
-import { apiFetch, type EventPage } from '@/lib/api';
+import { DbUnavailableError, listEvents } from '@/lib/db';
+import type { EventPage } from '@/lib/types';
 import { getNetwork } from '@/lib/server-network';
 import { networkToSlug } from '@/lib/network';
 import { EventsTable } from '@/components/events-table';
-import { ApiUnreachable } from '@/components/empty';
+import { DbUnreachable } from '@/components/empty';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,12 +30,23 @@ type Props = {
 export default async function EventsPage({ searchParams }: Props) {
   const sp = await searchParams;
   const network = await getNetwork();
-  const params = new URLSearchParams();
-  if (sp.kind) params.set('kind', sp.kind);
-  if (sp.cursor) params.set('cursor', sp.cursor);
-  params.set('limit', '50');
 
-  const res = await apiFetch<EventPage>(network, `/v1/events?${params.toString()}`);
+  let res: { ok: true; data: EventPage } | { ok: false; message: string };
+  try {
+    const data = await listEvents({
+      network,
+      ...(sp.kind ? { kind: sp.kind } : {}),
+      ...(sp.cursor ? { cursor: sp.cursor } : {}),
+      limit: 50,
+    });
+    res = { ok: true, data };
+  } catch (err) {
+    if (err instanceof DbUnavailableError) {
+      res = { ok: false, message: err.message };
+    } else {
+      throw err;
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -83,7 +95,7 @@ export default async function EventsPage({ searchParams }: Props) {
           ) : null}
         </>
       ) : (
-        <ApiUnreachable network={network} message={res.message} />
+        <DbUnreachable network={network} message={res.message} />
       )}
     </div>
   );

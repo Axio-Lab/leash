@@ -1,37 +1,41 @@
 import Link from 'next/link';
 import { Activity, FileSignature, Wallet, Zap } from 'lucide-react';
-import { apiFetch, type EventPage, type ReceiptPage, type IndexerStatus } from '@/lib/api';
+import { DbUnavailableError, getIndexerStatus, getReceiptByHash, listEvents } from '@/lib/db';
+import type { EventPage, IndexerStatus, ReceiptPage } from '@/lib/types';
 import { getNetwork } from '@/lib/server-network';
-import { networkToSlug } from '@/lib/network';
+import { networkToSlug, type Network } from '@/lib/network';
 import { EventsTable } from '@/components/events-table';
 import { ReceiptsTable } from '@/components/receipts-table';
-import { ApiUnreachable } from '@/components/empty';
+import { DbUnreachable } from '@/components/empty';
 import { SearchBar } from '@/components/search-bar';
 import { formatRelative } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
+type Result<T> = { ok: true; data: T } | { ok: false; message: string };
+
+async function safe<T>(fn: () => Promise<T>): Promise<Result<T>> {
+  try {
+    return { ok: true, data: await fn() };
+  } catch (err) {
+    if (err instanceof DbUnavailableError) {
+      return { ok: false, message: err.message };
+    }
+    throw err;
+  }
+}
+
 export default async function HomePage() {
   const network = await getNetwork();
 
-  const [eventsRes, statusRes] = await Promise.all([
-    apiFetch<EventPage>(network, '/v1/events?limit=15'),
-    apiFetch<IndexerStatus>(network, '/v1/indexer/status'),
+  const [eventsRes, statusRes, recentReceiptsRes] = await Promise.all([
+    safe<EventPage>(() => listEvents({ network, limit: 15 })),
+    safe<IndexerStatus>(() => getIndexerStatus(network)),
+    safe<EventPage>(() => listEvents({ network, kind: 'receipt.published', limit: 10 })),
   ]);
-
-  // Receipts feed is per-agent on the API; surface a flat "recent" view
-  // by reusing the events stream filtered to receipt.published.
-  const recentReceiptsRes = await apiFetch<EventPage>(
-    network,
-    '/v1/events?kind=receipt.published&limit=10',
-  );
 
   const events = eventsRes.ok ? eventsRes.data.items : [];
   const receiptEvents = recentReceiptsRes.ok ? recentReceiptsRes.data.items : [];
-
-  // Hydrate the receipt rows by fetching their hashes individually.
-  // For a recent feed, we use the receipt event metadata that the
-  // API stamps with `receipt_hash` when ingesting.
   const recentReceipts = await hydrateRecentReceipts(network, receiptEvents);
 
   return (
@@ -64,7 +68,7 @@ export default async function HomePage() {
         {eventsRes.ok ? (
           <EventsTable rows={events} network={network} />
         ) : (
-          <ApiUnreachable network={network} message={eventsRes.message} />
+          <DbUnreachable network={network} message={eventsRes.message} />
         )}
       </section>
 
@@ -76,7 +80,7 @@ export default async function HomePage() {
         {recentReceiptsRes.ok ? (
           <ReceiptsTable rows={recentReceipts} network={network} />
         ) : (
-          <ApiUnreachable network={network} message={recentReceiptsRes.message} />
+          <DbUnreachable network={network} message={recentReceiptsRes.message} />
         )}
       </section>
     </div>
@@ -84,24 +88,21 @@ export default async function HomePage() {
 }
 
 async function hydrateRecentReceipts(
-  network: Awaited<ReturnType<typeof getNetwork>>,
+  network: Network,
   receiptEvents: EventPage['items'],
-) {
+): Promise<ReceiptPage['items']> {
   const seen = new Set<string>();
-  const out = [] as ReceiptPage['items'];
+  const out: ReceiptPage['items'] = [];
   for (const ev of receiptEvents) {
     const hash = (ev.metadata['receipt_hash'] as string | undefined) ?? null;
     if (!hash || seen.has(hash)) continue;
     seen.add(hash);
-    const r = await apiFetch<
-      { receipt: ReceiptPage['items'][number] } | ReceiptPage['items'][number]
-    >(network, `/v1/receipts/by-hash/${encodeURIComponent(hash)}`);
-    if (r.ok) {
-      const item =
-        typeof (r.data as { receipt?: unknown }).receipt === 'object'
-          ? (r.data as { receipt: ReceiptPage['items'][number] }).receipt
-          : (r.data as ReceiptPage['items'][number]);
-      out.push(item);
+    try {
+      const r = await getReceiptByHash(network, hash);
+      if (r) out.push(r);
+    } catch (err) {
+      if (err instanceof DbUnavailableError) break;
+      throw err;
     }
     if (out.length >= 10) break;
   }

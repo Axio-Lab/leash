@@ -1,15 +1,24 @@
-import { apiFetch, type IndexerStatus } from '@/lib/api';
+import { DbUnavailableError, getIndexerStatus } from '@/lib/db';
+import type { IndexerStatus } from '@/lib/types';
 import type { Network } from '@/lib/network';
 import { formatRelative } from '@/lib/format';
-import { ApiUnreachable } from '@/components/empty';
+import { DbUnreachable } from '@/components/empty';
 
 export const dynamic = 'force-dynamic';
 
+type Result = { ok: true; data: IndexerStatus } | { ok: false; message: string };
+
+async function safe(network: Network): Promise<Result> {
+  try {
+    return { ok: true, data: await getIndexerStatus(network) };
+  } catch (err) {
+    if (err instanceof DbUnavailableError) return { ok: false, message: err.message };
+    throw err;
+  }
+}
+
 export default async function HealthPage() {
-  const [dev, main] = await Promise.all([
-    apiFetch<IndexerStatus>('devnet', '/v1/indexer/status'),
-    apiFetch<IndexerStatus>('mainnet', '/v1/indexer/status'),
-  ]);
+  const [dev, main] = await Promise.all([safe('devnet'), safe('mainnet')]);
 
   return (
     <div className="space-y-8">
@@ -28,18 +37,12 @@ export default async function HealthPage() {
   );
 }
 
-function NetworkCard({
-  network,
-  res,
-}: {
-  network: Network;
-  res: Awaited<ReturnType<typeof apiFetch<IndexerStatus>>>;
-}) {
+function NetworkCard({ network, res }: { network: Network; res: Result }) {
   if (!res.ok) {
     return (
       <div className="card px-5 py-4">
         <h2 className="text-sm font-semibold capitalize">{network}</h2>
-        <ApiUnreachable network={network} message={res.message} />
+        <DbUnreachable network={network} message={res.message} />
       </div>
     );
   }

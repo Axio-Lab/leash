@@ -158,12 +158,36 @@ importers:
 
   apps/explorer:
     dependencies:
+      '@leash/api':
+        specifier: workspace:*
+        version: link:../api
       '@leash/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@leash/registry-utils':
+        specifier: workspace:*
+        version: link:../../packages/registry-utils
       '@leash/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
+      '@libsql/client':
+        specifier: ^0.14.0
+        version: 0.14.0(bufferutil@4.1.0)
+      '@metaplex-foundation/mpl-agent-registry':
+        specifier: ^0.2.5
+        version: 0.2.5(@metaplex-foundation/umi@1.5.1)(@noble/hashes@1.8.0)
+      '@metaplex-foundation/mpl-core':
+        specifier: ^1.10.0
+        version: 1.10.0(@metaplex-foundation/umi@1.5.1)(@noble/hashes@1.8.0)
+      '@metaplex-foundation/mpl-toolbox':
+        specifier: ^0.10.0
+        version: 0.10.0(@metaplex-foundation/umi@1.5.1)
+      '@metaplex-foundation/umi':
+        specifier: ^1.5.1
+        version: 1.5.1
+      '@metaplex-foundation/umi-bundle-defaults':
+        specifier: ^1.5.1
+        version: 1.5.1(@metaplex-foundation/umi@1.5.1)(@solana/web3.js@1.98.4(bufferutil@4.1.0)(encoding@0.1.13)(typescript@5.9.3)(utf-8-validate@6.0.6))(encoding@0.1.13)
       clsx:
         specifier: ^2.1.1
         version: 2.1.1

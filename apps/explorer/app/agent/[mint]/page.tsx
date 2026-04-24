@@ -1,16 +1,12 @@
 import { notFound } from 'next/navigation';
-import {
-  apiFetch,
-  type AgentSummary,
-  type EventPage,
-  type ReceiptPage,
-  type TreasuryBalances,
-} from '@/lib/api';
+import { DbUnavailableError, listEvents, listReceipts } from '@/lib/db';
+import { RpcUnavailableError, getAgentSummaryFor, getTreasuryBalancesFor } from '@/lib/rpc';
+import type { AgentSummary, EventPage, ReceiptPage, TreasuryBalances } from '@/lib/types';
 import { getNetwork } from '@/lib/server-network';
 import { networkToSlug } from '@/lib/network';
 import { EventsTable } from '@/components/events-table';
 import { ReceiptsTable } from '@/components/receipts-table';
-import { ApiUnreachable } from '@/components/empty';
+import { DbUnreachable, RpcUnreachable } from '@/components/empty';
 import { Mono } from '@/components/mono';
 import { solscanAddrUrl } from '@/lib/solscan';
 
@@ -18,18 +14,44 @@ export const dynamic = 'force-dynamic';
 
 type Props = { params: Promise<{ mint: string }> };
 
+type Result<T> = { ok: true; data: T } | { ok: false; message: string };
+
+async function safeDb<T>(fn: () => Promise<T>): Promise<Result<T>> {
+  try {
+    return { ok: true, data: await fn() };
+  } catch (err) {
+    if (err instanceof DbUnavailableError) return { ok: false, message: err.message };
+    throw err;
+  }
+}
+
+async function safeRpc<T>(fn: () => Promise<T>): Promise<Result<T>> {
+  try {
+    return { ok: true, data: await fn() };
+  } catch (err) {
+    if (err instanceof RpcUnavailableError) return { ok: false, message: err.message };
+    throw err;
+  }
+}
+
 export default async function AgentPage({ params }: Props) {
   const { mint } = await params;
   const network = await getNetwork();
 
   const [summaryRes, balancesRes, eventsRes, receiptsRes] = await Promise.all([
-    apiFetch<AgentSummary>(network, `/v1/agents/${encodeURIComponent(mint)}`),
-    apiFetch<TreasuryBalances>(network, `/v1/agents/${encodeURIComponent(mint)}/treasury/balances`),
-    apiFetch<EventPage>(network, `/v1/events?agent=${encodeURIComponent(mint)}&limit=25`),
-    apiFetch<ReceiptPage>(network, `/v1/receipts/${encodeURIComponent(mint)}?limit=25`),
+    safeRpc<AgentSummary>(() => getAgentSummaryFor(network, mint)),
+    safeRpc<TreasuryBalances>(() => getTreasuryBalancesFor(network, mint)),
+    safeDb<EventPage>(() => listEvents({ network, agent: mint, limit: 25 })),
+    safeDb<ReceiptPage>(() => listReceipts({ network, agent: mint, limit: 25 })),
   ]);
 
-  if (summaryRes.ok === false && summaryRes.code === 'not_found') {
+  // The agent page is meaningful even for unregistered mints (empty
+  // identity panel + empty feeds), so we only 404 when the underlying
+  // mint pubkey is malformed enough that the snapshot helper itself
+  // throws — which RpcUnavailableError doesn't catch separately. Treat
+  // an empty summary with no identity and no recent activity as a
+  // valid (but empty) page rather than a hard 404.
+  if (!summaryRes.ok && !eventsRes.ok && !receiptsRes.ok) {
     notFound();
   }
 
@@ -79,7 +101,7 @@ export default async function AgentPage({ params }: Props) {
         {balancesRes.ok ? (
           <Balances data={balancesRes.data} />
         ) : (
-          <ApiUnreachable network={network} message={balancesRes.message} />
+          <RpcUnreachable network={network} message={balancesRes.message} />
         )}
       </section>
 
@@ -92,7 +114,7 @@ export default async function AgentPage({ params }: Props) {
             emptyTitle="No events for this agent yet."
           />
         ) : (
-          <ApiUnreachable network={network} message={eventsRes.message} />
+          <DbUnreachable network={network} message={eventsRes.message} />
         )}
       </section>
 
@@ -105,7 +127,7 @@ export default async function AgentPage({ params }: Props) {
             emptyTitle="No receipts published for this agent yet."
           />
         ) : (
-          <ApiUnreachable network={network} message={receiptsRes.message} />
+          <DbUnreachable network={network} message={receiptsRes.message} />
         )}
       </section>
     </div>

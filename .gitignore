@@ -8,3 +8,7 @@ coverage
 .env.local
 .DS_Store
 apps/docs/schemas/*.mdx
+*.db
+*.db-journal
+*.db-shm
+*.db-wal

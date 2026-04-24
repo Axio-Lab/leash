@@ -46,7 +46,7 @@ function installPrograms(umi: Umi): Umi {
 type CachedUmi = { umi: Umi; rpcUrl: string };
 const baseCache = new Map<SvmNetwork, CachedUmi>();
 
-function getBaseUmi(network: SvmNetwork, config: LeashApiConfig): Umi {
+function getBaseUmi(network: SvmNetwork, config: Pick<LeashApiConfig, 'rpc'>): Umi {
   const rpcUrl = config.rpc[network];
   const cached = baseCache.get(network);
   if (cached && cached.rpcUrl === rpcUrl) return cached.umi;
@@ -87,7 +87,11 @@ export function umiForRequest(
 /**
  * Read-only Umi for endpoints that don't need signers (balance reads,
  * identity lookups, broadcasting a pre-signed tx).
+ *
+ * Accepts a minimal `{ rpc: Record<SvmNetwork, string> }` shape — the
+ * full `LeashApiConfig` is a structural superset, but in-process
+ * consumers (e.g. the explorer) only need to hand us the RPC URLs.
  */
-export function umiReadOnly(config: LeashApiConfig, network: SvmNetwork): Umi {
+export function umiReadOnly(config: Pick<LeashApiConfig, 'rpc'>, network: SvmNetwork): Umi {
   return getBaseUmi(network, config);
 }

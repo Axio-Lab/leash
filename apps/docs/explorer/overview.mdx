@@ -10,9 +10,11 @@ status pills — but every screen is built around the **Leash
 domain model**: agents, executives, treasuries, allowances, and
 chained receipts.
 
-It's a thin standalone Next.js app that reads exclusively from
-[`api.leash.market`](https://api.leash.market). No RPC calls from
-the browser, no key material, no protocol logic duplicated.
+It's a server-rendered Next.js app that runs as part of the same
+infrastructure as the API, the chain indexer, and the webhook
+worker. Pages render straight from the protocol's own source of
+truth — no API key, no protocol logic duplicated, no extra
+network hop.
 
 ## What you can find
 
@@ -31,14 +33,14 @@ suggests switching clusters.
 The header has a single toggle: **Devnet** ↔ **Mainnet**. Flipping
 it:
 
-- Calls a different `api.leash.market` key (`lsh_test_*` vs
-  `lsh_live_*`) under the hood.
-- Re-issues every active query — no stale data leaks across
-  networks.
+- Re-issues every active query against the other network — no stale
+  data leaks across clusters.
 - Updates every Solscan deeplink (`?cluster=devnet` vs nothing).
 
-A devnet-only signature returns 404 on mainnet; the explorer makes
-this explicit: "Not found on mainnet — try devnet?".
+Devnet and mainnet records live in the same database under different
+`network` columns (`solana-devnet` / `solana-mainnet`); the explorer
+filters every read by the active network so a devnet receipt hash
+returns 404 on mainnet, and the page tells you so explicitly.
 
 ## Pages
 
@@ -54,8 +56,8 @@ this explicit: "Not found on mainnet — try devnet?".
   navigation, link to the matching transaction.
 - **`/event/<id>`** — prepare → submit → confirm phases with
   timestamps; on `phase=confirmed` the entry deeplinks to `/tx/<sig>`.
-- **`/health`** — public mirror of `/v1/indexer/status` per network
-  with freshness pills.
+- **`/health`** — indexer freshness for both networks: watchlist size,
+  cursor activity, per-kind event counts in the last hour.
 
 ## Design
 
@@ -70,28 +72,54 @@ explain **what just happened in protocol terms** ("Owner approved
 executive `9XQ2…` to spend up to `100 USDC` from agent `9pK9…`")
 rather than dumping the raw instruction array.
 
-## How it talks to the API
+## How it gets its data
+
+The explorer is the fourth process inside the protocol's
+infrastructure. The other three (API, indexer, webhook worker) all
+read and write the same Turso/libsql database; the explorer reads
+the same database and the same Solana RPCs directly.
 
 ```mermaid
 flowchart LR
-  subgraph Browser
-    Page["explorer.leash.market route"]
+  subgraph Chain[Solana RPC]
+    Devnet[devnet]
+    Mainnet[mainnet]
   end
-  subgraph Server[Next.js server actions / route handlers]
-    Action["fetchEvents / fetchReceipts / ..."]
+  subgraph Infra[Leash infrastructure]
+    Indexer[Chain indexer]
+    API[API server]
+    Webhooks[Webhook worker]
+    Explorer[Explorer]
   end
-  subgraph API[api.leash.market]
-    REST["GET /v1/events, /v1/receipts, /v1/agents, /v1/indexer/status"]
+  subgraph DB[Turso / libsql]
+    Events[(events)]
+    Receipts[(receipts)]
+    IndexerState[(indexer_*)]
   end
-  Page -->|"swr<br/>(client cache)"| Action
-  Action -->|server-side fetch<br/>with read-only API key| REST
+  Indexer -->|writes decoded events| Events
+  API -->|writes prepared / submitted / receipts| Events
+  API -->|writes ingested receipts| Receipts
+  Indexer -->|cursors| IndexerState
+  Devnet & Mainnet --> Indexer
+  Explorer -->|reads| Events
+  Explorer -->|reads| Receipts
+  Explorer -->|reads| IndexerState
+  Devnet & Mainnet --> Explorer
 ```
 
-The browser never holds the API key — every fetch is a server
-action that calls the API with a read-only `lsh_*_explorer_*` key
-scoped to the active network. SWR caches on the client for instant
-back-and-forth between agent and transaction views.
+The pieces:
 
-See the [Explorer source](https://github.com/metaplex-foundation/leash/tree/main/apps/explorer)
-for the full implementation, including the network switcher and the
-server actions that talk to `api.leash.market`.
+- **List views** (`/`, `/events`, `/agent/<mint>`'s timeline + receipt
+  feed, `/event/<id>`, `/tx/<sig>`, `/receipt/<hash>`, `/health`) all
+  read directly from the shared database — the same `events` and
+  `receipts` tables the API writes to.
+- **Live agent panels** on `/agent/<mint>` (identity status, treasury
+  PDA, native SOL + SPL balances) call the same Solana RPCs the API
+  uses, in-process, via the snapshot helpers exported from `@leash/api`.
+- The browser only ever sees `'devnet' | 'mainnet'` (carried by the
+  `leash_network` cookie). All database and RPC reads happen on the
+  Next.js server.
+
+This co-location is intentional. The explorer is internal infra, not a
+third-party API consumer, so it shouldn't have to authenticate
+against a service it already shares a trust boundary with.

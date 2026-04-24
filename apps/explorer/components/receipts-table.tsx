@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { cn } from '@/lib/cn';
-import type { ReceiptRow } from '@/lib/api';
+import type { ReceiptRow } from '@/lib/types';
 import type { Network } from '@/lib/network';
 import { formatRelative } from '@/lib/format';
 import { Mono } from './mono';

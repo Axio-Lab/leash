@@ -2,7 +2,7 @@
  * Map raw EventKind strings to Leash-domain labels for the explorer UI.
  */
 
-import type { EventRow } from './api';
+import type { EventRow } from './types';
 
 export type EventDescriptor = {
   label: string;

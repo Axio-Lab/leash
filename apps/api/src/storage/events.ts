@@ -236,6 +236,28 @@ export async function ingestChainEvent(
   return { eventId: id, duplicate: false };
 }
 
+/**
+ * Pull every event row decoded from a single on-chain transaction
+ * signature, on the given network. Used by the explorer's `/tx/<sig>`
+ * page so it can render every withdrawn mint as its own decoded row
+ * without depending on a wide `LIMIT 200` scan.
+ *
+ * Returned ordering is `id ASC` (insert order = decode order); callers
+ * typically render the first row as the "head" of the lifecycle.
+ */
+export async function listEventsForSignature(
+  db: DbClient,
+  network: SvmNetwork,
+  signature: string,
+): Promise<EventRow[]> {
+  const res = await execute(
+    db,
+    `SELECT * FROM events WHERE network = ? AND signature = ? ORDER BY id ASC`,
+    [network, signature],
+  );
+  return res.rows.map(rowToEvent);
+}
+
 export async function listEvents(db: DbClient, args: ListEventsArgs): Promise<EventRow[]> {
   const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
   const filters: string[] = [`network = ?`];

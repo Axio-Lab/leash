@@ -12,8 +12,16 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@leash/api": "workspace:*",
     "@leash/core": "workspace:*",
+    "@leash/registry-utils": "workspace:*",
     "@leash/schemas": "workspace:*",
+    "@libsql/client": "^0.14.0",
+    "@metaplex-foundation/mpl-agent-registry": "^0.2.5",
+    "@metaplex-foundation/mpl-core": "^1.10.0",
+    "@metaplex-foundation/mpl-toolbox": "^0.10.0",
+    "@metaplex-foundation/umi": "^1.5.1",
+    "@metaplex-foundation/umi-bundle-defaults": "^1.5.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.469.0",
     "next": "^15.1.0",

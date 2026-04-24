@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type { EventRow } from '@/lib/api';
+import type { EventRow } from '@/lib/types';
 import { describeEvent } from '@/lib/event-label';
 import { formatRelative } from '@/lib/format';
 import { EventBadge, PhaseBadge } from './event-badge';

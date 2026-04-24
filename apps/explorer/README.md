@@ -4,10 +4,41 @@
 search across agents, transactions, receipts, and events on **devnet
 and mainnet**.
 
-This is a thin Next.js (App Router) app. It does **no** RPC calls
-itself — every screen reads from `api.leash.market` via server actions
-that hold the right `lsh_test_*` / `lsh_live_*` key for the active
-network.
+## Architecture
+
+The explorer is **internal infrastructure**, not a customer-facing API
+client. It runs alongside the API process, the chain indexer, and the
+webhook worker, and reads straight from the same shared state:
+
+```
+            ┌─────────────────────┐
+            │  Solana RPC (×2)    │
+            └─────────┬───────────┘
+                      │ (read)
+                      ▼
+   indexer ─────► Turso / libsql ◄───── api (writes events / receipts)
+                      ▲
+                      │ (read)
+                      │
+   webhook worker ────┤
+                      │
+              ┌───────┴────────┐
+              │  EXPLORER (this app)  │
+              │  Next.js, server-only │
+              └────────────────────────┘
+```
+
+- Every list view (`/events`, `/health`, recent feed on `/`) is a
+  direct libsql read against the same DB the API writes to.
+- The agent page (`/agent/<mint>`) makes direct Solana RPC calls via
+  the snapshot helpers exported from `@leash/api`.
+- There is **no API key**, **no `LEASH_API_URL`**, and **no HTTP hop**
+  between the explorer and the API. They are peers in the same trust
+  boundary.
+
+The browser still only ever sees `'devnet' | 'mainnet'` (carried by
+the `leash_network` cookie). All DB and RPC reads happen on the
+Next.js server.
 
 ## Routes
 
@@ -24,24 +55,45 @@ network.
 
 ## Environment
 
+The explorer shares its env with the rest of the infra (api, indexer,
+webhook worker). Point it at the same database and the same RPC URLs
+those processes use:
+
 ```bash
-LEASH_API_URL=https://api.leash.market
-LEASH_EXPLORER_API_KEY_DEVNET=lsh_test_...
-LEASH_EXPLORER_API_KEY_MAINNET=lsh_live_...
+# Database — pick one (libsql for hosted Turso, file: for local dev).
+# Both LEASH_DB_URL and the API's LEASH_API_DB_URL are accepted; if
+# both are set, LEASH_DB_URL wins.
+LEASH_DB_URL=libsql://leash-prod.turso.io
+LEASH_DB_AUTH_TOKEN=...
+
+# Solana RPC — also accepts LEASH_API_RPC_DEVNET / _MAINNET.
+LEASH_RPC_DEVNET=https://api.devnet.solana.com
+LEASH_RPC_MAINNET=https://your-helius-or-quicknode-mainnet
 ```
 
-The browser **never** sees the API key. The `leash_network` cookie
-(`devnet` | `mainnet`) drives which key the server reaches for.
+Local dev defaults are sane: `LEASH_DB_URL=file:./.leash-api.db` (the
+same file the API process uses) and the public Solana RPCs.
 
 ## Local dev
 
+The explorer imports from the compiled `@leash/api` package, so build
+the workspace once first:
+
 ```bash
+pnpm install
+pnpm -r build
 pnpm --filter @leash/explorer dev
 # http://localhost:3100
 ```
+
+If you change `@leash/api` and want the explorer to pick it up,
+re-run `pnpm --filter @leash/api build`.
 
 ## Tests
 
 ```bash
 pnpm --filter @leash/explorer test
 ```
+
+The tests stub `@leash/api`'s storage and Umi helpers; they don't
+require a real database or RPC.
