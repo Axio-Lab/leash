@@ -1,0 +1,143 @@
+/**
+ * Turso/SQLite source-of-truth client.
+ *
+ * Schema:
+ *   - `api_keys`     — server-issued credentials (test_/live_).
+ *   - `api_requests` — every request, for usage and billing.
+ *   - `events`       — protocol-level event lifecycle (prepare → confirm).
+ *   - `receipts`     — x402 receipts (Phase 2 fills these).
+ *   - `pull_targets` — `services.receipts` URLs to poll (Phase 2).
+ *
+ * Keeping schema definitions co-located with the client keeps migrations
+ * trivial: bump `SCHEMA_VERSION`, add an `if (current < N)` block, and
+ * `runMigrations` is the only callsite.
+ */
+
+import { createClient, type Client, type InValue } from '@libsql/client';
+
+import type { LeashApiConfig } from '../config.js';
+
+export type DbClient = Client;
+
+const SCHEMA_VERSION = 1;
+
+const SCHEMA_SQL: readonly string[] = [
+  `CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS api_keys (
+    id TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    network TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    prefix TEXT NOT NULL,
+    last4 TEXT NOT NULL,
+    hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    disabled_at TEXT
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS api_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    api_key_id TEXT NOT NULL,
+    network TEXT NOT NULL,
+    method TEXT NOT NULL,
+    path TEXT NOT NULL,
+    status INTEGER NOT NULL,
+    latency_ms INTEGER NOT NULL,
+    error_code TEXT,
+    client_reference TEXT,
+    ts TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (api_key_id) REFERENCES api_keys(id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_api_requests_key_ts ON api_requests(api_key_id, ts DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS events (
+    id TEXT PRIMARY KEY,
+    ts TEXT NOT NULL DEFAULT (datetime('now')),
+    kind TEXT NOT NULL,
+    phase TEXT NOT NULL CHECK (phase IN ('prepared','submitted','confirmed','failed')),
+    network TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    api_key_id TEXT,
+    client_reference TEXT,
+    agent_asset TEXT,
+    signature TEXT,
+    mint TEXT,
+    amount_atomic TEXT,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    error_code TEXT,
+    error_message TEXT,
+    confirmed_at TEXT,
+    failed_at TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_events_network_ts ON events(network, ts DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_events_agent_ts ON events(agent_asset, ts DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_events_kind_ts ON events(kind, ts DESC)`,
+  // `(network, signature)` is unique — same signature can exist on both
+  // networks without collision (devnet/mainnet isolation).
+  `CREATE UNIQUE INDEX IF NOT EXISTS uq_events_network_signature ON events(network, signature) WHERE signature IS NOT NULL`,
+
+  `CREATE TABLE IF NOT EXISTS receipts (
+    receipt_hash TEXT NOT NULL,
+    network TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    agent TEXT NOT NULL,
+    nonce INTEGER NOT NULL,
+    decision TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    tx_sig TEXT,
+    payment_requirements_hash TEXT,
+    raw_json TEXT NOT NULL,
+    ingested_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (network, receipt_hash)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_receipts_agent_ts ON receipts(agent, ingested_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS pull_targets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    network TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    agent TEXT NOT NULL,
+    url TEXT NOT NULL,
+    last_polled_at TEXT,
+    last_cursor TEXT,
+    UNIQUE (network, agent, url)
+  )`,
+];
+
+let cached: Client | null = null;
+
+export function getDb(config: LeashApiConfig): Client {
+  if (cached != null) return cached;
+  cached = createClient({
+    url: config.db.url,
+    ...(config.db.authToken ? { authToken: config.db.authToken } : {}),
+  });
+  return cached;
+}
+
+/** Reset the module-level cache. Used by tests that want isolated DBs. */
+export function _resetDbForTests(): void {
+  cached = null;
+}
+
+export async function runMigrations(db: Client): Promise<void> {
+  for (const stmt of SCHEMA_SQL) {
+    await db.execute(stmt);
+  }
+  const cur = await db.execute('SELECT version FROM schema_version LIMIT 1');
+  const currentVersion = cur.rows.length > 0 ? Number(cur.rows[0]!.version) : 0;
+  if (currentVersion < SCHEMA_VERSION) {
+    await db.execute({
+      sql: 'INSERT OR REPLACE INTO schema_version(version) VALUES(?)',
+      args: [SCHEMA_VERSION],
+    });
+  }
+}
+
+/** Execute helper that surfaces typed args. */
+export async function execute(
+  db: Client,
+  sql: string,
+  args: InValue[] = [],
+): Promise<Awaited<ReturnType<Client['execute']>>> {
+  return db.execute({ sql, args });
+}

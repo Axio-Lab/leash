@@ -1,0 +1,127 @@
+/**
+ * API key creation, hashing, and lookup. Keys are stored as
+ * SHA-256(hex) — the raw value is shown to the user exactly once at
+ * creation time and never persisted in plaintext.
+ *
+ * Format: `lsh_test_<24 random chars>` or `lsh_live_<24 random chars>`.
+ * Prefix encodes the network (devnet vs mainnet); see `networkFromKey`
+ * in `../config.ts`.
+ */
+
+import { createHash, randomBytes } from 'node:crypto';
+import { ulid } from 'ulid';
+
+import type { DbClient } from './turso.js';
+import { execute } from './turso.js';
+import type { SvmNetwork } from '../util/network.js';
+import { networkFromKey } from '../config.js';
+
+const KEY_BODY_BYTES = 18; // base32 -> 28 chars; we trim to 24 for readability.
+
+export type ApiKeyRecord = {
+  id: string;
+  label: string;
+  network: SvmNetwork;
+  prefix: string;
+  last4: string;
+  createdAt: string;
+  disabledAt: string | null;
+};
+
+export type CreateApiKeyResult = {
+  key: ApiKeyRecord;
+  /** Plaintext value — show ONCE to the user, then forget. */
+  plaintext: string;
+};
+
+function hashKey(plaintext: string): string {
+  return createHash('sha256').update(plaintext).digest('hex');
+}
+
+function randomBody(): string {
+  // base32-ish (Crockford-ish) for URL-friendliness without padding.
+  const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  const bytes = randomBytes(KEY_BODY_BYTES);
+  let out = '';
+  for (const b of bytes) out += ALPHABET[b % ALPHABET.length];
+  return out.toLowerCase().slice(0, 24);
+}
+
+export function generateApiKey(network: SvmNetwork, plaintextOverride?: string): string {
+  if (plaintextOverride) return plaintextOverride;
+  const prefix = network === 'solana-devnet' ? 'lsh_test_' : 'lsh_live_';
+  return `${prefix}${randomBody()}`;
+}
+
+export async function createApiKey(
+  db: DbClient,
+  args: { label: string; network: SvmNetwork; plaintext?: string },
+): Promise<CreateApiKeyResult> {
+  const plaintext = generateApiKey(args.network, args.plaintext);
+  const network = networkFromKey(plaintext);
+  if (network !== args.network) {
+    throw new Error(
+      `key prefix mismatches requested network: ${plaintext.slice(0, 9)} vs ${args.network}`,
+    );
+  }
+  const id = ulid();
+  const prefix = plaintext.slice(0, 9);
+  const last4 = plaintext.slice(-4);
+  const hash = hashKey(plaintext);
+  await execute(
+    db,
+    `INSERT INTO api_keys (id, label, network, prefix, last4, hash) VALUES (?, ?, ?, ?, ?, ?)`,
+    [id, args.label, network, prefix, last4, hash],
+  );
+  const created = await getApiKeyById(db, id);
+  if (!created) throw new Error('api key insert succeeded but lookup failed');
+  return { key: created, plaintext };
+}
+
+export async function getApiKeyByPlaintext(
+  db: DbClient,
+  plaintext: string,
+): Promise<ApiKeyRecord | null> {
+  const hash = hashKey(plaintext);
+  const res = await execute(
+    db,
+    `SELECT id, label, network, prefix, last4, created_at, disabled_at
+       FROM api_keys WHERE hash = ? LIMIT 1`,
+    [hash],
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  return rowToRecord(row);
+}
+
+export async function getApiKeyById(db: DbClient, id: string): Promise<ApiKeyRecord | null> {
+  const res = await execute(
+    db,
+    `SELECT id, label, network, prefix, last4, created_at, disabled_at
+       FROM api_keys WHERE id = ? LIMIT 1`,
+    [id],
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  return rowToRecord(row);
+}
+
+export async function disableApiKey(db: DbClient, id: string): Promise<void> {
+  await execute(db, `UPDATE api_keys SET disabled_at = datetime('now') WHERE id = ?`, [id]);
+}
+
+function rowToRecord(row: Record<string, unknown>): ApiKeyRecord {
+  const network = String(row.network);
+  if (network !== 'solana-devnet' && network !== 'solana-mainnet') {
+    throw new Error(`unexpected network in api_keys: ${network}`);
+  }
+  return {
+    id: String(row.id),
+    label: String(row.label),
+    network,
+    prefix: String(row.prefix),
+    last4: String(row.last4),
+    createdAt: String(row.created_at),
+    disabledAt: row.disabled_at != null ? String(row.disabled_at) : null,
+  };
+}
