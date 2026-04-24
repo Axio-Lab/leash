@@ -55,6 +55,10 @@ Next.js server.
 
 ## Environment
 
+See **`apps/explorer/.env.example`** for a copy-paste template (this repo did
+not ship one earlier; variables were only documented here and in `lib/db.ts` /
+`lib/rpc.ts`). Next.js loads **`apps/explorer/.env.local`** automatically.
+
 The explorer shares its env with the rest of the infra (api, indexer,
 webhook worker). Point it at the same database and the same RPC URLs
 those processes use:
@@ -71,8 +75,12 @@ LEASH_RPC_DEVNET=https://api.devnet.solana.com
 LEASH_RPC_MAINNET=https://your-helius-or-quicknode-mainnet
 ```
 
-Local dev defaults are sane: `LEASH_DB_URL=file:./.leash-api.db` (the
-same file the API process uses) and the public Solana RPCs.
+If you omit `LEASH_DB_URL`, the explorer falls back to
+`file:./.leash-api.db` **under `apps/explorer/`**, which is not the same
+path as the API’s default (`apps/api/.leash-api.db`). Use
+`apps/explorer/.env.example` (or the same absolute DB path in both apps)
+so the explorer sees the data the API/indexer wrote. RPC defaults are
+the public Solana clusters.
 
 ## Local dev
 
