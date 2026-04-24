@@ -13,12 +13,23 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const listEventsMock = vi.fn();
-const getEventByIdMock = vi.fn();
-const listEventsForSignatureMock = vi.fn();
-const listReceiptsMock = vi.fn();
-const getReceiptByHashMock = vi.fn();
-const getIndexerStatusMock = vi.fn();
+const {
+  listEventsMock,
+  getEventByIdMock,
+  listEventsForSignatureMock,
+  listReceiptsMock,
+  getReceiptByHashMock,
+  getIndexerStatusMock,
+  runMigrationsMock,
+} = vi.hoisted(() => ({
+  listEventsMock: vi.fn(),
+  getEventByIdMock: vi.fn(),
+  listEventsForSignatureMock: vi.fn(),
+  listReceiptsMock: vi.fn(),
+  getReceiptByHashMock: vi.fn(),
+  getIndexerStatusMock: vi.fn(),
+  runMigrationsMock: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('@leash/api', () => ({
   listEvents: listEventsMock,
@@ -27,6 +38,7 @@ vi.mock('@leash/api', () => ({
   listReceipts: listReceiptsMock,
   getReceiptByHash: getReceiptByHashMock,
   getIndexerStatus: getIndexerStatusMock,
+  runMigrations: runMigrationsMock,
 }));
 
 // libsql's `createClient` is invoked lazily on the first DB read; we
@@ -48,8 +60,17 @@ describe('listEvents', () => {
   beforeEach(() => {
     process.env.LEASH_DB_URL = 'file::memory:';
     listEventsMock.mockReset();
+    runMigrationsMock.mockReset();
+    runMigrationsMock.mockResolvedValue(undefined);
   });
-  afterEach(() => vi.restoreAllMocks());
+
+  it('runs runMigrations once before queries (shared schema with the API)', async () => {
+    listEventsMock.mockResolvedValue([]);
+    const { listEvents } = await importDb();
+    await listEvents({ network: 'devnet', limit: 50 });
+    await listEvents({ network: 'devnet', limit: 50 });
+    expect(runMigrationsMock).toHaveBeenCalledTimes(1);
+  });
 
   it('passes the canonical network slug and reshapes rows', async () => {
     listEventsMock.mockResolvedValueOnce([

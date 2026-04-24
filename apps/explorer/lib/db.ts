@@ -7,6 +7,11 @@
  * key — and shapes rows into the snake_case wire types the views
  * already consume.
  *
+ * On first use we call `@leash/api`'s `runMigrations` against this
+ * client (same CREATE TABLE IF NOT EXISTS as the API bootstrap), so a
+ * brand-new `file:…` path gets an empty but valid schema instead of
+ * "no such table: events".
+ *
  * Configure with these env vars (shared with the API / indexer):
  *
  *   LEASH_DB_URL          libsql:// URL (or `file:./.leash-api.db` for
@@ -27,6 +32,7 @@ import {
   listEvents as apiListEvents,
   listEventsForSignature as apiListEventsForSignature,
   listReceipts as apiListReceipts,
+  runMigrations,
   type EventKind,
   type EventRow as ApiEventRow,
   type ReceiptRow as ApiReceiptRow,
@@ -37,6 +43,8 @@ import { networkToSlug } from './network';
 import type { EventPage, EventRow, IndexerStatus, ReceiptPage, ReceiptRow } from './types';
 
 let cached: Client | null = null;
+/** First-connection schema (same SQL as the API bootstrap). Idempotent. */
+let schemaPromise: Promise<void> | null = null;
 
 function dbUrl(): string {
   return process.env.LEASH_DB_URL || process.env.LEASH_API_DB_URL || 'file:./.leash-api.db';
@@ -57,6 +65,17 @@ export function getDb(): Client {
 /** Test-only: drop the singleton so each test gets a fresh client. */
 export function _resetDbForTests(): void {
   cached = null;
+  schemaPromise = null;
+}
+
+async function ensureSchema(db: Client): Promise<void> {
+  if (schemaPromise == null) {
+    schemaPromise = runMigrations(db).catch((err) => {
+      schemaPromise = null;
+      throw err;
+    });
+  }
+  await schemaPromise;
 }
 
 export class DbUnavailableError extends Error {
@@ -67,8 +86,10 @@ export class DbUnavailableError extends Error {
 }
 
 async function withDb<T>(fn: (db: Client) => Promise<T>): Promise<T> {
+  const db = getDb();
   try {
-    return await fn(getDb());
+    await ensureSchema(db);
+    return await fn(db);
   } catch (err) {
     throw new DbUnavailableError(`Leash DB unreachable (${dbUrl()}): ${(err as Error).message}`);
   }

@@ -79,8 +79,11 @@ If you omit `LEASH_DB_URL`, the explorer falls back to
 `file:./.leash-api.db` **under `apps/explorer/`**, which is not the same
 path as the API’s default (`apps/api/.leash-api.db`). Use
 `apps/explorer/.env.example` (or the same absolute DB path in both apps)
-so the explorer sees the data the API/indexer wrote. RPC defaults are
-the public Solana clusters.
+so the explorer sees the data the API/indexer wrote. On first connect
+the explorer still applies the same SQL migrations as the API, so you
+never hit “no such table: events” on a fresh file — you’ll just see an
+empty UI until something writes rows. RPC defaults are the public Solana
+clusters.
 
 ## Local dev
 
