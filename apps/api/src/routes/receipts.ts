@@ -27,6 +27,10 @@ import {
   listPullTargets,
 } from '../storage/receipts.js';
 import { createPreparedEvent, markConfirmed } from '../storage/events.js';
+import { ensureWatched } from '../indexer/watchlist.js';
+import { umiReadOnly } from '../util/umi.js';
+import { findAssetSignerPda } from '@metaplex-foundation/mpl-core';
+import { publicKey } from '@metaplex-foundation/umi';
 import { ApiErrorSchema, NetworkSchema, PubkeySchema } from '../openapi/common.js';
 import { invalidRequest, notFound } from '../util/errors.js';
 
@@ -122,6 +126,20 @@ export function buildReceiptRoutes(deps: {
       const network = c.var.network;
       const apiKey = c.var.apiKey;
       const result = await ingestReceipt(deps.db, { network, receipt });
+      // Best-effort enroll the agent in the indexer watchlist so any
+      // future on-chain activity (treasury withdraws, identity updates)
+      // shows up in the explorer feed for this agent.
+      try {
+        const umi = umiReadOnly(deps.config, network);
+        const [treasury] = findAssetSignerPda(umi, { asset: publicKey(agent) });
+        await ensureWatched(deps.db, {
+          network,
+          agentAsset: agent,
+          treasuryAddress: String(treasury),
+        });
+      } catch {
+        // never block receipt ingest on watchlist add
+      }
       // Only emit a `receipt.published` event for fresh ingests so the
       // explorer's activity feed isn't flooded by replays from buyer-kit
       // retries. The event row carries enough context that the explorer

@@ -131,6 +131,85 @@ export type ListEventsArgs = {
   limit?: number;
 };
 
+export type IngestChainEventInput = {
+  kind: EventKind;
+  network: SvmNetwork;
+  signature: string;
+  agentAsset?: string | null;
+  mint?: string | null;
+  amountAtomic?: string | null;
+  metadata?: Record<string, unknown>;
+  blockTime?: number | null;
+  failed?: boolean;
+};
+
+export type IngestChainEventResult = {
+  eventId: string;
+  duplicate: boolean;
+};
+
+/**
+ * Insert (or no-op) a chain-observed event row.
+ *
+ * Dedup is by `(network, signature, kind)` — the same signature can
+ * legitimately produce multiple kinds (e.g. an `Execute` that withdraws
+ * 3 different SPL mints emits 3 `agent.treasury.withdraw` rows, one per
+ * mint). The unique index on `(network, signature)` is partial and
+ * filters out NULL signatures only — we re-check at the application
+ * level so we can support the multi-kind case.
+ *
+ * Phase is `'confirmed'` (chain receipts are inherently terminal) or
+ * `'failed'` when the on-chain transaction errored.
+ */
+export async function ingestChainEvent(
+  db: DbClient,
+  input: IngestChainEventInput,
+): Promise<IngestChainEventResult> {
+  // Look for an existing row for this (network, signature, kind, mint?)
+  // tuple. We include `mint` because multi-mint withdraw bundles emit
+  // one row per mint and they must not collide.
+  const existing = await execute(
+    db,
+    `SELECT id FROM events
+       WHERE network = ? AND signature = ? AND kind = ?
+         AND IFNULL(mint,'') = IFNULL(?,'') LIMIT 1`,
+    [input.network, input.signature, input.kind, input.mint ?? null],
+  );
+  if (existing.rows[0]?.id != null) {
+    return { eventId: String(existing.rows[0].id), duplicate: true };
+  }
+  const id = ulid();
+  const phase: EventPhase = input.failed ? 'failed' : 'confirmed';
+  const metadata = {
+    ...(input.metadata ?? {}),
+    ...(input.blockTime != null ? { block_time: input.blockTime } : {}),
+    source: 'indexer',
+  };
+  await execute(
+    db,
+    `INSERT INTO events (id, kind, phase, network, agent_asset, signature,
+                         mint, amount_atomic, metadata_json,
+                         confirmed_at, failed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
+         CASE WHEN ?='confirmed' THEN datetime('now') ELSE NULL END,
+         CASE WHEN ?='failed' THEN datetime('now') ELSE NULL END)`,
+    [
+      id,
+      input.kind,
+      phase,
+      input.network,
+      input.agentAsset ?? null,
+      input.signature,
+      input.mint ?? null,
+      input.amountAtomic ?? null,
+      JSON.stringify(metadata),
+      phase,
+      phase,
+    ],
+  );
+  return { eventId: id, duplicate: false };
+}
+
 export async function listEvents(db: DbClient, args: ListEventsArgs): Promise<EventRow[]> {
   const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
   const filters: string[] = [`network = ?`];

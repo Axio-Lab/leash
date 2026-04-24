@@ -73,9 +73,11 @@ const SCHEMA_SQL: readonly string[] = [
   `CREATE INDEX IF NOT EXISTS idx_events_network_ts ON events(network, ts DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_events_agent_ts ON events(agent_asset, ts DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_events_kind_ts ON events(kind, ts DESC)`,
-  // `(network, signature)` is unique — same signature can exist on both
-  // networks without collision (devnet/mainnet isolation).
-  `CREATE UNIQUE INDEX IF NOT EXISTS uq_events_network_signature ON events(network, signature) WHERE signature IS NOT NULL`,
+  // Lookup index for `(network, signature)`. NOT unique — one signature
+  // can produce multiple event rows when an `Execute` withdraws several
+  // SPL mints in a single tx (one row per mint). Cross-network
+  // isolation is preserved by including `network` in every query.
+  `CREATE INDEX IF NOT EXISTS idx_events_network_signature ON events(network, signature) WHERE signature IS NOT NULL`,
 
   `CREATE TABLE IF NOT EXISTS receipts (
     receipt_hash TEXT NOT NULL,
@@ -101,6 +103,36 @@ const SCHEMA_SQL: readonly string[] = [
     last_cursor TEXT,
     UNIQUE (network, agent, url)
   )`,
+
+  // Indexer state: one row per (network, watch_address, kind). The
+  // indexer pages backwards through `getSignaturesForAddress(address)`
+  // until it hits `last_signature`, then resumes forward from the
+  // newest signature on the next pass. `kind` lets us track separate
+  // cursors for the same address used in different roles (e.g. asset
+  // pubkey vs treasury PDA).
+  `CREATE TABLE IF NOT EXISTS indexer_cursors (
+    network TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    address TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    last_signature TEXT,
+    last_slot INTEGER,
+    last_run_at TEXT,
+    backfill_complete INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (network, address, kind)
+  )`,
+
+  // Watchlist the indexer iterates on each tick. Populated automatically
+  // whenever the API sees a new agent asset (via prepare events or
+  // receipt ingest) so we never need to scan an entire program ID.
+  `CREATE TABLE IF NOT EXISTS indexer_watchlist (
+    network TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    address TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('asset','treasury')),
+    agent_asset TEXT NOT NULL,
+    added_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (network, address, kind)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_indexer_watchlist_agent ON indexer_watchlist(agent_asset)`,
 ];
 
 let cached: Client | null = null;

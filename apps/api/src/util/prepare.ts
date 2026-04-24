@@ -21,6 +21,9 @@ import type { SvmNetwork } from './network.js';
 import type { EventKind } from '../storage/events.js';
 import { createPreparedEvent } from '../storage/events.js';
 import { serializeBuilder, type WireTransaction } from './serialize.js';
+import { ensureWatched } from '../indexer/watchlist.js';
+import { findAssetSignerPda } from '@metaplex-foundation/mpl-core';
+import { publicKey } from '@metaplex-foundation/umi';
 
 export type PreparedResponse<TEcho> = {
   event_id: string;
@@ -71,6 +74,25 @@ export async function wrapPrepared<TEcho>(
           : args.amountAtomic,
     metadata: args.metadata,
   });
+  // Auto-add the agent to the indexer watchlist so any future on-chain
+  // activity for this asset shows up in the explorer feed even if the
+  // SDK skips submit (e.g. caller broadcasts directly via their own
+  // wallet). Best-effort: a missing agent_asset just means we couldn't
+  // derive the treasury, in which case we silently skip — the indexer
+  // can pick the agent up the next time `wrapPrepared` is called with
+  // a real agent_asset.
+  if (args.agentAsset) {
+    try {
+      const [treasury] = findAssetSignerPda(args.umi, { asset: publicKey(args.agentAsset) });
+      await ensureWatched(args.db, {
+        network: args.network,
+        agentAsset: args.agentAsset,
+        treasuryAddress: String(treasury),
+      });
+    } catch {
+      // PDA derivation can fail if the pubkey is invalid; treat as best-effort.
+    }
+  }
   return {
     event_id: eventId,
     network: args.network,

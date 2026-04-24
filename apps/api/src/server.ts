@@ -27,6 +27,7 @@ import { buildAgentRoutes } from './routes/agents.js';
 import { buildSubmitRoutes } from './routes/submit.js';
 import { buildEventRoutes } from './routes/events.js';
 import { buildReceiptRoutes } from './routes/receipts.js';
+import { buildIndexerRoutes } from './routes/indexer.js';
 
 export type CreateLeashApiArgs = AuthDeps;
 
@@ -58,6 +59,7 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   authed.route('/', buildSubmitRoutes(deps));
   authed.route('/', buildEventRoutes(deps));
   authed.route('/', buildReceiptRoutes(deps));
+  authed.route('/', buildIndexerRoutes(deps));
   app.route('/', authed);
 
   return app;

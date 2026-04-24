@@ -6,7 +6,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "leash-api": "./dist/cli.js"
+    "leash-api": "./dist/cli.js",
+    "leash-indexer": "./dist/indexer/cli.js"
   },
   "exports": {
     ".": {
@@ -19,6 +20,8 @@
   ],
   "scripts": {
     "start": "node dist/cli.js",
+    "indexer": "node dist/indexer/cli.js",
+    "indexer:dev": "tsx ./src/indexer/cli.ts",
     "dev": "tsx ./src/dev.ts",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
