@@ -39,14 +39,15 @@ isolation guarantee.
 
 ## Issuing keys
 
-In the playground today, keys are issued out-of-band — talk to us in
+Keys are issued out-of-band today — talk to us in
 [Discord](https://leash.market) and we'll mint one for the right
-network. The hosted dashboard for self-service issuance ships in the
-same release as billing.
+network. Self-service issuance through a hosted dashboard is on the
+[roadmap](/api/roadmap#self-service-api-key-management) and ships
+in the same release as billing.
 
-Programmatically, key bytes are random `crypto.randomUUID()`-derived
-material; the prefix is purely a routing hint. A separate hash is
-stored in `api_keys` so plaintext is never written to disk.
+The prefix is purely a routing hint and tells you which cluster the
+key acts on at a glance. The opaque tail is high-entropy; treat the
+full string as a secret.
 
 ## Per-request context
 
@@ -90,9 +91,9 @@ X-RateLimit-Reset: 2026-04-23T12:01:00.000Z
 ```
 
 Going over returns `429` with the same headers and a `retry_after`
-field in the JSON body. The Redis-backed limiter is global to all API
-nodes; in a fully Redis-less dev environment it falls back to an
-in-memory bucket per node.
+field in the JSON body. The limiter is global across the API
+fleet — retrying against a different region won't get you more
+budget.
 
 ## Rotating and revoking
 

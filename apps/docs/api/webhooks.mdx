@@ -61,10 +61,9 @@ export function verify(secret: string, header: string, rawBody: string): boolean
 }
 ```
 
-A reference implementation lives at `apps/api/src/webhooks/sign.ts`
-in the monorepo. First-party `verifySignature` helpers in the
-generated polyglot SDKs are on the roadmap and not yet shipped — for
-now, copy the snippet above (or the monorepo file) into your service.
+First-party `verifySignature` helpers in the generated polyglot
+SDKs are on the [roadmap](/api/roadmap#polyglot-sdks) and not yet
+shipped — for now, copy the snippet above into your service.
 
 Reject deliveries with a timestamp older than ~5 minutes — that's the
 default tolerance the API uses on the verify path and protects against
@@ -198,10 +197,11 @@ you want to drop a delivery on the floor, return `200` and discard.
 - **Network-isolated** — a `lsh_test_*` key only ever delivers
   devnet events, even if you accidentally point it at a mainnet URL.
 
-## Local development
+## Testing your receiver
 
-In dev (`apps/api/src/dev.ts`) the worker runs in-process every two
-seconds. For staging / prod, run it as a dedicated worker so a slow
-receiver can't backpressure the API server. The same module is
-exported as `startWebhookWorker(db, intervalMs, options)` from
-`@leash/api/webhooks/worker` — wire it into your own process supervisor.
+Spin up an `ngrok http <port>` (or use [webhook.site](https://webhook.site))
+and `POST /v1/webhooks` with the public URL. Run a `prepare` +
+`submit` against any agent and you'll see deliveries land within a
+few seconds. Inspect `GET /v1/webhooks/{id}/deliveries` to confirm
+attempts, status codes, and signing headers — re-create the
+subscription with a different secret if you suspect leakage.

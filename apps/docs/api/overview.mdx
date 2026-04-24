@@ -21,9 +21,9 @@ The SDK runs in your process. The API runs on ours.
 - **Polyglot.** The SDK is TypeScript-only. The API is HTTP + OpenAPI,
   so you can drive it from Python, Go, Rust, Java, or any language with
   `curl`.
-- **No Solana ops.** You never need to run an RPC node, manage Helius
-  rate limits, or patch a `umi-bundle-defaults`. The API uses our pool
-  on devnet and mainnet.
+- **No Solana ops.** You never need to run an RPC node, manage RPC
+  rate limits, or pin Solana SDK versions — the API talks to both
+  clusters for you.
 - **Receipt + event surface for free.** Every prepare, every submit,
   every receipt your agents push lands in one queryable feed scoped to
   your account.
@@ -39,9 +39,9 @@ people will install.
 
 | Subdomain                | What it serves                                                          |
 | ------------------------ | ----------------------------------------------------------------------- |
-| `api.leash.market`       | This API. Hono + zod-openapi behind Cloudflare. JSON 3.1 spec at `/openapi.json`. |
-| `docs.leash.market`      | This site (Mintlify). API reference is generated from the same spec.    |
-| `explorer.leash.market`  | Standalone protocol explorer; reads from `api.leash.market` only.       |
+| `api.leash.market`       | This API. JSON OpenAPI 3.1 spec at `/openapi.json`.                     |
+| `docs.leash.market`      | This site. API reference is generated from the same spec.               |
+| `explorer.leash.market`  | Protocol explorer; reads from `api.leash.market` only.                  |
 
 ## Prepare → Sign → Submit → Track
 
@@ -80,10 +80,10 @@ explorer's per-agent timeline.
 The API key prefix encodes the network. There is **no per-request
 network parameter** — picking the right key picks the right cluster.
 
-| Prefix       | Network          | Default RPC                      |
-| ------------ | ---------------- | -------------------------------- |
-| `lsh_test_*` | `solana-devnet`  | `LEASH_API_RPC_DEVNET`           |
-| `lsh_live_*` | `solana-mainnet` | `LEASH_API_RPC_MAINNET`          |
+| Prefix       | Network          | Use this when…                                                        |
+| ------------ | ---------------- | --------------------------------------------------------------------- |
+| `lsh_test_*` | `solana-devnet`  | Building, integration tests, CI, demos. Free RPC, faucet stables.     |
+| `lsh_live_*` | `solana-mainnet` | Production. Real money, mainnet RPC, mainnet receipts and explorer.   |
 
 Cross-network reads are impossible by construction: a `lsh_test_*`
 key cannot see a mainnet event row, and a transaction signature that

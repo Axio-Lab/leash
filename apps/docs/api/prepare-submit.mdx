@@ -111,7 +111,7 @@ Content-Type: application/json
 
 - **Validates** the signed tx parses, blockhash is fresh, and
   `event_id` is in `phase = prepared` (not already submitted).
-- **Broadcasts** via the API's RPC (Helius by default).
+- **Broadcasts** via the API's RPC pool.
 - **Stamps** the event to `phase = submitted` with the returned
   signature.
 - **Returns** `202 Accepted` with `{ signature }`. Confirmation is a

@@ -3,11 +3,11 @@ title: 'Indexer'
 description: Dual-network watchlist-driven worker that turns on-chain activity into queryable events.
 ---
 
-The Leash indexer (`leash-indexer`) is a sidecar to `api.leash.market`
-that turns on-chain agent activity into rows in the same `events`
-table the API writes prepare/submit transitions to. It runs against
-**devnet and mainnet at the same time**, with strict per-network
-cursors, and powers the explorer's per-agent timeline.
+The Leash indexer is the worker behind `api.leash.market` that turns
+on-chain agent activity into the same event stream the API writes
+prepare/submit transitions to. It runs against **devnet and mainnet
+at the same time**, with strict per-network cursors, and powers the
+explorer's per-agent timeline.
 
 It does not full-scan the cluster. It walks a watchlist seeded by
 the API itself.
@@ -87,14 +87,12 @@ The puller respects per-target `interval_seconds` and a global floor
 
 ## Networks
 
-- `LEASH_API_NETWORKS=devnet,mainnet` (default) — runs both, in
-  parallel goroutines per network.
-- Per-network knobs:
-  - `LEASH_API_RPC_DEVNET` / `LEASH_API_RPC_MAINNET` — RPC URL
-    (defaults to Helius if `LEASH_HELIUS_API_KEY` is set).
-  - `LEASH_API_INDEXER_INTERVAL_MS` — tick cadence (default `5000`).
-  - `LEASH_API_INDEXER_PAGE_SIZE` — `getSignaturesForAddress` limit
-    (default `100`, max `1000`).
+The indexer runs against devnet and mainnet in parallel with
+isolated cursors and watchlists per network. Tick cadence and page
+size are tuned server-side; from the outside you only see the
+result through `/v1/indexer/status` and the per-network event feed.
+A `lsh_test_*` key only sees devnet, a `lsh_live_*` key only sees
+mainnet.
 
 ## Health: `GET /v1/indexer/status`
 
@@ -121,25 +119,6 @@ curl https://api.leash.market/v1/indexer/status \
 }
 ```
 
-If `last_run_at` is older than `LEASH_API_INDEXER_INTERVAL_MS * 5`,
-something is wrong with the worker. The endpoint is scoped by API
-key prefix so you only see your network.
-
-## Running it locally
-
-The worker ships in the same package as the API:
-
-```bash
-pnpm --filter @leash/api build
-node apps/api/dist/indexer/cli.js
-# or in dev:
-pnpm --filter @leash/api indexer:dev
-```
-
-Required env (matches the API):
-
-```bash
-export LEASH_DB_URL=file:./.leash/api.sqlite      # or libsql://… for Turso
-export LEASH_REDIS_URL=redis://localhost:6379     # optional, falls back to in-memory
-export LEASH_HELIUS_API_KEY=...                   # or set LEASH_API_RPC_*
-```
+If `last_run_at` lags by more than ~30 seconds something is wrong on
+our end — open an incident in [Discord](https://leash.market). The
+endpoint is scoped by API key prefix so you only see your network.
