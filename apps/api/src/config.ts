@@ -34,6 +34,19 @@ export type LeashApiConfig = {
    * (mainnet) based on prefix. Useful for local dev only.
    */
   bootstrapKey?: { value: string; label: string };
+  /**
+   * Long random string that gates the `/v1/admin/*` surface. When unset
+   * those routes are not mounted at all (no admin endpoints exist),
+   * so a misconfigured deploy can never accidentally expose key
+   * issuance. Must be at least 32 chars.
+   */
+  adminSecret?: string;
+  /**
+   * When `true`, the server mounts `/docs` (Swagger UI) and a `/` →
+   * `/docs` redirect. Default: `true` if `NODE_ENV !== 'production'`,
+   * `false` otherwise. Override with `LEASH_API_DOCS_ENABLED=true|false`.
+   */
+  docsEnabled: boolean;
 };
 
 function readEnv(key: string, fallback: string): string {
@@ -51,8 +64,25 @@ function readNumber(key: string, fallback: number): number {
   return n;
 }
 
+function readBool(value: string | undefined, fallback: boolean): boolean {
+  if (value == null || value.length === 0) return fallback;
+  const v = value.trim().toLowerCase();
+  if (v === '1' || v === 'true' || v === 'yes' || v === 'on') return true;
+  if (v === '0' || v === 'false' || v === 'no' || v === 'off') return false;
+  return fallback;
+}
+
+const MIN_ADMIN_SECRET_LEN = 24;
+
 export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConfig {
   const bootstrapKey = env.LEASH_API_BOOTSTRAP_KEY?.trim();
+  const adminSecretRaw = env.LEASH_API_ADMIN_SECRET?.trim();
+  if (adminSecretRaw && adminSecretRaw.length < MIN_ADMIN_SECRET_LEN) {
+    throw new Error(
+      `LEASH_API_ADMIN_SECRET: must be >= ${MIN_ADMIN_SECRET_LEN} chars; got ${adminSecretRaw.length}`,
+    );
+  }
+  const docsDefault = env.NODE_ENV !== 'production';
   return {
     host: readEnv('LEASH_API_HOST', '0.0.0.0'),
     port: readNumber('LEASH_API_PORT', 8801),
@@ -66,6 +96,8 @@ export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConf
     },
     redisUrl: env.LEASH_API_REDIS_URL?.trim() || null,
     rateLimitRpm: readNumber('LEASH_API_RATELIMIT_RPM', 120),
+    docsEnabled: readBool(env.LEASH_API_DOCS_ENABLED, docsDefault),
+    ...(adminSecretRaw ? { adminSecret: adminSecretRaw } : {}),
     ...(bootstrapKey
       ? {
           bootstrapKey: {

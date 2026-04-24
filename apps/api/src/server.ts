@@ -31,6 +31,7 @@ import { buildReceiptRoutes } from './routes/receipts.js';
 import { buildIndexerRoutes } from './routes/indexer.js';
 import { buildWebhookRoutes } from './routes/webhooks.js';
 import { buildMetricsRoutes } from './routes/metrics.js';
+import { buildAdminRoutes } from './routes/admin.js';
 
 export type CreateLeashApiArgs = AuthDeps;
 
@@ -45,11 +46,18 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
     return jsonError(c, internal('unexpected error', message));
   });
 
-  // Mount unauthenticated routes (health + OpenAPI doc + Swagger UI)
-  // BEFORE the authed sub-app so its catch-all auth middleware doesn't
-  // shadow the public surface.
+  // Mount unauthenticated routes (health + OpenAPI doc + optional
+  // Swagger UI) BEFORE the authed sub-app so its catch-all auth
+  // middleware doesn't shadow the public surface.
   app.route('/', buildHealthRoutes());
-  mountOpenApi(app);
+  mountOpenApi(app, deps.config);
+
+  // Admin routes use their own secret-based auth. They're always
+  // mounted (so they appear in the OpenAPI doc and Swagger UI) but the
+  // middleware returns 503 when LEASH_API_ADMIN_SECRET is not set.
+  // Mounted BEFORE the user-key sub-app so its API key middleware
+  // doesn't intercept admin requests.
+  app.route('/', buildAdminRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
 
   const authed = new OpenAPIHono<{ Variables: AuthVariables }>();
   authed.use('*', apiKeyAuth(deps));

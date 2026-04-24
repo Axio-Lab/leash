@@ -110,6 +110,35 @@ export async function disableApiKey(db: DbClient, id: string): Promise<void> {
   await execute(db, `UPDATE api_keys SET disabled_at = datetime('now') WHERE id = ?`, [id]);
 }
 
+export type ListApiKeysArgs = {
+  network?: SvmNetwork;
+  includeDisabled?: boolean;
+  limit?: number;
+};
+
+export async function listApiKeys(
+  db: DbClient,
+  args: ListApiKeysArgs = {},
+): Promise<ApiKeyRecord[]> {
+  const where: string[] = [];
+  const params: (string | number)[] = [];
+  if (args.network) {
+    where.push('network = ?');
+    params.push(args.network);
+  }
+  if (!args.includeDisabled) {
+    where.push('disabled_at IS NULL');
+  }
+  const sql = `SELECT id, label, network, prefix, last4, created_at, disabled_at
+    FROM api_keys
+    ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
+    ORDER BY created_at DESC
+    LIMIT ?`;
+  params.push(args.limit ?? 100);
+  const res = await execute(db, sql, params);
+  return res.rows.map(rowToRecord);
+}
+
 function rowToRecord(row: Record<string, unknown>): ApiKeyRecord {
   const network = String(row.network);
   if (network !== 'solana-devnet' && network !== 'solana-mainnet') {

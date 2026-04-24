@@ -20,12 +20,22 @@ import type { DbClient } from '../storage/turso.js';
 import type { AuthVariables } from './types.js';
 
 const KEY_CACHE_TTL_SEC = 60;
+/** Slightly larger than KEY_CACHE_TTL_SEC so a revoke beats every still-warm cache entry. */
+const REVOKED_FLAG_TTL_SEC = 90;
 
 export type AuthDeps = {
   config: LeashApiConfig;
   db: DbClient;
   cache: CacheClient;
 };
+
+export function revokedFlagKey(id: string): string {
+  return `cache:apikey:revoked:${id}`;
+}
+
+export async function markKeyRevoked(cache: CacheClient, id: string): Promise<void> {
+  await cache.set(revokedFlagKey(id), '1', { ttlSec: REVOKED_FLAG_TTL_SEC });
+}
 
 function extractKey(c: Context): string | null {
   const auth = c.req.header('authorization');
@@ -68,6 +78,11 @@ export function apiKeyAuth(deps: AuthDeps): MiddlewareHandler<{ Variables: AuthV
     const record = await lookupKey(deps, raw);
     if (!record) return jsonError(c, unauthorized('api key not recognized'));
     if (record.disabledAt != null) return jsonError(c, unauthorized('api key disabled'));
+    // Cached record may pre-date a recent admin revoke (TTL is 60s).
+    // The revoked flag is set by `POST /v1/admin/api-keys/{id}/disable`
+    // and short-circuits any still-warm cache entry.
+    const revoked = await deps.cache.get(revokedFlagKey(record.id));
+    if (revoked) return jsonError(c, unauthorized('api key disabled'));
     if (record.network !== claimedNetwork) {
       return jsonError(c, unauthorized('api key network does not match its prefix'));
     }

@@ -47,9 +47,7 @@ export default async function HomePage() {
           </p>
           <h1 className="text-3xl font-semibold tracking-tight">Leash Explorer</h1>
           <p className="max-w-2xl text-sm text-[--color-fg-muted]">
-            Every agent created, every executive bound, every receipt published — visible across
-            devnet and mainnet. Search any address, transaction signature, receipt hash, or event
-            id.
+            Every agent created, every executive bound, every receipt published id.
           </p>
         </div>
         <div className="max-w-2xl">

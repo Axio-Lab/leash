@@ -205,3 +205,86 @@ Useful env vars (all optional; see `src/indexer/cli.ts`):
 Typical local layout: **terminal 1** API, **terminal 2** indexer,
 **terminal 3** `pnpm --filter @leash/explorer dev` — all three share
 `LEASH_API_DB_URL` / `LEASH_DB_URL` to the same file.
+
+### Authentication: how customers get an API key
+
+The API never lets users self-serve a key. Issuance is operator-only,
+gated by a single shared secret in `LEASH_API_ADMIN_SECRET`.
+
+1. Generate the admin secret once and store it in the deploy's secret
+   manager (1Password, Vault, AWS Secrets Manager, …):
+
+   ```bash
+   openssl rand -hex 32
+   ```
+
+2. Set it on the API process:
+
+   ```bash
+   LEASH_API_ADMIN_SECRET=<that 64-char hex string>
+   ```
+
+   When this var is **unset**, the `/v1/admin/*` surface is **not
+   mounted at all** — there is no "open by default" path.
+
+3. Issue a customer key:
+
+   ```bash
+   curl -sS -X POST http://localhost:8801/v1/admin/api-keys \
+     -H "Authorization: Bearer $LEASH_API_ADMIN_SECRET" \
+     -H "content-type: application/json" \
+     -d '{"label":"acme-corp","network":"solana-devnet"}'
+   ```
+
+   Response:
+
+   ```json
+   {
+     "key": {
+       "id": "01J…",
+       "label": "acme-corp",
+       "network": "solana-devnet",
+       "prefix": "lsh_test_",
+       "last4": "x7q9",
+       "created_at": "2026-04-24T22:11:30Z",
+       "disabled_at": null
+     },
+     "plaintext": "lsh_test_3z…"
+   }
+   ```
+
+   The `plaintext` is shown **once** and never stored. Hand it to the
+   customer over a secure channel (1Password share, etc.).
+
+4. List issued keys (no plaintext is ever recoverable):
+
+   ```bash
+   curl -sS http://localhost:8801/v1/admin/api-keys?network=solana-devnet \
+     -H "Authorization: Bearer $LEASH_API_ADMIN_SECRET"
+   ```
+
+5. Revoke a key (immediate — the auth cache is invalidated):
+
+   ```bash
+   curl -sS -X POST http://localhost:8801/v1/admin/api-keys/<id>/disable \
+     -H "Authorization: Bearer $LEASH_API_ADMIN_SECRET"
+   ```
+
+For local development the `LEASH_API_BOOTSTRAP_KEY` env var is a
+shortcut that pre-registers a single key on first boot — handy for
+`curl`ing the API without going through the admin endpoint. Don't ship
+that to prod.
+
+### Swagger UI
+
+`GET /docs` (Swagger UI) and `GET /` (which redirects to `/docs`) are
+intended for local development. They're enabled by default when
+`NODE_ENV !== 'production'` and disabled in prod. Override with:
+
+```bash
+LEASH_API_DOCS_ENABLED=true   # force on (e.g. behind a VPN)
+LEASH_API_DOCS_ENABLED=false  # force off in dev too
+```
+
+The OpenAPI document itself (`GET /openapi.json`) is always public —
+that's the wire contract polyglot SDKs are generated from.

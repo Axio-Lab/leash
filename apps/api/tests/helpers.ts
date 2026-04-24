@@ -38,6 +38,7 @@ export async function createTestRig(overrides: Partial<LeashApiConfig> = {}): Pr
     db: { url: ':memory:' },
     redisUrl: null,
     rateLimitRpm: 5,
+    docsEnabled: false,
     ...overrides,
   };
   const cache = getCache(config);

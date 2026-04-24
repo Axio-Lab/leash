@@ -41,7 +41,7 @@ export function jsonError(c: Context, err: ApiError): Response {
     message: err.message,
     ...(err.detail !== undefined ? { detail: err.detail } : {}),
   };
-  return c.json(body, err.status as 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500 | 502);
+  return c.json(body, err.status as 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500 | 502 | 503);
 }
 
 export function unauthorized(message = 'missing or invalid api key'): ApiError {
