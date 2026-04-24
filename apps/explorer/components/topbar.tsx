@@ -11,7 +11,7 @@ export function Topbar({ network }: { network: Network }) {
         <Link href="/" className="flex items-center gap-2">
           <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-[--color-brand-soft]">
             <Image
-              src="/leash-svg.png"
+              src="/leash.svg"
               alt="Leash"
               width={62}
               height={62}

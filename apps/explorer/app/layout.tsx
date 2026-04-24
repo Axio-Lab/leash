@@ -22,8 +22,8 @@ export const metadata: Metadata = {
   description: 'Search agents, transactions, receipts, and events on the Leash protocol.',
   metadataBase: new URL('https://explorer.leash.market'),
   icons: {
-    icon: [{ url: '/leash-svg.png', type: 'image/png' }],
-    apple: '/leash-svg.png',
+    icon: [{ url: '/leash.svg', type: 'image/png' }],
+    apple: '/leash.svg',
   },
 };
 
