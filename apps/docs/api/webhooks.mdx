@@ -61,9 +61,10 @@ export function verify(secret: string, header: string, rawBody: string): boolean
 }
 ```
 
-A first-party `verifySignature` helper ships in `@leash/api-client`
-(Phase 6 codegen) and a reference implementation lives at
-`apps/api/src/webhooks/sign.ts` in the monorepo.
+A reference implementation lives at `apps/api/src/webhooks/sign.ts`
+in the monorepo. First-party `verifySignature` helpers in the
+generated polyglot SDKs are on the roadmap and not yet shipped — for
+now, copy the snippet above (or the monorepo file) into your service.
 
 Reject deliveries with a timestamp older than ~5 minutes — that's the
 default tolerance the API uses on the verify path and protects against

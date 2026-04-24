@@ -152,9 +152,16 @@ the glue runs.
 - **Treasury control.** Funds land on the Asset Signer PDA. Use
   `POST /v1/agents/{mint}/treasury/withdraw/prepare` to pull them out
   to any wallet, signed by the asset's owner.
-- **Refunds.** Coming in Phase 6 — the API will expose
-  `POST /v1/payments/refund` that issues an inverse transfer and
-  writes a `refund` receipt linked to the original call.
+- **Refunds & cashback.** On the [roadmap](/api/roadmap#refunds--cashback),
+  **not yet shipped**. The planned surface is `POST /v1/payments/refund`
+  (full inverse transfer) and `POST /v1/payments/cashback` (partial
+  rebate based on a `CashbackRulesV1` doc you set per agent —
+  e.g. 1% back on every settled call, tiered by ticket size, or a
+  loyalty-window rebate every Nth call). Both will write a
+  `refund` / `cashback` receipt linked back to the original `tx_sig`
+  so the chain stays verifiable end-to-end. Until then, run a manual
+  `POST /v1/agents/{mint}/treasury/withdraw/prepare` against the
+  buyer's mint as a one-off rebate.
 
 ## Deciding between sidecar and edge
 

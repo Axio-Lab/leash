@@ -10,18 +10,24 @@ Mintlify renders the spec into the navigation tree on the left.
 
 ## Generated SDKs
 
-The same spec drives client generation. Phase 6 ships first-party
-clients for:
-
-- **TypeScript** — published as `@leash/api-client`. Already used
-  by `apps/web` and `apps/explorer`.
-- **Python** — `pip install leash-api`. `httpx`-based, async-first.
-- **Go** — `github.com/metaplex-foundation/leash-api-go`.
-- **Rust** — `leash-api` on crates.io. `reqwest` + `serde`.
-- **Java** — Maven coordinates `market.leash:leash-api`.
+The same spec drives client generation. First-party polyglot
+clients are **on the roadmap, not yet shipped** — planned targets
+are TypeScript (`@leash/api-client`), Python (`pip install leash-api`,
+`httpx`-based async-first), Go, Rust, and Java.
 
 Until those land, any standard OpenAPI 3.1 generator on the spec
-above works. We test against `openapi-generator-cli` and `oapi-codegen`.
+above works. We test against `openapi-generator-cli` and `oapi-codegen`:
+
+```bash
+npx openapi-typescript https://api.leash.market/openapi.json \
+  --output ./src/leash-api.d.ts
+
+# Python
+openapi-generator-cli generate -i leash-openapi.json -g python -o ./gen/leash_py
+
+# Go
+oapi-codegen -package leash leash-openapi.json > leash.gen.go
+```
 
 ## Local export
 

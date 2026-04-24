@@ -1,0 +1,78 @@
+---
+title: 'Roadmap'
+description: What ships next on top of the v1 API.
+---
+
+The API surface today (v1) covers the entire prepare → submit →
+track → receipt → indexer → events → webhooks → metrics loop. The
+items below are **planned, not shipped** — when you see them
+referenced from other pages, treat them as forward-looking.
+
+## Refunds & cashback
+
+Two endpoints, both writing receipts that link back to the original
+`tx_sig` so the chain stays verifiable:
+
+| Endpoint                        | Purpose                                                                 |
+| ------------------------------- | ----------------------------------------------------------------------- |
+| `POST /v1/payments/refund`      | Full inverse SPL transfer back to the buyer's source ATA.               |
+| `POST /v1/payments/cashback`    | Partial rebate driven by a per-agent `CashbackRulesV1` doc.             |
+
+Examples of `CashbackRulesV1` we want to support:
+
+- Flat percent (`{ kind: 'percent', basis_points: 100 }` = 1% back).
+- Tiered by ticket size (`{ kind: 'tiered', tiers: [{ threshold_atomic, basis_points }] }`).
+- Loyalty windows (`{ kind: 'window', count: 10, basis_points: 500 }` = 5%
+  back every tenth call).
+
+A new receipt `kind`s — `refund` and `cashback` — link to the
+original via `original_tx_sig` and `original_receipt_hash`. The
+indexer treats them as first-class events so the explorer and
+metrics surfaces show net flows, not gross.
+
+Until then, run a manual
+`POST /v1/agents/{mint}/treasury/withdraw/prepare` against the
+buyer's mint to issue a one-off rebate. The buyer's treasury
+explorer view will show it; the linkage to the original call has to
+live in your own ledger.
+
+## Polyglot SDKs
+
+First-party generated clients off the OpenAPI 3.1 spec:
+
+- TypeScript (`@leash/api-client`)
+- Python (`pip install leash-api`, `httpx`-based, async-first)
+- Go (`github.com/metaplex-foundation/leash-api-go`)
+- Rust (`leash-api` on crates.io, `reqwest` + `serde`)
+- Java (Maven `market.leash:leash-api`)
+
+Each will ship a typed `verifySignature` helper for webhooks and
+field-level error surfaces for `invalid_request` responses. Until
+then, [`/api/reference`](/api/reference#generated-sdks) shows how to
+generate your own client locally — the spec is stable.
+
+## Billing tables + invoices
+
+Daily rollups from `api_requests` and `events` into a per-account
+`invoices` table, plus a hosted dashboard that shows your usage
+trend, top endpoints, and Stripe-style line items. Until then,
+[`/v1/metrics/usage`](/api/metrics) is the canonical source of
+truth for what to charge.
+
+## Self-service API key management
+
+Today keys are issued out-of-band. The hosted dashboard will let
+you mint, rotate, label, and revoke keys without contacting us, and
+will surface the same `client_reference` audit trail the API
+already writes to every event row.
+
+## Multi-tenant webhook signing keys
+
+Webhook secrets today are scoped per-subscription. We plan to add
+*account-wide* signing keys so a single rotation propagates to
+every subscription at once — useful for incident response.
+
+## Want something not on this list?
+
+Tell us in [Discord](https://leash.market). The plan is public; the
+backlog is too.

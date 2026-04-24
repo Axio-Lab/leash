@@ -66,5 +66,7 @@ Validation errors bundle every Zod issue verbatim:
 }
 ```
 
-A typed client (Phase 6 SDK codegen) will surface these as field-level
-errors automatically.
+First-party polyglot SDKs that surface these as field-level errors
+automatically are on the roadmap. Until they ship, generate a typed
+client from the OpenAPI spec (see [API reference](/api/reference#generated-sdks))
+and inspect `details.issues` directly.

@@ -71,6 +71,8 @@
               "api/idempotency",
               "api/rate-limits",
               "api/errors",
+              "api/running-locally",
+              "api/roadmap",
               "api/reference"
             ]
           },
