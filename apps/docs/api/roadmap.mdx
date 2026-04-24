@@ -13,10 +13,10 @@ referenced from other pages, treat them as forward-looking.
 Two endpoints, both writing receipts that link back to the original
 `tx_sig` so the chain stays verifiable:
 
-| Endpoint                        | Purpose                                                                 |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| `POST /v1/payments/refund`      | Full inverse SPL transfer back to the buyer's source ATA.               |
-| `POST /v1/payments/cashback`    | Partial rebate driven by a per-agent `CashbackRulesV1` doc.             |
+| Endpoint                     | Purpose                                                     |
+| ---------------------------- | ----------------------------------------------------------- |
+| `POST /v1/payments/refund`   | Full inverse SPL transfer back to the buyer's source ATA.   |
+| `POST /v1/payments/cashback` | Partial rebate driven by a per-agent `CashbackRulesV1` doc. |
 
 Examples of `CashbackRulesV1` we want to support:
 
@@ -69,7 +69,7 @@ already writes to every event row.
 ## Multi-tenant webhook signing keys
 
 Webhook secrets today are scoped per-subscription. We plan to add
-*account-wide* signing keys so a single rotation propagates to
+_account-wide_ signing keys so a single rotation propagates to
 every subscription at once — useful for incident response.
 
 ## Want something not on this list?

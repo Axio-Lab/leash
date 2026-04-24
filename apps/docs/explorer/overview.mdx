@@ -18,12 +18,12 @@ network hop.
 
 ## What you can find
 
-| Search                                  | Resolves to                                                                  |
-| --------------------------------------- | ---------------------------------------------------------------------------- |
-| Solana address (32-byte base58)         | `/agent/<mint>` if it's a registered agent, else `/address/<addr>`            |
-| Transaction signature                   | `/tx/<sig>` with the decoded Leash event(s) plus a Solscan deeplink          |
-| Receipt hash (`0x…` or 64-hex)          | `/receipt/<hash>` with the full chain context                                |
-| Event id (`01HVTQX…`)                   | `/event/<id>` with prepare → submit → confirm timeline                       |
+| Search                          | Resolves to                                                         |
+| ------------------------------- | ------------------------------------------------------------------- |
+| Solana address (32-byte base58) | `/agent/<mint>` if it's a registered agent, else `/address/<addr>`  |
+| Transaction signature           | `/tx/<sig>` with the decoded Leash event(s) plus a Solscan deeplink |
+| Receipt hash (`0x…` or 64-hex)  | `/receipt/<hash>` with the full chain context                       |
+| Event id (`01HVTQX…`)           | `/event/<id>` with prepare → submit → confirm timeline              |
 
 A typo or unknown value lands on a "not on this network" page that
 suggests switching clusters.
@@ -66,7 +66,7 @@ playground (`#9b8cff` primary, dark-first). The layout is denser
 than the docs — heavy on monospaced columns, status pills, and
 inline truncation with copy-on-hover.
 
-It is deliberately *not* a generic Solana explorer. Solscan exists,
+It is deliberately _not_ a generic Solana explorer. Solscan exists,
 and we deeplink to it everywhere. The Leash explorer's job is to
 explain **what just happened in protocol terms** ("Owner approved
 executive `9XQ2…` to spend up to `100 USDC` from agent `9pK9…`")

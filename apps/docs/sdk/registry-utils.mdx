@@ -6,7 +6,7 @@ description: Pinata uploads, BYO URI resolution, leash-block helpers.
 ### Create / register
 
 - `createAgent(umi, input, config?)` — one-shot mint: calls Metaplex's `mintAndSubmitAgent`. Creates a Core asset and registers its Agent Identity in a single transaction. By default the agent's on-chain metadata advertises a `services.receipts` URL of `https://api.leash.market/v1/receipts/{agent}` so explorers and indexers can find the feed automatically — pass `receiptsUrl: false` to omit, `receiptsUrl: 'https://...'` to override, or set `LEASH_NO_RECEIPTS_URL=1` / `LEASH_RECEIPTS_URL=...` to control it from the environment. See the [Create an agent](/guides/create-an-agent) guide and [Receipts by default](/concepts/receipt#receipts-by-default).
-- `prepareAgentMint(umi, input, config?)` / `sendPreparedAgentMint(umi, prepared)` — two-step variant for priority fees, hardware wallets, custom retries. Honours the same `receiptsUrl` rules. 
+- `prepareAgentMint(umi, input, config?)` / `sendPreparedAgentMint(umi, prepared)` — two-step variant for priority fees, hardware wallets, custom retries. Honours the same `receiptsUrl` rules.
 - `registerAgentIdentity(umi, { asset, collection, agentRegistrationUri })` — BYO flow: attaches an Agent Identity plugin to a Core asset you already minted.
 
 ### Read

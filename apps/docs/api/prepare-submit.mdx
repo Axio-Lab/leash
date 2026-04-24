@@ -46,7 +46,7 @@ The split is the difference between a vendor and an HSM:
   network; calling it twice with the same `Idempotency-Key` returns
   the same event id and transaction bytes. Submit is the only call
   that can land on chain, and it is also idempotent on `event_id`.
-- **Race-free reads.** The `event_id` exists *before* the transaction
+- **Race-free reads.** The `event_id` exists _before_ the transaction
   is broadcast, so you can persist it next to your domain object,
   re-read it, and never miss a state transition. The
   [explorer](https://explorer.leash.market) and
@@ -57,21 +57,21 @@ The split is the difference between a vendor and an HSM:
 Each one wraps a `prepare*` function from `@leash/registry-utils`,
 returns the wire-encoded transaction, and creates a `prepared` event:
 
-| Endpoint                                                  | SDK function                       | What it does                                                                |
-| --------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
-| `POST /v1/agents/prepare`                                 | `prepareCreateAgent`               | Mint Core asset + Agent Identity in one tx.                                 |
-| `POST /v1/agents/{mint}/identity/prepare`                 | `prepareRegisterAgentIdentity`     | Re-register identity on an existing asset.                                  |
-| `POST /v1/executive/prepare`                              | `prepareRegisterExecutive`         | Bind a wallet as an executive once per cluster.                             |
-| `POST /v1/agents/{mint}/executive/delegate/prepare`       | `prepareDelegateExecution`         | Per-agent: let the executive sign `Execute` for this asset.                 |
-| `POST /v1/agents/{mint}/delegation/prepare`               | `prepareSetSpendDelegation`        | Owner approves the executive as SPL delegate up to a cap.                   |
-| `POST /v1/agents/{mint}/delegation/revoke/prepare`        | `prepareRevokeSpendDelegation`     | Drop the SPL delegate to zero.                                              |
-| `POST /v1/agents/{mint}/treasury/provision/prepare`       | `prepareProvisionTreasuryAtas`     | Pre-create stable ATAs on the treasury PDA.                                 |
-| `POST /v1/agents/{mint}/treasury/withdraw/prepare`        | `prepareWithdrawTreasury`          | Owner moves SPL out of the treasury.                                        |
-| `POST /v1/agents/{mint}/treasury/withdraw-sol/prepare`    | `prepareWithdrawTreasurySol`       | Owner moves lamports out of the treasury.                                   |
-| `POST /v1/agents/{mint}/token/prepare`                    | `prepareSetAgentToken`             | Set the `agent_token` field on the identity plugin.                         |
-| `POST /v1/agents/{mint}/token/launch/prepare`             | `prepareAgentTokenLaunch`          | Genesis-flow token launch + bind to the agent.                              |
-| `POST /v1/launches/sign/prepare`                          | `prepareSignAndSendLaunch`         | Sign the multi-tx Genesis launch in one call.                               |
-| `POST /v1/agents/{mint}/pause/prepare`                    | `preparePauseAgent`                | Toggle the on-chain `paused` flag (when wired).                             |
+| Endpoint                                               | SDK function                   | What it does                                                |
+| ------------------------------------------------------ | ------------------------------ | ----------------------------------------------------------- |
+| `POST /v1/agents/prepare`                              | `prepareCreateAgent`           | Mint Core asset + Agent Identity in one tx.                 |
+| `POST /v1/agents/{mint}/identity/prepare`              | `prepareRegisterAgentIdentity` | Re-register identity on an existing asset.                  |
+| `POST /v1/executive/prepare`                           | `prepareRegisterExecutive`     | Bind a wallet as an executive once per cluster.             |
+| `POST /v1/agents/{mint}/executive/delegate/prepare`    | `prepareDelegateExecution`     | Per-agent: let the executive sign `Execute` for this asset. |
+| `POST /v1/agents/{mint}/delegation/prepare`            | `prepareSetSpendDelegation`    | Owner approves the executive as SPL delegate up to a cap.   |
+| `POST /v1/agents/{mint}/delegation/revoke/prepare`     | `prepareRevokeSpendDelegation` | Drop the SPL delegate to zero.                              |
+| `POST /v1/agents/{mint}/treasury/provision/prepare`    | `prepareProvisionTreasuryAtas` | Pre-create stable ATAs on the treasury PDA.                 |
+| `POST /v1/agents/{mint}/treasury/withdraw/prepare`     | `prepareWithdrawTreasury`      | Owner moves SPL out of the treasury.                        |
+| `POST /v1/agents/{mint}/treasury/withdraw-sol/prepare` | `prepareWithdrawTreasurySol`   | Owner moves lamports out of the treasury.                   |
+| `POST /v1/agents/{mint}/token/prepare`                 | `prepareSetAgentToken`         | Set the `agent_token` field on the identity plugin.         |
+| `POST /v1/agents/{mint}/token/launch/prepare`          | `prepareAgentTokenLaunch`      | Genesis-flow token launch + bind to the agent.              |
+| `POST /v1/launches/sign/prepare`                       | `prepareSignAndSendLaunch`     | Sign the multi-tx Genesis launch in one call.               |
+| `POST /v1/agents/{mint}/pause/prepare`                 | `preparePauseAgent`            | Toggle the on-chain `paused` flag (when wired).             |
 
 Each response uses the same shape:
 
@@ -85,7 +85,9 @@ Each response uses the same shape:
     "blockhash": "GZNb…",
     "signers": ["HQbJ…", "9XQ2…"]
   },
-  "echo": { /* function-specific extras (asset, collection, ATA, etc.) */ }
+  "echo": {
+    /* function-specific extras (asset, collection, ATA, etc.) */
+  }
 }
 ```
 

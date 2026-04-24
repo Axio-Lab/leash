@@ -49,7 +49,7 @@ between prepare and submit.
 - First call lands the tx, returns `202 { signature }`.
 - Second call with the same `event_id` returns `200 { signature, replayed: true }`
   with no extra RPC traffic and no double-spend risk.
-- A second call with a *different* signed transaction for the same
+- A second call with a _different_ signed transaction for the same
   `event_id` returns `409 event_already_submitted`.
 
 The same rule lets you use `event_id` as the dedup key in your job
@@ -84,7 +84,7 @@ const prep = await withBackoff(() =>
   fetch('https://api.leash.market/v1/agents/' + mint + '/delegation/prepare', {
     method: 'POST',
     headers: {
-      'authorization': 'Bearer ' + key,
+      authorization: 'Bearer ' + key,
       'idempotency-key': idempotencyKey,
       'content-type': 'application/json',
     },
@@ -97,8 +97,8 @@ const submit = await withBackoff(() =>
   fetch('https://api.leash.market/v1/submit', {
     method: 'POST',
     headers: {
-      'authorization': 'Bearer ' + key,
-      'idempotency-key': prep.event_id,        // reuse — submit dedups on event_id too
+      authorization: 'Bearer ' + key,
+      'idempotency-key': prep.event_id, // reuse — submit dedups on event_id too
       'content-type': 'application/json',
     },
     body: JSON.stringify({ event_id: prep.event_id, transaction: signed }),

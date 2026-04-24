@@ -73,7 +73,12 @@ curl "https://api.leash.market/v1/receipts/$MINT?limit=50" \
       "agent": "9pK9…",
       "nonce": 137,
       "tx_sig": "5xY7…",
-      "price": { "amount": "10000", "currency": "USDC", "asset": "EPjF…", "network": "solana-mainnet" },
+      "price": {
+        "amount": "10000",
+        "currency": "USDC",
+        "asset": "EPjF…",
+        "network": "solana-mainnet"
+      },
       "request_hash": "7c1a…",
       "prev_receipt_hash": "8ad3…",
       "receipt_hash": "9a3f…",
@@ -121,11 +126,11 @@ curl -X POST https://api.leash.market/v1/agents/$MINT/pull-target \
   }'
 ```
 
-| Field      | Type                  | Default   | Notes                                                                  |
-| ---------- | --------------------- | --------- | ---------------------------------------------------------------------- |
-| `url`      | `string` (https only) | required  | Public, no auth. The pull worker does plain `GET`.                     |
-| `format`   | `"json" \| "jsonl"`   | `jsonl`   | `json` expects an array of `ReceiptV1` objects.                        |
-| `interval_seconds` | `number`     | `60`      | Worker honours per-target cadence with a global floor.                |
+| Field              | Type                  | Default  | Notes                                                  |
+| ------------------ | --------------------- | -------- | ------------------------------------------------------ |
+| `url`              | `string` (https only) | required | Public, no auth. The pull worker does plain `GET`.     |
+| `format`           | `"json" \| "jsonl"`   | `jsonl`  | `json` expects an array of `ReceiptV1` objects.        |
+| `interval_seconds` | `number`              | `60`     | Worker honours per-target cadence with a global floor. |
 
 Listing and removing pull targets is on the same path
 (`GET`, `DELETE`). One target per `(network, agent, url)`.

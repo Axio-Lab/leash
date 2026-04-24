@@ -16,10 +16,10 @@ the API itself.
 
 Two roles are tracked per address:
 
-| Kind       | What it is                                                | When it gets added                                                       |
-| ---------- | --------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `asset`    | The Core asset pubkey (the agent mint)                    | First `prepare*` call against the agent, or first receipt ingest.        |
-| `treasury` | The Asset Signer PDA derived from the asset                | Same trigger; computed via `findAssetSignerPda`.                         |
+| Kind       | What it is                                  | When it gets added                                                |
+| ---------- | ------------------------------------------- | ----------------------------------------------------------------- |
+| `asset`    | The Core asset pubkey (the agent mint)      | First `prepare*` call against the agent, or first receipt ingest. |
+| `treasury` | The Asset Signer PDA derived from the asset | Same trigger; computed via `findAssetSignerPda`.                  |
 
 Anything reachable through `getSignaturesForAddress(address)` is
 fair game. Adding to the watchlist is automatic; the API calls
@@ -37,7 +37,7 @@ seen", which matches the explorer's product surface.
 - `last_signature` — newest signature already ingested for the row.
 - `last_slot` — slot of `last_signature`.
 - `last_run_at` — wall-clock timestamp of the most recent tick.
-- `backfill_complete` — `0` while the row is paging *backwards*,
+- `backfill_complete` — `0` while the row is paging _backwards_,
   `1` once it has reached its origin.
 
 A tick walks `getSignaturesForAddress` in pages of 100. New rows page
@@ -55,12 +55,12 @@ Decoding is log-driven. The indexer fetches each transaction with
 `getTransaction(signature, { jsonParsed, maxSupportedTransactionVersion: 0 })`
 and matches program logs against a known table:
 
-| Program                                  | Logs we match                                  | EventKind                                                    |
-| ---------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------ |
-| `mpl-agent-identity`                     | `CreateIdentity`, `SetAgentToken`              | `agent.identity.register`, `agent.token.set`                 |
-| `mpl-agent-tools`                        | `CreateExecutive`, `Delegate`, `Revoke`        | `agent.executive.register`, `agent.executive.delegate`       |
-| `mpl-core` (`Execute` wrapping SPL/Sys)  | `Approve`, `TransferChecked`, lamport delta    | `agent.delegation.set`, `agent.treasury.withdraw[_sol]`      |
-| SPL Token / Token-2022                   | `Approve`, `Revoke`, `TransferChecked`         | Same as above when wrapped in `Execute` for an asset signer  |
+| Program                                 | Logs we match                               | EventKind                                                   |
+| --------------------------------------- | ------------------------------------------- | ----------------------------------------------------------- |
+| `mpl-agent-identity`                    | `CreateIdentity`, `SetAgentToken`           | `agent.identity.register`, `agent.token.set`                |
+| `mpl-agent-tools`                       | `CreateExecutive`, `Delegate`, `Revoke`     | `agent.executive.register`, `agent.executive.delegate`      |
+| `mpl-core` (`Execute` wrapping SPL/Sys) | `Approve`, `TransferChecked`, lamport delta | `agent.delegation.set`, `agent.treasury.withdraw[_sol]`     |
+| SPL Token / Token-2022                  | `Approve`, `Revoke`, `TransferChecked`      | Same as above when wrapped in `Execute` for an asset signer |
 
 Amounts are taken from the parsed instruction data (for SPL) or the
 `postTokenBalances` / `postBalances` deltas keyed to the treasury

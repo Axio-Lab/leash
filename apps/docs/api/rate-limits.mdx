@@ -10,16 +10,16 @@ endpoint can't starve the rest.
 
 ## Defaults
 
-| Bucket           | Window | Limit (per key) | Routes covered                                    |
-| ---------------- | ------ | --------------- | ------------------------------------------------- |
-| `prepare`        | 60s    | 600             | All `POST /v1/.../prepare` endpoints              |
-| `submit`         | 60s    | 600             | `POST /v1/submit`                                 |
-| `receipts.write` | 60s    | 1200            | `POST /v1/receipts/{agent}`                       |
-| `receipts.read`  | 60s    | 600             | `GET /v1/receipts/*`                              |
-| `events.read`    | 60s    | 600             | `GET /v1/events/*`                                |
-| `agents.read`    | 60s    | 300             | `GET /v1/agents/*`, treasury balances             |
-| `indexer.read`   | 60s    | 60              | `GET /v1/indexer/status`                          |
-| `meta`           | 60s    | 60              | `GET /v1/health`, `GET /v1/version`               |
+| Bucket           | Window | Limit (per key) | Routes covered                        |
+| ---------------- | ------ | --------------- | ------------------------------------- |
+| `prepare`        | 60s    | 600             | All `POST /v1/.../prepare` endpoints  |
+| `submit`         | 60s    | 600             | `POST /v1/submit`                     |
+| `receipts.write` | 60s    | 1200            | `POST /v1/receipts/{agent}`           |
+| `receipts.read`  | 60s    | 600             | `GET /v1/receipts/*`                  |
+| `events.read`    | 60s    | 600             | `GET /v1/events/*`                    |
+| `agents.read`    | 60s    | 300             | `GET /v1/agents/*`, treasury balances |
+| `indexer.read`   | 60s    | 60              | `GET /v1/indexer/status`              |
+| `meta`           | 60s    | 60              | `GET /v1/health`, `GET /v1/version`   |
 
 `lsh_live_*` keys ship with the same defaults. We bump per-account
 ceilings on request — talk to us in [Discord](https://leash.market)

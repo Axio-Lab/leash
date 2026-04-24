@@ -37,11 +37,11 @@ people will install.
 
 ## Subdomain layout
 
-| Subdomain                | What it serves                                                          |
-| ------------------------ | ----------------------------------------------------------------------- |
-| `api.leash.market`       | This API. JSON OpenAPI 3.1 spec at `/openapi.json`.                     |
-| `docs.leash.market`      | This site. API reference is generated from the same spec.               |
-| `explorer.leash.market`  | Protocol explorer over the same data this API persists.                 |
+| Subdomain               | What it serves                                            |
+| ----------------------- | --------------------------------------------------------- |
+| `api.leash.market`      | This API. JSON OpenAPI 3.1 spec at `/openapi.json`.       |
+| `docs.leash.market`     | This site. API reference is generated from the same spec. |
+| `explorer.leash.market` | Protocol explorer over the same data this API persists.   |
 
 ## Prepare → Sign → Submit → Track
 
@@ -80,10 +80,10 @@ explorer's per-agent timeline.
 The API key prefix encodes the network. There is **no per-request
 network parameter** — picking the right key picks the right cluster.
 
-| Prefix       | Network          | Use this when…                                                        |
-| ------------ | ---------------- | --------------------------------------------------------------------- |
-| `lsh_test_*` | `solana-devnet`  | Building, integration tests, CI, demos. Free RPC, faucet stables.     |
-| `lsh_live_*` | `solana-mainnet` | Production. Real money, mainnet RPC, mainnet receipts and explorer.   |
+| Prefix       | Network          | Use this when…                                                      |
+| ------------ | ---------------- | ------------------------------------------------------------------- |
+| `lsh_test_*` | `solana-devnet`  | Building, integration tests, CI, demos. Free RPC, faucet stables.   |
+| `lsh_live_*` | `solana-mainnet` | Production. Real money, mainnet RPC, mainnet receipts and explorer. |
 
 Cross-network reads are impossible by construction: a `lsh_test_*`
 key cannot see a mainnet event row, and a transaction signature that
@@ -97,19 +97,19 @@ See [Authentication](/api/auth) for issuing keys, the
 
 ## Endpoint surface (v1)
 
-| Group        | Endpoints                                                                                                |
-| ------------ | -------------------------------------------------------------------------------------------------------- |
-| Health       | `GET /v1/health`, `GET /v1/version`                                                                      |
-| Agents       | `GET /v1/agents/{mint}`, `GET /v1/agents/{mint}/treasury/balances`                                       |
-| Prepare      | 13 routes mapped 1:1 to the SDK's `prepare*` helpers — see [Prepare → Submit](/api/prepare-submit)       |
-| Submit       | `POST /v1/submit` (signed tx → broadcast)                                                                |
-| Events       | `GET /v1/events/{id}`, `GET /v1/events?kind=&agent=&cursor=`                                             |
-| Receipts     | `POST /v1/receipts/{agent}`, `GET /v1/receipts/{agent}`, `GET /v1/receipts/by-hash/{hash}`               |
-| Pull targets | `POST /v1/agents/{mint}/pull-target` — register an off-API receipts URL the indexer will poll            |
-| Indexer      | `GET /v1/indexer/status`                                                                                 |
-| Webhooks     | `POST /v1/webhooks`, `GET /v1/webhooks`, `GET /v1/webhooks/{id}/deliveries`, `DELETE /v1/webhooks/{id}`  |
-| Metrics      | `GET /v1/metrics/usage`, `GET /v1/metrics/events`                                                        |
-| OpenAPI      | `GET /openapi.json` — full 3.1 spec (also rendered at [API reference](/api/reference))                   |
+| Group        | Endpoints                                                                                               |
+| ------------ | ------------------------------------------------------------------------------------------------------- |
+| Health       | `GET /v1/health`, `GET /v1/version`                                                                     |
+| Agents       | `GET /v1/agents/{mint}`, `GET /v1/agents/{mint}/treasury/balances`                                      |
+| Prepare      | 13 routes mapped 1:1 to the SDK's `prepare*` helpers — see [Prepare → Submit](/api/prepare-submit)      |
+| Submit       | `POST /v1/submit` (signed tx → broadcast)                                                               |
+| Events       | `GET /v1/events/{id}`, `GET /v1/events?kind=&agent=&cursor=`                                            |
+| Receipts     | `POST /v1/receipts/{agent}`, `GET /v1/receipts/{agent}`, `GET /v1/receipts/by-hash/{hash}`              |
+| Pull targets | `POST /v1/agents/{mint}/pull-target` — register an off-API receipts URL the indexer will poll           |
+| Indexer      | `GET /v1/indexer/status`                                                                                |
+| Webhooks     | `POST /v1/webhooks`, `GET /v1/webhooks`, `GET /v1/webhooks/{id}/deliveries`, `DELETE /v1/webhooks/{id}` |
+| Metrics      | `GET /v1/metrics/usage`, `GET /v1/metrics/events`                                                       |
+| OpenAPI      | `GET /openapi.json` — full 3.1 spec (also rendered at [API reference](/api/reference))                  |
 
 ## What's next
 

@@ -100,20 +100,20 @@ curl -X POST https://api.leash.market/v1/webhooks \
 `events: []` (or omitting the field) subscribes to **every** event
 kind for the network the API key is bound to. Concrete kinds:
 
-| Kind                              | When it fires                                                       |
-| --------------------------------- | ------------------------------------------------------------------- |
-| `agent.identity.register`         | A new agent identity is registered on chain.                        |
-| `agent.executive.register`        | An executive wallet is bound to the cluster.                        |
-| `agent.executive.delegate`        | An agent delegates execution to an executive.                       |
-| `agent.delegation.set`            | Owner sets an SPL spend delegation for the executive.               |
-| `agent.delegation.revoke`         | Owner revokes the spend delegation.                                 |
-| `agent.treasury.provision`        | Treasury ATAs are pre-created.                                      |
-| `agent.treasury.withdraw`         | Owner withdraws SPL from the treasury.                              |
-| `agent.treasury.withdraw_sol`     | Owner withdraws lamports from the treasury.                         |
-| `agent.token.set`                 | Identity's `agent_token` field is updated.                          |
-| `submit.raw`                      | Any signed transaction broadcast through `/v1/submit`.              |
-| `receipt.published`               | A new receipt was pushed to the API (or forwarded by the runner).   |
-| `receipt.pulled`                  | The receipt-pull worker ingested a receipt from a registered URL.   |
+| Kind                          | When it fires                                                     |
+| ----------------------------- | ----------------------------------------------------------------- |
+| `agent.identity.register`     | A new agent identity is registered on chain.                      |
+| `agent.executive.register`    | An executive wallet is bound to the cluster.                      |
+| `agent.executive.delegate`    | An agent delegates execution to an executive.                     |
+| `agent.delegation.set`        | Owner sets an SPL spend delegation for the executive.             |
+| `agent.delegation.revoke`     | Owner revokes the spend delegation.                               |
+| `agent.treasury.provision`    | Treasury ATAs are pre-created.                                    |
+| `agent.treasury.withdraw`     | Owner withdraws SPL from the treasury.                            |
+| `agent.treasury.withdraw_sol` | Owner withdraws lamports from the treasury.                       |
+| `agent.token.set`             | Identity's `agent_token` field is updated.                        |
+| `submit.raw`                  | Any signed transaction broadcast through `/v1/submit`.            |
+| `receipt.published`           | A new receipt was pushed to the API (or forwarded by the runner). |
+| `receipt.pulled`              | The receipt-pull worker ingested a receipt from a registered URL. |
 
 ## Listing, fetching, deleting
 

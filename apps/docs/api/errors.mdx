@@ -9,7 +9,9 @@ Every error response uses the same envelope:
 {
   "error": "snake_case_machine_code",
   "message": "Human-readable summary.",
-  "details": { /* optional, route-specific */ },
+  "details": {
+    /* optional, route-specific */
+  },
   "request_id": "01HVTQX4GZTH8XK1F2JZ7N5WJ4"
 }
 ```
@@ -19,23 +21,23 @@ Every error response uses the same envelope:
 
 ## Common errors
 
-| HTTP | `error`                       | When                                                                                  |
-| ---- | ----------------------------- | ------------------------------------------------------------------------------------- |
-| 400  | `invalid_request`             | Body fails Zod validation. `details.issues` matches the Zod issue array.              |
-| 401  | `missing_api_key`             | No `Authorization` header.                                                            |
-| 401  | `invalid_api_key`             | Key not found, revoked, or wrong prefix.                                              |
-| 403  | `wrong_network`               | Tried to read a row outside the key's network.                                        |
-| 404  | `agent_not_found`             | The asset is not a registered agent on this network.                                  |
-| 404  | `event_not_found`             | Event id does not exist for this key's network.                                       |
-| 404  | `receipt_not_found`           | Hash lookup miss on this network.                                                     |
-| 409  | `idempotency_body_mismatch`   | Replay with the same `Idempotency-Key` but a different body.                          |
-| 409  | `event_already_submitted`     | `POST /v1/submit` for a different signed tx on the same `event_id`.                   |
-| 422  | `receipt_agent_mismatch`      | `receipt.agent` does not equal the `{agent}` path parameter.                          |
-| 422  | `receipt_chain_invalid`       | `prev_receipt_hash` does not match the most recent stored receipt for the agent.      |
-| 429  | `rate_limited`                | See [Rate limits](/api/rate-limits) — body has `retry_after_ms`.                      |
-| 500  | `internal_error`              | Bug. Always paired with a `request_id` we can search for.                             |
-| 502  | `rpc_unavailable`             | Upstream RPC failed. Safe to retry.                                                   |
-| 504  | `submit_timeout`              | `sendRawTransaction` did not return in time. The tx may still land — poll the event.  |
+| HTTP | `error`                     | When                                                                                 |
+| ---- | --------------------------- | ------------------------------------------------------------------------------------ |
+| 400  | `invalid_request`           | Body fails Zod validation. `details.issues` matches the Zod issue array.             |
+| 401  | `missing_api_key`           | No `Authorization` header.                                                           |
+| 401  | `invalid_api_key`           | Key not found, revoked, or wrong prefix.                                             |
+| 403  | `wrong_network`             | Tried to read a row outside the key's network.                                       |
+| 404  | `agent_not_found`           | The asset is not a registered agent on this network.                                 |
+| 404  | `event_not_found`           | Event id does not exist for this key's network.                                      |
+| 404  | `receipt_not_found`         | Hash lookup miss on this network.                                                    |
+| 409  | `idempotency_body_mismatch` | Replay with the same `Idempotency-Key` but a different body.                         |
+| 409  | `event_already_submitted`   | `POST /v1/submit` for a different signed tx on the same `event_id`.                  |
+| 422  | `receipt_agent_mismatch`    | `receipt.agent` does not equal the `{agent}` path parameter.                         |
+| 422  | `receipt_chain_invalid`     | `prev_receipt_hash` does not match the most recent stored receipt for the agent.     |
+| 429  | `rate_limited`              | See [Rate limits](/api/rate-limits) — body has `retry_after_ms`.                     |
+| 500  | `internal_error`            | Bug. Always paired with a `request_id` we can search for.                            |
+| 502  | `rpc_unavailable`           | Upstream RPC failed. Safe to retry.                                                  |
+| 504  | `submit_timeout`            | `sendRawTransaction` did not return in time. The tx may still land — poll the event. |
 
 Submit is the only endpoint where a `5xx` does **not** unambiguously
 mean "nothing happened" — the transaction may have reached a
@@ -60,7 +62,11 @@ Validation errors bundle every Zod issue verbatim:
   "details": {
     "issues": [
       { "path": ["allowance"], "message": "Required", "code": "invalid_type" },
-      { "path": ["stable_symbol"], "message": "Invalid enum value. Expected 'USDC' | 'USDT' | 'USDG', received 'EUR'", "code": "invalid_enum_value" }
+      {
+        "path": ["stable_symbol"],
+        "message": "Invalid enum value. Expected 'USDC' | 'USDT' | 'USDG', received 'EUR'",
+        "code": "invalid_enum_value"
+      }
     ]
   }
 }

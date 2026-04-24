@@ -28,24 +28,41 @@ curl "https://api.leash.market/v1/metrics/usage?days=7" \
     "avg_latency_ms": 87.41
   },
   "by_day": [
-    { "date": "2026-04-17", "requests": 2415, "errors": 8, "avg_latency_ms": 91.2, "p95_latency_ms": 184 },
-    { "date": "2026-04-18", "requests": 2602, "errors": 5, "avg_latency_ms": 86.7, "p95_latency_ms": 179 }
+    {
+      "date": "2026-04-17",
+      "requests": 2415,
+      "errors": 8,
+      "avg_latency_ms": 91.2,
+      "p95_latency_ms": 184
+    },
+    {
+      "date": "2026-04-18",
+      "requests": 2602,
+      "errors": 5,
+      "avg_latency_ms": 86.7,
+      "p95_latency_ms": 179
+    }
   ],
   "by_endpoint": [
     { "method": "POST", "path": "/v1/receipts/9pK9", "requests": 9821, "errors": 2 },
-    { "method": "POST", "path": "/v1/agents/9pK9/delegation/prepare", "requests": 412, "errors": 1 },
+    {
+      "method": "POST",
+      "path": "/v1/agents/9pK9/delegation/prepare",
+      "requests": 412,
+      "errors": 1
+    },
     { "method": "POST", "path": "/v1/submit", "requests": 401, "errors": 1 }
   ]
 }
 ```
 
-| Field                 | Notes                                                                                       |
-| --------------------- | ------------------------------------------------------------------------------------------- |
-| `totals.requests`     | All authenticated requests in the window. Health/version endpoints are excluded.            |
-| `totals.errors`       | Anything that responded 4xx/5xx. Includes rate-limit `429`s.                                |
-| `totals.avg_latency`  | Request-weighted mean of per-day averages.                                                  |
-| `by_day[].p95`        | Sample-based: the API caps per-day samples at 1,000 to keep the query bounded.              |
-| `by_endpoint`         | Top 50 routes by request count. Path templates collapse to the matched route, not the URL. |
+| Field                | Notes                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------ |
+| `totals.requests`    | All authenticated requests in the window. Health/version endpoints are excluded.           |
+| `totals.errors`      | Anything that responded 4xx/5xx. Includes rate-limit `429`s.                               |
+| `totals.avg_latency` | Request-weighted mean of per-day averages.                                                 |
+| `by_day[].p95`       | Sample-based: the API caps per-day samples at 1,000 to keep the query bounded.             |
+| `by_endpoint`        | Top 50 routes by request count. Path templates collapse to the matched route, not the URL. |
 
 The data source is the `api_requests` table, populated by the
 `usageLogger` middleware that runs after auth on every authenticated

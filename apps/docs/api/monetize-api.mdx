@@ -65,11 +65,9 @@ import { createSeller } from '@leash/seller-kit';
 const app = new Hono();
 
 createSeller(app, {
-  agent: process.env.LEASH_SELLER_AGENT!,        // recipient mint
+  agent: process.env.LEASH_SELLER_AGENT!, // recipient mint
   network: 'solana-mainnet',
-  routes: [
-    { method: 'GET', path: '/quote', price: { amount: '0.01', currency: 'USDC' } },
-  ],
+  routes: [{ method: 'GET', path: '/quote', price: { amount: '0.01', currency: 'USDC' } }],
   // Receipts are forwarded automatically when both env vars are set:
   //   LEASH_API_URL=https://api.leash.market
   //   LEASH_API_KEY=lsh_live_...
@@ -165,13 +163,13 @@ the glue runs.
 
 ## Deciding between sidecar and edge
 
-| Question                                        | Sidecar (seller-kit)              | Edge (Leash API in front)               |
-| ----------------------------------------------- | --------------------------------- | --------------------------------------- |
-| Is your API in TypeScript / Node?               | Recommended.                      | Works, but heavier.                     |
-| Do you want zero new infrastructure?            | Yes — same process as your API.   | Needs an edge worker or extra route.    |
-| Does the language need to stay flexible?        | No — TS only.                     | Yes — anything with an HTTP client.     |
-| Do you need 100% offline operation?             | Yes — seller-kit can keep receipts purely local with `receipts: false`. | No — always calls the Leash API.        |
-| Do you want webhook + retry replay for free?    | Coming via runner forward.        | Yes today — the API replays from `events`. |
+| Question                                     | Sidecar (seller-kit)                                                    | Edge (Leash API in front)                  |
+| -------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------ |
+| Is your API in TypeScript / Node?            | Recommended.                                                            | Works, but heavier.                        |
+| Do you want zero new infrastructure?         | Yes — same process as your API.                                         | Needs an edge worker or extra route.       |
+| Does the language need to stay flexible?     | No — TS only.                                                           | Yes — anything with an HTTP client.        |
+| Do you need 100% offline operation?          | Yes — seller-kit can keep receipts purely local with `receipts: false`. | No — always calls the Leash API.           |
+| Do you want webhook + retry replay for free? | Coming via runner forward.                                              | Yes today — the API replays from `events`. |
 
 Most teams start with sidecar mode for the first revenue endpoint and
 fan out to edge mode when polyglot services join the rail.

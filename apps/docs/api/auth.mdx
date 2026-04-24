@@ -54,11 +54,11 @@ full string as a secret.
 Two optional headers (or body fields, where supported) flow into every
 event row and receipt for traceability:
 
-| Field                  | Where it lives                                                   | Purpose                                                                                  |
-| ---------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `Idempotency-Key`      | Header, on `POST` only                                           | Replays the prior response if the same key is reused. See [Idempotency](/api/idempotency). |
-| `X-Leash-Client-Ref`   | Header, any method                                               | Free-form caller reference. Stored on the event row, returned on lookup, surfaced in the explorer. |
-| `client_reference`     | Body field on every prepare and submit endpoint                  | Same as the header. Body wins when both are set.                                         |
+| Field                | Where it lives                                  | Purpose                                                                                            |
+| -------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `Idempotency-Key`    | Header, on `POST` only                          | Replays the prior response if the same key is reused. See [Idempotency](/api/idempotency).         |
+| `X-Leash-Client-Ref` | Header, any method                              | Free-form caller reference. Stored on the event row, returned on lookup, surfaced in the explorer. |
+| `client_reference`   | Body field on every prepare and submit endpoint | Same as the header. Body wins when both are set.                                                   |
 
 Example wiring:
 
