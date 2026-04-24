@@ -116,6 +116,10 @@ Confirmation is a background job, not the response. After submit:
 
 - Poll `GET /v1/events/{id}` every ~5s until `phase` is `confirmed`
   or `failed`. Cheap, cached.
-- Or subscribe to webhooks (Phase 6) — `event.confirmed`,
-  `event.failed`, `receipt.published` are pushed to your endpoint
-  with a Leash signature header.
+- Or subscribe via [webhooks](/api/webhooks) — every phase transition
+  (`prepared` → `submitted` → `confirmed` | `failed`) and every
+  `receipt.published` / `receipt.pulled` is pushed to your endpoint
+  with an HMAC-signed `X-Leash-Signature` header. Webhook deliveries
+  are at-least-once and idempotent on `(webhook_id, event_id)`, so
+  the same event/phase combination only reaches you once even if our
+  worker retries.

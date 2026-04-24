@@ -5,8 +5,8 @@
   "theme": "maple",
   "favicon": "/leash_icon.svg",
   "logo": {
-    "light": "/leash_icon.svg",
-    "dark": "/leash_icon.svg"
+    "light": "/leash-wordmark-light.png",
+    "dark": "/leash-wordmark-dark.png"
   },
   "colors": {
     "primary": "#9b8cff",
@@ -66,6 +66,8 @@
               "api/monetize-api",
               "api/receipts",
               "api/indexer",
+              "api/webhooks",
+              "api/metrics",
               "api/idempotency",
               "api/rate-limits",
               "api/errors",

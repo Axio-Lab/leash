@@ -107,6 +107,8 @@ See [Authentication](/api/auth) for issuing keys, the
 | Receipts     | `POST /v1/receipts/{agent}`, `GET /v1/receipts/{agent}`, `GET /v1/receipts/by-hash/{hash}`               |
 | Pull targets | `POST /v1/agents/{mint}/pull-target` — register an off-API receipts URL the indexer will poll            |
 | Indexer      | `GET /v1/indexer/status`                                                                                 |
+| Webhooks     | `POST /v1/webhooks`, `GET /v1/webhooks`, `GET /v1/webhooks/{id}/deliveries`, `DELETE /v1/webhooks/{id}`  |
+| Metrics      | `GET /v1/metrics/usage`, `GET /v1/metrics/events`                                                        |
 | OpenAPI      | `GET /openapi.json` — full 3.1 spec (also rendered at [API reference](/api/reference))                   |
 
 ## What's next
@@ -120,3 +122,7 @@ See [Authentication](/api/auth) for issuing keys, the
 - [Receipts API](/api/receipts) — the push, pull, and feed surface.
 - [Indexer](/api/indexer) — what the dual-network worker does and
   how to know it's caught up.
+- [Webhooks](/api/webhooks) — push event lifecycle changes to your
+  service with HMAC-signed deliveries and exponential retries.
+- [Metrics](/api/metrics) — per-key usage rollups and per-network
+  event counters for dashboards and billing.

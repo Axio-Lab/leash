@@ -1,0 +1,126 @@
+---
+title: 'Metrics'
+description: Per-key request rollups and per-network event counters for dashboards and billing.
+---
+
+Two endpoints give you everything you need to build a usage dashboard,
+debug a degraded service, or close a billing cycle. Both are scoped
+to the API key making the call (and therefore network).
+
+## Usage rollups: `GET /v1/metrics/usage`
+
+Per-day request counts, error counts, and latency stats for the
+caller's API key. Defaults to the last 7 days; max window is 30 days.
+
+```bash
+curl "https://api.leash.market/v1/metrics/usage?days=7" \
+  -H "Authorization: Bearer $LEASH_API_KEY"
+```
+
+```json
+{
+  "network": "solana-mainnet",
+  "api_key_id": "01HVTQX4GZTH8XK1F2JZ7N5WJ4",
+  "window_days": 7,
+  "totals": {
+    "requests": 18234,
+    "errors": 41,
+    "avg_latency_ms": 87.41
+  },
+  "by_day": [
+    { "date": "2026-04-17", "requests": 2415, "errors": 8, "avg_latency_ms": 91.2, "p95_latency_ms": 184 },
+    { "date": "2026-04-18", "requests": 2602, "errors": 5, "avg_latency_ms": 86.7, "p95_latency_ms": 179 }
+  ],
+  "by_endpoint": [
+    { "method": "POST", "path": "/v1/receipts/9pK9", "requests": 9821, "errors": 2 },
+    { "method": "POST", "path": "/v1/agents/9pK9/delegation/prepare", "requests": 412, "errors": 1 },
+    { "method": "POST", "path": "/v1/submit", "requests": 401, "errors": 1 }
+  ]
+}
+```
+
+| Field                 | Notes                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| `totals.requests`     | All authenticated requests in the window. Health/version endpoints are excluded.            |
+| `totals.errors`       | Anything that responded 4xx/5xx. Includes rate-limit `429`s.                                |
+| `totals.avg_latency`  | Request-weighted mean of per-day averages.                                                  |
+| `by_day[].p95`        | Sample-based: the API caps per-day samples at 1,000 to keep the query bounded.              |
+| `by_endpoint`         | Top 50 routes by request count. Path templates collapse to the matched route, not the URL. |
+
+The data source is the `api_requests` table, populated by the
+`usageLogger` middleware that runs after auth on every authenticated
+request. Logging is best-effort — a write failure never blocks the
+response, but it does mean a small number of requests may be missing
+from the rollup during database degradation.
+
+## Event counts: `GET /v1/metrics/events`
+
+A view on the `events` table grouped by `phase` and `kind`. Defaults
+to the last 24 hours; max 168 (7 days).
+
+```bash
+curl "https://api.leash.market/v1/metrics/events?hours=24" \
+  -H "Authorization: Bearer $LEASH_API_KEY"
+```
+
+```json
+{
+  "network": "solana-mainnet",
+  "window_hours": 24,
+  "by_phase": {
+    "prepared": 412,
+    "submitted": 411,
+    "confirmed": 408,
+    "failed": 3
+  },
+  "by_kind": {
+    "agent.delegation.set": 22,
+    "agent.treasury.withdraw": 11,
+    "submit.raw": 401,
+    "receipt.published": 1284,
+    "receipt.pulled": 39
+  },
+  "failure_rate": 0.01
+}
+```
+
+`failure_rate` is `failed / total_events` over the window. Because the
+table includes both API-driven and indexer-driven events,
+`failure_rate` is a true protocol-level health signal — it reflects
+on-chain failures (txs that landed and reverted) as well as
+infrastructure failures.
+
+## Combining the two
+
+Operators usually pull both endpoints into one view:
+
+- **Usage** answers "how much is this API key doing and how fast?"
+  — surface `totals.requests`, `errors`, `p95`, and the top
+  `by_endpoint` rows.
+- **Events** answers "what did that traffic actually produce
+  on-chain?" — surface `by_kind` (volume by category) and
+  `failure_rate` (red-flag panel).
+
+Cross-network comparisons are intentionally out of scope: each API key
+prefix sees only its own network. Aggregating across `lsh_test_*` and
+`lsh_live_*` keys is left to your own dashboard layer.
+
+## Retention
+
+- `api_requests` rows are kept for **30 days**, then pruned by a daily
+  job. Long-term aggregates live in your own analytics pipeline (or
+  Phase 7's billing tables).
+- `events` rows are kept indefinitely — they're protocol-level
+  artefacts, not traffic logs, and back the explorer's history view.
+
+## Privacy
+
+`api_requests` stores HTTP method + path template + status + latency
+and the optional `client_reference` tag. **No bodies, no headers, no
+query strings.** Path templates collapse dynamic segments (`/v1/agents/9pK9…`
+becomes `/v1/agents/9pK9`) so caller pubkeys are not leaked to other
+operators of the same API key.
+
+The `Authorization` header is hashed at lookup time and only the row
+id makes it into `api_requests` — there is no path that surfaces the
+plaintext key after the initial issuance.

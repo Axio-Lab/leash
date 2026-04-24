@@ -1,0 +1,206 @@
+---
+title: 'Webhooks'
+description: Subscribe to event lifecycle changes — prepared, submitted, confirmed, failed, receipt.published, receipt.pulled.
+---
+
+The Leash API can push every event it writes to a URL you control, so
+you don't have to poll. Subscriptions are scoped to your API key
+(and therefore network), HMAC-signed end-to-end, and retried with
+exponential backoff if your endpoint is down.
+
+## What you receive
+
+Every delivery is a `POST` with a JSON body and three Leash headers:
+
+```http
+POST https://your-app.example.com/leash-hook
+Content-Type: application/json
+X-Leash-Signature: t=1745446272,v1=8f3c…
+X-Leash-Event: event
+X-Leash-Delivery: 01HVTQX4GZTH8XK1F2JZ7N5WJ4
+
+{
+  "type": "event",
+  "event": {
+    "id": "01HVTQX4GZTH8XK1F2JZ7N5WJ4",
+    "ts": "2026-04-23T12:01:02.000Z",
+    "kind": "agent.delegation.set",
+    "phase": "confirmed",
+    "network": "solana-devnet",
+    "client_reference": "order-42",
+    "agent_asset": "9pK9…",
+    "signature": "5xY7…",
+    "mint": "EPjF…",
+    "amount_atomic": "100000000",
+    "metadata": { "stable_symbol": "USDC", "allowance_atomic": "100000000" },
+    "error_code": null,
+    "error_message": null
+  }
+}
+```
+
+The same event id may be delivered up to four times — once per phase
+transition (`prepared` → `submitted` → `confirmed` | `failed`). The
+delivery row is unique on `(webhook_id, event_id)` so duplicates from
+internal retries never reach you.
+
+## Verifying signatures
+
+`X-Leash-Signature` follows the Stripe-compatible `t=<unix>,v1=<hex>`
+format. The signed payload is `${t}.${rawBody}` (concatenate the
+timestamp, a literal dot, and the request body before HMAC-ing).
+
+```ts
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
+export function verify(secret: string, header: string, rawBody: string): boolean {
+  const map = Object.fromEntries(header.split(',').map((s) => s.split('=') as [string, string]));
+  if (!map.t || !map.v1) return false;
+  const expected = createHmac('sha256', secret).update(`${map.t}.${rawBody}`).digest('hex');
+  return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(map.v1, 'hex'));
+}
+```
+
+A first-party `verifySignature` helper ships in `@leash/api-client`
+(Phase 6 codegen) and a reference implementation lives at
+`apps/api/src/webhooks/sign.ts` in the monorepo.
+
+Reject deliveries with a timestamp older than ~5 minutes — that's the
+default tolerance the API uses on the verify path and protects against
+replay if your webhook URL ever leaks alongside a captured request.
+
+## Subscribing
+
+```bash
+curl -X POST https://api.leash.market/v1/webhooks \
+  -H "Authorization: Bearer $LEASH_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://your-app.example.com/leash-hook",
+    "events": ["receipt.published", "agent.treasury.withdraw"]
+  }'
+```
+
+```json
+{
+  "id": "01HVTQX4GZTH8XK1F2JZ7N5WJ4",
+  "network": "solana-devnet",
+  "url": "https://your-app.example.com/leash-hook",
+  "events": ["receipt.published", "agent.treasury.withdraw"],
+  "secret": "whsec_5b1a3e8c…",
+  "disabled_at": null,
+  "created_at": "2026-04-23T12:01:02Z"
+}
+```
+
+> **The secret is returned exactly once.** Store it the moment the
+> response lands; subsequent `GET` calls omit it on purpose. Rotate by
+> deleting and re-creating the subscription.
+
+`events: []` (or omitting the field) subscribes to **every** event
+kind for the network the API key is bound to. Concrete kinds:
+
+| Kind                              | When it fires                                                       |
+| --------------------------------- | ------------------------------------------------------------------- |
+| `agent.identity.register`         | A new agent identity is registered on chain.                        |
+| `agent.executive.register`        | An executive wallet is bound to the cluster.                        |
+| `agent.executive.delegate`        | An agent delegates execution to an executive.                       |
+| `agent.delegation.set`            | Owner sets an SPL spend delegation for the executive.               |
+| `agent.delegation.revoke`         | Owner revokes the spend delegation.                                 |
+| `agent.treasury.provision`        | Treasury ATAs are pre-created.                                      |
+| `agent.treasury.withdraw`         | Owner withdraws SPL from the treasury.                              |
+| `agent.treasury.withdraw_sol`     | Owner withdraws lamports from the treasury.                         |
+| `agent.token.set`                 | Identity's `agent_token` field is updated.                          |
+| `submit.raw`                      | Any signed transaction broadcast through `/v1/submit`.              |
+| `receipt.published`               | A new receipt was pushed to the API (or forwarded by the runner).   |
+| `receipt.pulled`                  | The receipt-pull worker ingested a receipt from a registered URL.   |
+
+## Listing, fetching, deleting
+
+```bash
+# All subscriptions on the current key
+curl https://api.leash.market/v1/webhooks \
+  -H "Authorization: Bearer $LEASH_API_KEY"
+
+# One subscription
+curl https://api.leash.market/v1/webhooks/$WEBHOOK_ID \
+  -H "Authorization: Bearer $LEASH_API_KEY"
+
+# Delete and purge delivery history
+curl -X DELETE https://api.leash.market/v1/webhooks/$WEBHOOK_ID \
+  -H "Authorization: Bearer $LEASH_API_KEY"
+```
+
+`GET` and `LIST` never include the secret — only the original `POST`
+response does. A `404` on cross-key lookup confirms subscriptions
+are scoped per API key.
+
+## Delivery history
+
+```bash
+curl https://api.leash.market/v1/webhooks/$WEBHOOK_ID/deliveries?limit=50 \
+  -H "Authorization: Bearer $LEASH_API_KEY"
+```
+
+```json
+{
+  "items": [
+    {
+      "id": "01HVTQX5…",
+      "webhook_id": "01HVTQX4…",
+      "event_id": "01HVTQX4GZTH8XK1F2JZ7N5WJ4",
+      "attempts": 1,
+      "delivered": true,
+      "next_attempt_at": "2026-04-23 12:01:02",
+      "last_status": 200,
+      "last_error": null,
+      "last_attempt_at": "2026-04-23 12:01:02",
+      "created_at": "2026-04-23 12:01:01"
+    }
+  ]
+}
+```
+
+Failed deliveries stay in this list for 7 days with the last status
+code and error message so you can debug receiver-side outages.
+
+## Retries
+
+The worker schedules retries with exponential backoff:
+
+| Attempt | Delay before next try |
+| ------- | --------------------- |
+| 1       | 5 seconds             |
+| 2       | 25 seconds            |
+| 3       | ~2 minutes            |
+| 4       | ~10 minutes           |
+| 5+      | capped at 1 hour      |
+
+After **8 failed attempts** (~30 minutes total), the delivery is
+flagged as `delivered=true` with `last_status=-1` so it stops being
+retried — but it stays in the deliveries history so you can see the
+failure. Re-create the subscription to drain backlogs.
+
+Any `2xx` status counts as success. `4xx` and `5xx` are both retried
+the same way; we don't distinguish "permanent" client errors because
+intermittent gateway misbehaviour is too common to special-case. If
+you want to drop a delivery on the floor, return `200` and discard.
+
+## Best-effort guarantees
+
+- **At-least-once** — your endpoint may receive the same event twice
+  (different delivery ids, same `event.id`). Idempotency is your
+  responsibility; key on `event.id` and `event.phase`.
+- **Out-of-order possible** — phase `submitted` may land before phase
+  `prepared` on a slow receiver. Always reconcile against the latest
+  state via `GET /v1/events/{id}` if order matters.
+- **Network-isolated** — a `lsh_test_*` key only ever delivers
+  devnet events, even if you accidentally point it at a mainnet URL.
+
+## Local development
+
+In dev (`apps/api/src/dev.ts`) the worker runs in-process every two
+seconds. For staging / prod, run it as a dedicated worker so a slow
+receiver can't backpressure the API server. The same module is
+exported as `startWebhookWorker(db, intervalMs, options)` from
+`@leash/api/webhooks/worker` — wire it into your own process supervisor.
