@@ -14,6 +14,68 @@ import { _resetCacheForTests, getCache } from '../src/storage/redis.js';
 import { _resetDbForTests, type DbClient } from '../src/storage/turso.js';
 import type { LeashApiConfig } from '../src/config.js';
 
+// Tests configure the API to point its hosted paywall at the unreachable
+// host `facilitator.test.invalid` so settle-side asserts never depend on
+// a network round-trip. The seller-kit middleware (`@x402/hono`)
+// initializes by fetching `${facilitator}/supported` on the first
+// request and `throw`s on DNS failure, which Hono catches and dumps to
+// stderr — polluting CI output even when the test itself passes
+// (paywall tests only assert `status !== 200` on unpaid requests, which
+// holds either way).
+//
+// We shim global `fetch` ONCE per process to short-circuit any URL on
+// the test host with a valid empty `SupportedResponse`. The middleware
+// then initializes cleanly with zero registered schemes, every unpaid
+// `/x/{id}` request returns a non-200 (still satisfying the assertion),
+// and stderr stays quiet. All other URLs fall through to the real fetch
+// untouched.
+installFacilitatorTestFetchShimOnce();
+function installFacilitatorTestFetchShimOnce(): void {
+  const flag = '__leashFacilitatorTestFetchShim';
+  const g = globalThis as unknown as Record<string, unknown>;
+  if (g[flag]) return;
+  g[flag] = true;
+
+  const realFetch = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = (async (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const href = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (href.includes('facilitator.test.invalid')) {
+      // Mimic an x402 facilitator's `/supported` endpoint with both
+      // v1 (legacy network slug) and v2 (CAIP-2) entries for SVM so
+      // the seller-kit middleware passes its
+      //   "no supported payment kinds loaded from any facilitator"
+      // initialization gate. Unpaid `/x/{id}` requests then get a
+      // real 402 (or 5xx if settle/verify are exercised), which is
+      // still what the paywall tests assert ("status !== 200").
+      return new Response(
+        JSON.stringify({
+          kinds: [
+            { x402Version: 1, scheme: 'exact', network: 'solana-devnet' },
+            { x402Version: 1, scheme: 'exact', network: 'solana-mainnet' },
+            {
+              x402Version: 2,
+              scheme: 'exact',
+              network: 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1',
+            },
+            {
+              x402Version: 2,
+              scheme: 'exact',
+              network: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',
+            },
+          ],
+          extensions: [],
+          signers: { svm: ['11111111111111111111111111111111'] },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    return realFetch(input as Parameters<typeof realFetch>[0], init);
+  }) as typeof globalThis.fetch;
+}
+
 export type TestRig = {
   app: ReturnType<typeof createLeashApiApp>;
   db: DbClient;
