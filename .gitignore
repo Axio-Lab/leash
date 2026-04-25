@@ -6,6 +6,9 @@ coverage
 *.log
 .env
 .env.local
+.env.*
+!.env.example
+!.env.*.example
 .DS_Store
 apps/docs/schemas/*.mdx
 *.db
