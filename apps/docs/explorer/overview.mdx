@@ -123,3 +123,23 @@ The pieces:
 This co-location is intentional. The explorer is internal infra, not a
 third-party API consumer, so it shouldn't have to authenticate
 against a service it already shares a trust boundary with.
+
+## Making your activity appear here
+
+The explorer renders whatever the API and the chain indexer write into
+the shared `events` and `receipts` tables. Two simple rules cover the
+whole surface:
+
+1. **API-driven actions** (every state-changing call: identity,
+   delegation, withdraws, payment links, receipts) need the full
+   `prepare → submit` round-trip via the API. Calls that stop at
+   `prepare` show up as `phase=prepared` and never advance.
+2. **Indexer-only actions** (incoming SPL or SOL deposits to a
+   treasury, SDK-driven `Execute`s the API didn't initiate) require
+   the agent to be on the indexer watchlist. The cheapest way to
+   force-register is one `GET /v1/agents/{mint}/treasury/balances`
+   call — read-only, free, side-effects three watch kinds at once.
+
+For the per-event-kind matrix — every `kind` value the explorer
+shows, with the exact endpoint or on-chain trigger that surfaces it
+— see [Explorer tracking](/api/explorer-tracking).

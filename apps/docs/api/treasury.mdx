@@ -312,16 +312,31 @@ curl -sG https://api.leash.market/v1/events \
 
 ## Reference scripts
 
-The repository ships two end-to-end scripts that drive these endpoints
+The repository ships three end-to-end scripts that drive these endpoints
 against real devnet:
 
 - `pnpm --filter @leash/api e2e:devnet` — full payment-link / paywall /
   receipt flow, including a real `agent.treasury.provision` round-trip
-  that exercises prepare → sign → submit → confirm.
+  that exercises prepare → sign → submit → confirm. Note that this
+  script is focused on x402 surfaces; it does not by itself generate
+  withdraw or fund events on the explorer (see the dedicated scripts
+  below).
 - `pnpm --filter @leash/api withdraw` — one-shot script that withdraws
   a configurable amount of USDG from a target agent treasury through
   the public API. See [`apps/api/scripts/withdraw.ts`](https://github.com/leash-market/leash/blob/main/apps/api/scripts/withdraw.ts)
   for the `LEASH_WITHDRAW_*` env knobs.
+- `pnpm --filter @leash/api fund` — one-shot script that deposits SPL
+  (USDG by default) into a target agent treasury, then polls for the
+  matching `agent.treasury.fund` event so you can verify indexer
+  visibility end-to-end. See [`apps/api/scripts/fund.ts`](https://github.com/leash-market/leash/blob/main/apps/api/scripts/fund.ts)
+  for the `LEASH_FUND_*` env knobs. There is no `fund/prepare` API
+  endpoint — deposits are plain SPL transfers — so the script signs
+  and broadcasts the `TransferChecked` directly with Umi, then nudges
+  the API once via `GET /v1/agents/{mint}/treasury/balances` to make
+  sure the ATA is on the indexer watchlist.
+
+For the full "which endpoint surfaces which event on the explorer"
+matrix, see [Explorer tracking](/api/explorer-tracking).
 
 ## See also
 

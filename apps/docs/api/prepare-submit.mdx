@@ -197,5 +197,10 @@ curl -s https://api.leash.market/v1/events/$EVENT_ID \
 
 That's the entire surface for any Leash state change. Every prepare
 shares the contract, every submit shares the contract, every event
-shares the schema. See [Monetise an existing API](/api/monetize-api)
-for plugging this into a SaaS that already exists.
+shares the schema.
+
+- [Monetise an existing API](/api/monetize-api) — plug this lifecycle
+  into a SaaS that already exists.
+- [Explorer tracking](/api/explorer-tracking) — the per-event-kind
+  cookbook: which `prepare → submit` pair (or which on-chain
+  trigger) makes each row show up on the explorer.

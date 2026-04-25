@@ -1,0 +1,194 @@
+---
+title: 'Explorer tracking'
+description: Which endpoint to call so each event kind shows up on explorer.leash.market and in /v1/metrics/events.
+---
+
+Every row on [`explorer.leash.market`](https://explorer.leash.market)
+and every counter in [`/v1/metrics/events`](/api/metrics) comes from a
+single source: the `events` table. Two writers populate it:
+
+1. **The API.** Every `prepare → submit → confirm` hop appends a row
+   with the right `kind` and bumps its `phase`. Anything you drive
+   through the public HTTP surface lands here automatically.
+2. **The chain indexer.** A dual-network worker that walks signatures
+   for every `(network, address)` row on its watchlist and emits
+   `events` for the on-chain activity it sees, including activity
+   the API never initiated (deposits to a treasury, an SDK-driven
+   `Execute`, a third-party top-up).
+
+If you want a row to land on the explorer, you have one of two jobs:
+
+- **API-driven kinds** — call the matching `prepare` endpoint, sign
+  locally, then `POST /v1/submit`. The event is created in
+  `phase=prepared` before the network call returns and gets stamped
+  to `submitted` then `confirmed` automatically. See
+  [Prepare → Submit lifecycle](/api/prepare-submit).
+- **Indexer-only kinds** — perform the on-chain action through any
+  channel (SDK, wallet, faucet, another protocol), and make sure the
+  agent + ATA are on the indexer watchlist (covered below).
+
+This page is the cookbook that maps every event kind to the
+specific endpoint or trigger that surfaces it.
+
+## Auto-registration: how the indexer learns about your agent
+
+The indexer never crawls the cluster from scratch. It iterates a
+strict, per-network watchlist seeded by the API. Three watch kinds
+exist: `asset`, `treasury`, and `treasury_ata`. Once an agent is on
+the watchlist, every transaction touching its asset, treasury PDA,
+or any of its ATAs is decoded and emitted as the right event kind.
+
+| Endpoint                                                    | Watchlist side-effect                            |
+| ----------------------------------------------------------- | ------------------------------------------------ |
+| Any `prepare*` endpoint targeting `/v1/agents/{mint}/...`   | Adds `asset` + `treasury` rows for the agent.    |
+| `POST /v1/agents/{mint}/treasury/provision/prepare`         | Adds the provisioned ATAs as `treasury_ata`.     |
+| `POST /v1/agents/{mint}/treasury/withdraw/prepare`          | Adds the source ATA as `treasury_ata`.           |
+| `POST /v1/agents/{mint}/treasury/withdraw-all/prepare`      | Adds the source ATA as `treasury_ata`.           |
+| `GET  /v1/agents/{mint}/treasury/balances`                  | Adds the PDA + every SPL ATA it surfaces.        |
+| `POST /v1/receipts/{agent}` (first push for the agent)      | Adds an `asset` row.                             |
+| `POST /v1/agents/{mint}/pull-target` (registers a feed URL) | Adds an `asset` row.                             |
+
+The indexer also self-bootstraps on startup: for every `treasury`
+row it has never paged, it issues one `getTokenAccountsByOwner`
+per token program and registers each result as a `treasury_ata`.
+
+**The single most useful "make it light up" call is
+`GET /v1/agents/{mint}/treasury/balances`.** It is read-only, free,
+and side-effects all three watch kinds at once. If you have an
+agent that was funded out-of-band before any API call, hit
+`/treasury/balances` once and the indexer will surface its history
+on the next tick.
+
+## Per-event-kind matrix
+
+| Event kind                    | Source           | Endpoint / trigger that surfaces it                                                                                        |
+| ----------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `agent.identity.register`     | API + indexer    | `POST /v1/agents/prepare` (then `/v1/submit`); or any `mpl-agent-identity::CreateIdentity` for a watched asset.            |
+| `agent.executive.register`    | API + indexer    | `POST /v1/executive/prepare` (then `/v1/submit`); or `mpl-agent-tools::CreateExecutive`.                                   |
+| `agent.executive.delegate`    | API + indexer    | `POST /v1/agents/{mint}/executive/delegate/prepare`; or `mpl-agent-tools::Delegate`.                                       |
+| `agent.delegation.set`        | API + indexer    | `POST /v1/agents/{mint}/delegation/prepare`; or an `Execute`-wrapped SPL `Approve` for the asset's signer PDA.             |
+| `agent.delegation.revoke`     | API + indexer    | `POST /v1/agents/{mint}/delegation/revoke/prepare`; or an `Execute`-wrapped SPL `Revoke`.                                  |
+| `agent.token.set`             | API + indexer    | `POST /v1/agents/{mint}/token/prepare`; or `mpl-agent-identity::SetAgentToken`.                                            |
+| `agent.treasury.provision`    | API + indexer    | `POST /v1/agents/{mint}/treasury/provision/prepare` (skipped if every ATA already exists); or any `CreateAssociatedTokenAccount` for the PDA. |
+| `agent.treasury.withdraw`     | API + indexer    | `POST /v1/agents/{mint}/treasury/withdraw[-all]/prepare`; or any `Execute`-wrapped `TransferChecked` debiting the PDA's ATA. |
+| `agent.treasury.withdraw_sol` | API + indexer    | `POST /v1/agents/{mint}/treasury/withdraw-sol[-all]/prepare`; or any `Execute` reducing the PDA's lamport balance.         |
+| `agent.treasury.fund`         | **Indexer only** | A plain SPL `TransferChecked` *into* a treasury ATA. Make sure the ATA is registered (see auto-registration table above).   |
+| `agent.treasury.fund_sol`     | **Indexer only** | A plain `SystemProgram::Transfer` ≥ 5 000 lamports *into* the treasury PDA. Sub-fee wobbles are filtered out as noise.      |
+| `submit.raw`                  | API only         | `POST /v1/submit` (any signed tx broadcast through the API).                                                                |
+| `payment_link.created`        | API only         | `POST /v1/payment-links`.                                                                                                   |
+| `payment_link.updated`        | API only         | `PATCH /v1/payment-links/{id}`.                                                                                             |
+| `payment_link.deleted`        | API only         | `DELETE /v1/payment-links/{id}`.                                                                                            |
+| `payment_link.served`         | API only         | An anonymous client hits `/x/{id}` with no `X-PAYMENT` header (paywall serves a `402`).                                     |
+| `payment_link.settled`        | API only         | An anonymous client hits `/x/{id}` with a valid `X-PAYMENT` header and the facilitator settles the payment.                 |
+| `buyer.payment.prepare`       | API only         | `POST /v1/buyer/payment/prepare`.                                                                                           |
+| `receipt.published`           | API only         | `POST /v1/receipts/{agent}`.                                                                                                |
+| `receipt.pulled`              | Indexer only     | The pull worker fetches a receipt from a registered `pull-target` URL.                                                      |
+
+## Recipes
+
+### "Show every state-changing action my agent takes"
+
+Use the `prepare → submit` flow for every action you initiate. The
+event lifecycle (`prepared → submitted → confirmed`) renders directly
+on the explorer's per-agent timeline, plus the matching
+`/tx/<signature>` page once the chain confirms.
+
+```bash
+# 1. Prepare
+PREP=$(curl -sX POST https://api.leash.market/v1/agents/$MINT/delegation/prepare \
+  -H "Authorization: Bearer $LEASH_API_KEY" \
+  -d '{ "executive": "'$EXEC'", "stable_symbol": "USDC", "allowance": "100" }')
+
+EVENT_ID=$(echo "$PREP" | jq -r '.event_id')
+TX=$(echo "$PREP" | jq -r '.transaction.base64')
+
+# 2. Sign locally with your wallet/HSM
+SIGNED=$(node ./sign.mjs "$TX")
+
+# 3. Submit
+curl -sX POST https://api.leash.market/v1/submit \
+  -H "Authorization: Bearer $LEASH_API_KEY" \
+  -d "{ \"event_id\": \"$EVENT_ID\", \"transaction_base64\": \"$SIGNED\" }"
+
+# 4. Track (or subscribe via /v1/webhooks instead)
+curl -s https://api.leash.market/v1/events/$EVENT_ID \
+  -H "Authorization: Bearer $LEASH_API_KEY"
+```
+
+### "Make sure deposits to my agent's treasury show up"
+
+Funds are indexer-only because anyone can deposit and there is no
+authority to satisfy. The one-time setup:
+
+```bash
+# Forces the indexer to register the treasury PDA + every ATA.
+curl -s "https://api.leash.market/v1/agents/$MINT/treasury/balances" \
+  -H "Authorization: Bearer $LEASH_API_KEY"
+```
+
+After the next indexer tick, every existing and future SPL deposit
+to any of the treasury's ATAs will land as `agent.treasury.fund`,
+and every SOL deposit ≥ 5 000 lamports will land as
+`agent.treasury.fund_sol`.
+
+To generate a real deposit on devnet for testing, see the
+[`fund.ts` reference script](/api/treasury#reference-scripts):
+
+```bash
+LEASH_FUND_AMOUNT=1 LEASH_FUND_SYMBOL=USDG \
+  pnpm --filter @leash/api fund
+```
+
+### "Surface withdraws an SDK driver did out-of-band"
+
+The chain indexer treats SDK-driven `Execute` instructions identically
+to API-driven ones. As long as the agent is on the watchlist (any
+prior `prepare*` call or one `/treasury/balances` ping is enough),
+`agent.treasury.withdraw` and `agent.treasury.withdraw_sol` will
+surface within one indexer tick of confirmation.
+
+### "Get push notifications for explorer-relevant events"
+
+Subscribe via [Webhooks](/api/webhooks). You can subscribe to the
+empty event list (= every kind) or a curated subset:
+
+```bash
+curl -X POST https://api.leash.market/v1/webhooks \
+  -H "Authorization: Bearer $LEASH_API_KEY" \
+  -d '{
+    "url": "https://your-app.example.com/leash-hook",
+    "events": [
+      "agent.treasury.withdraw",
+      "agent.treasury.fund",
+      "receipt.published",
+      "payment_link.settled"
+    ]
+  }'
+```
+
+### "Aggregate event volume for a dashboard"
+
+[`GET /v1/metrics/events`](/api/metrics#event-counts-get-v1metricsevents)
+returns event counts grouped by `phase` and `kind` for the active
+network. Combined with [`GET /v1/metrics/usage`](/api/metrics#usage-rollups-get-v1metricsusage)
+that gives you a full "API traffic in → on-chain volume out" picture.
+
+## Quick checklist
+
+When something *should* be on the explorer but isn't:
+
+1. Is the indexer worker running? `GET /v1/indexer/status` —
+   `cursors.last_run_at` should be < 30 seconds old.
+2. Is the agent on the watchlist? Hit
+   `GET /v1/agents/{mint}/treasury/balances` once. Read-only,
+   side-effects three watch kinds.
+3. Is the action one the API initiates? Did you complete the full
+   `prepare → submit` round-trip (not just `prepare`)? Calls that
+   stop at `prepared` show up with `phase=prepared` and never
+   advance — that's almost always a stuck client, not a stuck API.
+4. Is the action a deposit? Confirm the treasury ATA is on the
+   watchlist (the `/treasury/balances` call above guarantees it),
+   then wait one indexer tick.
+5. Is your API key on the right network? `lsh_test_*` keys see
+   devnet only; `lsh_live_*` keys see mainnet only. Cross-network
+   reads return `404` by design.

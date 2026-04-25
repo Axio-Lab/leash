@@ -33,16 +33,31 @@ when the ATA's owner (= the PDA) shows a positive
 
 Adding to the watchlist is automatic; the API calls
 `ensureWatched(...)` and `ensureWatchedAta(...)` whenever a new
-agent or ATA crosses its surface. The indexer additionally
-self-bootstraps on startup: for every `treasury` row it has never
-discovered ATAs for, it issues one `getTokenAccountsByOwner` per
-token program (classic SPL + Token-2022) and registers each result
-as a `treasury_ata` row.
+agent or ATA crosses its surface. The triggers are:
+
+- **Any `prepare*` call against `/v1/agents/{mint}/...`** — adds the
+  asset and treasury PDA.
+- **`provision/prepare`, `withdraw/prepare`, `withdraw-all/prepare`** —
+  also add every relevant `treasury_ata`.
+- **`GET /v1/agents/{mint}/treasury/balances`** — adds the PDA + every
+  SPL ATA the snapshot surfaces. This is the cheapest "force-register
+  this agent" call available; it's read-only, free, and side-effects
+  all three watch kinds at once.
+- **`POST /v1/receipts/{agent}` and `POST /v1/agents/{mint}/pull-target`**
+  — register the asset (no ATA discovery, since neither call needs it).
+
+The indexer additionally self-bootstraps on startup: for every
+`treasury` row it has never discovered ATAs for, it issues one
+`getTokenAccountsByOwner` per token program (classic SPL + Token-2022)
+and registers each result as a `treasury_ata` row.
 
 You can list the watchlist (subset of your network) via
 `GET /v1/indexer/status`. Manual adds are not exposed in v1 — the
 goal is to keep the indexer scope strictly tied to "agents Leash has
 seen", which matches the explorer's product surface.
+
+For a per-event-kind cookbook of "which call do I make so this row
+shows up?", see [Explorer tracking](/api/explorer-tracking).
 
 ## Cursors
 
@@ -75,7 +90,8 @@ and matches program logs against a known table:
 | `mpl-agent-tools`                       | `CreateExecutive`, `Delegate`, `Revoke`         | `agent.executive.register`, `agent.executive.delegate`      |
 | `mpl-core` (`Execute` wrapping SPL/Sys) | `Approve`, `TransferChecked`, lamport delta < 0 | `agent.delegation.set`, `agent.treasury.withdraw[_sol]`     |
 | SPL Token / Token-2022                  | `Approve`, `Revoke`, `TransferChecked`          | Same as above when wrapped in `Execute` for an asset signer |
-| Any program                             | Treasury balance delta > 0 (no `Execute`); resolved via the `treasury_ata` watch row → owner = PDA | `agent.treasury.fund` (SPL), `agent.treasury.fund_sol` (lamports — fee-amount wobbles filtered out) |
+| Any program (no `Execute`)              | `tokenBalanceDeltas[ata].delta > 0` where the ATA is on the watchlist and its owner is the treasury PDA | `agent.treasury.fund` (one row per mint that increased)    |
+| `system`                                | `lamportDeltas[treasury].delta ≥ 5 000` with no matching withdraw row in the same tx | `agent.treasury.fund_sol` (sub-fee wobbles dropped as noise) |
 
 Amounts are taken from the parsed instruction data (for SPL) or the
 `postTokenBalances` / `postBalances` deltas keyed to the treasury

@@ -98,7 +98,9 @@ curl -X POST https://api.leash.market/v1/webhooks \
 > deleting and re-creating the subscription.
 
 `events: []` (or omitting the field) subscribes to **every** event
-kind for the network the API key is bound to. Concrete kinds:
+kind for the network the API key is bound to. For the full list of
+kinds with the API or on-chain trigger that produces each one, see
+[Explorer tracking](/api/explorer-tracking). The summary version:
 
 | Kind                          | When it fires                                                     |
 | ----------------------------- | ----------------------------------------------------------------- |

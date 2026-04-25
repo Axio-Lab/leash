@@ -70,6 +70,7 @@
               "api/treasury",
               "api/receipts",
               "api/indexer",
+              "api/explorer-tracking",
               "api/webhooks",
               "api/metrics",
               "api/idempotency",
