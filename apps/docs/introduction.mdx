@@ -41,3 +41,21 @@ these packages produce.
 - **Explorer** — what `explorer.leash.market` shows and how to deeplink ([Leash Explorer](/explorer/overview)).
 
 See the repo `README.md` for the 5-minute demo and environment variables.
+
+## For LLMs and coding agents
+
+These docs are designed to be slurped wholesale into your model's context.
+
+| Resource                                                                 | What it gives you                                                                                                                                      |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`/llms.txt`](https://docs.leash.market/llms.txt)                        | A curated, sidebar-grouped index. Every entry links to the Markdown rendering of the page. Auto-discovered via the `Link: rel="llms-txt"` HTTP header. |
+| [`/llms-full.txt`](https://docs.leash.market/llms-full.txt)              | The entire site concatenated into one Markdown file. Drop into a system prompt and you have the whole manual.                                          |
+| `/<page>.md`                                                             | Append `.md` to **any** docs URL to fetch the raw Markdown for a single page (e.g. [`/api/overview.md`](https://docs.leash.market/api/overview.md)).   |
+| [`api.leash.market/openapi.json`](https://api.leash.market/openapi.json) | Live OpenAPI 3.1 spec. Feed it to your client generator of choice.                                                                                     |
+| **In-page actions**                                                      | The header on every page has a "Copy page" / "View as Markdown" / "Open in ChatGPT, Claude, Perplexity" / "Connect to Cursor or VS Code (MCP)" menu.   |
+
+Building on top of Leash from inside an agent (Cursor, Claude Code, Codex,
+Replit, Windsurf)? Install the **Leash skill** so your assistant always has
+the right primitives at hand: see the
+[`leash/skills/leash`](https://github.com/leash-market/leash/tree/main/skills/leash)
+folder in the monorepo for a one-command install.

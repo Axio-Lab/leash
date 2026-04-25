@@ -1,0 +1,96 @@
+# Leash
+
+> An open rail for agents that spend on the open internet. Built on Solana.
+> Leash gives every agent a wallet (an MPL Core asset with an Asset Signer
+> PDA treasury), a capped spend allowance you control, real x402 settlement
+> in SPL stables (USDC, USDT, USDG), and a hash-chained `ReceiptV1` audit log
+> for every gated call. Buyers, sellers, and merged agents all share one
+> on-chain identity, one policy doc, and one HTTPS surface
+> (`api.leash.market`) that any language can drive.
+>
+> This file (and `llms-full.txt`) are auto-discoverable by AI tools via the
+> `Link: rel="llms-txt"` HTTP header on every docs page. To slurp the whole
+> manual into context: GET `https://docs.leash.market/llms-full.txt`. To copy
+> any single page as Markdown: append `.md` to its URL (or use the
+> "Copy page" action from the page header).
+
+## Start here
+
+- [Introduction](https://docs.leash.market/introduction.md): What Leash is, what ships, how the pieces fit together.
+- [Quickstart](https://docs.leash.market/quickstart.md): Bring up the Leash split or merged stack locally in five minutes.
+
+## Concepts (read first)
+
+- [Agent](https://docs.leash.market/concepts/agent.md): One MPL Core asset. One Asset Signer treasury. Two capabilities.
+- [Identities](https://docs.leash.market/concepts/identities.md): Owner, executive, operator — the three keypairs every Leash agent involves and what each one signs.
+- [Treasury](https://docs.leash.market/concepts/treasury.md): Asset Signer PDA — receive without keys, withdraw via MPL Core Execute.
+- [Policy](https://docs.leash.market/concepts/policy.md): Pure evaluation of `RulesV1` against a request and running state.
+- [Receipt](https://docs.leash.market/concepts/receipt.md): Hash-chained JSONL feed of every gated call.
+- [Capabilities](https://docs.leash.market/concepts/capabilities.md): Buyer + seller as orthogonal capabilities on one identity.
+
+## Guides (do this)
+
+- [Create an agent](https://docs.leash.market/guides/create-an-agent.md): Mint a Core asset and register an `AgentIdentity` in one transaction with `@leash/registry-utils`.
+- [Bring your own keypair](https://docs.leash.market/guides/bring-your-own-keypair.md): Mint and run an agent without Privy — local keypair, server env var, or generated operator key.
+- [Fund an agent](https://docs.leash.market/guides/fund-an-agent.md): Approve a spend allowance from your agent treasury so the executive can pay x402 calls on its behalf.
+- [Create a payment link](https://docs.leash.market/guides/create-an-endpoint.md): No-code x402 paywalls. Pick an agent, declare a price + response, share a URL.
+- [Build a seller](https://docs.leash.market/guides/build-a-seller.md): Wire a Hono app behind a Leash seller agent with real x402.
+- [Build a buyer](https://docs.leash.market/guides/build-a-buyer.md): Script an agent that pays an x402 endpoint with real SPL stables.
+- [Build a merged agent](https://docs.leash.market/guides/build-a-merged-agent.md): One asset that both sells and buys, sharing a single feed.
+- [Withdraw treasury funds](https://docs.leash.market/guides/withdraw-funds.md): Owner-driven withdraw of stablecoins + native SOL via MPL Core Execute.
+- [Launch an agent token](https://docs.leash.market/guides/launch-agent-token.md): Bonding-curve token via Metaplex Genesis. Creator fees route to the treasury PDA automatically.
+- [Pause an agent](https://docs.leash.market/guides/pause-an-agent.md): Env breaker plus on-chain `AppData` mirror.
+- [Run a Leash facilitator](https://docs.leash.market/guides/run-a-facilitator.md): Operate `facilitator.leash.dev` (or your own) on Solana devnet.
+
+## API — `api.leash.market`
+
+- [Overview](https://docs.leash.market/api/overview.md): One HTTPS surface for prepare → submit → track, receipts, and the indexer that powers the explorer.
+- [Authentication](https://docs.leash.market/api/auth.md): API keys, prefix-driven network binding, idempotency, and rate limits.
+- [Prepare → Submit lifecycle](https://docs.leash.market/api/prepare-submit.md): How every state-changing call splits into prepare, sign, submit, track — and why.
+- [Agents](https://docs.leash.market/api/agents.md): Mint, read, and manage Leash agents over HTTP — the same flow the SDK exposes, callable from any language.
+- [Monetise an existing API](https://docs.leash.market/api/monetize-api.md): Charge per call on a SaaS endpoint you already host, without rewriting it.
+- [Payment links](https://docs.leash.market/api/payment-links.md): Create hosted x402 payment links served at `/x/{id}` — the "Stripe Payment Link" of x402.
+- [Seller utilities](https://docs.leash.market/api/seller-utils.md): HTTP parity for the `@leash/seller-kit` helpers — networks, facilitator, parse-price, pay-to.
+- [Buyer endpoints](https://docs.leash.market/api/buyer.md): HTTP parity for `@leash/buyer-kit` — quote, policy gate, payment prepare/execute, receipt finalize/verify.
+- [Treasury](https://docs.leash.market/api/treasury.md): Read SOL + SPL balances, provision stable ATAs, prepare owner-driven withdrawals.
+- [Receipts](https://docs.leash.market/api/receipts.md): Push receipts in, pull receipts out, register pull targets the indexer will poll.
+- [Indexer](https://docs.leash.market/api/indexer.md): Dual-network watchlist-driven worker that turns on-chain activity into queryable events.
+- [Explorer tracking](https://docs.leash.market/api/explorer-tracking.md): Which endpoint to call so each event kind shows up on `explorer.leash.market` and in `/v1/metrics/events`.
+- [Webhooks](https://docs.leash.market/api/webhooks.md): Subscribe to event lifecycle changes — prepared, submitted, confirmed, failed, receipt.published, receipt.pulled.
+- [Metrics](https://docs.leash.market/api/metrics.md): Per-key request rollups and per-network event counters for dashboards and billing.
+- [Idempotency & retries](https://docs.leash.market/api/idempotency.md): How `Idempotency-Key`, event ids, and the prepare/submit split make every state-changing call safe to retry.
+- [Rate limits](https://docs.leash.market/api/rate-limits.md): Per-key sliding windows, route-family buckets, and how to interpret the headers.
+- [Error model](https://docs.leash.market/api/errors.md): Stable JSON shape, machine-readable codes, and how to map them to user-facing messages.
+- [Roadmap](https://docs.leash.market/api/roadmap.md): What ships next on top of the v1 API.
+- [API reference](https://docs.leash.market/api/reference.md): Generated from `/openapi.json` — every route, schema, and example.
+
+## Explorer — `explorer.leash.market`
+
+- [Leash Explorer](https://docs.leash.market/explorer/overview.md): A semantic, dual-network protocol explorer over the same data the API persists.
+
+## SDK reference
+
+- [`@leash/core`](https://docs.leash.market/sdk/core.md): Policy evaluation, receipt hashing, x402 client adapter, treasury, kill-switch.
+- [`@leash/seller-kit`](https://docs.leash.market/sdk/seller-kit.md): Hono integration. Asset Signer PDA payTo. Real x402 middleware on Solana.
+- [`@leash/buyer-kit`](https://docs.leash.market/sdk/buyer-kit.md): Scriptable buyer agents. `createBuyer` + real x402 fetch + chained `ReceiptV1`.
+- [`@leash/registry-utils`](https://docs.leash.market/sdk/registry-utils.md): Pinata uploads, BYO URI resolution, leash-block helpers.
+- [`@leash/runner`](https://docs.leash.market/sdk/runner.md): HTTP service that hosts JSONL receipt feeds, payment-link endpoints, and the kill switch.
+- [`@leash/testing`](https://docs.leash.market/sdk/testing.md): Fixtures, in-memory facilitator, and the `leash-conformance` CLI.
+
+## Schemas (canonical JSON shapes)
+
+- [Receipt V1](https://docs.leash.market/schemas/receipt-v1.md): Wire-format JSONL event for every gated call.
+- [Rules V1](https://docs.leash.market/schemas/rules-v1.md): Budgets, hosts, triggers — the policy doc the runner enforces.
+- [Leash Block V1](https://docs.leash.market/schemas/leash-block-v1.md): On-chain `leash` block embedded in registration metadata.
+- [Registration V1](https://docs.leash.market/schemas/registration-v1.md): Off-chain `AgentIdentity` JSON pinned to IPFS / Pinata / R2.
+- [Endpoint V1](https://docs.leash.market/schemas/endpoint-v1.md): Single endpoint manifest a seller agent advertises.
+
+## Standards
+
+- [Real x402 on Solana](https://docs.leash.market/standards/x402-on-solana.md): How Leash uses x402 + a Solana facilitator to settle agent traffic in real SPL stables.
+- [Receipt format](https://docs.leash.market/standards/receipt-format.md): Wire format of the JSONL feed.
+- [Conformance](https://docs.leash.market/standards/conformance.md): How third-party Leash implementations prove compatibility.
+
+## OpenAPI Specs
+
+- [openapi](https://api.leash.market/openapi.json): Live OpenAPI 3.1 spec for every route on `api.leash.market`.
