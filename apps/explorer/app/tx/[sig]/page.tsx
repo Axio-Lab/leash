@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import { ExternalLink } from 'lucide-react';
 import { DbUnavailableError, listEventsForSignature } from '@/lib/db';
+import { probeTxOnOtherNetwork } from '@/lib/cross-network';
 import type { EventRow } from '@/lib/types';
 import { getNetwork } from '@/lib/server-network';
 import { networkToSlug, type Network } from '@/lib/network';
@@ -9,6 +9,7 @@ import { describeEvent } from '@/lib/event-label';
 import { EventBadge, PhaseBadge } from '@/components/event-badge';
 import { DbUnreachable } from '@/components/empty';
 import { Mono } from '@/components/mono';
+import { NoRecordFound, WrongNetworkNotice } from '@/components/wrong-network-notice';
 import { solscanTxUrl, solscanAddrUrl } from '@/lib/solscan';
 import { formatTs, formatRelative } from '@/lib/format';
 import { formatTokenAmount, tokenInfoFor } from '@/lib/token-info';
@@ -32,7 +33,21 @@ export default async function TxPage({ params }: Props) {
   }
 
   if (matches.length === 0) {
-    notFound();
+    const probe = await probeTxOnOtherNetwork(network, sig);
+    return (
+      <NotFoundShell title="Transaction" network={network} sig={sig}>
+        {probe.foundOnOther ? (
+          <WrongNetworkNotice
+            current={probe.current}
+            other={probe.other}
+            entity="transaction"
+            identifier={sig}
+          />
+        ) : (
+          <NoRecordFound entity="transaction" identifier={sig} network={network} />
+        )}
+      </NotFoundShell>
+    );
   }
 
   const head = matches[0]!;
@@ -68,6 +83,43 @@ export default async function TxPage({ params }: Props) {
           ))}
         </div>
       </section>
+    </div>
+  );
+}
+
+/**
+ * Header + container shared between the "real" tx view and the
+ * not-found / wrong-network states. Keeps Solscan link and identifier
+ * visible so the user can verify the cluster they need.
+ */
+function NotFoundShell({
+  title,
+  network,
+  sig,
+  children,
+}: {
+  title: string;
+  network: Network;
+  sig: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-6">
+      <header className="space-y-2">
+        <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
+          {title} · {networkToSlug(network)}
+        </p>
+        <h1 className="break-all font-mono text-2xl font-semibold tracking-tight">{sig}</h1>
+        <a
+          href={solscanTxUrl(network, sig)}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="inline-flex items-center gap-1 text-xs text-[--color-brand] hover:text-[--color-brand-strong]"
+        >
+          View on Solscan <ExternalLink className="h-3 w-3" />
+        </a>
+      </header>
+      {children}
     </div>
   );
 }

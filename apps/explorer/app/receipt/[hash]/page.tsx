@@ -1,12 +1,13 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import { ExternalLink } from 'lucide-react';
 import { DbUnavailableError, getReceiptByHash } from '@/lib/db';
+import { probeReceiptOnOtherNetwork } from '@/lib/cross-network';
 import type { ReceiptRow } from '@/lib/types';
 import { getNetwork } from '@/lib/server-network';
-import { networkToSlug } from '@/lib/network';
+import { networkToSlug, type Network } from '@/lib/network';
 import { DbUnreachable } from '@/components/empty';
 import { Mono } from '@/components/mono';
+import { NoRecordFound, WrongNetworkNotice } from '@/components/wrong-network-notice';
 import { solscanTxUrl } from '@/lib/solscan';
 import { formatTs, formatRelative } from '@/lib/format';
 import { formatTokenAmount, tokenInfoFor } from '@/lib/token-info';
@@ -28,7 +29,23 @@ export default async function ReceiptPage({ params }: Props) {
     }
     throw err;
   }
-  if (!r) notFound();
+  if (!r) {
+    const probe = await probeReceiptOnOtherNetwork(network, hash);
+    return (
+      <NotFoundShell title="Receipt" network={network} identifier={hash}>
+        {probe.foundOnOther ? (
+          <WrongNetworkNotice
+            current={probe.current}
+            other={probe.other}
+            entity="receipt"
+            identifier={hash}
+          />
+        ) : (
+          <NoRecordFound entity="receipt" identifier={hash} network={network} />
+        )}
+      </NotFoundShell>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -121,6 +138,30 @@ export default async function ReceiptPage({ params }: Props) {
           View settlement on Solscan <ExternalLink className="h-3 w-3" />
         </a>
       ) : null}
+    </div>
+  );
+}
+
+function NotFoundShell({
+  title,
+  network,
+  identifier,
+  children,
+}: {
+  title: string;
+  network: Network;
+  identifier: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-6">
+      <header className="space-y-2">
+        <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
+          {title} · {networkToSlug(network)}
+        </p>
+        <h1 className="break-all font-mono text-2xl font-semibold tracking-tight">{identifier}</h1>
+      </header>
+      {children}
     </div>
   );
 }

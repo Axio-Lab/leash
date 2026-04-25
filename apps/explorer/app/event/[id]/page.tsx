@@ -1,14 +1,15 @@
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
 import { ExternalLink } from 'lucide-react';
 import { DbUnavailableError, getEventById } from '@/lib/db';
+import { probeEventOnOtherNetwork } from '@/lib/cross-network';
 import type { EventRow } from '@/lib/types';
 import { getNetwork } from '@/lib/server-network';
-import { networkToSlug } from '@/lib/network';
+import { networkToSlug, type Network } from '@/lib/network';
 import { describeEvent } from '@/lib/event-label';
 import { EventBadge, PhaseBadge } from '@/components/event-badge';
 import { DbUnreachable } from '@/components/empty';
 import { Mono } from '@/components/mono';
+import { NoRecordFound, WrongNetworkNotice } from '@/components/wrong-network-notice';
 import { solscanTxUrl, solscanAddrUrl } from '@/lib/solscan';
 import { formatTs, formatRelative } from '@/lib/format';
 import { formatTokenAmount, tokenInfoFor } from '@/lib/token-info';
@@ -30,7 +31,23 @@ export default async function EventPage({ params }: Props) {
     }
     throw err;
   }
-  if (!row) notFound();
+  if (!row) {
+    const probe = await probeEventOnOtherNetwork(network, id);
+    return (
+      <NotFoundShell title="Event" network={network} identifier={id}>
+        {probe.foundOnOther ? (
+          <WrongNetworkNotice
+            current={probe.current}
+            other={probe.other}
+            entity="event"
+            identifier={id}
+          />
+        ) : (
+          <NoRecordFound entity="event" identifier={id} network={network} />
+        )}
+      </NotFoundShell>
+    );
+  }
 
   const desc = describeEvent(row);
 
@@ -156,6 +173,30 @@ function Timeline({ row }: { row: EventRow }) {
         );
       })}
     </ol>
+  );
+}
+
+function NotFoundShell({
+  title,
+  network,
+  identifier,
+  children,
+}: {
+  title: string;
+  network: Network;
+  identifier: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-6">
+      <header className="space-y-2">
+        <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
+          {title} · {networkToSlug(network)}
+        </p>
+        <h1 className="break-all font-mono text-2xl font-semibold tracking-tight">{identifier}</h1>
+      </header>
+      {children}
+    </div>
   );
 }
 

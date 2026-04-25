@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { DbUnavailableError, listEvents, listReceipts } from '@/lib/db';
+import { probeAgentOnOtherNetwork } from '@/lib/cross-network';
 import { RpcUnavailableError, getAgentSummaryFor, getTreasuryBalancesFor } from '@/lib/rpc';
 import type { AgentSummary, EventPage, ReceiptPage, TreasuryBalances } from '@/lib/types';
 import { getNetwork } from '@/lib/server-network';
@@ -8,6 +9,7 @@ import { EventsTable } from '@/components/events-table';
 import { ReceiptsTable } from '@/components/receipts-table';
 import { DbUnreachable, RpcUnreachable } from '@/components/empty';
 import { Mono } from '@/components/mono';
+import { WrongNetworkNotice } from '@/components/wrong-network-notice';
 import { solscanAddrUrl } from '@/lib/solscan';
 
 export const dynamic = 'force-dynamic';
@@ -55,8 +57,32 @@ export default async function AgentPage({ params }: Props) {
     notFound();
   }
 
+  // Detect the "viewing the wrong cluster" case: the local feeds are
+  // empty AND the on-chain identity is unregistered AND the SOL/SPL
+  // balances all sit at zero. If the same agent has activity on the
+  // other cluster, surface a switch-network banner so the user
+  // doesn't think the agent is dead.
+  const hasLocalActivity =
+    (eventsRes.ok && eventsRes.data.items.length > 0) ||
+    (receiptsRes.ok && receiptsRes.data.items.length > 0) ||
+    (summaryRes.ok && summaryRes.data.has_identity) ||
+    (balancesRes.ok && hasAnyBalance(balancesRes.data));
+
+  let crossNetwork: Awaited<ReturnType<typeof probeAgentOnOtherNetwork>> | null = null;
+  if (!hasLocalActivity) {
+    crossNetwork = await probeAgentOnOtherNetwork(network, mint);
+  }
+
   return (
     <div className="space-y-8">
+      {crossNetwork?.foundOnOther ? (
+        <WrongNetworkNotice
+          current={crossNetwork.current}
+          other={crossNetwork.other}
+          entity="agent"
+          identifier={mint}
+        />
+      ) : null}
       <header className="space-y-2">
         <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
           Agent · {networkToSlug(network)}
@@ -132,6 +158,16 @@ export default async function AgentPage({ params }: Props) {
       </section>
     </div>
   );
+}
+
+/**
+ * "Has this treasury ever held anything?" — a non-zero SOL or SPL
+ * balance is enough to consider the agent alive on this cluster, even
+ * if it has no Leash events yet (e.g. user just funded the wallet).
+ */
+function hasAnyBalance(b: TreasuryBalances): boolean {
+  if (b.sol.sol > 0) return true;
+  return b.spl.some((row) => row.ui_amount > 0);
 }
 
 function Balances({ data }: { data: TreasuryBalances }) {

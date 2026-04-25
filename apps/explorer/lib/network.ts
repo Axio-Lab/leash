@@ -27,6 +27,10 @@ export function networkToSlug(network: Network): 'solana-devnet' | 'solana-mainn
   return network === 'mainnet' ? 'solana-mainnet' : 'solana-devnet';
 }
 
+export function otherNetwork(network: Network): Network {
+  return network === 'mainnet' ? 'devnet' : 'mainnet';
+}
+
 export function solscanCluster(network: Network): string {
   return network === 'mainnet' ? '' : '?cluster=devnet';
 }
