@@ -17,12 +17,12 @@ under `/v1/seller/*` and `/v1/agents/{mint}/pay-to`. They do no DB
 writes and never call out to a facilitator or RPC node — every
 response is a pure derivation from the API's compile-time registry.
 
-| Endpoint                              | Mirrors                              | Use it for                                  |
-| ------------------------------------- | ------------------------------------ | ------------------------------------------- |
-| `GET  /v1/seller/networks`            | `KNOWN_TOKENS` + `KNOWN_STABLE_SYMBOLS` | Currency / network dropdowns                 |
-| `GET  /v1/seller/facilitator`         | `defaultFacilitatorFor` + config     | Showing the buyer "settles via X" label     |
-| `POST /v1/seller/parse-price`         | `parsePrice` from seller-kit         | Validating a draft `price` string           |
-| `GET  /v1/agents/{mint}/pay-to`       | `findAssetSignerPda` from `mpl-core` | Resolving the on-chain `payTo`              |
+| Endpoint                        | Mirrors                                 | Use it for                              |
+| ------------------------------- | --------------------------------------- | --------------------------------------- |
+| `GET  /v1/seller/networks`      | `KNOWN_TOKENS` + `KNOWN_STABLE_SYMBOLS` | Currency / network dropdowns            |
+| `GET  /v1/seller/facilitator`   | `defaultFacilitatorFor` + config        | Showing the buyer "settles via X" label |
+| `POST /v1/seller/parse-price`   | `parsePrice` from seller-kit            | Validating a draft `price` string       |
+| `GET  /v1/agents/{mint}/pay-to` | `findAssetSignerPda` from `mpl-core`    | Resolving the on-chain `payTo`          |
 
 Every endpoint is **network-scoped via the API key prefix** — there
 is no per-request network parameter. `lsh_test_*` keys see devnet
@@ -65,7 +65,11 @@ Authorization: Bearer lsh_test_...
         }
       ]
     },
-    { "network": "solana-mainnet", "caip2": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc", "...": "..." }
+    {
+      "network": "solana-mainnet",
+      "caip2": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc",
+      "...": "..."
+    }
   ],
   "current": { "network": "solana-devnet", "...": "..." }
 }
@@ -152,12 +156,12 @@ stable instead of the USDC default:
 
 Accepted forms (same parser as the SDK):
 
-| Form                | Resolves to                                     |
-| ------------------- | ----------------------------------------------- |
-| `"$0.001"`          | $0.001 in `currency` (default USDC).            |
-| `"0.5"` (bare num)  | 0.5 units of `currency` (default USDC).         |
-| `"0.5 USDT"`        | 0.5 USDT regardless of `currency`.              |
-| `"1000 USDC"`       | 1000 USDC.                                      |
+| Form               | Resolves to                             |
+| ------------------ | --------------------------------------- |
+| `"$0.001"`         | $0.001 in `currency` (default USDC).    |
+| `"0.5"` (bare num) | 0.5 units of `currency` (default USDC). |
+| `"0.5 USDT"`       | 0.5 USDT regardless of `currency`.      |
+| `"1000 USDC"`      | 1000 USDC.                              |
 
 Unparseable inputs return `422 invalid_request` with a message
 explaining what was tried.

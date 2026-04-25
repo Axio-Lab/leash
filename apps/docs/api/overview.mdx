@@ -97,23 +97,23 @@ See [Authentication](/api/auth) for issuing keys, the
 
 ## Endpoint surface (v1)
 
-| Group         | Endpoints                                                                                               |
-| ------------- | ------------------------------------------------------------------------------------------------------- |
-| Health        | `GET /v1/health`, `GET /v1/version`                                                                     |
-| Agents        | `GET /v1/agents/{mint}`, `GET /v1/agents/{mint}/treasury/balances`                                      |
-| Prepare       | 13 routes mapped 1:1 to the SDK's `prepare*` helpers — see [Prepare → Submit](/api/prepare-submit)      |
-| Submit        | `POST /v1/submit` (signed tx → broadcast)                                                               |
-| Payment links | `POST/GET/PATCH/DELETE /v1/payment-links`, `POST /v1/payment-links/preview`, public `/x/{id}` paywall   |
-| Seller utils  | `GET /v1/seller/networks`, `GET /v1/seller/facilitator`, `POST /v1/seller/parse-price`, `GET /v1/agents/{mint}/pay-to` |
+| Group         | Endpoints                                                                                                                                                                             |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Health        | `GET /v1/health`, `GET /v1/version`                                                                                                                                                   |
+| Agents        | `GET /v1/agents/{mint}`, `GET /v1/agents/{mint}/treasury/balances`                                                                                                                    |
+| Prepare       | 13 routes mapped 1:1 to the SDK's `prepare*` helpers — see [Prepare → Submit](/api/prepare-submit)                                                                                    |
+| Submit        | `POST /v1/submit` (signed tx → broadcast)                                                                                                                                             |
+| Payment links | `POST/GET/PATCH/DELETE /v1/payment-links`, `POST /v1/payment-links/preview`, public `/x/{id}` paywall                                                                                 |
+| Seller utils  | `GET /v1/seller/networks`, `GET /v1/seller/facilitator`, `POST /v1/seller/parse-price`, `GET /v1/agents/{mint}/pay-to`                                                                |
 | Buyer         | `POST /v1/buyer/quote`, `POST /v1/buyer/policy/evaluate`, `POST /v1/buyer/payment/{prepare,execute}`, `POST /v1/buyer/receipt/{finalize,verify}`, `GET /v1/buyer/{networks,currency}` |
-| Events        | `GET /v1/events/{id}`, `GET /v1/events?kind=&agent=&cursor=`                                            |
-| Receipts      | `POST /v1/receipts/{agent}`, `GET /v1/receipts/{agent}`, `GET /v1/receipts/by-hash/{hash}`              |
-| Pull targets  | `POST /v1/agents/{mint}/pull-target` — register an off-API receipts URL the indexer will poll           |
-| Indexer       | `GET /v1/indexer/status`                                                                                |
-| Webhooks      | `POST /v1/webhooks`, `GET /v1/webhooks`, `GET /v1/webhooks/{id}/deliveries`, `DELETE /v1/webhooks/{id}` |
-| Metrics       | `GET /v1/metrics/usage`, `GET /v1/metrics/events`                                                       |
-| Admin         | `POST/GET /v1/admin/api-keys`, `POST /v1/admin/api-keys/{id}/disable` — operator-only                   |
-| OpenAPI       | `GET /openapi.json` — full 3.1 spec (also rendered at [API reference](/api/reference))                  |
+| Events        | `GET /v1/events/{id}`, `GET /v1/events?kind=&agent=&cursor=`                                                                                                                          |
+| Receipts      | `POST /v1/receipts/{agent}`, `GET /v1/receipts/{agent}`, `GET /v1/receipts/by-hash/{hash}`                                                                                            |
+| Pull targets  | `POST /v1/agents/{mint}/pull-target` — register an off-API receipts URL the indexer will poll                                                                                         |
+| Indexer       | `GET /v1/indexer/status`                                                                                                                                                              |
+| Webhooks      | `POST /v1/webhooks`, `GET /v1/webhooks`, `GET /v1/webhooks/{id}/deliveries`, `DELETE /v1/webhooks/{id}`                                                                               |
+| Metrics       | `GET /v1/metrics/usage`, `GET /v1/metrics/events`                                                                                                                                     |
+| Admin         | `POST/GET /v1/admin/api-keys`, `POST /v1/admin/api-keys/{id}/disable` — operator-only                                                                                                 |
+| OpenAPI       | `GET /openapi.json` — full 3.1 spec (also rendered at [API reference](/api/reference))                                                                                                |
 
 ## What's next
 

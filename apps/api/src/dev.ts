@@ -11,7 +11,7 @@ import { serve } from '@hono/node-server';
 import { boot } from './bootstrap.js';
 import { createConfig } from './config.js';
 import { createLeashApiApp } from './server.js';
-import { getCache } from './storage/redis.js';
+import { getCache, pingCache } from './storage/redis.js';
 import { getDb } from './storage/turso.js';
 import { startWebhookWorker } from './webhooks/worker.js';
 
@@ -20,6 +20,7 @@ const db = getDb(config);
 const cache = getCache(config);
 
 await boot({ db, config });
+await pingCache(config, cache);
 
 const app = createLeashApiApp({ config, db, cache });
 const webhookHandle = startWebhookWorker(db);

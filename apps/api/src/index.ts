@@ -16,7 +16,7 @@ export type { LeashApiConfig } from './config.js';
 export { boot } from './bootstrap.js';
 export { getDb, runMigrations, _resetDbForTests } from './storage/turso.js';
 export type { DbClient } from './storage/turso.js';
-export { getCache, _resetCacheForTests } from './storage/redis.js';
+export { getCache, pingCache, _resetCacheForTests } from './storage/redis.js';
 export {
   createApiKey,
   generateApiKey,

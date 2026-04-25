@@ -9,16 +9,16 @@ API can't sign for you. Instead, the eight `/v1/buyer/*` endpoints
 break the buyer flow down into discrete primitives that mirror the
 TypeScript [`@leash/buyer-kit`](/sdk/buyer-kit) one-to-one:
 
-| Endpoint                            | Purpose                                                       | IO   |
-| ----------------------------------- | ------------------------------------------------------------- | ---- |
-| `POST /v1/buyer/quote`              | Probe a URL, decode `payment-required`, return `accepts[]`    | HTTP |
-| `POST /v1/buyer/policy/evaluate`    | Pure RulesV1 gate (host / budget / per-call ceiling)          | None |
-| `POST /v1/buyer/payment/prepare`    | Build an unsigned SPL `TransferChecked` from buyer ATA        | None |
-| `POST /v1/buyer/payment/execute`    | Replay the seller request with `X-PAYMENT` + ingest receipt   | HTTP |
-| `POST /v1/buyer/receipt/finalize`   | Compute `receipt_hash` for a draft (pure)                     | None |
-| `POST /v1/buyer/receipt/verify`     | Verify a chain (hashes / nonces / `prev_receipt_hash` links)  | None |
-| `GET  /v1/buyer/networks`           | Buyer-side network catalog                                    | None |
-| `GET  /v1/buyer/currency`           | Stablecoins payable on the caller-scoped network              | None |
+| Endpoint                          | Purpose                                                      | IO   |
+| --------------------------------- | ------------------------------------------------------------ | ---- |
+| `POST /v1/buyer/quote`            | Probe a URL, decode `payment-required`, return `accepts[]`   | HTTP |
+| `POST /v1/buyer/policy/evaluate`  | Pure RulesV1 gate (host / budget / per-call ceiling)         | None |
+| `POST /v1/buyer/payment/prepare`  | Build an unsigned SPL `TransferChecked` from buyer ATA       | None |
+| `POST /v1/buyer/payment/execute`  | Replay the seller request with `X-PAYMENT` + ingest receipt  | HTTP |
+| `POST /v1/buyer/receipt/finalize` | Compute `receipt_hash` for a draft (pure)                    | None |
+| `POST /v1/buyer/receipt/verify`   | Verify a chain (hashes / nonces / `prev_receipt_hash` links) | None |
+| `GET  /v1/buyer/networks`         | Buyer-side network catalog                                   | None |
+| `GET  /v1/buyer/currency`         | Stablecoins payable on the caller-scoped network             | None |
 
 You stay in control of the signer. The API stays in control of the
 receipt index, watchlist, and webhook fan-out. Together they let
@@ -384,7 +384,13 @@ Authorization: Bearer lsh_test_...
       "facilitator": "https://facilitator.svmacc.tech",
       "accepts": ["USDC", "USDT", "USDG"],
       "currencies": [
-        { "symbol": "USDC", "name": "USD Coin", "mint": "4zMM…", "decimals": 6, "program": "spl-token" }
+        {
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "mint": "4zMM…",
+          "decimals": 6,
+          "program": "spl-token"
+        }
       ]
     }
   ],
@@ -406,9 +412,27 @@ Authorization: Bearer lsh_test_...
 {
   "network": "solana-devnet",
   "items": [
-    { "symbol": "USDC", "name": "USD Coin", "mint": "4zMM…", "decimals": 6, "program": "spl-token" },
-    { "symbol": "USDT", "name": "Tether USD", "mint": "Es9v…", "decimals": 6, "program": "spl-token" },
-    { "symbol": "USDG", "name": "Global Dollar", "mint": "...",  "decimals": 6, "program": "spl-token-2022" }
+    {
+      "symbol": "USDC",
+      "name": "USD Coin",
+      "mint": "4zMM…",
+      "decimals": 6,
+      "program": "spl-token"
+    },
+    {
+      "symbol": "USDT",
+      "name": "Tether USD",
+      "mint": "Es9v…",
+      "decimals": 6,
+      "program": "spl-token"
+    },
+    {
+      "symbol": "USDG",
+      "name": "Global Dollar",
+      "mint": "...",
+      "decimals": 6,
+      "program": "spl-token-2022"
+    }
   ]
 }
 ```

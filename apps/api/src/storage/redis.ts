@@ -29,6 +29,31 @@ export type CacheClient = {
 
 class RedisCacheClient implements CacheClient {
   constructor(private readonly r: InstanceType<typeof Redis>) {}
+  /** Force the lazy connection to establish (or surface its error). */
+  async connect(): Promise<void> {
+    if (this.r.status === 'ready') return;
+    if (this.r.status === 'wait' || this.r.status === 'end') {
+      await this.r.connect();
+      return;
+    }
+    // 'connecting' | 'connect' | 'reconnecting' — wait for ready/end.
+    await new Promise<void>((resolve, reject) => {
+      const onReady = () => {
+        cleanup();
+        resolve();
+      };
+      const onErr = (e: Error) => {
+        cleanup();
+        reject(e);
+      };
+      const cleanup = () => {
+        this.r.off('ready', onReady);
+        this.r.off('error', onErr);
+      };
+      this.r.once('ready', onReady);
+      this.r.once('error', onErr);
+    });
+  }
   async get(key: string): Promise<string | null> {
     return this.r.get(key);
   }
@@ -132,6 +157,51 @@ export function getCache(config: LeashApiConfig): CacheClient {
   // is not auto-swapped — operators get a 5xx and clear log instead).
   cached = new RedisCacheClient(r);
   return cached;
+}
+
+/** Mask user/password in a redis URL for safe logging. */
+function maskRedisUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    if (u.password) u.password = '***';
+    if (u.username) u.username = '***';
+    return u.toString();
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Best-effort connectivity probe used at boot for an early, friendly log.
+ * Does NOT throw — Redis being down at start time must not block the
+ * server (in-memory fallback is not auto-swapped, but per-request errors
+ * are easier to debug than a refusal to boot).
+ */
+export async function pingCache(config: LeashApiConfig, cache: CacheClient): Promise<void> {
+  if (config.redisUrl == null) {
+    // eslint-disable-next-line no-console
+    console.log(
+      '[leash-api] cache: in-memory fallback (set LEASH_API_REDIS_URL for Redis-backed rate-limit + idempotency)',
+    );
+    return;
+  }
+  const url = maskRedisUrl(config.redisUrl);
+  const probeKey = `__leash:ping:${process.pid}`;
+  try {
+    if (cache instanceof RedisCacheClient) {
+      await cache.connect();
+    }
+    await cache.set(probeKey, String(Date.now()), { ttlSec: 5 });
+    await cache.del(probeKey);
+    // eslint-disable-next-line no-console
+    console.log(`[leash-api] cache: redis connected (${url})`);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[leash-api] cache: redis UNREACHABLE at ${url} — requests will 5xx until it recovers`,
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
 
 export function _resetCacheForTests(): void {

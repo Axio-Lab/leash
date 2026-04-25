@@ -213,15 +213,15 @@ without bundling JS.
 
 ## Deciding between the three
 
-| Question                                       | Hosted link               | Sidecar (seller-kit)                          | Edge (buyer/seller v1 endpoints)             |
-| ---------------------------------------------- | ------------------------- | --------------------------------------------- | -------------------------------------------- |
-| Is your response body a fixed JSON payload?    | **Yes — easiest**         | Works.                                        | Works.                                       |
-| Is your API in TypeScript / Node?              | Yes (any).                | **Recommended**.                              | Works, but heavier.                          |
-| Do you want zero new infrastructure?           | **Yes — none**.           | Yes — same process as your API.               | Needs an edge worker or extra route.         |
-| Does the language need to stay flexible?       | **Yes — any HTTP client** | No — TS only.                                 | **Yes — anything with HTTP**.                |
-| Do you want a sharable URL?                    | **Yes — built-in**.       | You'd make one yourself.                      | You'd make one yourself.                     |
-| Do you need 100% offline operation?            | No — paywall is hosted.   | Yes — `receipts: false`.                      | No — always calls the Leash API.             |
-| Do you want webhook + retry replay for free?   | **Yes** — `webhook_url`.  | Coming via runner forward.                    | Yes today — the API replays from `events`.   |
+| Question                                     | Hosted link               | Sidecar (seller-kit)            | Edge (buyer/seller v1 endpoints)           |
+| -------------------------------------------- | ------------------------- | ------------------------------- | ------------------------------------------ |
+| Is your response body a fixed JSON payload?  | **Yes — easiest**         | Works.                          | Works.                                     |
+| Is your API in TypeScript / Node?            | Yes (any).                | **Recommended**.                | Works, but heavier.                        |
+| Do you want zero new infrastructure?         | **Yes — none**.           | Yes — same process as your API. | Needs an edge worker or extra route.       |
+| Does the language need to stay flexible?     | **Yes — any HTTP client** | No — TS only.                   | **Yes — anything with HTTP**.              |
+| Do you want a sharable URL?                  | **Yes — built-in**.       | You'd make one yourself.        | You'd make one yourself.                   |
+| Do you need 100% offline operation?          | No — paywall is hosted.   | Yes — `receipts: false`.        | No — always calls the Leash API.           |
+| Do you want webhook + retry replay for free? | **Yes** — `webhook_url`.  | Coming via runner forward.      | Yes today — the API replays from `events`. |
 
 Most teams start with a **hosted payment link** for the first
 revenue endpoint (one curl, no code), move to **sidecar** when the
