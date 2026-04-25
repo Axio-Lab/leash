@@ -1,71 +1,84 @@
 ---
 title: 'Monetise an existing API'
-description: Charge per call on a SaaS endpoint you already host, without rewriting it.
+description: >-
+  Charge per call on a SaaS endpoint you already host, without rewriting it.
+  Covers hosted payment links, seller-kit sidecar, and polyglot edge mode.
 ---
 
-Leash is the easiest way to monetise an HTTP API. You keep your
-endpoint exactly as it is. Leash adds the 402, settles the SPL
-transfer through a real x402 facilitator, hands the proceeds to a
-treasury you control, and writes a chained receipt for every call —
-all visible on [`explorer.leash.market`](https://explorer.leash.market).
+Leash adds the x402 `402`, settles the SPL transfer through a real
+facilitator, credits your agent's **Asset Signer PDA** treasury, and
+writes a chained `ReceiptV1` for every call — all visible on
+[`explorer.leash.market`](https://explorer.leash.market).
 
-Three integration shapes are supported, in increasing order of
-control:
+## Pick your integration shape
 
-1. **Hosted payment link** — the fastest. POST a JSON document to
-   the API, get a public `https://api.leash.market/x/{id}` paywall
-   you can share. No code, no infrastructure, no SDK.
-2. **Sidecar mode (Hono / Node middleware)** — drop
-   [`@leash/seller-kit`](/sdk/seller-kit) into your existing Node
-   service. Add three env vars, ship.
-3. **Edge mode (any language)** — sit a tiny worker / proxy in
-   front of your route. Use the buyer + seller endpoints to wire
-   x402 from Python / Go / Rust / a Cloudflare Worker.
+| Shape                             | Best when                                                             | You ship                                         |
+| --------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------ |
+| **Hosted payment link**           | Fixed or templated JSON response, zero new infra, sharable URL        | `POST /v1/payment-links` → share `share_url`     |
+| **Sidecar (`@leash/seller-kit`)** | Your API is TypeScript / Hono; you want the route inside your process | `createSeller` + env for receipt fan-out         |
+| **Edge (any language)**           | Python / Go / Rust / Worker in front of your route                    | Buyer + seller HTTP utilities, or link + webhook |
 
-All three produce the same on-chain result, the same explorer
-entries, and the same receipt feed.
+All three settle the same way on-chain and emit the same explorer /
+metrics events once the seller agent is set up correctly.
 
-## Before you monetise: create and prep your agent
+## Step 0 — Create your seller agent (once per mint)
 
-Every monetised route needs a seller agent first. The `payTo` address
-used in x402 is derived from that agent's asset, and all explorer /
-metrics attribution keys off that same mint.
+Every monetised route needs an **owner agent** (one MPL Core mint). The
+x402 `payTo` is derived from that asset; explorer and metrics key off
+the same mint.
 
-Run this once per agent:
+**Create the mint + Agent Identity**
 
-1. **Create the agent asset + identity.** Either:
-   - over HTTP: [`POST /v1/agents/prepare`](/api/agents) (sign →
-     `POST /v1/submit`) — works from any language, and
-     auto-registers the new asset + treasury PDA on the indexer
-     watchlist; or
-   - in TypeScript:
-     [`prepareAgentMint`](/sdk/registry-utils) /
-     [`createAgent`](/sdk/registry-utils) from
-     `@leash/registry-utils`. Both paths produce identical on-chain
-     state.
-2. **Register/delegate execution via API**:
-   - `POST /v1/agents/{mint}/executive/register/prepare`
-   - `POST /v1/agents/{mint}/executive/delegate/prepare`
-   - `POST /v1/agents/{mint}/delegation/prepare`
-     (each followed by sign → `POST /v1/submit`)
-3. **Provision treasury token accounts**:
-   `POST /v1/agents/{mint}/treasury/provision/prepare`
-   (sign → submit, or accept `no_op` if already provisioned).
-4. **Indexer visibility follow-up (important)**:
-   call `GET /v1/agents/{mint}/treasury/balances` once. This
-   registers the treasury PDA + all ATAs so incoming fund events are
-   tracked and show up on explorer/metrics.
+- **HTTP (any language):** [`POST /v1/agents/prepare`](/api/agents) →
+  sign `transaction.base64` → [`POST /v1/submit`](/api/prepare-submit)
+  → poll [`GET /v1/events/{id}`](/api/prepare-submit) until
+  `phase: confirmed`. The prepare path auto-watchlists the new agent for
+  the indexer.
+- **TypeScript:** [`createAgent`](/sdk/registry-utils) or
+  [`prepareAgentMint`](/sdk/registry-utils) +
+  [`sendPreparedAgentMint`](/sdk/registry-utils) from
+  `@leash/registry-utils` — same on-chain result as the API.
 
-For a copy-paste sequence with request examples, see
-[Explorer tracking](/api/explorer-tracking#standard-integration-sequences).
+**Seller-only checklist (receive USDC / USDT / USDG — payment links,
+seller-kit, or any earn flow)**
 
-## Hosted payment links (no code path)
+You are **not** spending from the treasury here; you only need inbound
+ATAs and visibility:
 
-If your monetised endpoint is "return this JSON when paid", a
-**payment link** is one HTTP call away:
+1. **Provision ATAs** for every stable you list in `accepts` (or the
+   link will fail at settle when the treasury has no account for that
+   mint): `POST /v1/agents/{mint}/treasury/provision/prepare` → sign →
+   `POST /v1/submit` (idempotent; `no_op` if already done).
+2. **Enrol the treasury for explorer fund events:** call
+   [`GET /v1/agents/{mint}/treasury/balances`](/api/treasury) once after
+   provisioning. That registers the PDA + ATAs on the watchlist. See
+   [Explorer tracking](/api/explorer-tracking#standard-integration-sequences)
+   for the full copy-paste sequence.
+
+**Optional — same mint will also _pay_ x402 (buyer capability)**
+
+Only then wire the executive + SPL spend delegation:
+
+- `POST /v1/agents/{mint}/executive/register/prepare` → submit
+- `POST /v1/agents/{mint}/executive/delegate/prepare` → submit
+- `POST /v1/agents/{mint}/delegation/prepare` (SPL `Approve` from
+  treasury to executive) → submit
+
+Each step is prepare → sign → submit. Details:
+[Prepare → Submit](/api/prepare-submit), [Treasury](/api/treasury).
+
+## Try it in the playground (no API key in the browser)
+
+The web app ships a **Payment-Link Builder** at `/seller` — same x402
+semantics as the hosted API, useful before you script `curl`. Walkthrough:
+[Create a payment link](/guides/create-an-endpoint).
+
+## Hosted payment links (fastest path)
+
+One `POST` creates a public paywall on `api.leash.market`:
 
 ```bash
-curl -X POST https://api.leash.market/v1/payment-links \
+curl -sS -X POST https://api.leash.market/v1/payment-links \
   -H "Authorization: Bearer $LEASH_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -82,26 +95,20 @@ curl -X POST https://api.leash.market/v1/payment-links \
   }'
 ```
 
-You get back a `share_url` like
-`https://api.leash.market/x/01HVTQX4GZ`. Share it. Buyers (or
-agents) hit it, see a `402` with `PAYMENT-REQUIRED`, sign an SPL
-transfer, replay, and your configured response body comes back.
-Funds land on the **owner agent's Asset Signer PDA**.
+The JSON body includes `share_url` (public paywall), `pay_to`, and
+`accepts[]`. Buyers hit it, receive `402` + `PAYMENT-REQUIRED`, sign
+`TransferChecked`, replay with `X-PAYMENT`, and get your configured
+response after settlement. Full CRUD, hooks, and counters:
+[Payment links](/api/payment-links).
 
-This is the right path when:
-
-- The response body is a fixed (or templated) JSON payload.
-- You want zero infrastructure overhead.
-- You want a sharable link, not a route inside a larger app.
-
-See [Payment links](/api/payment-links) for the full CRUD surface,
-the public `/x/{id}` semantics, and how `payment_link.settled`
-events flow into webhooks and the explorer.
+To **proxy** your existing SaaS after payment, set `response` to forward
+to your backend (see that page for the `proxy` / template fields) so
+you do not duplicate business logic in static JSON.
 
 ## End-to-end flow (sidecar / edge)
 
-When you _do_ have a real route to monetise, the picture looks the
-same regardless of which integration shape you pick:
+When the paid response comes from a route you already run, the
+handshake is the same:
 
 ```mermaid
 sequenceDiagram
@@ -113,9 +120,9 @@ sequenceDiagram
 
   Buyer->>Edge: GET /quote
   Edge-->>Buyer: 402 PAYMENT-REQUIRED
-  Buyer->>Buyer: build SPL transfer (delegate of agent treasury)
+  Buyer->>Buyer: build SPL transfer (delegate of buyer treasury)
   Buyer->>Edge: GET /quote with X-PAYMENT
-  Edge->>API: facilitator settle (via seller-kit)
+  Edge->>API: facilitator settle (via seller-kit or hosted paywall)
   API->>Chain: send SPL TransferChecked
   Chain-->>API: tx_sig
   API-->>Edge: 200 + PAYMENT-RESPONSE
@@ -125,17 +132,15 @@ sequenceDiagram
   API->>API: write receipt (kind=earn) + receipt.published event
 ```
 
-The buyer never sees your service until they pay. Your service
-never has to learn x402 — Leash does that handshake on the edge.
+The buyer does not reach your origin until they pay. Your origin does
+not need to speak x402 — Leash handles that at the edge or inside the
+hosted paywall.
 
 ## Sidecar mode (TypeScript / Hono)
 
-If your API is a Node service, the cleanest path is
-[`@leash/seller-kit`](/sdk/seller-kit). It gives you
-`createSeller(app, options)` that adds the 402 middleware in one
-line, optionally forwards every produced receipt to the Leash API
-on `api.leash.market`, and shows up in the explorer with no extra
-code.
+[`@leash/seller-kit`](/sdk/seller-kit) exposes `createSeller(app,
+options)` — real `@x402/hono` middleware, Asset Signer PDA as `payTo`,
+optional receipt POST to the Leash API when both env vars are set.
 
 ```ts
 import { Hono } from 'hono';
@@ -152,7 +157,7 @@ createSeller(app, {
   routes: {
     'GET /quote': { price: '$0.01', currency: 'USDC' },
   },
-  // Receipts forward automatically when both env vars are set:
+  // Receipts forward automatically when both are set:
   //   LEASH_API_URL=https://api.leash.market
   //   LEASH_API_KEY=lsh_live_...
 });
@@ -160,109 +165,72 @@ createSeller(app, {
 app.get('/quote', (c) => c.json({ pair: 'SOL/USD', price: 142.71 }));
 ```
 
-The `LEASH_SELLER_AGENT` value must be a real, already-created agent
-mint from the setup flow above. If you skip agent creation/provision,
-payments may settle but your explorer/indexer visibility will be
-partial (especially treasury fund events).
+`LEASH_SELLER_AGENT` must be a mint that completed **Step 0** (create +
+provision + balances ping). Skipping provisioning does not block every
+settle, but treasury **fund** lines on the explorer may never appear.
 
-That's the entire integration. The sidecar will:
-
-- Return `402` for unpaid callers with the right `PAYMENT-REQUIRED`
-  headers.
-- Verify the buyer's signature, hand it to the configured facilitator,
-  and re-run the request once the SPL transfer lands.
-- Build a `ReceiptV1` for every settled call and POST it to your
-  agent's `/v1/receipts/{agent}` endpoint on the Leash API. Set
-  `receipts: false` to keep receipts purely local.
-
-See [`@leash/seller-kit`](/sdk/seller-kit) for the full options surface.
+**How forwarding works:** when `LEASH_API_URL` and `LEASH_API_KEY` are
+set, seller-kit's `onReceipt` hook POSTs each settled `ReceiptV1` to
+`POST /v1/receipts/{agent}` on the API. That ingests the row, emits
+`receipt.published`, and joins the explorer timeline. Omit those env
+vars and receipts stay local (`receipts: false` is explicit opt-out).
 
 ## Edge mode (any language)
 
-If your service is in Python / Go / Rust / a Cloudflare Worker, the
-two integration patterns are:
+### Option A — payment link + webhook
 
-### Option A — point a payment link at your service
+Create a link with `webhook_url` pointing at your backend. On settle,
+Leash POSTs a `payment_link.settled` payload (see
+[Payment links](/api/payment-links)) so you can flip entitlements,
+enqueue jobs, or issue API keys without the buyer hitting your service
+first.
 
-The simplest edge integration is to **forward** the payment link's
-configured response. You set `webhook_url` on the link to your own
-backend; we POST a `payment_link.settled` event there with the
-`tx_sig` and `payment_link_id`; you flip a row in your DB
-("user X has access for this call") and respond on the next request.
+### Option B — buyer HTTP utilities
 
-This is the right shape when access is granted asynchronously
-(API keys, queue jobs, downloads, etc).
-
-### Option B — script a buyer / seller dance with the v1/buyer endpoints
-
-For a true 402 dance _on a route you already serve_, the
-[buyer endpoints](/api/buyer) give you HTTP parity with
-`@leash/buyer-kit`. From your service's edge worker:
+For a true 402 dance on a URL you control, the
+[buyer endpoints](/api/buyer) mirror `@leash/buyer-kit`:
 
 ```bash
-# 1. Quote a target URL on behalf of a buyer.
-curl -X POST https://api.leash.market/v1/buyer/quote \
+curl -sS -X POST https://api.leash.market/v1/buyer/quote \
   -H "Authorization: Bearer $LEASH_API_KEY" \
+  -H "Content-Type: application/json" \
   -d '{ "url": "https://api.example.com/quote", "method": "GET" }'
 
-# 2. Once you have an X-PAYMENT signed by the buyer's wallet, replay.
-curl -X POST https://api.leash.market/v1/buyer/payment/execute \
+curl -sS -X POST https://api.leash.market/v1/buyer/payment/execute \
   -H "Authorization: Bearer $LEASH_API_KEY" \
+  -H "Content-Type: application/json" \
   -d '{ "url": "https://api.example.com/quote", "x_payment": "<base64>", "agent": "...", "nonce": 1 }'
 ```
 
-The execute endpoint replays the request, parses the seller's
-`PAYMENT-RESPONSE`, finalizes a `spend` `ReceiptV1`, ingests it into
-your account, and returns the seller's response body verbatim plus
-the `tx_sig`. See [Buyer endpoints](/api/buyer) for every field.
+[`POST /v1/buyer/payment/execute`](/api/buyer) replays the request,
+parses `PAYMENT-RESPONSE`, finalises a **spend** receipt, and returns the
+seller body plus `tx_sig`.
 
-For the seller side from a polyglot service, the
-[seller utilities](/api/seller-utils) (`networks`, `facilitator`,
-`parse-price`, `pay-to`) are pure HTTP — useful for validating
-prices, resolving the `payTo` PDA, and rendering your own 402
-without bundling JS.
+For seller-side helpers without Node (`networks`, `facilitator`,
+`parse-price`, `pay-to`), use [Seller utilities](/api/seller-utils).
 
-## What you get out of the box
+## What you get
 
-- **Pay-per-call settlement.** Real SPL transfer, real on-chain tx,
-  real explorer link.
-- **Hosted paywalls.** [Payment links](/api/payment-links) at
-  `/x/{id}` — no infrastructure, sharable URL, full counters.
-- **Receipts feed.** `GET /v1/receipts/{agent}` is ordered, paginated,
-  cursor-based. The chain is verifiable end-to-end with
-  `verifyReceiptChain` from `@leash/core` — or via
-  [`POST /v1/buyer/receipt/verify`](/api/buyer#post-v1buyerreceiptverify)
-  if you prefer the HTTP surface.
-- **Explorer entries.** Each settled call shows up at
-  `https://explorer.leash.market/tx/<signature>` and
-  `https://explorer.leash.market/agent/<mint>`.
-- **Treasury control.** Funds land on the Asset Signer PDA. Use
-  `POST /v1/agents/{mint}/treasury/withdraw/prepare` to pull them out
-  to any wallet, signed by the asset's owner.
-- **Refunds & cashback.** On the [roadmap](/api/roadmap#refunds--cashback),
-  **not yet shipped**. The planned surface is `POST /v1/payments/refund`
-  (full inverse transfer) and `POST /v1/payments/cashback` (partial
-  rebate based on a `CashbackRulesV1` doc you set per agent —
-  e.g. 1% back on every settled call, tiered by ticket size, or a
-  loyalty-window rebate every Nth call). Both will write a
-  `refund` / `cashback` receipt linked back to the original `tx_sig`
-  so the chain stays verifiable end-to-end. Until then, run a manual
-  `POST /v1/agents/{mint}/treasury/withdraw/prepare` against the
-  buyer's mint as a one-off rebate.
+- **Pay-per-call settlement** — real SPL transfer, explorer `tx/` link.
+- **Hosted paywalls** — `/x/{id}` with counters and idempotent creates.
+- **Receipt feed** — `GET /v1/receipts/{agent}`; verify with
+  `@leash/core` or [`POST /v1/buyer/receipt/verify`](/api/buyer).
+- **Treasury control** — owner-driven withdraw via
+  [`/v1/agents/{mint}/treasury/.../prepare`](/api/treasury).
 
-## Deciding between the three
+Automated **refunds / cashback** are on the [roadmap](/api/roadmap) (not
+shipped yet). Until then, use owner withdraw to move stables manually.
 
-| Question                                     | Hosted link               | Sidecar (seller-kit)            | Edge (buyer/seller v1 endpoints)           |
-| -------------------------------------------- | ------------------------- | ------------------------------- | ------------------------------------------ |
-| Is your response body a fixed JSON payload?  | **Yes — easiest**         | Works.                          | Works.                                     |
-| Is your API in TypeScript / Node?            | Yes (any).                | **Recommended**.                | Works, but heavier.                        |
-| Do you want zero new infrastructure?         | **Yes — none**.           | Yes — same process as your API. | Needs an edge worker or extra route.       |
-| Does the language need to stay flexible?     | **Yes — any HTTP client** | No — TS only.                   | **Yes — anything with HTTP**.              |
-| Do you want a sharable URL?                  | **Yes — built-in**.       | You'd make one yourself.        | You'd make one yourself.                   |
-| Do you need 100% offline operation?          | No — paywall is hosted.   | Yes — `receipts: false`.        | No — always calls the Leash API.           |
-| Do you want webhook + retry replay for free? | **Yes** — `webhook_url`.  | Coming via runner forward.      | Yes today — the API replays from `events`. |
+## Which shape should I pick?
 
-Most teams start with a **hosted payment link** for the first
-revenue endpoint (one curl, no code), move to **sidecar** when the
-response body becomes dynamic, and reach for **edge mode** when
-polyglot services join the rail.
+| Question                    | Hosted link    | Sidecar             | Edge         |
+| --------------------------- | -------------- | ------------------- | ------------ |
+| Response is fixed JSON      | **Yes**        | Yes                 | Yes          |
+| API is TypeScript / Node    | Yes            | **Yes**             | Possible     |
+| Zero new processes          | **Yes**        | Same as your server | Needs worker |
+| Language must stay polyglot | **Yes** (curl) | No                  | **Yes**      |
+| Sharable URL out of the box | **Yes**        | DIY                 | DIY          |
+
+Most teams ship the first dollar with a **hosted payment link**, move
+to **seller-kit** when the response is dynamic and already lives in
+Node, and use **edge mode** when the stack is not TypeScript.
