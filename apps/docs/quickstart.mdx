@@ -46,7 +46,7 @@ Once the web app is up at [http://localhost:3000](http://localhost:3000):
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `/agents/new`    | Mint a Core asset + Agent Identity. Set behaviour rules (or "limitless") and the initial spend allowance (USDC on devnet; more stables on mainnet). | Privy embedded wallet (asset owner). Approves the executive as SPL delegate. |
 | `/agents/[mint]` | Inspect identity, treasury balances, and the live spend allowance. Top up, adjust, or revoke the delegation.                                        | Privy embedded wallet.                                                       |
-| `/seller`        | **Payment-Link Builder.** Settlement currency + optional "also accept" stables → shareable `/x/<id>` x402 paywall.                                  | Runner stores descriptors; `/x/<id>` settles via `facilitator.svmacc.tech`.  |
+| `/seller`        | **Payment-Link Builder.** Settlement currency + optional "also accept" stables → shareable `/x/<id>` x402 paywall.                                  | Runner stores descriptors; `/x/<id>` settles via `devnet-facilitator.leash.market` (Leash default). |
 | `/buyer`         | **Autonomous-agent cockpit.** **Pay with** (USDC / USDT / USDG) + policy rules → fire x402 URLs; treasury readout follows the selected mint.        | Privy wallet signs as the agent's registered Executive (no keys in browser). |
 
 See [Create a payment link](/guides/create-an-endpoint),

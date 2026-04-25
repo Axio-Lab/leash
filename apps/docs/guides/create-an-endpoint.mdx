@@ -35,24 +35,23 @@ stores your `EndpointV1` descriptors and the Next.js app exposes them at
 
 When someone pays a link, an x402 **facilitator** verifies the buyer’s signed SPL transfer and broadcasts it as the Solana **fee payer** (so the buyer only spends stables, not SOL for fees). The facilitator URL is stamped on every `ReceiptV1.facilitator` and appears in payment-link discovery JSON (the `docs` field points here).
 
-### Built-in defaults by network (`@leash/core`)
+### Built-in defaults by network
 
-If you do not pass a `facilitator` URL, Leash picks a **sensible public default** per cluster so a new project works out of the box. Those defaults are **not exclusive** — they are just two well-known hosts that implement the same x402 + Solana **exact** SVM surface as everyone else.
+**`@leash/facilitator`** is now the **default for both networks**:
 
-| Network (`solana-*`) | Default URL (when unset)            | Who runs it (examples)         |
-| -------------------- | ----------------------------------- | ------------------------------ |
-| `solana-devnet`      | `https://facilitator.svmacc.tech`   | SVMacc (gas-sponsored devnet). |
-| `solana-mainnet`     | `https://facilitator.payai.network` | PayAI (gas-sponsored mainnet). |
+| Network (`solana-*`) | Default URL                               | Notes |
+| -------------------- | ----------------------------------------- | ----- |
+| `solana-devnet`      | `https://devnet-facilitator.leash.market` | Leash-operated devnet facilitator. Gas-sponsored; Token-2022 + `exact` SVM scheme. |
+| `solana-mainnet`     | `https://facilitator.leash.market`        | Leash-operated mainnet facilitator. Gas-sponsored; same wire contract. |
 
-### Other facilitators (you are not locked in)
+### Other facilitators (fully supported)
 
-**Any** HTTPS base URL that implements the x402 facilitator contract your kits already speak — `GET /supported`, `POST /verify`, `POST /settle` — and advertises the **exact** SVM scheme for the network you are on can be used instead. Point at it with:
+You are **not locked in** to the Leash facilitators. Any HTTPS base URL that implements x402's `GET /supported`, `POST /verify`, `POST /settle` and advertises the **exact** SVM scheme for your cluster works as a drop-in replacement. Override via:
 
-- `facilitator: 'https://your-facilitator.example.com'` on `createBuyer` / `createSeller`, or
-- `LEASH_FACILITATOR_URL` / `NEXT_PUBLIC_LEASH_FACILITATOR_URL` / `LEASH_API_FACILITATOR_URL` (depending on surface), or
-- the hosted **Leash** binary at `https://facilitator.leash.dev` (devnet v0.1) or **self-hosted** [`@leash/facilitator`](/guides/run-a-facilitator) on `http://localhost:8787` or your own domain — same wire shape as third-party facilitators from the x402 ecosystem (e.g. other PayAI / Coinbase / community deployments), as long as they expose a compatible `/supported` for your cluster.
+- `facilitator: 'https://…'` on `createBuyer` / `createSeller`, or
+- `LEASH_FACILITATOR_URL` / `NEXT_PUBLIC_LEASH_FACILITATOR_URL` / `LEASH_API_FACILITATOR_URL` (depending on surface).
 
-Resolution order for SDK defaults is in [`defaultFacilitatorFor`](https://github.com/leash-market/leash/blob/main/packages/core/src/x402/facilitator.ts).
+Third-party examples: `facilitator.svmacc.tech` (devnet), `facilitator.payai.network` (mainnet), community deployments, or your own self-hosted instance. Resolution order: [`defaultFacilitatorFor`](https://github.com/leash-market/leash/blob/main/packages/core/src/x402/facilitator.ts).
 
 ### Playground (`apps/web`)
 
@@ -65,9 +64,9 @@ Both are optional; if unset, the app uses the same defaults as the table above. 
 
 Payment links served at `https://api.leash.market/x/{id}` use whatever the API operator configured as **`LEASH_API_FACILITATOR_URL`** on the server (falls back to the public devnet default if unset). That is independent of the playground env vars.
 
-### Self-hosting the Leash facilitator binary (optional)
+### Self-hosting or using a third-party facilitator (optional)
 
-`@leash/facilitator` is **one** supported backend — useful when you want an operator-controlled devnet host (`https://facilitator.leash.dev`) or a private instance (`LEASH_FACILITATOR_NETWORKS`, dedicated fee payer, TLS on mainnet). It is wire-compatible with any other x402 SVM facilitator; pick whichever host you trust. Walkthrough: [Run a Leash facilitator](/guides/run-a-facilitator).
+The Leash defaults work for most users. If you need a custom settlement path — self-hosted [`@leash/facilitator`](/guides/run-a-facilitator), a community host, or a third-party provider like `facilitator.svmacc.tech` / `facilitator.payai.network` — pass a `facilitator:` override or set the env var. The wire contract is the same across all of them. See [Run a Leash facilitator](/guides/run-a-facilitator).
 
 ### Related docs
 
@@ -114,7 +113,7 @@ each settlement the runner will POST a versioned `WebhookPayload`:
     "agent": "33Qv…",
     "network": "solana-devnet",
     "amount": { "amount": "1000", "currency": "USDC" },
-    "facilitator": "https://facilitator.svmacc.tech",
+    "facilitator": "https://devnet-facilitator.leash.market",
     "explorer": {
       "tx": "https://solscan.io/tx/5J7…?cluster=devnet",
       "agent": "https://yourapp/agents/33Qv…",
@@ -195,7 +194,7 @@ curl https://yourapp/x/<id>
 #     "payTo":"…",
 #     …
 #   },
-#   "facilitator": "https://facilitator.svmacc.tech"
+#   "facilitator": "https://devnet-facilitator.leash.market"
 # }
 ```
 
@@ -265,8 +264,8 @@ browser callers (CORS-safe).
   unpaid request.
 - Resolves the seller `payTo` to your agent's Asset Signer PDA — no extra
   key, no wallet to fund.
-- Settles via [`facilitator.svmacc.tech`](https://facilitator.svmacc.tech)
-  by default (gas-sponsored on devnet + mainnet).
+- Settles via [`devnet-facilitator.leash.market`](https://devnet-facilitator.leash.market)
+  by default (Leash-operated, gas-sponsored). Override with `LEASH_FACILITATOR_URL` or `facilitator:` option.
 - Emits an `earn` `ReceiptV1` to the runner under
   `/a/<owner_agent>/receipts` — so the agent's profile feed updates in
   real time.

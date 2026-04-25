@@ -135,30 +135,31 @@ Common `kind`s: `prepared`, `submitted`, `confirmed`, `failed`,
 
 ## Common environment variables
 
-| Var                                   | Owner       | What it controls                                                                         |
-| ------------------------------------- | ----------- | ---------------------------------------------------------------------------------------- |
-| `LEASH_API_URL`                       | SDK         | Default `https://api.leash.market`. Override for self-host.                              |
-| `LEASH_API_KEY`                       | SDK         | Used by `@leash/seller-kit` `onReceipt` default to forward receipts to the API.          |
-| `LEASH_API_FACILITATOR_URL`           | API server  | Override the facilitator URL the hosted paywall uses (default: facilitator.svmacc.tech). |
-| `LEASH_API_ADMIN_SECRET`              | API server  | Bearer secret for `/v1/admin/*` routes.                                                  |
-| `LEASH_API_REDIS_URL`                 | API server  | Required for rate limits, idempotency, SSE Pub/Sub. Defaults to in-memory.               |
-| `LEASH_FACILITATOR_SECRET_KEY`        | Facilitator | Solana keypair (JSON byte array OR base58). MUST be separate from any buyer key.         |
-| `LEASH_FACILITATOR_NETWORKS`          | Facilitator | Comma list. Devnet only in v0.1.                                                         |
-| `LEASH_FACILITATOR_PORT/HOST/RPC_URL` | Facilitator | HTTP listener + RPC override.                                                            |
-| `LEASH_RECEIPTS_URL`                  | SDK         | Override the auto-injected `services.receipts.endpoint` on new agents.                   |
-| `LEASH_NO_RECEIPTS_URL=1`             | SDK         | Skip the auto-inject entirely (self-host).                                               |
+| Var                                   | Owner       | What it controls                                                                                                                                    |
+| ------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LEASH_API_URL`                       | SDK         | Default `https://api.leash.market`. Override for self-host.                                                                                         |
+| `LEASH_API_KEY`                       | SDK         | Used by `@leash/seller-kit` `onReceipt` default to forward receipts to the API.                                                                     |
+| `LEASH_API_FACILITATOR_URL`           | API server  | Override the facilitator URL the hosted paywall uses (default: `devnet-facilitator.leash.market` on devnet, `facilitator.leash.market` on mainnet). |
+| `LEASH_API_ADMIN_SECRET`              | API server  | Bearer secret for `/v1/admin/*` routes.                                                                                                             |
+| `LEASH_API_REDIS_URL`                 | API server  | Required for rate limits, idempotency, SSE Pub/Sub. Defaults to in-memory.                                                                          |
+| `LEASH_FACILITATOR_SECRET_KEY`        | Facilitator | Solana keypair (JSON byte array OR base58). MUST be separate from any buyer key.                                                                    |
+| `LEASH_FACILITATOR_NETWORKS`          | Facilitator | Comma list. Devnet only in v0.1.                                                                                                                    |
+| `LEASH_FACILITATOR_PORT/HOST/RPC_URL` | Facilitator | HTTP listener + RPC override.                                                                                                                       |
+| `LEASH_RECEIPTS_URL`                  | SDK         | Override the auto-injected `services.receipts.endpoint` on new agents.                                                                              |
+| `LEASH_NO_RECEIPTS_URL=1`             | SDK         | Skip the auto-inject entirely (self-host).                                                                                                          |
 
 ## Network constants
 
-| Token / network       | Address                                                   |
-| --------------------- | --------------------------------------------------------- |
-| USDC mainnet          | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`            |
-| USDC devnet (Circle)  | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`            |
-| Solana CAIP-2 mainnet | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp`                 |
-| Solana CAIP-2 devnet  | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1`                 |
-| Public devnet RPC     | `https://api.devnet.solana.com`                           |
-| Devnet USDC faucet    | `https://faucet.circle.com`                               |
-| Hosted facilitator    | `https://facilitator.svmacc.tech` (default for SDK + API) |
+| Token / network           | Address                                                       |
+| ------------------------- | ------------------------------------------------------------- |
+| USDC mainnet              | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`                |
+| USDC devnet (Circle)      | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`                |
+| Solana CAIP-2 mainnet     | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp`                     |
+| Solana CAIP-2 devnet      | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1`                     |
+| Public devnet RPC         | `https://api.devnet.solana.com`                               |
+| Devnet USDC faucet        | `https://faucet.circle.com`                                   |
+| Leash devnet facilitator  | `https://devnet-facilitator.leash.market` (SDK + API default) |
+| Leash mainnet facilitator | `https://facilitator.leash.market` (SDK + API default)        |
 
 ## Error model
 

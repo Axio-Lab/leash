@@ -48,9 +48,11 @@ app.post('/tag', (c) => c.json({ tagged: true }));
    x402 settlements credit this PDA, so the agent's treasury balance grows
    automatically as buyers pay.
 2. Builds a `createSvmResourceServer` (from `@leash/seller-kit/x402`) bound
-   to `facilitator.svmacc.tech` on `solana-devnet` (or the network you
-   configure). The facilitator pays the network fee on `payTo` so neither
-   the seller nor the buyer needs SOL on the receiving side.
+   to `devnet-facilitator.leash.market` on `solana-devnet` (or the network you
+   configure) by default. Other facilitators are fully supported — see
+   [Configuring the facilitator](#configuring-the-facilitator). The facilitator
+   pays the network fee on `payTo` so neither the seller nor the buyer needs SOL
+   on the receiving side.
 3. Registers `paymentMiddlewareFromHTTPServer` from `@x402/hono` for each
    route. Unauthenticated requests get
    `402 Payment Required` with a base64-encoded `PAYMENT-REQUIRED`
@@ -86,7 +88,8 @@ playground at `/seller` does this for you.
 
 ## Configuring the facilitator
 
-The default is `https://facilitator.svmacc.tech`. To use a different
+The default is `https://devnet-facilitator.leash.market` (devnet) /
+`https://facilitator.leash.market` (mainnet). To use a different
 HTTPS-compatible facilitator:
 
 ```ts

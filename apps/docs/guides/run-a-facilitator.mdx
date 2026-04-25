@@ -1,23 +1,23 @@
 ---
 title: 'Run a Leash facilitator'
-description: 'Operate facilitator.leash.dev (or your own) with @leash/facilitator on Solana devnet.'
+description: 'Use facilitator.leash.market (mainnet) / devnet-facilitator.leash.market (devnet), or self-host @leash/facilitator.'
 ---
 
-> Leash now ships its own x402 facilitator. v0.1 runs **devnet only**
-> behind `https://facilitator.leash.dev`. Anyone can self-host the same
-> binary in 60 seconds — useful for local dev, integration tests, or
-> running your own settlement infrastructure on mainnet.
+> Leash operates two public facilitators: **`https://facilitator.leash.market`** (mainnet)
+> and **`https://devnet-facilitator.leash.market`** (devnet). These are the SDK defaults.
+> Anyone can self-host the same binary — useful for local dev, integration tests,
+> or running on a custom settlement key.
 
 ## Default facilitators vs overrides (any compatible host)
 
 Leash **SDKs** (`@leash/buyer-kit`, `@leash/seller-kit`) resolve the facilitator URL through [`defaultFacilitatorFor`](https://github.com/leash-market/leash/blob/main/packages/core/src/x402/facilitator.ts): optional `LEASH_FACILITATOR_URL`, else a per-network default, else a universal fallback.
 
-The table below is only **“what you get if you set nothing”** — it is **not** a whitelist. You can aim `LEASH_FACILITATOR_URL` (or `facilitator:` on `createBuyer` / `createSeller`) at **any** HTTPS base URL that implements the x402 facilitator HTTP API and publishes the **exact** SVM scheme for your cluster (same contract svmacc, PayAI, Coinbase-family hosts, or your own deployment use).
+The table below is the **“what you get if you set nothing”** default — it is **not** a whitelist. You can point `LEASH_FACILITATOR_URL` (or `facilitator:` on `createBuyer` / `createSeller`) at **any** HTTPS base URL that implements the x402 facilitator HTTP API and publishes the **exact** SVM scheme for your cluster.
 
-| Network     | Default (no `LEASH_FACILITATOR_URL`) | Example overrides (pick one)                                                                                                                                                 |
-| ----------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Devnet**  | `https://facilitator.svmacc.tech`    | `https://facilitator.leash.dev`, `http://localhost:8787` (local `@leash/facilitator-app`), or **any other** devnet-capable x402 facilitator URL you operate or trust.        |
-| **Mainnet** | `https://facilitator.payai.network`  | Self-hosted `@leash/facilitator` with TLS + `LEASH_FACILITATOR_NETWORKS=mainnet` ([Going to mainnet](#going-to-mainnet)), or **any other** mainnet-capable x402 facilitator. |
+| Network     | Default                                   | Example third-party alternatives                                                                    |
+| ----------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **Devnet**  | `https://devnet-facilitator.leash.market` | `https://facilitator.svmacc.tech`, `http://localhost:8787` (local `@leash/facilitator-app`)         |
+| **Mainnet** | `https://facilitator.leash.market`        | `https://facilitator.payai.network`, or any other mainnet-capable x402 facilitator you run or trust |
 
 The **hosted Leash API** (`api.leash.market`) uses **`LEASH_API_FACILITATOR_URL`** for its own `/x/{id}` paywall and seller-utils — that is server-side only and does not change your SDK defaults. That value can also be **any** compatible facilitator base URL, not only the Leash binary.
 
@@ -50,10 +50,10 @@ for both protocol v1 and v2. That means every existing Leash buyer
 out of the box: just set `LEASH_FACILITATOR_URL`.
 
 ```bash
-# Use the hosted Leash facilitator (devnet)
-export LEASH_FACILITATOR_URL=https://facilitator.leash.dev
+# Use the Leash devnet facilitator (default; no config needed)
+export LEASH_FACILITATOR_URL=https://devnet-facilitator.leash.market
 
-# Or point at a local one
+# Or point at a local self-hosted instance
 export LEASH_FACILITATOR_URL=http://localhost:8787
 ```
 

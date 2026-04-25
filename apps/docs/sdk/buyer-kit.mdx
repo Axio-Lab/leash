@@ -119,8 +119,9 @@ type BuyerConfig = {
   preferredCurrency?: 'USDC' | 'USDT' | 'USDG';
   /**
    * Override the default x402 facilitator URL. Defaults to
-   * `facilitator.svmacc.tech` on devnet and `facilitator.payai.network` on
-   * mainnet; the env var `LEASH_FACILITATOR_URL` overrides both.
+   * `devnet-facilitator.leash.market` on devnet and `facilitator.leash.market` on
+   * mainnet; the env var `LEASH_FACILITATOR_URL` overrides both. Other
+   * facilitators (svmacc.tech, payai.network, self-hosted) are fully supported.
    */
   facilitator?: string;
   fetch?: typeof globalThis.fetch; // injection point for tests
