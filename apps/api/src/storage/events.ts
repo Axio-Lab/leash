@@ -22,6 +22,8 @@ export type EventKind =
   | 'agent.treasury.provision'
   | 'agent.treasury.withdraw'
   | 'agent.treasury.withdraw_sol'
+  | 'agent.treasury.fund'
+  | 'agent.treasury.fund_sol'
   | 'agent.token.set'
   | 'submit.raw'
   | 'receipt.published'

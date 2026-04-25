@@ -23,19 +23,46 @@ export type TokenInfo = {
   isStable: boolean;
 };
 
+// Mints are globally unique on Solana, so a single flat table is enough —
+// devnet and mainnet entries can coexist without a network qualifier.
+// Keep this in sync with `packages/core/src/tokens/index.ts` which is the
+// canonical registry consumed by the API + SDK; the explorer duplicates
+// the small subset it actually renders to stay independent of the core
+// import path (the catalog is intentionally tiny — stables + wSOL).
 const KNOWN: Record<string, TokenInfo> = {
-  // USDC mainnet
+  // ── USDC ─────────────────────────────────────────────────────────────
+  // mainnet
   EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: { symbol: 'USDC', decimals: 6, isStable: true },
-  // USDT mainnet
-  Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: { symbol: 'USDT', decimals: 6, isStable: true },
-  // USDC devnet (Circle's official faucet mint)
+  // devnet (Circle's official faucet mint)
   Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr: { symbol: 'USDC', decimals: 6, isStable: true },
-  // USDC devnet (Solana labs canonical)
+  // devnet (Solana labs canonical, the one the e2e + faucet use)
   '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU': {
     symbol: 'USDC',
     decimals: 6,
     isStable: true,
   },
+  // ── USDT ─────────────────────────────────────────────────────────────
+  // mainnet
+  Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: { symbol: 'USDT', decimals: 6, isStable: true },
+  // devnet (test mint Leash's catalog ships with)
+  EcFc2cMyZxaKBkFK1XooxiyDyCPneLXiMwSJiVY6eTad: { symbol: 'USDT', decimals: 6, isStable: true },
+  // ── USDG (Global Dollar by Paxos, Token-2022) ────────────────────────
+  // mainnet
+  '2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH': {
+    symbol: 'USDG',
+    decimals: 6,
+    isStable: true,
+  },
+  // devnet
+  '4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7': {
+    symbol: 'USDG',
+    decimals: 6,
+    isStable: true,
+  },
+  // ── Wrapped SOL ──────────────────────────────────────────────────────
+  // (Same mint on devnet + mainnet.) Not a stable, but worth labelling so
+  // wSOL deposits don't render as "0.123 tokens".
+  So11111111111111111111111111111111111111112: { symbol: 'wSOL', decimals: 9, isStable: false },
 };
 
 const FALLBACK: TokenInfo = { symbol: 'tokens', decimals: 6, isStable: false };

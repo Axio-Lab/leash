@@ -17,6 +17,7 @@ import type { DbClient } from '../storage/turso.js';
 import { umiReadOnly } from '../util/umi.js';
 import { getAgentSummary, getAgentTreasuryBalances } from '../util/agent-snapshot.js';
 import { ApiErrorSchema, NetworkSchema, PubkeySchema } from '../openapi/common.js';
+import { ensureWatched, ensureWatchedAta } from '../indexer/watchlist.js';
 
 const AgentSummarySchema = z.object({
   agent_asset: PubkeySchema,
@@ -111,6 +112,27 @@ export function buildAgentRoutes(deps: {
       const network = c.var.network;
       const umi = umiReadOnly(deps.config, network);
       const balances = await getAgentTreasuryBalances(umi, network, mint);
+      // Side-effect: every time someone reads an agent's treasury,
+      // make sure the indexer is watching the PDA + every ATA we just
+      // surfaced. This is the cheapest path to "explorer auto-detects
+      // a deposit to an agent the API has never written to" without
+      // forcing the caller to hit a prepare endpoint first.
+      try {
+        await ensureWatched(deps.db, {
+          network,
+          agentAsset: balances.agent_asset,
+          treasuryAddress: balances.treasury,
+        });
+        for (const row of balances.spl) {
+          await ensureWatchedAta(deps.db, {
+            network,
+            agentAsset: balances.agent_asset,
+            ataAddress: row.ata,
+          });
+        }
+      } catch {
+        // Best-effort.
+      }
       return c.json(balances, 200);
     },
   );

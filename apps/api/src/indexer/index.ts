@@ -8,6 +8,7 @@ export {
 export { decodeTransaction, type DecodedEvent, type DecodeContext } from './decode.js';
 export {
   ensureWatched,
+  ensureWatchedAta,
   getCursor,
   listWatchlist,
   upsertCursor,
@@ -15,7 +16,12 @@ export {
   type WatchKind,
   type WatchRow,
 } from './watchlist.js';
-export { runIndexerTick, type IndexerOptions, type IndexerTickResult } from './run.js';
+export {
+  runIndexerTick,
+  _resetDiscoveryCacheForTests,
+  type IndexerOptions,
+  type IndexerTickResult,
+} from './run.js';
 export {
   runReceiptPullTick,
   type ReceiptPullOptions,

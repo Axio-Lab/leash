@@ -26,6 +26,7 @@ import { SVM_NETWORKS, type SvmNetwork } from '../util/network.js';
 import { createRpcClient } from './rpc.js';
 import { runIndexerTick } from './run.js';
 import { runReceiptPullTick } from './receipt-pull.js';
+import { discoverTreasuryAtas } from './ata-discovery.js';
 
 async function main(): Promise<void> {
   const config = createConfig();
@@ -61,7 +62,11 @@ async function main(): Promise<void> {
           db,
           rpc,
           network,
-          options: { perAddressLimit: perAddrLimit },
+          options: {
+            perAddressLimit: perAddrLimit,
+            discoverTreasuryAtas: ({ network: n, treasuryAddress }) =>
+              discoverTreasuryAtas({ rpcUrl: config.rpc[n]!, treasuryAddress }),
+          },
         });
         console.log(
           `[indexer] ${network} addrs=${r.addressesScanned} sigs=${r.signaturesFetched} events=${r.eventsWritten} errors=${r.errors}`,

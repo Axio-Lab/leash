@@ -110,6 +110,8 @@ kind for the network the API key is bound to. Concrete kinds:
 | `agent.treasury.provision`    | Treasury ATAs are pre-created.                                    |
 | `agent.treasury.withdraw`     | Owner withdraws SPL from the treasury.                            |
 | `agent.treasury.withdraw_sol` | Owner withdraws lamports from the treasury.                       |
+| `agent.treasury.fund`         | Indexer observed an incoming SPL transfer to the treasury PDA.    |
+| `agent.treasury.fund_sol`     | Indexer observed an incoming SOL transfer to the treasury PDA.    |
 | `agent.token.set`             | Identity's `agent_token` field is updated.                        |
 | `submit.raw`                  | Any signed transaction broadcast through `/v1/submit`.            |
 | `receipt.published`           | A new receipt was pushed to the API (or forwarded by the runner). |

@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 
 import { createTestRig, authedFetch } from './helpers.js';
 import {
+  _resetDiscoveryCacheForTests,
   ensureWatched,
+  ensureWatchedAta,
   getCursor,
   listWatchlist,
   runIndexerTick,
@@ -165,6 +167,264 @@ describe('indexer', () => {
     expect(withdraw?.mint).toBe(USDC);
     expect(withdraw?.signature).toBe('sigWithdraw');
     expect(withdraw?.phase).toBe('confirmed');
+  });
+
+  it('decodes incoming SPL transfers to the treasury PDA as agent.treasury.fund', async () => {
+    // Regression: incoming transfers used to be invisible to the
+    // explorer because the decoder only fired inside the mpl-core
+    // `Execute` branch (= withdraws). A raw SPL `TransferChecked`
+    // landing in the treasury ATA now produces a `fund` row so owner
+    // top-ups (and x402 settlements) show up in the activity feed.
+    const rig = await createTestRig();
+    await ensureWatched(rig.db, {
+      network: 'solana-devnet',
+      agentAsset: ASSET,
+      treasuryAddress: TREASURY,
+    });
+    const sigs: RpcSignature[] = [{ signature: 'sigFund', slot: 400, blockTime: null, err: null }];
+    const txsBySig: Record<string, RpcParsedTransaction> = {
+      sigFund: tx({
+        signature: 'sigFund',
+        programIds: [SPL_TOKEN_PROGRAM_ID],
+        // Plain SPL TransferChecked from owner -> treasury ATA.
+        // Crucially: NO mpl-core Execute log, so this exercises the
+        // pure "fund detection" branch.
+        logs: [
+          `Program ${SPL_TOKEN_PROGRAM_ID} invoke [1]`,
+          'Program log: Instruction: TransferChecked',
+          `Program ${SPL_TOKEN_PROGRAM_ID} success`,
+        ],
+        tokenBalanceDeltas: [
+          { owner: PAYER, mint: USDC, delta: '-1000000' },
+          { owner: TREASURY, mint: USDC, delta: '1000000' },
+        ],
+      }),
+    };
+    const rpc = makeStubRpc({
+      sigsByAddress: { [ASSET]: [], [TREASURY]: sigs },
+      txsBySig,
+    });
+    const r = await runIndexerTick({ db: rig.db, rpc, network: 'solana-devnet' });
+    expect(r.eventsWritten).toBe(1);
+    const events = await listEvents(rig.db, { network: 'solana-devnet', agent: ASSET });
+    const fund = events.find((e) => e.kind === 'agent.treasury.fund');
+    expect(fund?.amountAtomic).toBe('1000000');
+    expect(fund?.mint).toBe(USDC);
+    expect(fund?.signature).toBe('sigFund');
+    expect(fund?.phase).toBe('confirmed');
+    // Withdraw and fund are mutually exclusive on the same tx.
+    expect(events.find((e) => e.kind === 'agent.treasury.withdraw')).toBeUndefined();
+  });
+
+  it('does not emit agent.treasury.fund for the withdraw side of an Execute', async () => {
+    // Defence in depth: a withdraw decreases the treasury balance, so
+    // the positive-delta branch must not fire. We assert this by
+    // re-using the same withdraw fixture as the main happy-path test
+    // and confirming only `withdraw` (not `fund`) was written.
+    const rig = await createTestRig();
+    await ensureWatched(rig.db, {
+      network: 'solana-devnet',
+      agentAsset: ASSET,
+      treasuryAddress: TREASURY,
+    });
+    const sigs: RpcSignature[] = [
+      { signature: 'sigWithdrawOnly', slot: 410, blockTime: null, err: null },
+    ];
+    const txsBySig: Record<string, RpcParsedTransaction> = {
+      sigWithdrawOnly: tx({
+        signature: 'sigWithdrawOnly',
+        programIds: [MPL_CORE_PROGRAM_ID, SPL_TOKEN_PROGRAM_ID],
+        logs: [
+          `Program ${MPL_CORE_PROGRAM_ID} invoke [1]`,
+          'Program log: Instruction: Execute',
+          `Program ${SPL_TOKEN_PROGRAM_ID} invoke [2]`,
+          'Program log: Instruction: TransferChecked',
+          `Program ${SPL_TOKEN_PROGRAM_ID} success`,
+          `Program ${MPL_CORE_PROGRAM_ID} success`,
+        ],
+        tokenBalanceDeltas: [
+          { owner: TREASURY, mint: USDC, delta: '-250000' },
+          { owner: PAYER, mint: USDC, delta: '250000' },
+        ],
+      }),
+    };
+    const rpc = makeStubRpc({
+      sigsByAddress: { [ASSET]: [], [TREASURY]: sigs },
+      txsBySig,
+    });
+    await runIndexerTick({ db: rig.db, rpc, network: 'solana-devnet' });
+    const events = await listEvents(rig.db, { network: 'solana-devnet', agent: ASSET });
+    const kinds = events.map((e) => e.kind);
+    expect(kinds).toContain('agent.treasury.withdraw');
+    expect(kinds).not.toContain('agent.treasury.fund');
+  });
+
+  it('decodes incoming SOL transfers to the treasury PDA as agent.treasury.fund_sol', async () => {
+    const rig = await createTestRig();
+    await ensureWatched(rig.db, {
+      network: 'solana-devnet',
+      agentAsset: ASSET,
+      treasuryAddress: TREASURY,
+    });
+    const sigs: RpcSignature[] = [
+      { signature: 'sigFundSol', slot: 420, blockTime: null, err: null },
+    ];
+    const txsBySig: Record<string, RpcParsedTransaction> = {
+      sigFundSol: tx({
+        signature: 'sigFundSol',
+        programIds: [],
+        logs: [
+          'Program 11111111111111111111111111111111 invoke [1]',
+          'Program 11111111111111111111111111111111 success',
+        ],
+        lamportDeltas: [
+          { pubkey: PAYER, delta: '-100000000' },
+          { pubkey: TREASURY, delta: '100000000' },
+        ],
+      }),
+    };
+    const rpc = makeStubRpc({
+      sigsByAddress: { [ASSET]: [], [TREASURY]: sigs },
+      txsBySig,
+    });
+    await runIndexerTick({ db: rig.db, rpc, network: 'solana-devnet' });
+    const events = await listEvents(rig.db, { network: 'solana-devnet', agent: ASSET });
+    const fund = events.find((e) => e.kind === 'agent.treasury.fund_sol');
+    expect(fund?.amountAtomic).toBe('100000000');
+    expect(fund?.signature).toBe('sigFundSol');
+  });
+
+  it('decodes plain SPL deposits via treasury_ata watch (PDA not in account list)', async () => {
+    // The realistic deposit shape: a third party broadcasts a plain
+    // `TransferChecked` whose account list contains the treasury's
+    // ATA but not the PDA itself. `getSignaturesForAddress(pda)`
+    // therefore never surfaces this signature — only
+    // `getSignaturesForAddress(ata)` does. The decoder must use
+    // `ctx.treasuryAddress` (= the PDA) to filter the
+    // `tokenBalanceDeltas`, since the PDA is what owns the ATA.
+    _resetDiscoveryCacheForTests();
+    const rig = await createTestRig();
+    await ensureWatched(rig.db, {
+      network: 'solana-devnet',
+      agentAsset: ASSET,
+      treasuryAddress: TREASURY,
+    });
+    const ATA = '7tH8AqkZQXMQTwY9SwtA1xZUjzLNqEqxXnVk7knKL3aE';
+    await ensureWatchedAta(rig.db, {
+      network: 'solana-devnet',
+      agentAsset: ASSET,
+      ataAddress: ATA,
+    });
+    const sigs: RpcSignature[] = [
+      { signature: 'sigDeposit', slot: 440, blockTime: null, err: null },
+    ];
+    const txsBySig: Record<string, RpcParsedTransaction> = {
+      sigDeposit: tx({
+        signature: 'sigDeposit',
+        programIds: [SPL_TOKEN_PROGRAM_ID],
+        // Account list contains the buyer, the buyer's ATA, the
+        // treasury's ATA, and the mint — but NOT the PDA.
+        accountKeys: [PAYER, ATA, USDC, SPL_TOKEN_PROGRAM_ID],
+        logs: [
+          `Program ${SPL_TOKEN_PROGRAM_ID} invoke [1]`,
+          'Program log: Instruction: TransferChecked',
+          `Program ${SPL_TOKEN_PROGRAM_ID} success`,
+        ],
+        tokenBalanceDeltas: [
+          { owner: PAYER, mint: USDC, delta: '-2500000' },
+          { owner: TREASURY, mint: USDC, delta: '2500000' },
+        ],
+      }),
+    };
+    const rpc = makeStubRpc({
+      // Critically: the PDA returns no sigs; only the ATA does.
+      sigsByAddress: { [ASSET]: [], [TREASURY]: [], [ATA]: sigs },
+      txsBySig,
+    });
+    const r = await runIndexerTick({ db: rig.db, rpc, network: 'solana-devnet' });
+    expect(r.eventsWritten).toBe(1);
+    const events = await listEvents(rig.db, { network: 'solana-devnet', agent: ASSET });
+    const fund = events.find((e) => e.kind === 'agent.treasury.fund');
+    expect(fund?.amountAtomic).toBe('2500000');
+    expect(fund?.mint).toBe(USDC);
+    expect(fund?.signature).toBe('sigDeposit');
+    expect(fund?.phase).toBe('confirmed');
+  });
+
+  it('runs treasury ATA discovery once per agent and adds rows to the watchlist', async () => {
+    // Lazy bootstrap: the indexer asks the RPC for every SPL account
+    // owned by each treasury PDA the first time it sees the agent,
+    // adds them to the watchlist, then re-uses the result on
+    // subsequent ticks. This is what lets a freshly-restarted
+    // indexer pick up an agent that was provisioned out-of-band.
+    _resetDiscoveryCacheForTests();
+    const rig = await createTestRig();
+    await ensureWatched(rig.db, {
+      network: 'solana-devnet',
+      agentAsset: ASSET,
+      treasuryAddress: TREASURY,
+    });
+    const ATA = '7tH8AqkZQXMQTwY9SwtA1xZUjzLNqEqxXnVk7knKL3aE';
+    let discoverCalls = 0;
+    const rpc = makeStubRpc({ sigsByAddress: {}, txsBySig: {} });
+
+    await runIndexerTick({
+      db: rig.db,
+      rpc,
+      network: 'solana-devnet',
+      options: {
+        discoverTreasuryAtas: async ({ treasuryAddress }) => {
+          discoverCalls += 1;
+          expect(treasuryAddress).toBe(TREASURY);
+          return [ATA];
+        },
+      },
+    });
+    expect(discoverCalls).toBe(1);
+    const wl1 = await listWatchlist(rig.db, 'solana-devnet');
+    expect(wl1.find((r) => r.kind === 'treasury_ata' && r.address === ATA)).toBeDefined();
+
+    // Second tick on the same process: discovery cache short-circuits.
+    await runIndexerTick({
+      db: rig.db,
+      rpc,
+      network: 'solana-devnet',
+      options: {
+        discoverTreasuryAtas: async () => {
+          discoverCalls += 1;
+          return [];
+        },
+      },
+    });
+    expect(discoverCalls).toBe(1);
+  });
+
+  it('skips dust-sized lamport wobbles below the fee threshold', async () => {
+    // Without the floor, every ATA-rent rebate would generate a
+    // spurious "fund_sol" row. Rebates are a few thousand lamports;
+    // the threshold is 5 000 (the typical signature fee).
+    const rig = await createTestRig();
+    await ensureWatched(rig.db, {
+      network: 'solana-devnet',
+      agentAsset: ASSET,
+      treasuryAddress: TREASURY,
+    });
+    const sigs: RpcSignature[] = [{ signature: 'sigDust', slot: 430, blockTime: null, err: null }];
+    const txsBySig: Record<string, RpcParsedTransaction> = {
+      sigDust: tx({
+        signature: 'sigDust',
+        programIds: [],
+        logs: [],
+        lamportDeltas: [{ pubkey: TREASURY, delta: '4999' }],
+      }),
+    };
+    const rpc = makeStubRpc({
+      sigsByAddress: { [ASSET]: [], [TREASURY]: sigs },
+      txsBySig,
+    });
+    await runIndexerTick({ db: rig.db, rpc, network: 'solana-devnet' });
+    const events = await listEvents(rig.db, { network: 'solana-devnet', agent: ASSET });
+    expect(events.find((e) => e.kind === 'agent.treasury.fund_sol')).toBeUndefined();
   });
 
   it('is idempotent across consecutive ticks (cursors prevent rework)', async () => {

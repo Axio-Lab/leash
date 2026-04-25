@@ -18,6 +18,8 @@ const KIND_OPTIONS = [
   { value: 'agent.treasury.provision', label: 'Provision' },
   { value: 'agent.treasury.withdraw', label: 'Withdraw' },
   { value: 'agent.treasury.withdraw_sol', label: 'Withdraw SOL' },
+  { value: 'agent.treasury.fund', label: 'Fund' },
+  { value: 'agent.treasury.fund_sol', label: 'Fund SOL' },
   { value: 'agent.token.set', label: 'Token' },
   { value: 'submit.raw', label: 'Submit' },
   { value: 'receipt.published', label: 'Receipt' },

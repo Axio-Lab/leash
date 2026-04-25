@@ -4,14 +4,20 @@
  * The indexer never scans the entire mpl-agent-identity / mpl-core
  * program — that would mean millions of unrelated signatures. Instead,
  * every agent the API touches is added to the per-network watchlist
- * with two entries:
+ * with up to three entries:
  *
- *   - `kind='asset'`    — the agent's mpl-core asset pubkey (mint).
- *                         Captures identity registration, executive
- *                         setup, delegation flips, agent-token launch.
- *   - `kind='treasury'` — the asset signer PDA derived from the asset.
- *                         Captures every withdraw (`Execute` against
- *                         the PDA) and every ATA provisioning.
+ *   - `kind='asset'`        — the agent's mpl-core asset pubkey (mint).
+ *                             Captures identity registration, executive
+ *                             setup, delegation flips, agent-token launch.
+ *   - `kind='treasury'`     — the asset signer PDA derived from the asset.
+ *                             Captures every withdraw (`Execute` against
+ *                             the PDA) and every ATA provisioning.
+ *   - `kind='treasury_ata'` — a stable ATA owned by the treasury PDA.
+ *                             Required to detect plain SPL deposits, since
+ *                             a `TransferChecked` to the ATA does not
+ *                             include the PDA in its account list and
+ *                             therefore never surfaces through
+ *                             `getSignaturesForAddress(pda)`.
  *
  * Cursors are tracked per `(network, address, kind)` — when the indexer
  * pages through `getSignaturesForAddress(address)`, it stops at
@@ -22,7 +28,13 @@ import type { DbClient } from '../storage/turso.js';
 import { execute } from '../storage/turso.js';
 import type { SvmNetwork } from '../util/network.js';
 
-export type WatchKind = 'asset' | 'treasury';
+export type WatchKind = 'asset' | 'treasury' | 'treasury_ata';
+
+const VALID_WATCH_KINDS: ReadonlySet<string> = new Set<WatchKind>([
+  'asset',
+  'treasury',
+  'treasury_ata',
+]);
 
 export type WatchRow = {
   network: SvmNetwork;
@@ -55,6 +67,29 @@ export async function ensureWatched(
   );
 }
 
+/**
+ * Idempotently add a treasury ATA to the watchlist for a network. The
+ * indexer pages signatures on this address so plain SPL deposits to the
+ * treasury (which never include the PDA itself) are picked up and
+ * decoded as `agent.treasury.fund`.
+ *
+ * Why a separate kind (vs reusing `treasury`): keeping kinds disjoint
+ * lets the decoder cheaply branch on `watchedKind` without a per-row
+ * lookup, and keeps the `treasury` cursor focused on Execute-emitted
+ * signatures (which are higher-signal and lower-volume).
+ */
+export async function ensureWatchedAta(
+  db: DbClient,
+  args: { network: SvmNetwork; agentAsset: string; ataAddress: string },
+): Promise<void> {
+  await execute(
+    db,
+    `INSERT OR IGNORE INTO indexer_watchlist (network, address, kind, agent_asset)
+       VALUES (?, ?, 'treasury_ata', ?)`,
+    [args.network, args.ataAddress, args.agentAsset],
+  );
+}
+
 export async function listWatchlist(db: DbClient, network: SvmNetwork): Promise<WatchRow[]> {
   const res = await execute(
     db,
@@ -64,7 +99,7 @@ export async function listWatchlist(db: DbClient, network: SvmNetwork): Promise<
   );
   return res.rows.map((row) => {
     const kind = String(row.kind);
-    if (kind !== 'asset' && kind !== 'treasury') {
+    if (!VALID_WATCH_KINDS.has(kind)) {
       throw new Error(`watchlist row has unexpected kind: ${kind}`);
     }
     const networkStr = String(row.network);
@@ -74,7 +109,7 @@ export async function listWatchlist(db: DbClient, network: SvmNetwork): Promise<
     return {
       network: networkStr,
       address: String(row.address),
-      kind,
+      kind: kind as WatchKind,
       agentAsset: String(row.agent_asset),
       addedAt: String(row.added_at),
     };

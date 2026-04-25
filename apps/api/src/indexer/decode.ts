@@ -46,8 +46,17 @@ export type DecodeContext = {
    * a single transaction touches both.
    */
   watchedAddress: string;
-  watchedKind: 'asset' | 'treasury';
+  watchedKind: 'asset' | 'treasury' | 'treasury_ata';
   agentAsset: string;
+  /**
+   * Treasury PDA owned by `agentAsset`. Required when
+   * `watchedKind === 'treasury_ata'`: the ATA itself is in the tx
+   * account list (so the signature surfaces) but the deltas we need
+   * are keyed by the ATA's owner (= the PDA). The indexer derives
+   * this once per agent and passes it down so the decoder doesn't
+   * need a Umi instance.
+   */
+  treasuryAddress?: string;
 };
 
 /**
@@ -158,6 +167,73 @@ export function decodeTransaction(tx: RpcParsedTransaction, ctx: DecodeContext):
       logs.some((l) => l.includes('Create') && l.includes('AssociatedTokenAccount'))
     ) {
       events.push(baseEvent('agent.treasury.provision', tx, ctx));
+    }
+  }
+
+  // ---- Treasury funding (incoming transfers) ----
+  // Whenever the watched treasury *receives* funds — owner top-ups,
+  // x402 settlements landing in the seller's treasury, third-party
+  // donations, anything — the parsed transaction shows a positive
+  // balance delta on the treasury PDA. We classify those as
+  // `agent.treasury.fund` (SPL) or `agent.treasury.fund_sol` (native).
+  //
+  // Two surface paths:
+  //   - `watchedKind === 'treasury'`     — the PDA itself appeared in
+  //     the tx (e.g. SOL transfer where the PDA is `to`, or rare
+  //     contracts that pass the PDA explicitly).
+  //   - `watchedKind === 'treasury_ata'` — a stable ATA owned by the
+  //     PDA appeared in the tx (every plain SPL `TransferChecked`
+  //     deposit goes through this path). For these rows the PDA is
+  //     never in the account list, so we resolve it from
+  //     `ctx.treasuryAddress`.
+  //
+  // Mutual exclusion with the withdraw branch above is automatic for
+  // the SPL case (the treasury can't be both sender and receiver of a
+  // single transfer of the same mint). The `events.some(...)` guards
+  // additionally protect against races where an Execute that sweeps
+  // multiple mints could otherwise produce a phantom fund row.
+  const treasuryAddrForFund =
+    ctx.watchedKind === 'treasury'
+      ? ctx.watchedAddress
+      : ctx.watchedKind === 'treasury_ata'
+        ? ctx.treasuryAddress
+        : undefined;
+
+  if (treasuryAddrForFund) {
+    const splInsAlreadyHandled = events.some((e) => e.kind === 'agent.treasury.withdraw');
+    if (!splInsAlreadyHandled) {
+      const splIns = tx.tokenBalanceDeltas.filter(
+        (d) => d.owner === treasuryAddrForFund && BigInt(d.delta) > 0n,
+      );
+      for (const d of splIns) {
+        events.push({
+          ...baseEvent('agent.treasury.fund', tx, ctx),
+          mint: d.mint,
+          amountAtomic: BigInt(d.delta).toString(),
+        });
+      }
+    }
+
+    // SOL fund detection only makes sense for the PDA watch — an SPL
+    // ATA has its own lamport balance for rent and we don't want to
+    // surface that as a deposit.
+    if (ctx.watchedKind === 'treasury') {
+      const solInAlreadyHandled = events.some((e) => e.kind === 'agent.treasury.withdraw_sol');
+      if (!solInAlreadyHandled) {
+        const solIn = tx.lamportDeltas.find(
+          (d) => d.pubkey === treasuryAddrForFund && BigInt(d.delta) > 0n,
+        );
+        // Skip dust: a treasury PDA's lamport balance can wobble by a few
+        // lamports during ATA rent rebates without representing a real
+        // deposit. Anything below 5_000 lamports (a typical fee) is noise.
+        if (solIn && BigInt(solIn.delta) >= 5_000n) {
+          events.push({
+            ...baseEvent('agent.treasury.fund_sol', tx, ctx),
+            amountAtomic: BigInt(solIn.delta).toString(),
+            metadata: { source_lamports_delta: solIn.delta },
+          });
+        }
+      }
     }
   }
 

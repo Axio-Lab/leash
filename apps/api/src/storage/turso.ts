@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const SCHEMA_SQL: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS schema_version (
@@ -124,10 +124,23 @@ const SCHEMA_SQL: readonly string[] = [
   // Watchlist the indexer iterates on each tick. Populated automatically
   // whenever the API sees a new agent asset (via prepare events or
   // receipt ingest) so we never need to scan an entire program ID.
+  //
+  // `kind` semantics:
+  //   - 'asset'        — agent's mpl-core asset (identity / executive / token).
+  //   - 'treasury'     — asset signer PDA (Execute = withdraws, provisioning).
+  //   - 'treasury_ata' — a stable ATA owned by the treasury PDA. Required to
+  //     pick up plain SPL `TransferChecked` deposits, since the PDA itself
+  //     is not in the account list of those transactions and therefore
+  //     never surfaces through `getSignaturesForAddress(pda)`.
+  //
+  // The CHECK constraint is intentionally absent: SQLite cannot widen
+  // CHECK constraints with `ALTER TABLE`, and any future watch kind
+  // (e.g. token mint, token-2022 extension) would otherwise force a
+  // fresh migration. The TS `WatchKind` enum is the source of truth.
   `CREATE TABLE IF NOT EXISTS indexer_watchlist (
     network TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
     address TEXT NOT NULL,
-    kind TEXT NOT NULL CHECK (kind IN ('asset','treasury')),
+    kind TEXT NOT NULL,
     agent_asset TEXT NOT NULL,
     added_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (network, address, kind)
@@ -241,14 +254,55 @@ export async function runMigrations(db: Client): Promise<void> {
   for (const stmt of SCHEMA_SQL) {
     await db.execute(stmt);
   }
+
+  // Versioned migrations. New databases get the latest schema directly
+  // from `SCHEMA_SQL` above and skip every block (currentVersion ≥ N
+  // already). Older databases ratchet forward one version at a time.
   const cur = await db.execute('SELECT version FROM schema_version LIMIT 1');
   const currentVersion = cur.rows.length > 0 ? Number(cur.rows[0]!.version) : 0;
+
+  // v3: drop the `kind IN ('asset','treasury')` CHECK on
+  // `indexer_watchlist` so we can introduce new watch kinds (e.g.
+  // 'treasury_ata') without another migration.
+  if (currentVersion < 3) {
+    await migrateWatchlistKindCheck(db);
+  }
+
   if (currentVersion < SCHEMA_VERSION) {
     await db.execute({
       sql: 'INSERT OR REPLACE INTO schema_version(version) VALUES(?)',
       args: [SCHEMA_VERSION],
     });
   }
+}
+
+/**
+ * SQLite cannot alter CHECK constraints in place. To drop the old
+ * `kind IN ('asset','treasury')` rule we copy the table into a new one
+ * without that constraint, then atomically swap names. Wrapped in a
+ * transaction so a crash mid-migration doesn't leave us with both
+ * tables. Idempotent: if the target table already exists (because a
+ * previous migration was interrupted), we drop it and retry.
+ */
+async function migrateWatchlistKindCheck(db: Client): Promise<void> {
+  await db.execute('DROP TABLE IF EXISTS indexer_watchlist_v3_tmp');
+  await db.execute(`CREATE TABLE indexer_watchlist_v3_tmp (
+    network TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    address TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    agent_asset TEXT NOT NULL,
+    added_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (network, address, kind)
+  )`);
+  await db.execute(
+    `INSERT INTO indexer_watchlist_v3_tmp (network, address, kind, agent_asset, added_at)
+       SELECT network, address, kind, agent_asset, added_at FROM indexer_watchlist`,
+  );
+  await db.execute('DROP TABLE indexer_watchlist');
+  await db.execute('ALTER TABLE indexer_watchlist_v3_tmp RENAME TO indexer_watchlist');
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_indexer_watchlist_agent ON indexer_watchlist(agent_asset)`,
+  );
 }
 
 /** Execute helper that surfaces typed args. */

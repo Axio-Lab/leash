@@ -23,7 +23,14 @@ import { ingestChainEvent } from '../storage/events.js';
 import type { SvmNetwork } from '../util/network.js';
 import type { RpcClient } from './rpc.js';
 import { decodeTransaction } from './decode.js';
-import { getCursor, listWatchlist, upsertCursor, type WatchKind } from './watchlist.js';
+import {
+  ensureWatchedAta,
+  getCursor,
+  listWatchlist,
+  upsertCursor,
+  type WatchKind,
+  type WatchRow,
+} from './watchlist.js';
 
 export type IndexerOptions = {
   /**
@@ -40,6 +47,18 @@ export type IndexerOptions = {
    * Optional logger. Defaults to `console.log` with a `[indexer]` prefix.
    */
   log?: (line: string) => void;
+  /**
+   * Optional ATA-discovery hook: given a treasury PDA, returns the
+   * pubkeys of the SPL token accounts it owns (across both classic
+   * Token and Token-2022 programs). Used at most once per agent per
+   * process — `discoveredAgents` below caches the result so we don't
+   * spam the RPC. When omitted, ATA discovery is skipped (the API
+   * still adds ATAs to the watchlist via prepare/balances routes).
+   */
+  discoverTreasuryAtas?: (args: {
+    network: SvmNetwork;
+    treasuryAddress: string;
+  }) => Promise<string[]>;
 };
 
 export type IndexerTickResult = {
@@ -49,6 +68,16 @@ export type IndexerTickResult = {
   eventsWritten: number;
   errors: number;
 };
+
+/**
+ * Per-process cache of agents we've already discovered ATAs for. We
+ * scan an agent's treasury exactly once per indexer process to keep
+ * RPC pressure low — subsequent tick passes rely on the watchlist
+ * rows the API + this discovery loop already wrote. Restarting the
+ * indexer re-discovers, which is correct behaviour for picking up
+ * ATAs created out-of-band (e.g. a new stable mint).
+ */
+const discoveredAgents = new Set<string>();
 
 /**
  * Run a single indexer pass for one network. Returns a summary the
@@ -76,7 +105,48 @@ export async function runIndexerTick(args: {
   };
 
   const watchlist = await listWatchlist(db, network);
-  for (const watch of watchlist) {
+
+  // Build agent → treasury PDA map once per tick. The decoder needs
+  // this when processing `treasury_ata` rows: the ATA's owner (the
+  // PDA) is what `tokenBalanceDeltas` is keyed by, but the watch row
+  // only carries the ATA address.
+  const treasuryByAgent = buildTreasuryMap(watchlist);
+
+  // Lazy ATA discovery — fan out once per agent we haven't seen
+  // before. Adds rows to the watchlist in-place; they'll be picked up
+  // on the next iteration of this same loop because we re-list below.
+  if (opts.discoverTreasuryAtas) {
+    for (const [agent, treasury] of treasuryByAgent.entries()) {
+      const cacheKey = `${network}|${agent}`;
+      if (discoveredAgents.has(cacheKey)) continue;
+      discoveredAgents.add(cacheKey);
+      try {
+        const atas = await opts.discoverTreasuryAtas({
+          network,
+          treasuryAddress: treasury,
+        });
+        for (const ata of atas) {
+          await ensureWatchedAta(db, { network, agentAsset: agent, ataAddress: ata });
+        }
+        if (atas.length > 0) {
+          log(`discovered ${atas.length} treasury ATA(s) for agent=${agent}`);
+        }
+      } catch (err) {
+        // Non-fatal: deposits will still go undetected this tick, but
+        // we'll re-attempt next process restart.
+        log(`treasury ATA discovery failed agent=${agent}: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  // Re-list so the freshly added ATA watch rows participate in this
+  // tick instead of waiting another 15s.
+  const finalWatchlist =
+    opts.discoverTreasuryAtas && treasuryByAgent.size > 0
+      ? await listWatchlist(db, network)
+      : watchlist;
+
+  for (const watch of finalWatchlist) {
     result.addressesScanned += 1;
     try {
       const cursor = await getCursor(db, {
@@ -121,10 +191,12 @@ export async function runIndexerTick(args: {
           continue;
         }
         if (!tx) continue;
+        const treasuryForAgent = treasuryByAgent.get(watch.agentAsset);
         const events = decodeTransaction(tx, {
           watchedAddress: watch.address,
           watchedKind: watch.kind as WatchKind,
           agentAsset: watch.agentAsset,
+          ...(treasuryForAgent ? { treasuryAddress: treasuryForAgent } : {}),
         });
         for (const ev of events) {
           const writeRes = await ingestChainEvent(db, {
@@ -160,4 +232,17 @@ export async function runIndexerTick(args: {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Reset the per-process discovery cache. Used by tests. */
+export function _resetDiscoveryCacheForTests(): void {
+  discoveredAgents.clear();
+}
+
+function buildTreasuryMap(rows: WatchRow[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const r of rows) {
+    if (r.kind === 'treasury') out.set(r.agentAsset, r.address);
+  }
+  return out;
 }

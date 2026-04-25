@@ -78,6 +78,18 @@ const TABLE: Record<string, EventDescriptor> = {
     variant: 'treasury',
     description: () => 'Owner moved native SOL out of the treasury.',
   },
+  'agent.treasury.fund': {
+    label: 'Treasury funded',
+    shortLabel: 'fund',
+    variant: 'treasury',
+    description: () => 'Treasury received an incoming SPL transfer.',
+  },
+  'agent.treasury.fund_sol': {
+    label: 'Treasury SOL funded',
+    shortLabel: 'fund SOL',
+    variant: 'treasury',
+    description: () => 'Treasury received an incoming native SOL transfer.',
+  },
   'agent.token.set': {
     label: 'Agent token set',
     shortLabel: 'token',

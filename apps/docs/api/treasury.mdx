@@ -254,18 +254,45 @@ curl -sX POST https://api.leash.market/v1/agents/$MINT/treasury/withdraw-sol-all
 
 ## Watch on the explorer
 
-Every prepared treasury operation creates a row in the `events` table
-with one of three kinds:
+Every prepared treasury operation creates a row in the `events` record.
+There are five kinds:
 
-- `agent.treasury.provision` — emitted by `provision/prepare`
-- `agent.treasury.withdraw` — emitted by `withdraw/prepare` and `withdraw-all/prepare`
-- `agent.treasury.withdraw_sol` — emitted by `withdraw-sol/prepare` and `withdraw-sol-all/prepare`
+- `agent.treasury.provision` — emitted by `provision/prepare` (and by
+  the chain indexer when an SDK drove the same flow directly).
+- `agent.treasury.withdraw` — emitted by `withdraw/prepare` and
+  `withdraw-all/prepare`, plus by the indexer when the treasury PDA is
+  the source of an SPL `TransferChecked`.
+- `agent.treasury.withdraw_sol` — emitted by `withdraw-sol/prepare` and
+  `withdraw-sol-all/prepare`, plus by the indexer when the treasury
+  PDA's lamport balance drops via an `Execute` instruction.
+- `agent.treasury.fund` — emitted **only by the indexer** when the
+  treasury PDA *receives* an SPL transfer. There is no
+  `fund/prepare` endpoint because deposits are plain SPL transfers
+  initiated by anyone (the owner topping up, an x402 payment landing,
+  a third-party donation). The fund row is what makes those visible
+  on the explorer feed.
 
-The same kinds are also emitted by the chain indexer when it observes
-matching on-chain activity for a watched agent (for example, an SDK
-that drove `withdrawTreasury` directly without going through the API).
-That way the [explorer](https://explorer.leash.market) shows every
-treasury action regardless of whether the API or the SDK initiated it.
+  Detection requires the indexer to be watching the treasury's
+  ATA, not just the PDA — `getSignaturesForAddress(pda)` does not
+  return plain `TransferChecked` deposits because the PDA is not
+  in their account list. The API auto-registers each ATA the
+  first time you hit `provision/prepare`, `withdraw/prepare`, or
+  `treasury/balances`, and the indexer also self-bootstraps any
+  un-registered ATAs at startup via `getTokenAccountsByOwner`. If
+  you previously deposited before any of those calls happened, run
+  `GET /v1/agents/{mint}/treasury/balances` once to backfill the
+  watch rows.
+- `agent.treasury.fund_sol` — same idea for native SOL transfers
+  landing in the treasury PDA. Sub-fee-amount wobbles (under 5 000
+  lamports) are filtered out as noise.
+
+The withdraw + provision rows fire from both the API (via
+`/prepare → /submit`) **and** the chain indexer when matching
+on-chain activity is observed for a watched agent — so the
+[explorer](https://explorer.leash.market) shows every treasury action
+regardless of whether the API or an SDK driver initiated it. Fund rows
+are indexer-only: there's no API call that "deposits" to a treasury,
+and the chain is the canonical source of truth for who paid in.
 
 You can query them directly:
 
@@ -273,6 +300,12 @@ You can query them directly:
 curl -sG https://api.leash.market/v1/events \
   -H "Authorization: Bearer $LSH_TEST_KEY" \
   --data-urlencode "kind=agent.treasury.withdraw" \
+  --data-urlencode "agent=$MINT" \
+  --data-urlencode "limit=5"
+
+curl -sG https://api.leash.market/v1/events \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  --data-urlencode "kind=agent.treasury.fund" \
   --data-urlencode "agent=$MINT" \
   --data-urlencode "limit=5"
 ```

@@ -21,6 +21,7 @@ import type { LeashApiConfig } from '../config.js';
 import type { DbClient } from '../storage/turso.js';
 import { umiForRequest } from '../util/umi.js';
 import { wrapNoOp, wrapPrepared } from '../util/prepare.js';
+import { ensureWatchedAta } from '../indexer/watchlist.js';
 import {
   ApiErrorSchema,
   PreparedEnvelopeOpenApi,
@@ -147,6 +148,23 @@ export function buildTreasuryRoutes(deps: {
           created: a.created,
         })),
       };
+      // Add every (existing or to-be-created) ATA to the indexer
+      // watchlist so plain SPL deposits to those addresses surface
+      // as `agent.treasury.fund` events. Done unconditionally — even
+      // on `no_op` — so importing an already-provisioned agent into
+      // a fresh API instance still gets the ATA watch rows.
+      for (const a of prepared.atas) {
+        try {
+          await ensureWatchedAta(deps.db, {
+            network,
+            agentAsset: mint,
+            ataAddress: String(a.address),
+          });
+        } catch {
+          // Best-effort — a single failed insert shouldn't block the
+          // user's prepare call.
+        }
+      }
       if (prepared.builder == null) {
         return c.json(wrapNoOp({ network, echo }), 200);
       }
@@ -222,6 +240,15 @@ export function buildTreasuryRoutes(deps: {
           : {}),
         ...(body.decimals != null ? { decimals: body.decimals } : {}),
       });
+      try {
+        await ensureWatchedAta(deps.db, {
+          network,
+          agentAsset: mint,
+          ataAddress: String(prepared.sourceTokenAccount),
+        });
+      } catch {
+        // Best-effort.
+      }
       const result = await wrapPrepared({
         db: deps.db,
         umi,
@@ -311,6 +338,15 @@ export function buildTreasuryRoutes(deps: {
       });
       if (prepared == null) {
         return c.json(wrapNoOp({ network, echo: {} }), 200);
+      }
+      try {
+        await ensureWatchedAta(deps.db, {
+          network,
+          agentAsset: mint,
+          ataAddress: String(prepared.sourceTokenAccount),
+        });
+      } catch {
+        // Best-effort.
       }
       const result = await wrapPrepared({
         db: deps.db,
