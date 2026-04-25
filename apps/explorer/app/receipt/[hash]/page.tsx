@@ -10,7 +10,7 @@ import { Mono } from '@/components/mono';
 import { NoRecordFound, WrongNetworkNotice } from '@/components/wrong-network-notice';
 import { solscanTxUrl } from '@/lib/solscan';
 import { formatTs, formatRelative } from '@/lib/format';
-import { formatTokenAmount, tokenInfoFor } from '@/lib/token-info';
+import { formatAtomicAsUi, formatTokenAmount, tokenInfoFor } from '@/lib/token-info';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +46,8 @@ export default async function ReceiptPage({ params }: Props) {
       </NotFoundShell>
     );
   }
+
+  const displayJson = toDisplayReceiptJson(r, network);
 
   return (
     <div className="space-y-8">
@@ -124,7 +126,7 @@ export default async function ReceiptPage({ params }: Props) {
       <section className="card px-5 py-4">
         <h2 className="mb-3 text-sm font-semibold">Raw JSON</h2>
         <pre className="overflow-x-auto rounded-md bg-[oklch(0.18_0.02_280)] p-3 font-mono text-[11px] leading-relaxed">
-          {JSON.stringify(r, null, 2)}
+          {JSON.stringify(displayJson, null, 2)}
         </pre>
       </section>
 
@@ -140,6 +142,20 @@ export default async function ReceiptPage({ params }: Props) {
       ) : null}
     </div>
   );
+}
+
+function toDisplayReceiptJson(r: ReceiptRow, network: Network): Record<string, unknown> {
+  if (!r.price) return r as unknown as Record<string, unknown>;
+  const info = tokenInfoFor(network, r.price.asset ?? null);
+  const normalizedAmount = formatAtomicAsUi(r.price.amount, info.decimals);
+  return {
+    ...r,
+    price: {
+      ...r.price,
+      amount: normalizedAmount,
+      amount_atomic: r.price.amount,
+    },
+  } as unknown as Record<string, unknown>;
 }
 
 function NotFoundShell({
