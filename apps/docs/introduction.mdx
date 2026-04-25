@@ -56,6 +56,15 @@ These docs are designed to be slurped wholesale into your model's context.
 
 Building on top of Leash from inside an agent (Cursor, Claude Code, Codex,
 Replit, Windsurf)? Install the **Leash skill** so your assistant always has
-the right primitives at hand: see the
-[`leash/skills/leash`](https://github.com/leash-market/leash/tree/main/skills/leash)
-folder in the monorepo for a one-command install.
+the right primitives at hand:
+
+```bash
+git clone https://github.com/leash-market/leash ~/leash
+mkdir -p .cursor/skills && ln -sf ~/leash/skills/leash .cursor/skills/leash
+# (or: .claude/skills, .codex/skills, .windsurf/skills — see skills/leash/INSTALL.md)
+```
+
+The skill ships a curated `SKILL.md` (mental model + workflow), a
+`REFERENCE.md` (full surface map — every SDK package, every API route,
+every env var), and an `EXAMPLES.md` of copy-paste snippets for the
+most common flows. Source: [`leash/skills/leash`](https://github.com/leash-market/leash/tree/main/skills/leash).
