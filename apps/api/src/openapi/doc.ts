@@ -117,6 +117,12 @@ export function mountOpenApi(
           'Network-scoped via the API key.',
       },
       {
+        name: 'seller-utils',
+        description:
+          'Read-only seller-kit helpers (`networks`, `facilitator`, `parse-price`, `pay-to`). ' +
+          'Mirrors the `@leash/seller-kit` exports for polyglot SDKs and UI dropdowns.',
+      },
+      {
         name: 'admin',
         description:
           'Operator-only API key issuance. Requires the operator secret in ' +
