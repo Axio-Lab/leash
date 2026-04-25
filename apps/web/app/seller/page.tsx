@@ -29,7 +29,7 @@ import { PageHeader } from '@/components/page-header';
 import { InlineCode } from '@/components/ui/code';
 import { useToast } from '@/components/ui/toast';
 import { Pager, usePagedItems } from '@/components/ui/pager';
-import { SOLANA_NETWORK } from '@/lib/env';
+import { SOLANA_NETWORK, facilitatorDisplayHost } from '@/lib/env';
 import { ReceiptRow } from '@/components/receipt-row';
 import { listAgents, type StoredAgent } from '@/lib/agent-storage';
 
@@ -229,7 +229,7 @@ export default function SellerPage() {
       <section className="grid gap-4 md:grid-cols-4">
         <InfoCard label="Surface" value="POST/GET /x/<id>" />
         <InfoCard label="Network" value={SOLANA_NETWORK} />
-        <InfoCard label="Facilitator" value="facilitator.svmacc.tech" />
+        <InfoCard label="Facilitator" value={facilitatorDisplayHost()} />
         <InfoCard label="Receives at" value="Asset Signer PDA (auto)" />
       </section>
 

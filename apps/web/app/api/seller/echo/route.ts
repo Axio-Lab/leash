@@ -4,7 +4,7 @@ import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
 import { createSeller } from '@leash/seller-kit';
 import type { ReceiptV1 } from '@leash/schemas';
-import { RUNNER_URL, SOLANA_RPC } from '@/lib/env';
+import { FACILITATOR_URL, RUNNER_URL, SOLANA_RPC } from '@/lib/env';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -38,6 +38,7 @@ function buildApp(asset: string): Hono {
   createSeller(app, {
     umi,
     sellerAgent: { asset },
+    facilitator: FACILITATOR_URL,
     routes: { 'POST /api/seller/echo': { price: '$0.001', description: 'Echo' } },
     onReceipt: postReceipt,
   });

@@ -3,7 +3,37 @@
  * sees variables prefixed with `NEXT_PUBLIC_*`.
  */
 
-import { networkFromRpc } from '@leash/core';
+import { FALLBACK_FACILITATOR_URL, networkFromRpc } from '@leash/core';
+
+/**
+ * x402 facilitator base URL (no trailing slash). Used by `createBuyer` /
+ * `createSeller` in the playground.
+ *
+ * - **Browser (`'use client'`)** — only `NEXT_PUBLIC_LEASH_FACILITATOR_URL`
+ *   is inlined at build time.
+ * - **Server routes** — may also read `LEASH_FACILITATOR_URL` (no prefix) so
+ *   docker / CI can set one var for SSR only.
+ *
+ * Default: public hosted facilitator (`https://facilitator.svmacc.tech`).
+ */
+function resolveFacilitatorUrl(): string {
+  const fromPublic = process.env.NEXT_PUBLIC_LEASH_FACILITATOR_URL?.trim();
+  if (fromPublic) return fromPublic.replace(/\/+$/, '');
+  const fromServer = process.env.LEASH_FACILITATOR_URL?.trim();
+  if (fromServer) return fromServer.replace(/\/+$/, '');
+  return FALLBACK_FACILITATOR_URL;
+}
+
+export const FACILITATOR_URL: string = resolveFacilitatorUrl();
+
+/** Short label for UI badges (hostname or raw string). */
+export function facilitatorDisplayHost(): string {
+  try {
+    return new URL(FACILITATOR_URL).host;
+  } catch {
+    return FACILITATOR_URL;
+  }
+}
 
 export const RUNNER_URL: string = process.env.LEASH_RUNNER_URL ?? 'http://localhost:8787';
 export const SELLER_URL: string = process.env.LEASH_SELLER_URL ?? 'http://localhost:3001';

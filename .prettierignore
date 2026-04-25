@@ -13,3 +13,6 @@ apps/docs/schemas/*.mdx
 **/.next/**
 **/node_modules/**
 pnpm-lock.yaml
+
+# Dotenv-style examples — no file extension Prettier recognises.
+apps/web/.env.local.example

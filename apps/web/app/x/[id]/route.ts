@@ -14,7 +14,7 @@ import {
 } from '@leash/core';
 import { createRunnerClient } from '@leash/runner';
 import type { EndpointV1, ReceiptV1 } from '@leash/schemas';
-import { RUNNER_URL, SOLANA_RPC } from '@/lib/env';
+import { FACILITATOR_URL, RUNNER_URL, SOLANA_RPC } from '@/lib/env';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -139,6 +139,7 @@ function buildApp(endpoint: EndpointV1, pathname: string): Hono {
     umi,
     sellerAgent: { asset: endpoint.owner_agent },
     network: networkAlias(endpoint.network),
+    facilitator: FACILITATOR_URL,
     routes: {
       [`${endpoint.method} ${pathname}`]: {
         description: endpoint.label,
@@ -212,7 +213,7 @@ function buildDiscoveryPayload(req: Request, endpoint: EndpointV1): PaymentLinkM
     },
     origin,
     payTo,
-    facilitator: 'https://facilitator.svmacc.tech',
+    facilitator: FACILITATOR_URL,
     docsUrl: 'https://leash.svmacc.tech/docs/playground/seller',
   });
 }

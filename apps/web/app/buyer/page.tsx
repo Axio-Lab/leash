@@ -26,7 +26,7 @@ import { useToast } from '@/components/ui/toast';
 import { usePrivySvmSigner } from '@/lib/privy-svm-signer';
 import { usePrivyUmi } from '@/lib/privy-umi';
 import { transactionExplorerUrl } from '@/lib/solscan';
-import { SOLANA_NETWORK, SOLANA_RPC } from '@/lib/env';
+import { FACILITATOR_URL, SOLANA_NETWORK, SOLANA_RPC, facilitatorDisplayHost } from '@/lib/env';
 import {
   effectiveRules,
   isLimitless,
@@ -411,6 +411,7 @@ export default function BuyerPage() {
         signer,
         networks: [network],
         rpcUrl: SOLANA_RPC,
+        facilitator: FACILITATOR_URL,
         onReceipt: shipReceipt,
         preferredCurrency: payCurrency,
         // Per-currency source ATA. `derivedSourceAta` is computed from
@@ -631,7 +632,7 @@ export default function BuyerPage() {
                   <>
                     <div className="flex flex-wrap items-center gap-2 text-sm text-fg">
                       <Badge variant="brand">{SOLANA_NETWORK}</Badge>
-                      <Badge variant="success">facilitator.svmacc.tech</Badge>
+                      <Badge variant="success">{facilitatorDisplayHost()}</Badge>
                     </div>
                   </>
                 )}
@@ -909,7 +910,7 @@ export default function BuyerPage() {
                 <CardTitle>Latest result</CardTitle>
                 <CardDescription>
                   Browser-side <InlineCode>createBuyer().fetch(url)</InlineCode>. Privy signs the
-                  SPL transfer; <InlineCode>facilitator.svmacc.tech</InlineCode> settles.
+                  SPL transfer; <InlineCode>{facilitatorDisplayHost()}</InlineCode> settles.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-3">
@@ -1087,8 +1088,8 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
           <ul className="ml-4 mt-1 list-disc space-y-0.5">
             <li>The Privy popup was closed or rejected before signing.</li>
             <li>
-              The configured facilitator (<InlineCode>facilitator.svmacc.tech</InlineCode>) returned
-              an error or timed out while settling.
+              The configured facilitator (<InlineCode>{facilitatorDisplayHost()}</InlineCode>)
+              returned an error or timed out while settling.
             </li>
             <li>
               The Solana RPC endpoint is unreachable / rate-limited (check{' '}
