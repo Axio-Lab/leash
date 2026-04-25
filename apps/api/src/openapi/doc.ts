@@ -111,6 +111,12 @@ export function mountOpenApi(
       { name: 'webhooks', description: 'Outbound webhook subscriptions and deliveries.' },
       { name: 'metrics', description: 'Per-key usage and event rollups.' },
       {
+        name: 'payment-links',
+        description:
+          'Hosted x402 payment links served by `/x/{id}` (the "Stripe Payment Links" of x402). ' +
+          'Network-scoped via the API key.',
+      },
+      {
         name: 'admin',
         description:
           'Operator-only API key issuance. Requires the operator secret in ' +

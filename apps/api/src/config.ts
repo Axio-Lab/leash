@@ -47,6 +47,26 @@ export type LeashApiConfig = {
    * `false` otherwise. Override with `LEASH_API_DOCS_ENABLED=true|false`.
    */
   docsEnabled: boolean;
+  /**
+   * Hosted x402 facilitator URL the API uses when serving its own
+   * paywall on `/x/{id}`. Same URL is recorded on every `earn` receipt
+   * the paywall emits, so explorers can verify settlement out-of-band.
+   *
+   * Defaults to `https://facilitator.svmacc.tech` (free, gas-sponsored).
+   * Override with `LEASH_API_FACILITATOR_URL`.
+   */
+  facilitatorUrl: string;
+  /**
+   * Public origin the API is reachable on (e.g.
+   * `https://api.leash.market`). Used by `POST /v1/payment-links` to
+   * compose the canonical paywall URL, by `/v1/payment-links/preview`
+   * to render a `share_url`, and by the paywall itself when stamping
+   * receipts (`request.url`).
+   *
+   * Defaults to `http://localhost:<port>` so local dev "just works".
+   * Override with `LEASH_API_PUBLIC_ORIGIN`.
+   */
+  publicOrigin: string;
 };
 
 function readEnv(key: string, fallback: string): string {
@@ -83,9 +103,18 @@ export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConf
     );
   }
   const docsDefault = env.NODE_ENV !== 'production';
+  const host = readEnv('LEASH_API_HOST', '0.0.0.0');
+  const port = readNumber('LEASH_API_PORT', 8801);
+  // `0.0.0.0` is a valid bind address but not routable in a browser.
+  // Rewrite it to `localhost` so the default `publicOrigin` is usable
+  // without forcing local devs to set `LEASH_API_PUBLIC_ORIGIN`.
+  const publicHost = host === '0.0.0.0' || host === '::' ? 'localhost' : host;
+  const publicOrigin = (
+    env.LEASH_API_PUBLIC_ORIGIN?.trim() || `http://${publicHost}:${port}`
+  ).replace(/\/+$/, '');
   return {
-    host: readEnv('LEASH_API_HOST', '0.0.0.0'),
-    port: readNumber('LEASH_API_PORT', 8801),
+    host,
+    port,
     rpc: {
       'solana-devnet': readEnv('LEASH_API_RPC_DEVNET', 'https://api.devnet.solana.com'),
       'solana-mainnet': readEnv('LEASH_API_RPC_MAINNET', 'https://api.mainnet-beta.solana.com'),
@@ -97,6 +126,8 @@ export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConf
     redisUrl: env.LEASH_API_REDIS_URL?.trim() || null,
     rateLimitRpm: readNumber('LEASH_API_RATELIMIT_RPM', 120),
     docsEnabled: readBool(env.LEASH_API_DOCS_ENABLED, docsDefault),
+    facilitatorUrl: readEnv('LEASH_API_FACILITATOR_URL', 'https://facilitator.svmacc.tech'),
+    publicOrigin,
     ...(adminSecretRaw ? { adminSecret: adminSecretRaw } : {}),
     ...(bootstrapKey
       ? {

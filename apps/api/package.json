@@ -34,6 +34,7 @@
     "@leash/core": "workspace:*",
     "@leash/registry-utils": "workspace:*",
     "@leash/schemas": "workspace:*",
+    "@leash/seller-kit": "workspace:*",
     "@libsql/client": "^0.14.0",
     "@metaplex-foundation/mpl-agent-registry": "^0.2.5",
     "@metaplex-foundation/mpl-core": "^1.10.0",

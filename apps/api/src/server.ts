@@ -32,6 +32,7 @@ import { buildIndexerRoutes } from './routes/indexer.js';
 import { buildWebhookRoutes } from './routes/webhooks.js';
 import { buildMetricsRoutes } from './routes/metrics.js';
 import { buildAdminRoutes } from './routes/admin.js';
+import { buildPaymentLinkRoutes } from './routes/payment-links.js';
 
 export type CreateLeashApiArgs = AuthDeps;
 
@@ -74,6 +75,7 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   authed.route('/', buildIndexerRoutes(deps));
   authed.route('/', buildWebhookRoutes(deps));
   authed.route('/', buildMetricsRoutes(deps));
+  authed.route('/', buildPaymentLinkRoutes(deps));
   app.route('/', authed);
 
   return app;

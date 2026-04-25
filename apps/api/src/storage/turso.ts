@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 const SCHEMA_SQL: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS schema_version (
@@ -173,6 +173,52 @@ const SCHEMA_SQL: readonly string[] = [
     UNIQUE (webhook_id, event_id)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_pending ON webhook_deliveries(next_attempt_at) WHERE delivered = 0`,
+
+  // Hosted x402 payment links served by `/x/{id}`. Same role as the
+  // runner's `endpoints` table, except authoritative and queryable
+  // through `/v1/payment-links` so non-runner consumers (and the
+  // explorer) see them too.
+  //
+  // Primary key is (network, id) so devnet and mainnet can each own
+  // the same slug — matches receipts/events isolation. `path` is what
+  // the paywall mounts (always `/x/<id>` today; recorded for parity
+  // with seller-kit's route-keyed config).
+  //
+  // Counters are maintained by recordCall / recordSettlement so
+  // `GET /v1/payment-links/{id}` can show "served N, settled M" without
+  // re-aggregating the events table on every request.
+  `CREATE TABLE IF NOT EXISTS payment_links (
+    id TEXT NOT NULL,
+    network TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    api_key_id TEXT NOT NULL,
+    label TEXT NOT NULL,
+    description TEXT,
+    owner_agent TEXT NOT NULL,
+    owner_wallet TEXT,
+    method TEXT NOT NULL CHECK (method IN ('GET','POST')),
+    path TEXT NOT NULL,
+    price TEXT NOT NULL,
+    currency TEXT NOT NULL CHECK (currency IN ('USDC','USDT','USDG')),
+    accepts_currencies_json TEXT NOT NULL DEFAULT '[]',
+    response_json TEXT NOT NULL,
+    webhook_url TEXT,
+    wrap_receipt INTEGER NOT NULL DEFAULT 0,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    call_count INTEGER NOT NULL DEFAULT 0,
+    settled_count INTEGER NOT NULL DEFAULT 0,
+    last_called_at TEXT,
+    last_settled_at TEXT,
+    last_tx_sig TEXT,
+    last_settled_amount_atomic TEXT,
+    last_settled_currency TEXT,
+    disabled_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (network, id),
+    FOREIGN KEY (api_key_id) REFERENCES api_keys(id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_payment_links_key_created ON payment_links(api_key_id, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_payment_links_agent ON payment_links(owner_agent)`,
 ];
 
 let cached: Client | null = null;

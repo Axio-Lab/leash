@@ -64,6 +64,10 @@ export function rateLimited(message = 'rate limit exceeded'): ApiError {
   return new ApiError({ code: 'rate_limited', status: 429, message });
 }
 
+export function conflict(message: string, detail?: unknown): ApiError {
+  return new ApiError({ code: 'idempotency_conflict', status: 409, message, detail });
+}
+
 export function rpcError(message: string, detail?: unknown): ApiError {
   return new ApiError({ code: 'rpc_error', status: 502, message, detail });
 }
