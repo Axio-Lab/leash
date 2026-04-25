@@ -33,6 +33,7 @@ import { buildWebhookRoutes } from './routes/webhooks.js';
 import { buildMetricsRoutes } from './routes/metrics.js';
 import { buildAdminRoutes } from './routes/admin.js';
 import { buildPaymentLinkRoutes } from './routes/payment-links.js';
+import { buildPaywallRoutes } from './routes/paywall.js';
 
 export type CreateLeashApiArgs = AuthDeps;
 
@@ -59,6 +60,12 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   // Mounted BEFORE the user-key sub-app so its API key middleware
   // doesn't intercept admin requests.
   app.route('/', buildAdminRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
+
+  // Public x402 paywall (`GET/POST /x/{id}`). Anonymous buyers must
+  // be able to reach this without an API key, so it's mounted BEFORE
+  // the authed sub-app. It also intentionally does not appear in the
+  // OpenAPI doc — it's a protocol surface, not a JSON API.
+  app.route('/', buildPaywallRoutes(deps));
 
   const authed = new OpenAPIHono<{ Variables: AuthVariables }>();
   authed.use('*', apiKeyAuth(deps));
