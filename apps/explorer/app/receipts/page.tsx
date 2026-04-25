@@ -4,6 +4,7 @@ import { getNetwork } from '@/lib/server-network';
 import { networkToSlug } from '@/lib/network';
 import { ReceiptsTable } from '@/components/receipts-table';
 import { DbUnreachable } from '@/components/empty';
+import { AutoRefresh } from '@/components/auto-refresh';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,15 +41,18 @@ export default async function ReceiptsPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-6">
-      <header className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
-          {networkToSlug(network)} · receipts
-        </p>
-        <h1 className="text-2xl font-semibold tracking-tight">Receipt feed</h1>
-        <p className="max-w-2xl text-sm text-[--color-fg-muted]">
-          Every x402 settlement that any agent has emitted. Earn receipts come from paywall-served
-          calls; spend receipts come from buyer-side payments.
-        </p>
+      <header className="flex items-end justify-between gap-4">
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
+            {networkToSlug(network)} · receipts
+          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">Receipt feed</h1>
+          <p className="max-w-2xl text-sm text-[--color-fg-muted]">
+            Every x402 settlement that any agent has emitted. Earn receipts come from paywall-served
+            calls; spend receipts come from buyer-side payments.
+          </p>
+        </div>
+        {sp.cursor ? null : <AutoRefresh intervalSec={5} />}
       </header>
 
       <nav className="flex flex-wrap gap-2">

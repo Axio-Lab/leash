@@ -8,6 +8,7 @@ import { EventsTable } from '@/components/events-table';
 import { ReceiptsTable } from '@/components/receipts-table';
 import { DbUnreachable } from '@/components/empty';
 import { SearchBar } from '@/components/search-bar';
+import { AutoRefresh } from '@/components/auto-refresh';
 import { formatRelative } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -58,9 +59,15 @@ export default async function HomePage() {
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Recent activity</h2>
-          <Link href="/events" className="text-xs text-[--color-fg-muted] hover:text-[--color-fg]">
-            view all →
-          </Link>
+          <div className="flex items-center gap-3">
+            <AutoRefresh intervalSec={5} />
+            <Link
+              href="/events"
+              className="text-xs text-[--color-fg-muted] hover:text-[--color-fg]"
+            >
+              view all →
+            </Link>
+          </div>
         </div>
         {eventsRes.ok ? (
           <EventsTable rows={events} network={network} />

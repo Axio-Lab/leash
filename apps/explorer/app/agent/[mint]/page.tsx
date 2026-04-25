@@ -10,6 +10,7 @@ import { ReceiptsTable } from '@/components/receipts-table';
 import { DbUnreachable, RpcUnreachable } from '@/components/empty';
 import { Mono } from '@/components/mono';
 import { WrongNetworkNotice } from '@/components/wrong-network-notice';
+import { AutoRefresh } from '@/components/auto-refresh';
 import { solscanAddrUrl } from '@/lib/solscan';
 
 export const dynamic = 'force-dynamic';
@@ -132,7 +133,10 @@ export default async function AgentPage({ params }: Props) {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Event timeline</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Event timeline</h2>
+          <AutoRefresh intervalSec={5} />
+        </div>
         {eventsRes.ok ? (
           <EventsTable
             rows={eventsRes.data.items}

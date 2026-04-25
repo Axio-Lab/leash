@@ -4,6 +4,7 @@ import { getNetwork } from '@/lib/server-network';
 import { networkToSlug } from '@/lib/network';
 import { EventsTable } from '@/components/events-table';
 import { DbUnreachable } from '@/components/empty';
+import { AutoRefresh } from '@/components/auto-refresh';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,11 +51,14 @@ export default async function EventsPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-6">
-      <header className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
-          {networkToSlug(network)} · events
-        </p>
-        <h1 className="text-2xl font-semibold tracking-tight">Event feed</h1>
+      <header className="flex items-end justify-between gap-4">
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
+            {networkToSlug(network)} · events
+          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">Event feed</h1>
+        </div>
+        {sp.cursor ? null : <AutoRefresh intervalSec={5} />}
       </header>
 
       <nav className="flex flex-wrap gap-2">
