@@ -52,7 +52,7 @@ import {
   type PaymentLinkRow,
 } from '../storage/payment-links.js';
 import { ingestReceipt } from '../storage/receipts.js';
-import { createPreparedEvent, markConfirmed } from '../storage/events.js';
+import { createPreparedEvent, markConfirmed, markSubmitted } from '../storage/events.js';
 import { ensureWatched } from '../indexer/watchlist.js';
 import { umiReadOnly } from '../util/umi.js';
 import { isSvmNetwork, type SvmNetwork } from '../util/network.js';
@@ -208,8 +208,12 @@ export async function ingestPaywallReceipt(
       network,
       apiKeyId: link.apiKeyId,
       agentAsset: link.ownerAgent,
-      ...(receipt.tx_sig ? { metadata: { tx_sig: receipt.tx_sig } } : {}),
+      metadata: {
+        receipt_hash: receipt.receipt_hash,
+        ...(receipt.tx_sig ? { tx_sig: receipt.tx_sig } : {}),
+      },
     });
+    if (receipt.tx_sig) await markSubmitted(deps.db, receiptEventId, receipt.tx_sig);
     await markConfirmed(deps.db, receiptEventId);
   }
 
@@ -220,6 +224,7 @@ export async function ingestPaywallReceipt(
     agentAsset: link.ownerAgent,
     metadata: { payment_link_id: link.id, tx_sig: receipt.tx_sig },
   });
+  if (receipt.tx_sig) await markSubmitted(deps.db, servedId, receipt.tx_sig);
   await markConfirmed(deps.db, servedId);
 
   const settledId = await createPreparedEvent(deps.db, {
@@ -236,6 +241,7 @@ export async function ingestPaywallReceipt(
       receipt_hash: receipt.receipt_hash,
     },
   });
+  if (receipt.tx_sig) await markSubmitted(deps.db, settledId, receipt.tx_sig);
   await markConfirmed(deps.db, settledId);
 }
 

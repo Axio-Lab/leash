@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { Activity, FileSignature, Wallet, Zap } from 'lucide-react';
-import { DbUnavailableError, getIndexerStatus, getReceiptByHash, listEvents } from '@/lib/db';
+import { DbUnavailableError, getIndexerStatus, listEvents, listRecentReceipts } from '@/lib/db';
 import type { EventPage, IndexerStatus, ReceiptPage } from '@/lib/types';
 import { getNetwork } from '@/lib/server-network';
-import { networkToSlug, type Network } from '@/lib/network';
+import { networkToSlug } from '@/lib/network';
 import { EventsTable } from '@/components/events-table';
 import { ReceiptsTable } from '@/components/receipts-table';
 import { DbUnreachable } from '@/components/empty';
@@ -31,12 +31,11 @@ export default async function HomePage() {
   const [eventsRes, statusRes, recentReceiptsRes] = await Promise.all([
     safe<EventPage>(() => listEvents({ network, limit: 15 })),
     safe<IndexerStatus>(() => getIndexerStatus(network)),
-    safe<EventPage>(() => listEvents({ network, kind: 'receipt.published', limit: 10 })),
+    safe<ReceiptPage>(() => listRecentReceipts({ network, limit: 10 })),
   ]);
 
   const events = eventsRes.ok ? eventsRes.data.items : [];
-  const receiptEvents = recentReceiptsRes.ok ? recentReceiptsRes.data.items : [];
-  const recentReceipts = await hydrateRecentReceipts(network, receiptEvents);
+  const recentReceipts = recentReceiptsRes.ok ? recentReceiptsRes.data.items : [];
 
   return (
     <div className="space-y-8">
@@ -73,7 +72,12 @@ export default async function HomePage() {
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Recent receipts</h2>
-          <span className="text-xs text-[--color-fg-subtle]">kind = receipt.published</span>
+          <Link
+            href="/receipts"
+            className="text-xs text-[--color-fg-muted] hover:text-[--color-fg]"
+          >
+            view all →
+          </Link>
         </div>
         {recentReceiptsRes.ok ? (
           <ReceiptsTable rows={recentReceipts} network={network} />
@@ -83,28 +87,6 @@ export default async function HomePage() {
       </section>
     </div>
   );
-}
-
-async function hydrateRecentReceipts(
-  network: Network,
-  receiptEvents: EventPage['items'],
-): Promise<ReceiptPage['items']> {
-  const seen = new Set<string>();
-  const out: ReceiptPage['items'] = [];
-  for (const ev of receiptEvents) {
-    const hash = (ev.metadata['receipt_hash'] as string | undefined) ?? null;
-    if (!hash || seen.has(hash)) continue;
-    seen.add(hash);
-    try {
-      const r = await getReceiptByHash(network, hash);
-      if (r) out.push(r);
-    } catch (err) {
-      if (err instanceof DbUnavailableError) break;
-      throw err;
-    }
-    if (out.length >= 10) break;
-  }
-  return out;
 }
 
 function StatusStrip({ status }: { status: IndexerStatus | null }) {

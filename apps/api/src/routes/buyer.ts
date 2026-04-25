@@ -73,7 +73,7 @@ import { networkToCaip2, type SvmNetwork } from '../util/network.js';
 import { umiForRequest, umiReadOnly } from '../util/umi.js';
 import { wrapPrepared } from '../util/prepare.js';
 import { ingestReceipt } from '../storage/receipts.js';
-import { createPreparedEvent, markConfirmed } from '../storage/events.js';
+import { createPreparedEvent, markConfirmed, markSubmitted } from '../storage/events.js';
 import { ensureWatched } from '../indexer/watchlist.js';
 import { findAssetSignerPda } from '@metaplex-foundation/mpl-core';
 
@@ -654,8 +654,12 @@ export function buildBuyerRoutes(deps: BuyerRoutesDeps): OpenAPIHono<{ Variables
             network,
             apiKeyId: apiKey.id,
             agentAsset: body.agent,
-            ...(receipt.tx_sig ? { metadata: { tx_sig: receipt.tx_sig } } : {}),
+            metadata: {
+              receipt_hash: receipt.receipt_hash,
+              ...(receipt.tx_sig ? { tx_sig: receipt.tx_sig } : {}),
+            },
           });
+          if (receipt.tx_sig) await markSubmitted(deps.db, eventId, receipt.tx_sig);
           await markConfirmed(deps.db, eventId);
         }
         try {

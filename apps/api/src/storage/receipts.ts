@@ -137,6 +137,46 @@ export async function getReceiptByHash(
   return rowToReceipt(row);
 }
 
+/**
+ * Cross-agent recent-receipts feed used by the explorer homepage and
+ * the dedicated `/receipts` listing. The receipts table is the source
+ * of truth — this avoids the explorer having to triangulate via
+ * `events.metadata.receipt_hash` (which only works for events emitted
+ * after we started writing that field).
+ *
+ * Pagination uses the same `(ingested_at, receipt_hash)` cursor shape
+ * as `listReceipts`, encoded as `<isots>|<hash>`.
+ */
+export async function listRecentReceipts(
+  db: DbClient,
+  network: SvmNetwork,
+  opts: { limit?: number; cursor?: string | null; kind?: 'spend' | 'earn' | null } = {},
+): Promise<ReceiptRow[]> {
+  const capped = Math.min(Math.max(opts.limit ?? 10, 1), 100);
+  const filters: string[] = ['network = ?'];
+  const values: (string | number)[] = [network];
+  if (opts.kind) {
+    filters.push('kind = ?');
+    values.push(opts.kind);
+  }
+  if (opts.cursor) {
+    const sep = opts.cursor.indexOf('|');
+    if (sep > 0) {
+      const ts = opts.cursor.slice(0, sep);
+      const hash = opts.cursor.slice(sep + 1);
+      filters.push('(ingested_at < ? OR (ingested_at = ? AND receipt_hash < ?))');
+      values.push(ts, ts, hash);
+    }
+  }
+  const res = await execute(
+    db,
+    `SELECT * FROM receipts WHERE ${filters.join(' AND ')}
+       ORDER BY ingested_at DESC, receipt_hash DESC LIMIT ${capped}`,
+    values,
+  );
+  return res.rows.map(rowToReceipt);
+}
+
 function rowToReceipt(row: Record<string, unknown>): ReceiptRow {
   const network = String(row.network);
   if (network !== 'solana-devnet' && network !== 'solana-mainnet') {

@@ -26,7 +26,7 @@ import {
   upsertPullTarget,
   listPullTargets,
 } from '../storage/receipts.js';
-import { createPreparedEvent, markConfirmed } from '../storage/events.js';
+import { createPreparedEvent, markConfirmed, markSubmitted } from '../storage/events.js';
 import { ensureWatched } from '../indexer/watchlist.js';
 import { umiReadOnly } from '../util/umi.js';
 import { findAssetSignerPda } from '@metaplex-foundation/mpl-core';
@@ -151,11 +151,17 @@ export function buildReceiptRoutes(deps: {
           network,
           apiKeyId: apiKey.id,
           agentAsset: agent,
-          ...(receipt.tx_sig ? { metadata: { tx_sig: receipt.tx_sig } } : {}),
+          metadata: {
+            receipt_hash: receipt.receipt_hash,
+            ...(receipt.tx_sig ? { tx_sig: receipt.tx_sig } : {}),
+          },
         });
         // Receipts are terminal — there's no on-chain confirmation to
         // wait for — so flip the row straight to `confirmed` so it
-        // shows up in the right bucket on the explorer.
+        // shows up in the right bucket on the explorer. We still
+        // record the underlying signature on the event row itself so
+        // the explorer's tx column isn't blank.
+        if (receipt.tx_sig) await markSubmitted(deps.db, eventId, receipt.tx_sig);
         await markConfirmed(deps.db, eventId);
       }
       return c.json(

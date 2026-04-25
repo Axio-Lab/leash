@@ -11,6 +11,7 @@ import { DbUnreachable } from '@/components/empty';
 import { Mono } from '@/components/mono';
 import { solscanTxUrl, solscanAddrUrl } from '@/lib/solscan';
 import { formatTs, formatRelative } from '@/lib/format';
+import { formatTokenAmount, tokenInfoFor } from '@/lib/token-info';
 
 export const dynamic = 'force-dynamic';
 
@@ -97,7 +98,11 @@ function DecodedRow({ row, network }: { row: EventRow; network: Network }) {
             <Mono value={row.mint} external={solscanAddrUrl(network, row.mint)} />
           </Field>
         ) : null}
-        {row.amount_atomic ? <Field label="Amount (atomic)">{row.amount_atomic}</Field> : null}
+        {row.amount_atomic ? (
+          <Field label="Amount" hint={`Raw on-chain integer (atoms): ${row.amount_atomic}`}>
+            {formatTokenAmount(row.amount_atomic, tokenInfoFor(network, row.mint))}
+          </Field>
+        ) : null}
         {row.client_reference ? <Field label="Client ref">{row.client_reference}</Field> : null}
         {row.error_code ? <Field label="Error">{row.error_code}</Field> : null}
       </dl>
@@ -105,11 +110,23 @@ function DecodedRow({ row, network }: { row: EventRow; network: Network }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex items-center gap-3">
-      <dt className="w-24 shrink-0 text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">
+      <dt
+        className="w-24 shrink-0 text-[10px] uppercase tracking-wider text-[--color-fg-subtle]"
+        title={hint}
+      >
         {label}
+        {hint ? <span className="ml-1 cursor-help text-[--color-fg-muted]">ⓘ</span> : null}
       </dt>
       <dd className="font-mono text-xs text-[--color-fg]">{children}</dd>
     </div>

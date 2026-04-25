@@ -39,6 +39,7 @@ export {
 export {
   listReceipts,
   getReceiptByHash,
+  listRecentReceipts,
   type ReceiptRow,
   type ListReceiptsArgs,
 } from './storage/receipts.js';

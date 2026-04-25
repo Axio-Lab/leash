@@ -1,10 +1,10 @@
-import Link from 'next/link';
 import { cn } from '@/lib/cn';
 import type { ReceiptRow } from '@/lib/types';
 import type { Network } from '@/lib/network';
 import { formatRelative } from '@/lib/format';
 import { Mono } from './mono';
 import { solscanTxUrl } from '@/lib/solscan';
+import { formatTokenAmount, tokenInfoFor } from '@/lib/token-info';
 
 const KIND_CLS = {
   spend: 'bg-[oklch(0.32_0.13_320_/_0.5)] text-[oklch(0.85_0.13_320)]',
@@ -74,7 +74,9 @@ export function ReceiptsTable({
                 <Mono value={r.agent} href={`/agent/${r.agent}`} />
               </td>
               <td className="px-3 py-2.5 align-middle text-xs text-[--color-fg-muted]">
-                {r.price ? `${r.price.amount} ${r.price.currency}` : '—'}
+                {r.price
+                  ? formatTokenAmount(r.price.amount, tokenInfoFor(network, r.price.asset ?? null))
+                  : '—'}
               </td>
               <td className="px-3 py-2.5 align-middle">
                 <Mono
@@ -84,13 +86,7 @@ export function ReceiptsTable({
                 />
               </td>
               <td className="px-3 py-2.5 align-middle">
-                <Link
-                  href={`/receipt/${r.receipt_hash}`}
-                  className="font-mono text-xs text-[--color-brand] hover:text-[--color-brand-strong]"
-                  title={r.receipt_hash}
-                >
-                  {r.receipt_hash.slice(0, 10)}…
-                </Link>
+                <Mono value={r.receipt_hash} href={`/receipt/${r.receipt_hash}`} />
               </td>
               <td className="px-3 py-2.5 text-right align-middle text-xs text-[--color-fg-muted]">
                 {formatRelative(r.ts)}

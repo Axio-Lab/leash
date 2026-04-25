@@ -29,6 +29,7 @@ import {
   getEventById as apiGetEventById,
   getIndexerStatus as apiGetIndexerStatus,
   getReceiptByHash as apiGetReceiptByHash,
+  listRecentReceipts as apiListRecentReceipts,
   listEvents as apiListEvents,
   listEventsForSignature as apiListEventsForSignature,
   listReceipts as apiListReceipts,
@@ -195,6 +196,34 @@ export async function getReceiptByHash(network: Network, hash: string): Promise<
   const row = await withDb((db) => apiGetReceiptByHash(db, networkToSlug(network), hash));
   if (!row) return null;
   return receiptToRow(row);
+}
+
+/**
+ * Cross-agent recent-receipts feed for the homepage panel and the
+ * `/receipts` page. Reads straight from the receipts table so we
+ * don't depend on event metadata having `receipt_hash` populated
+ * (older rows didn't).
+ */
+export async function listRecentReceipts(opts: {
+  network: Network;
+  limit?: number;
+  cursor?: string;
+  kind?: 'spend' | 'earn';
+}): Promise<ReceiptPage> {
+  const limit = opts.limit ?? 10;
+  const rows = await withDb((db) =>
+    apiListRecentReceipts(db, networkToSlug(opts.network), {
+      limit,
+      ...(opts.cursor ? { cursor: opts.cursor } : {}),
+      ...(opts.kind ? { kind: opts.kind } : {}),
+    }),
+  );
+  // Pull cursor metadata off the underlying ApiReceiptRow, before we
+  // strip it down to ReceiptV1 in receiptToRow.
+  const last = rows[rows.length - 1];
+  const next_cursor =
+    last && rows.length === limit ? `${last.ingestedAt}|${last.receiptHash}` : null;
+  return { items: rows.map(receiptToRow), next_cursor };
 }
 
 export async function getIndexerStatus(network: Network): Promise<IndexerStatus> {

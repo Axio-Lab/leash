@@ -7,7 +7,16 @@ import type { EventRow } from './types';
 export type EventDescriptor = {
   label: string;
   shortLabel: string;
-  variant: 'identity' | 'executive' | 'delegation' | 'treasury' | 'token' | 'submit' | 'receipt';
+  variant:
+    | 'identity'
+    | 'executive'
+    | 'delegation'
+    | 'treasury'
+    | 'token'
+    | 'submit'
+    | 'receipt'
+    | 'payment-link'
+    | 'buyer';
   description: (e: EventRow) => string;
 };
 
@@ -95,6 +104,65 @@ const TABLE: Record<string, EventDescriptor> = {
     shortLabel: 'pulled',
     variant: 'receipt',
     description: () => 'Receipt fetched from a registered pull target.',
+  },
+  'payment_link.created': {
+    label: 'Payment link created',
+    shortLabel: 'link created',
+    variant: 'payment-link',
+    description: (e) => {
+      const id = (e.metadata?.['payment_link_id'] as string | undefined) ?? null;
+      const price = (e.metadata?.['price'] as string | undefined) ?? null;
+      const currency = (e.metadata?.['currency'] as string | undefined) ?? null;
+      const tail = price && currency ? ` (${price} ${currency})` : '';
+      return id ? `Payment link ${id}${tail} created.` : `Payment link${tail} created.`;
+    },
+  },
+  'payment_link.updated': {
+    label: 'Payment link updated',
+    shortLabel: 'link updated',
+    variant: 'payment-link',
+    description: (e) => {
+      const id = (e.metadata?.['payment_link_id'] as string | undefined) ?? null;
+      return id ? `Payment link ${id} was updated.` : 'A payment link was updated.';
+    },
+  },
+  'payment_link.deleted': {
+    label: 'Payment link deleted',
+    shortLabel: 'link deleted',
+    variant: 'payment-link',
+    description: (e) => {
+      const id = (e.metadata?.['payment_link_id'] as string | undefined) ?? null;
+      return id ? `Payment link ${id} was deleted.` : 'A payment link was deleted.';
+    },
+  },
+  'payment_link.served': {
+    label: 'Payment link served',
+    shortLabel: 'link served',
+    variant: 'payment-link',
+    description: (e) => {
+      const id = (e.metadata?.['payment_link_id'] as string | undefined) ?? null;
+      return id
+        ? `Paywall for ${id} served a paid response.`
+        : 'A hosted paywall served a paid response.';
+    },
+  },
+  'payment_link.settled': {
+    label: 'Payment link settled',
+    shortLabel: 'link settled',
+    variant: 'payment-link',
+    description: (e) => {
+      const id = (e.metadata?.['payment_link_id'] as string | undefined) ?? null;
+      const currency = (e.metadata?.['currency'] as string | undefined) ?? null;
+      return id
+        ? `Paywall for ${id} settled${currency ? ` in ${currency}` : ''}.`
+        : 'A paywall settled an x402 payment.';
+    },
+  },
+  'buyer.payment.prepare': {
+    label: 'Buyer payment prepared',
+    shortLabel: 'buyer prepare',
+    variant: 'buyer',
+    description: () => 'Buyer prepared (but did not yet sign) an x402 payment envelope.',
   },
 };
 

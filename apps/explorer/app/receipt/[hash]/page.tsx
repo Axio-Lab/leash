@@ -9,6 +9,7 @@ import { DbUnreachable } from '@/components/empty';
 import { Mono } from '@/components/mono';
 import { solscanTxUrl } from '@/lib/solscan';
 import { formatTs, formatRelative } from '@/lib/format';
+import { formatTokenAmount, tokenInfoFor } from '@/lib/token-info';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,7 +67,11 @@ export default async function ReceiptPage({ params }: Props) {
               />
             </Field>
           ) : null}
-          {r.price ? <Field label="Price">{`${r.price.amount} ${r.price.currency}`}</Field> : null}
+          {r.price ? (
+            <Field label="Price" hint={`Raw on-chain integer (atoms): ${r.price.amount}`}>
+              {formatTokenAmount(r.price.amount, tokenInfoFor(network, r.price.asset ?? null))}
+            </Field>
+          ) : null}
           {r.reason ? <Field label="Reason">{r.reason}</Field> : null}
           <Field label="Request">
             <span className="break-all">
@@ -120,11 +125,23 @@ export default async function ReceiptPage({ params }: Props) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex items-baseline gap-3">
-      <dt className="w-28 shrink-0 text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">
+      <dt
+        className="w-28 shrink-0 text-[10px] uppercase tracking-wider text-[--color-fg-subtle]"
+        title={hint}
+      >
         {label}
+        {hint ? <span className="ml-1 cursor-help text-[--color-fg-muted]">ⓘ</span> : null}
       </dt>
       <dd className="font-mono text-xs text-[--color-fg]">{children}</dd>
     </div>
