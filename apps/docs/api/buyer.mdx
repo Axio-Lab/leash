@@ -290,6 +290,30 @@ price will reflect the actual charged amount, and you can compare
 against `expected_payment` client-side to alert on dynamic-pricing
 mismatches.
 
+<Note>
+  **Indexer follow-up after `/payment/execute`.** This call
+  auto-registers the **buyer** agent (`body.agent`) on the indexer
+  watchlist, so the buyer's spend receipts and any future on-chain
+  activity for the buyer surface on the explorer automatically.
+
+  It does **not** register the **seller's** treasury. If the seller
+  is a Leash payment link (`/x/{id}`), the paywall already handles
+  this on its end. If the seller is a third-party x402 endpoint and
+  you want the matching `agent.treasury.fund` event for the seller's
+  receiving agent to also show up on the explorer, run **one**
+  `GET /v1/agents/{seller_agent}/treasury/balances` call after your
+  first successful payment to that seller. It's read-only,
+  idempotent, free, and registers the PDA + every ATA in one shot.
+
+  ```bash
+  curl -s "https://api.leash.market/v1/agents/$SELLER_AGENT/treasury/balances" \
+    -H "Authorization: Bearer $LEASH_API_KEY"
+  ```
+
+  See [Explorer tracking → Sequence 2](/api/explorer-tracking#sequence-2--issue-a-buyer-payment-against-an-x402-endpoint)
+  for the full buyer-side flow.
+</Note>
+
 ## `POST /v1/buyer/receipt/finalize`
 
 Pure helper that computes `receipt_hash` for a draft receipt. Useful

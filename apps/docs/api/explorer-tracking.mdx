@@ -63,12 +63,12 @@ on the next tick.
 
 | Event kind                    | Source           | Endpoint / trigger that surfaces it                                                                                        |
 | ----------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `agent.identity.register`     | API + indexer    | `POST /v1/agents/prepare` (then `/v1/submit`); or any `mpl-agent-identity::CreateIdentity` for a watched asset.            |
-| `agent.executive.register`    | API + indexer    | `POST /v1/executive/prepare` (then `/v1/submit`); or `mpl-agent-tools::CreateExecutive`.                                   |
+| `agent.identity.register`     | API + indexer    | `POST /v1/agents/{mint}/identity/prepare` (then `/v1/submit`); or any `mpl-agent-identity::CreateIdentity` for a watched asset (e.g. an SDK-driven `prepareAgentMint`). |
+| `agent.executive.register`    | API + indexer    | `POST /v1/agents/{mint}/executive/register/prepare`; or `mpl-agent-tools::CreateExecutive`.                                |
 | `agent.executive.delegate`    | API + indexer    | `POST /v1/agents/{mint}/executive/delegate/prepare`; or `mpl-agent-tools::Delegate`.                                       |
 | `agent.delegation.set`        | API + indexer    | `POST /v1/agents/{mint}/delegation/prepare`; or an `Execute`-wrapped SPL `Approve` for the asset's signer PDA.             |
 | `agent.delegation.revoke`     | API + indexer    | `POST /v1/agents/{mint}/delegation/revoke/prepare`; or an `Execute`-wrapped SPL `Revoke`.                                  |
-| `agent.token.set`             | API + indexer    | `POST /v1/agents/{mint}/token/prepare`; or `mpl-agent-identity::SetAgentToken`.                                            |
+| `agent.token.set`             | API + indexer    | `POST /v1/agents/{mint}/token/set/prepare`; or `mpl-agent-identity::SetAgentToken`.                                        |
 | `agent.treasury.provision`    | API + indexer    | `POST /v1/agents/{mint}/treasury/provision/prepare` (skipped if every ATA already exists); or any `CreateAssociatedTokenAccount` for the PDA. |
 | `agent.treasury.withdraw`     | API + indexer    | `POST /v1/agents/{mint}/treasury/withdraw[-all]/prepare`; or any `Execute`-wrapped `TransferChecked` debiting the PDA's ATA. |
 | `agent.treasury.withdraw_sol` | API + indexer    | `POST /v1/agents/{mint}/treasury/withdraw-sol[-all]/prepare`; or any `Execute` reducing the PDA's lamport balance.         |
@@ -81,8 +81,152 @@ on the next tick.
 | `payment_link.served`         | API only         | An anonymous client hits `/x/{id}` with no `X-PAYMENT` header (paywall serves a `402`).                                     |
 | `payment_link.settled`        | API only         | An anonymous client hits `/x/{id}` with a valid `X-PAYMENT` header and the facilitator settles the payment.                 |
 | `buyer.payment.prepare`       | API only         | `POST /v1/buyer/payment/prepare`.                                                                                           |
-| `receipt.published`           | API only         | `POST /v1/receipts/{agent}`.                                                                                                |
+| `receipt.published`           | API only         | `POST /v1/receipts/{agent}` (also auto-emitted by `POST /v1/buyer/payment/execute` and the paywall on settle).              |
 | `receipt.pulled`              | Indexer only     | The pull worker fetches a receipt from a registered `pull-target` URL.                                                      |
+
+Brand-new agent creation (`prepareAgentMint`) is not yet exposed as an
+HTTP endpoint — mint the asset via the SDK, then start hitting
+`/v1/agents/{mint}/...` from the second action onwards.
+
+## Standard integration sequences
+
+These are the four flows almost every integration ends up running.
+Each one lists the calls in order, what each call does, and — where
+relevant — the **explicit follow-up call** you should run so the
+indexer registers everything the explorer needs.
+
+### Sequence 1 — Stand up a brand-new agent end-to-end
+
+Run these in order. After this sequence, the agent + treasury PDA +
+every stable ATA are on the indexer watchlist, so every future
+on-chain event for this agent will surface on the explorer
+automatically.
+
+```bash
+# 0. Mint the agent asset locally with @leash/registry-utils
+#    (no API endpoint yet — see /sdk/registry-utils#prepareAgentMint).
+#    Save the resulting `mint` pubkey as $MINT.
+
+# 1. Bind an executive wallet to the agent (auto-watches asset + treasury).
+curl -sX POST https://api.leash.market/v1/agents/$MINT/executive/register/prepare \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -d '{ "executive_authority": "'$EXEC_PUBKEY'" }'
+# → sign locally → POST /v1/submit
+
+# 2. Authorize the executive to drive Execute for this asset.
+curl -sX POST https://api.leash.market/v1/agents/$MINT/executive/delegate/prepare \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -d '{ "executive": "'$EXEC_PUBKEY'" }'
+# → sign → submit
+
+# 3. Set the SPL spend delegation cap (per stablecoin).
+curl -sX POST https://api.leash.market/v1/agents/$MINT/delegation/prepare \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -d '{ "executive": "'$EXEC_PUBKEY'", "stable_symbol": "USDC", "allowance": "100" }'
+# → sign → submit
+
+# 4. Pre-create stable ATAs on the treasury PDA
+#    (auto-registers the ATAs as treasury_ata watch rows).
+curl -sX POST https://api.leash.market/v1/agents/$MINT/treasury/provision/prepare \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -d '{ "stable_symbols": ["USDC", "USDG"] }'
+# → sign → submit  (or accept the no_op envelope if every ATA exists)
+
+# 5. ★ FOLLOW-UP: register every ATA with one read-only call.
+#    Free, idempotent, and the canonical "make this agent fully
+#    visible on the explorer" step. Run this any time you suspect
+#    an ATA was created out-of-band (faucet drop, third-party top-up).
+curl -s "https://api.leash.market/v1/agents/$MINT/treasury/balances" \
+  -H "Authorization: Bearer $LSH_TEST_KEY"
+```
+
+### Sequence 2 — Issue a buyer payment against an x402 endpoint
+
+```bash
+# 1. Quote the seller (no chain writes; emits no events).
+QUOTE=$(curl -sX POST https://api.leash.market/v1/buyer/quote \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -d '{ "url": "'$SELLER_URL'", "method": "GET" }')
+
+# 2. Optional: gate via your local RulesV1.
+curl -sX POST https://api.leash.market/v1/buyer/policy/evaluate \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -d '{ "rules": '"$RULES"', "request": '"$REQ"', "state": '"$STATE"' }'
+
+# 3. Build the unsigned SPL TransferChecked.
+PREP=$(curl -sX POST https://api.leash.market/v1/buyer/payment/prepare \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -d '{ "payer": "'$BUYER_PUBKEY'", "spl_mint": "'$MINT'",
+        "destination": "'$SELLER_PAYTO'", "amount": "1000", "decimals": 6,
+        "token_program": "spl" }')
+# Drops a `buyer.payment.prepare` event automatically.
+
+# 4. Sign locally → wrap into X-PAYMENT header → execute via the API.
+curl -sX POST https://api.leash.market/v1/buyer/payment/execute \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -d '{ "url": "'$SELLER_URL'", "method": "GET", "x_payment": "'$X_PAYMENT'",
+        "agent": "'$BUYER_AGENT'", "nonce": '$NONCE' }'
+# Auto-watches the BUYER agent + treasury, writes the spend receipt,
+# and emits `receipt.published` for the buyer.
+
+# 5. ★ FOLLOW-UP (only if you want the SELLER's treasury fund event
+#    to also show up on the explorer, and the seller is NOT a Leash
+#    payment link). One call, idempotent, free.
+curl -s "https://api.leash.market/v1/agents/$SELLER_AGENT/treasury/balances" \
+  -H "Authorization: Bearer $LSH_TEST_KEY"
+```
+
+When the seller is a Leash payment link (`/x/{id}`), step 5 is
+unnecessary — the paywall already auto-watches the payee on every
+settle.
+
+### Sequence 3 — Onboard an agent that already exists on chain
+
+You inherited an agent that the API has never written to (maybe it
+was minted with the SDK, or by a different team). One call is enough
+to make every past **and** future on-chain event surface.
+
+```bash
+curl -s "https://api.leash.market/v1/agents/$MINT/treasury/balances" \
+  -H "Authorization: Bearer $LSH_TEST_KEY"
+```
+
+This single read:
+
+- Registers the asset as `asset` on the watchlist.
+- Registers the treasury PDA as `treasury`.
+- Registers every SPL ATA owned by the PDA as `treasury_ata`.
+
+The next indexer tick will backfill the agent's history (capped at
+the configured backfill floor) and start surfacing every future
+event.
+
+### Sequence 4 — Receive deposits to an agent treasury
+
+Funding is **indexer-only** because deposits are unauthenticated SPL
+transfers anyone can send. To make sure they land in the explorer:
+
+```bash
+# 1. ★ One-time setup: register the treasury PDA + every ATA.
+curl -s "https://api.leash.market/v1/agents/$MINT/treasury/balances" \
+  -H "Authorization: Bearer $LSH_TEST_KEY"
+
+# 2. Tell your funder to deposit normally — any TransferChecked into
+#    the treasury's ATA, no x402, no special header. After the next
+#    indexer tick (~5 s), check:
+curl -sG https://api.leash.market/v1/events \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  --data-urlencode "kind=agent.treasury.fund" \
+  --data-urlencode "agent=$MINT" \
+  --data-urlencode "limit=5"
+```
+
+For an end-to-end devnet demo, run the reference script:
+
+```bash
+LEASH_FUND_AMOUNT=1 LEASH_FUND_SYMBOL=USDG \
+  pnpm --filter @leash/api fund
+```
 
 ## Recipes
 
