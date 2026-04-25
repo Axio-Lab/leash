@@ -1,0 +1,301 @@
+---
+title: 'Agent treasury'
+description: Read SOL + SPL balances on the Asset Signer PDA, provision stable ATAs, and prepare owner-driven SPL / SOL withdrawals through one HTTPS surface.
+---
+
+The agent treasury is the **Asset Signer PDA** derived from an MPL Core
+asset. It has no private key — only the asset's `owner` can authorise an
+`mpl-core::Execute` instruction, and `Execute` is the only path that can
+CPI-sign on behalf of the PDA.
+
+This page documents the five HTTP routes that drive that PDA:
+
+| Endpoint                                                        | Method | Purpose                                                      |
+| --------------------------------------------------------------- | ------ | ------------------------------------------------------------ |
+| `GET  /v1/agents/{mint}/treasury/balances`                      | read   | Native SOL + every SPL token sitting on the PDA right now.   |
+| `POST /v1/agents/{mint}/treasury/provision/prepare`             | write  | Pre-create the curated stable ATAs (USDC / USDT / USDG).     |
+| `POST /v1/agents/{mint}/treasury/withdraw/prepare`              | write  | Owner moves a specific atomic amount of one SPL mint out.    |
+| `POST /v1/agents/{mint}/treasury/withdraw-all/prepare`          | write  | Same shape; drains the full balance (or `no_op` when zero).  |
+| `POST /v1/agents/{mint}/treasury/withdraw-sol/prepare`          | write  | Owner moves a specific lamport amount of native SOL out.     |
+| `POST /v1/agents/{mint}/treasury/withdraw-sol-all/prepare`      | write  | Same shape; drains all SOL above a configurable reserve.     |
+
+Every write route follows the standard
+[Prepare → Submit lifecycle](/api/prepare-submit): the API never holds
+your key, you sign locally, then hand the signed bytes to `POST /v1/submit`.
+
+## Read balances
+
+```bash
+curl -sX GET https://api.leash.market/v1/agents/$MINT/treasury/balances \
+  -H "Authorization: Bearer $LSH_TEST_KEY"
+```
+
+```json
+{
+  "agent_asset": "E1wVJP…",
+  "network": "solana-devnet",
+  "treasury": "AssetSigner…",
+  "sol": {
+    "lamports": "12500000",
+    "sol": 0.0125,
+    "spendable_lamports": "12495000",
+    "spendable_sol": 0.012495
+  },
+  "spl": [
+    {
+      "mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      "symbol": "USDC",
+      "ata": "TreasuryUSDCAta…",
+      "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "amount": "100000",
+      "decimals": 6,
+      "ui_amount": 0.1
+    },
+    {
+      "mint": "4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7",
+      "symbol": "USDG",
+      "ata": "TreasuryUSDGAta…",
+      "token_program": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "amount": "0",
+      "decimals": 6,
+      "ui_amount": 0
+    }
+  ]
+}
+```
+
+`spendable_lamports` already subtracts a small safety reserve so the PDA
+keeps enough rent to sign its own future transactions; use it directly to
+gate "Withdraw all SOL" UI buttons.
+
+## Provision stable ATAs
+
+Pre-create the curated stable ATAs so wallets, faucets, and other agents
+can deposit into the treasury without "recipient has no token account"
+errors. Idempotent: if every ATA already exists, the response is
+`no_op: true` and no transaction is constructed.
+
+```bash
+curl -sX POST https://api.leash.market/v1/agents/$MINT/treasury/provision/prepare \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payer": "FFvP…owner",
+    "authority": "FFvP…owner"
+  }'
+```
+
+`mints` is optional. Omit it to provision the network's curated stable
+list (USDC on devnet; USDC + USDT + USDG on mainnet); pass an explicit
+list to provision arbitrary mints. USDG is a Token-2022 mint, so its
+entry must include `"token_program": "token-2022"`:
+
+```json
+{
+  "payer": "FFvP…owner",
+  "authority": "FFvP…owner",
+  "mints": [
+    { "mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU", "symbol": "USDC" },
+    { "mint": "4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7", "symbol": "USDG", "token_program": "token-2022" }
+  ]
+}
+```
+
+A non-trivial response looks like:
+
+```json
+{
+  "event_id": "01J…",
+  "network": "solana-devnet",
+  "transaction": {
+    "base64": "AQABAv…",
+    "message_base64": "AQABAv…",
+    "recent_blockhash": "GZNb…",
+    "last_valid_block_height": 320489201,
+    "fee_payer": "FFvP…owner",
+    "signers": ["FFvP…owner"]
+  },
+  "echo": {
+    "treasury": "AssetSigner…",
+    "atas": [
+      {
+        "mint": "4zMMC…",
+        "symbol": "USDC",
+        "address": "TreasuryUSDCAta…",
+        "token_program": "Tokenkeg…",
+        "created": true
+      }
+    ]
+  }
+}
+```
+
+Sign `transaction.base64` (or `transaction.message_base64`, see
+[Prepare → Submit](/api/prepare-submit)) with the owner key, then post the
+signed bytes back to `POST /v1/submit`:
+
+```bash
+curl -sX POST https://api.leash.market/v1/submit \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{ \"event_id\": \"$EVENT_ID\", \"transaction_base64\": \"$SIGNED\" }"
+```
+
+The "no-op" envelope skips the round-trip entirely:
+
+```json
+{
+  "event_id": null,
+  "network": "solana-devnet",
+  "transaction": null,
+  "echo": {
+    "treasury": "AssetSigner…",
+    "atas": [{ "mint": "4zMMC…", "symbol": "USDC", "address": "TreasuryUSDCAta…", "token_program": "Tokenkeg…", "created": false }]
+  },
+  "no_op": true
+}
+```
+
+## Withdraw an SPL stable
+
+`destination` is a **wallet address**, not an ATA — the API derives the
+destination's ATA for `spl_mint` and prepends a `CreateIdempotent`
+instruction when it doesn't exist (`will_create_destination_ata: true`
+in the response).
+
+```bash
+curl -sX POST https://api.leash.market/v1/agents/$MINT/treasury/withdraw/prepare \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payer": "FFvP…owner",
+    "authority": "FFvP…owner",
+    "spl_mint": "4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7",
+    "destination": "FFvP…owner",
+    "amount": "99000000",
+    "token_program": "token-2022",
+    "decimals": 6,
+    "create_destination_ata_if_missing": true
+  }'
+```
+
+| Field                               | Required | Notes                                                                                                            |
+| ----------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------- |
+| `payer`                             | yes      | Wallet that pays SOL fees + ATA rent. Usually the owner.                                                         |
+| `authority`                         | yes      | Asset owner. Only the owner can authorise `mpl-core::Execute`.                                                   |
+| `spl_mint`                          | yes      | The SPL mint to debit (USDC / USDT / USDG / arbitrary).                                                          |
+| `destination`                       | yes      | Receiving wallet (its ATA is derived; no need to pre-create).                                                    |
+| `amount`                            | yes      | Atomic units (USDG has 6 decimals, so `99000000` = 99 USDG).                                                     |
+| `token_program`                     | no       | `"spl"` (default) or `"token-2022"`. USDG **requires** `"token-2022"`.                                           |
+| `decimals`                          | no       | Pre-fetched mint decimals — saves an RPC roundtrip in the API.                                                   |
+| `create_destination_ata_if_missing` | no       | Defaults to `true`. Set `false` to fail loudly when the destination has no ATA yet.                              |
+
+Response shape:
+
+```json
+{
+  "event_id": "01J…",
+  "network": "solana-devnet",
+  "transaction": { "base64": "AQABAv…", "message_base64": "…", "recent_blockhash": "…", "fee_payer": "FFvP…", "signers": ["FFvP…"] },
+  "echo": {
+    "treasury": "AssetSigner…",
+    "source_token_account": "TreasuryUSDGAta…",
+    "destination_token_account": "OwnerUSDGAta…",
+    "amount": "99000000",
+    "destination": "FFvP…owner",
+    "will_create_destination_ata": false,
+    "decimals": 6
+  }
+}
+```
+
+The "drain everything" variant has the same shape minus `amount`. It
+returns `no_op: true` when the treasury balance is zero, so you can wire
+it to a one-click button without a balance pre-flight:
+
+```bash
+curl -sX POST https://api.leash.market/v1/agents/$MINT/treasury/withdraw-all/prepare \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -d '{ "payer": "...", "authority": "...", "spl_mint": "...", "destination": "..." }'
+```
+
+## Withdraw native SOL
+
+Drains lamports from the treasury PDA. Useful for reclaiming Genesis
+creator fees from an agent token launch — fees route to the same PDA as
+the treasury's SPL ATAs.
+
+```bash
+curl -sX POST https://api.leash.market/v1/agents/$MINT/treasury/withdraw-sol/prepare \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -d '{
+    "payer": "FFvP…owner",
+    "authority": "FFvP…owner",
+    "destination": "FFvP…owner",
+    "lamports": "1000000"
+  }'
+```
+
+The "drain everything" variant accepts an optional `reserve_lamports`
+field (defaults to a tiny safety reserve so the PDA keeps enough SOL
+for its own future tx fees) and returns `no_op: true` when the balance
+is at or below the reserve:
+
+```bash
+curl -sX POST https://api.leash.market/v1/agents/$MINT/treasury/withdraw-sol-all/prepare \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -d '{
+    "payer": "FFvP…owner",
+    "authority": "FFvP…owner",
+    "destination": "FFvP…owner",
+    "reserve_lamports": "100000"
+  }'
+```
+
+## Watch on the explorer
+
+Every prepared treasury operation creates a row in the `events` table
+with one of three kinds:
+
+- `agent.treasury.provision` — emitted by `provision/prepare`
+- `agent.treasury.withdraw` — emitted by `withdraw/prepare` and `withdraw-all/prepare`
+- `agent.treasury.withdraw_sol` — emitted by `withdraw-sol/prepare` and `withdraw-sol-all/prepare`
+
+The same kinds are also emitted by the chain indexer when it observes
+matching on-chain activity for a watched agent (for example, an SDK
+that drove `withdrawTreasury` directly without going through the API).
+That way the [explorer](https://explorer.leash.market) shows every
+treasury action regardless of whether the API or the SDK initiated it.
+
+You can query them directly:
+
+```bash
+curl -sG https://api.leash.market/v1/events \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  --data-urlencode "kind=agent.treasury.withdraw" \
+  --data-urlencode "agent=$MINT" \
+  --data-urlencode "limit=5"
+```
+
+## Reference scripts
+
+The repository ships two end-to-end scripts that drive these endpoints
+against real devnet:
+
+- `pnpm --filter @leash/api e2e:devnet` — full payment-link / paywall /
+  receipt flow, including a real `agent.treasury.provision` round-trip
+  that exercises prepare → sign → submit → confirm.
+- `pnpm --filter @leash/api withdraw` — one-shot script that withdraws
+  a configurable amount of USDG from a target agent treasury through
+  the public API. See [`apps/api/scripts/withdraw.ts`](https://github.com/leash-market/leash/blob/main/apps/api/scripts/withdraw.ts)
+  for the `LEASH_WITHDRAW_*` env knobs.
+
+## See also
+
+- [Treasury concept](/concepts/treasury) — what the Asset Signer PDA is
+  and why withdraws bypass the executive delegation.
+- [Withdraw treasury funds (guide)](/guides/withdraw-funds) — SDK-side
+  walkthrough plus the playground UI flow.
+- [`@leash/registry-utils`](/sdk/registry-utils) — the same primitives
+  the API wraps; useful when you want client-side custody with no
+  remote dependency.

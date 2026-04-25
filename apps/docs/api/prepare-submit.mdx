@@ -16,15 +16,15 @@ sequenceDiagram
   Client->>API: POST /v1/.../prepare
   API->>API: build TransactionBuilder<br/>derive PDAs, set blockhash
   API->>API: createPreparedEvent (phase=prepared)
-  API-->>Client: { event_id, transaction.{message,full,signers,blockhash}, echo }
+  API-->>Client: { event_id, transaction.{base64,message_base64,recent_blockhash,signers}, echo }
 
   Client->>Wallet: sign(message_base64)
-  Wallet-->>Client: signature(s)
+  Wallet-->>Client: signed transaction (base64)
 
-  Client->>API: POST /v1/submit { event_id, transaction.full_signed }
+  Client->>API: POST /v1/submit { event_id, transaction_base64 }
   API->>Chain: sendRawTransaction
   API->>API: markSubmitted (phase=submitted)
-  API-->>Client: 202 { signature }
+  API-->>Client: 200 { signature }
 
   loop background
     API->>Chain: getSignatureStatuses
@@ -66,8 +66,10 @@ returns the wire-encoded transaction, and creates a `prepared` event:
 | `POST /v1/agents/{mint}/delegation/prepare`            | `prepareSetSpendDelegation`    | Owner approves the executive as SPL delegate up to a cap.   |
 | `POST /v1/agents/{mint}/delegation/revoke/prepare`     | `prepareRevokeSpendDelegation` | Drop the SPL delegate to zero.                              |
 | `POST /v1/agents/{mint}/treasury/provision/prepare`    | `prepareProvisionTreasuryAtas` | Pre-create stable ATAs on the treasury PDA.                 |
-| `POST /v1/agents/{mint}/treasury/withdraw/prepare`     | `prepareWithdrawTreasury`      | Owner moves SPL out of the treasury.                        |
+| `POST /v1/agents/{mint}/treasury/withdraw/prepare`     | `prepareWithdrawTreasury`      | Owner moves a specific SPL amount out of the treasury.      |
+| `POST /v1/agents/{mint}/treasury/withdraw-all/prepare` | `prepareWithdrawTreasuryAll`   | Owner drains the full SPL balance (or `no_op` when zero).   |
 | `POST /v1/agents/{mint}/treasury/withdraw-sol/prepare` | `prepareWithdrawTreasurySol`   | Owner moves lamports out of the treasury.                   |
+| `POST /v1/agents/{mint}/treasury/withdraw-sol-all/prepare` | `prepareWithdrawTreasurySolAll` | Owner drains all SOL above a configurable safety reserve. |
 | `POST /v1/agents/{mint}/token/prepare`                 | `prepareSetAgentToken`         | Set the `agent_token` field on the identity plugin.         |
 | `POST /v1/agents/{mint}/token/launch/prepare`          | `prepareAgentTokenLaunch`      | Genesis-flow token launch + bind to the agent.              |
 | `POST /v1/launches/sign/prepare`                       | `prepareSignAndSendLaunch`     | Sign the multi-tx Genesis launch in one call.               |
@@ -80,9 +82,11 @@ Each response uses the same shape:
   "event_id": "01HVTQX4GZTH8XK1F2JZ7N5WJ4",
   "network": "solana-devnet",
   "transaction": {
+    "base64": "AQABAv…",
     "message_base64": "AQABAv…",
-    "full_base64": "AQABAv…",
-    "blockhash": "GZNb…",
+    "recent_blockhash": "GZNb…",
+    "last_valid_block_height": 320489201,
+    "fee_payer": "HQbJ…",
     "signers": ["HQbJ…", "9XQ2…"]
   },
   "echo": {
@@ -92,9 +96,26 @@ Each response uses the same shape:
 ```
 
 `signers` is the ordered set of pubkeys the API expects on the
-`message_base64` you return to `/v1/submit`. `full_base64` is the
-same transaction with the API's noop signers stripped — sign that
-when your client only knows how to consume a fully-formed tx.
+`message_base64` you return to `/v1/submit`. `base64` is the same
+transaction with empty signature slots — most polyglot SDKs sign
+that directly with `signTransaction(tx, [signer])` and POST the
+resulting bytes back. `fee_payer` is the first account in the
+message and is always the first entry of `signers`.
+
+A small subset of helpers can short-circuit when there's nothing to
+do — provision-when-already-provisioned, withdraw-all-when-empty.
+They return a "no-op" envelope with a `null` event id and no
+`transaction`:
+
+```json
+{
+  "event_id": null,
+  "network": "solana-devnet",
+  "transaction": null,
+  "echo": { /* same shape as the active envelope */ },
+  "no_op": true
+}
+```
 
 ## The submit endpoint
 
@@ -106,7 +127,7 @@ Content-Type: application/json
 
 {
   "event_id": "01HVTQX4GZTH8XK1F2JZ7N5WJ4",
-  "transaction": "AQABAv…",         # signed full tx, base64
+  "transaction_base64": "AQABAv…",   # signed full tx, base64
   "client_reference": "order-42"     # optional
 }
 ```
@@ -116,8 +137,8 @@ Content-Type: application/json
 - **Broadcasts** via the API's RPC pool.
 - **Stamps** the event to `phase = submitted` with the returned
   signature.
-- **Returns** `202 Accepted` with `{ signature }`. Confirmation is a
-  separate poll.
+- **Returns** `200 OK` with `{ event_id, signature, phase: "submitted", network }`.
+  Confirmation is a separate poll.
 
 A background tick polls `getSignatureStatuses` for every
 `submitted` event and flips it to `confirmed` (with `confirmed_at`,
@@ -158,15 +179,16 @@ PREP=$(curl -sX POST https://api.leash.market/v1/agents/$MINT/delegation/prepare
   -d '{ "executive": "'$EXEC'", "stable_symbol": "USDC", "allowance": "100" }')
 
 EVENT_ID=$(echo "$PREP" | jq -r '.event_id')
-MSG=$(echo "$PREP"      | jq -r '.transaction.full_base64')
+TX=$(echo "$PREP"       | jq -r '.transaction.base64')
 
 # 2. Sign locally — anything that produces a base64-signed full tx works.
-SIGNED=$(node ./sign.mjs "$MSG")
+#    With Umi:  signTransaction(umi.transactions.deserialize(bytes), [signer])
+SIGNED=$(node ./sign.mjs "$TX")
 
 # 3. Submit
 curl -sX POST https://api.leash.market/v1/submit \
   -H "Authorization: Bearer $LSH_TEST_KEY" \
-  -d "{ \"event_id\": \"$EVENT_ID\", \"transaction\": \"$SIGNED\" }"
+  -d "{ \"event_id\": \"$EVENT_ID\", \"transaction_base64\": \"$SIGNED\" }"
 
 # 4. Track
 curl -s https://api.leash.market/v1/events/$EVENT_ID \

@@ -21,7 +21,13 @@ What it covers (in order):
    `LEASH_E2E_BUYER_AGENT` aren't supplied
 5. `GET /v1/agents/{seller}/pay-to` — asserts the API derives the same Asset
    Signer PDA as the SDK
-6. provisions USDC ATAs on both treasuries
+6. **provisions the seller treasury through the public API** —
+   `POST /v1/agents/{seller}/treasury/provision/prepare` → owner signs →
+   `POST /v1/submit` → polls `/v1/events/{id}` until `confirmed`. Asserts
+   `/v1/events?kind=agent.treasury.provision` lists the event so the
+   explorer feed sees it. Provisions the buyer treasury directly via the
+   SDK (faster, and the delegation step further down needs the buyer ATA
+   to exist regardless of API round-trip)
 7. tops up the buyer treasury USDC from the owner wallet (only if balance is
    below `LEASH_E2E_FUND_USDC`)
 8. sets a fresh SPL spend delegation on the buyer treasury so the owner can
@@ -159,3 +165,54 @@ The script is idempotent on the chain side:
 | `paywall should respond with 402 …`                    | API isn't actually serving `/x/{id}` (check `LEASH_API_PUBLIC_ORIGIN` and that the `apps/api` build is current).                   |
 | `settlement failed; reason=…`                          | The buyer policy rejected the call, or the facilitator returned an error. The `decision` and `failureReason` are in the same line. |
 | `settled_count never bumped`                           | Settlement reached the chain but the API's paywall handler didn't observe it; check API logs for `payment_link.settled` errors.    |
+
+## `withdraw.ts`
+
+One-shot script that withdraws a configurable amount of USDG (default
+`99`) from a target agent treasury to a destination wallet. Defaults
+match the canonical example used in [`docs/guides/withdraw-funds.mdx`](../../docs/guides/withdraw-funds.mdx)
+and the [Treasury API reference](../../docs/api/treasury.mdx).
+
+What it does:
+
+1. Reads the current treasury USDG balance via `getTreasuryBalance`.
+2. If the balance is below the requested amount, transfers the
+   shortfall from the **owner's USDG ATA** into the treasury (creates
+   the treasury ATA via `createTokenIfMissing` if needed). USDG is a
+   Token-2022 mint, so the script builds `TransferChecked` against
+   `TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb` directly.
+3. Calls `POST /v1/agents/{agent}/treasury/withdraw/prepare` with
+   `token_program: "token-2022"` and the requested atomic amount.
+4. Signs the returned `transaction.base64` with the owner key
+   (`umi.identity`) and POSTs it to `/v1/submit`.
+5. Polls `/v1/events/{event_id}` until `phase=confirmed` (or `failed`).
+6. Prints a Solscan link + final treasury balance readout.
+
+### Environment
+
+Reuses `apps/api/.env` + `apps/api/.env.e2e` so callers that already
+configured the e2e suite have nothing extra to set up.
+
+| Var                          | Default                                        | Notes                                                 |
+| ---------------------------- | ---------------------------------------------- | ----------------------------------------------------- |
+| `LEASH_E2E_API_URL`          | `http://localhost:8801`                        | Same key as the e2e script.                           |
+| `LEASH_E2E_API_KEY`          | _required_                                     | A devnet `lsh_test_*` key.                            |
+| `LEASH_E2E_OWNER_SECRET`     | _required_                                     | Asset owner secret (base58 or JSON array).            |
+| `LEASH_WITHDRAW_AGENT`       | `E1wVJPjADFMmdpJ2T3To9C9sBD97PCcPaxPFFqmka6rv` | Agent asset to withdraw from.                         |
+| `LEASH_WITHDRAW_MINT`        | devnet USDG mint                               | Override to test other mints.                         |
+| `LEASH_WITHDRAW_AMOUNT`      | `99`                                           | Display units (string, e.g. `"99"` or `"0.5"`).       |
+| `LEASH_WITHDRAW_DESTINATION` | _owner pubkey_                                 | Where the funds land. Defaults to the owner's wallet. |
+
+### Run it
+
+```bash
+pnpm --filter @leash/api withdraw
+```
+
+### When it fails
+
+| Symptom                                                | Likely cause                                                                                                                   |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `owner … USDG balance (…) < required (…)`              | The owner wallet has no USDG to top up the treasury. Mint USDG to the owner wallet via the project's USDG faucet, then re-run. |
+| `withdraw did not confirm — phase=failed`              | The transaction reached the chain but the program rejected it. The event row's `error_code` + `error_logs` carry the reason.   |
+| `expected a devnet key (lsh_test_*), got "lsh_live_…"` | Don't run this against mainnet. If you need a mainnet variant, fork the script and remove the prefix guard explicitly.         |

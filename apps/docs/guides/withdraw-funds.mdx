@@ -147,6 +147,62 @@ helpers are different code paths only because the inner instruction
 (asset/PDA derivation, fee payer override, authority override) is
 identical.
 
+## Via the Leash HTTP API
+
+Every SDK helper above has a 1:1 HTTP equivalent on
+[`api.leash.market`](https://api.leash.market) — useful when the signer
+lives somewhere the TypeScript SDK can't reach (Python service, Privy
+embedded wallet, TEE, hardware key behind a bastion). The API never
+sees the secret material; it only builds the unsigned transaction,
+returns it, and broadcasts the signed bytes you hand back.
+
+```bash
+# 1. Prepare — the API derives the treasury PDA + destination ATA, encodes
+#    `mpl-core::Execute(SPL.TransferChecked)`, and persists a `prepared`
+#    event row your code can later join to the on-chain receipt.
+PREP=$(curl -sX POST https://api.leash.market/v1/agents/$MINT/treasury/withdraw/prepare \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payer":           "FFvP…owner",
+    "authority":       "FFvP…owner",
+    "spl_mint":        "4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7",
+    "destination":     "FFvP…owner",
+    "amount":          "99000000",
+    "token_program":   "token-2022",
+    "decimals":        6
+  }')
+
+EVENT_ID=$(echo "$PREP" | jq -r '.event_id')
+TX=$(echo "$PREP"       | jq -r '.transaction.base64')
+
+# 2. Sign locally with the asset owner's key.
+SIGNED=$(node ./sign.mjs "$TX")
+
+# 3. Broadcast.
+curl -sX POST https://api.leash.market/v1/submit \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{ \"event_id\": \"$EVENT_ID\", \"transaction_base64\": \"$SIGNED\" }"
+
+# 4. Track — phase flips to `confirmed` once the chain agrees.
+curl -s https://api.leash.market/v1/events/$EVENT_ID \
+  -H "Authorization: Bearer $LSH_TEST_KEY" | jq .
+```
+
+The same lifecycle covers `withdraw-all/prepare`,
+`withdraw-sol/prepare`, and `withdraw-sol-all/prepare`. The full
+treasury surface (request fields, response shape, no-op semantics, and
+the matching `agent.treasury.*` event kinds) is documented in the API
+reference at [Treasury endpoints](/api/treasury). Two reference scripts
+live at `apps/api/scripts/`:
+
+- `pnpm --filter @leash/api e2e:devnet` — drives the full payment-link
+  flow plus a real `agent.treasury.provision` round-trip.
+- `pnpm --filter @leash/api withdraw` — withdraws a configurable amount
+  of USDG from a target agent through the API; defaults exactly match
+  this guide's `99 USDG` example.
+
 ## The web playground flow
 
 The agent detail page (`/agents/<mint>`) ships a **Withdraw treasury**

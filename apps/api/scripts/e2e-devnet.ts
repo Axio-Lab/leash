@@ -82,6 +82,15 @@ import {
   provisionTreasuryAtas,
 } from '@leash/registry-utils';
 
+import {
+  isNoOp,
+  signWireTransaction,
+  waitForEvent,
+  type EventRow,
+  type PreparedEnvelope,
+  type SubmitResponse,
+} from './lib/api-prepare-submit.js';
+
 // ────────────────────────────────────────────────────────────────────────────
 // Configuration
 // ────────────────────────────────────────────────────────────────────────────
@@ -307,19 +316,94 @@ async function main(): Promise<void> {
   );
   ok(`seller payTo (API == SDK): ${payToView.pay_to}`);
 
-  // ───── 7. ensure ATAs exist on both treasuries ─────
-  step('Provision treasury USDC ATAs on both agents');
-  for (const [label, asset] of [
-    ['seller', sellerAgent],
-    ['buyer', buyerAgent],
-  ] as const) {
-    const out = await provisionTreasuryAtas(umi, { agentAsset: asset, network: 'solana-devnet' });
+  // ───── 7. provision treasury ATAs through the API (prepare → sign → submit) ─────
+  // We deliberately go through the HTTP API here (instead of calling
+  // `provisionTreasuryAtas` directly via the SDK) so the explorer ends
+  // up with a real `agent.treasury.provision` event row whose lifecycle
+  // we can observe end-to-end. The buyer agent is provisioned via the
+  // SDK *after* this step because the delegation flow further down
+  // needs the buyer USDC ATA to already exist regardless of whether
+  // the API path picked a fresh tx or returned `no_op: true`.
+  step('Provision seller treasury through /v1/agents/{seller}/treasury/provision/prepare');
+  const sellerProvision = await api<
+    PreparedEnvelope<{ atas: Array<{ symbol?: string; created: boolean }> }>
+  >(`/v1/agents/${sellerAgent}/treasury/provision/prepare`, {
+    method: 'POST',
+    body: { payer: ownerPubkey, authority: ownerPubkey },
+  });
+  if (isNoOp(sellerProvision)) {
+    ok(
+      `provision is no-op (every supported ATA already exists: ${sellerProvision.echo.atas
+        .map((a) => a.symbol ?? '?')
+        .join(', ')})`,
+    );
+  } else {
+    info(`event_id   : ${sellerProvision.event_id}`);
     info(
-      `${label} treasury ATAs: ${out.atas
-        .map((a) => `${a.symbol ?? a.mint.slice(0, 4)}=${a.created ? 'new' : 'ok'}`)
-        .join(' ')}`,
+      `will create: ${
+        sellerProvision.echo.atas
+          .filter((a) => a.created)
+          .map((a) => a.symbol ?? '?')
+          .join(', ') || '(none — refresh-only)'
+      }`,
+    );
+    const signed = await signWireTransaction(umi, sellerProvision.transaction, [umi.identity]);
+    const submitted = await api<SubmitResponse>('/v1/submit', {
+      method: 'POST',
+      body: { event_id: sellerProvision.event_id, transaction_base64: signed },
+    });
+    ok(`submitted tx_sig: ${submitted.signature}`);
+    const final = await waitForEvent(
+      (id) => api<EventRow>(`/v1/events/${id}`),
+      sellerProvision.event_id,
+      { timeoutMs: 90_000 },
+    );
+    if (final.phase !== 'confirmed') {
+      fatal(
+        `treasury.provision did not confirm — phase=${final.phase}, error_code=${final.error_code ?? 'n/a'}`,
+      );
+    }
+    ok(`provision confirmed in event ${final.id}`);
+  }
+
+  step('GET /v1/events?kind=agent.treasury.provision — explorer feed sees it');
+  const provisionEvents = await api<{
+    items: Array<{ id: string; kind: string; phase: string; agent_asset: string | null }>;
+  }>(`/v1/events?kind=agent.treasury.provision&agent=${sellerAgent}&limit=5`);
+  // The API only writes a `prepared` row when there's a real transaction
+  // to sign. When every supported ATA already exists, `provision/prepare`
+  // short-circuits with `no_op: true` and (correctly) doesn't enqueue
+  // anything for the explorer feed. In that case, "0 rows" is the
+  // expected indexer state for a brand-new agent — older agents that
+  // were provisioned via the SDK *or* through a previous API run will
+  // still have rows here, so we only assert the feed query is shaped
+  // correctly and log whatever's on file.
+  if (isNoOp(sellerProvision)) {
+    ok(
+      provisionEvents.items.length === 0
+        ? 'no provision events on file (seller treasury was provisioned out-of-band — expected for SDK-only setups)'
+        : `${provisionEvents.items.length} historical provision event(s) on file (latest phase=${provisionEvents.items[0]?.phase})`,
+    );
+  } else {
+    assert(
+      provisionEvents.items.length >= 1,
+      'no agent.treasury.provision event indexed for the seller after the API drove a real prepare → submit',
+    );
+    ok(
+      `${provisionEvents.items.length} provision event(s) on file, latest phase=${provisionEvents.items[0]?.phase}`,
     );
   }
+
+  step('Provision buyer treasury directly via SDK (needed for delegation step)');
+  const buyerProvision = await provisionTreasuryAtas(umi, {
+    agentAsset: buyerAgent,
+    network: 'solana-devnet',
+  });
+  info(
+    `buyer treasury ATAs: ${buyerProvision.atas
+      .map((a) => `${a.symbol ?? a.mint.slice(0, 4)}=${a.created ? 'new' : 'ok'}`)
+      .join(' ')}`,
+  );
 
   // ───── 8. fund the buyer treasury USDC if low ─────
   step('Top up buyer treasury USDC if low');

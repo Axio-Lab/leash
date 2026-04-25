@@ -106,6 +106,7 @@ See [Authentication](/api/auth) for issuing keys, the
 | Payment links | `POST/GET/PATCH/DELETE /v1/payment-links`, `POST /v1/payment-links/preview`, public `/x/{id}` paywall                                                                                 |
 | Seller utils  | `GET /v1/seller/networks`, `GET /v1/seller/facilitator`, `POST /v1/seller/parse-price`, `GET /v1/agents/{mint}/pay-to`                                                                |
 | Buyer         | `POST /v1/buyer/quote`, `POST /v1/buyer/policy/evaluate`, `POST /v1/buyer/payment/{prepare,execute}`, `POST /v1/buyer/receipt/{finalize,verify}`, `GET /v1/buyer/{networks,currency}` |
+| Treasury      | `GET /v1/agents/{mint}/treasury/balances`, `POST /v1/agents/{mint}/treasury/{provision,withdraw,withdraw-all,withdraw-sol,withdraw-sol-all}/prepare` — see [Treasury](/api/treasury)  |
 | Events        | `GET /v1/events/{id}`, `GET /v1/events?kind=&agent=&cursor=`                                                                                                                          |
 | Receipts      | `POST /v1/receipts/{agent}`, `GET /v1/receipts/{agent}`, `GET /v1/receipts/by-hash/{hash}`                                                                                            |
 | Pull targets  | `POST /v1/agents/{mint}/pull-target` — register an off-API receipts URL the indexer will poll                                                                                         |
@@ -131,6 +132,9 @@ See [Authentication](/api/auth) for issuing keys, the
 - [Buyer endpoints](/api/buyer) — full HTTP parity with
   `@leash/buyer-kit`: quote, policy gate, prepare, execute,
   receipt finalize/verify.
+- [Treasury endpoints](/api/treasury) — read SOL + SPL balances
+  on the Asset Signer PDA, provision stable ATAs, and prepare
+  owner-driven SPL / SOL withdrawals.
 - [Receipts API](/api/receipts) — the push, pull, and feed surface.
 - [Indexer](/api/indexer) — what the dual-network worker does and
   how to know it's caught up.

@@ -196,14 +196,11 @@ function hasAnyBalance(b: TreasuryBalances): boolean {
 
 function Balances({ data }: { data: TreasuryBalances }) {
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <div className="card px-4 py-3">
         <p className="text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">SOL</p>
         <p className="mt-1 font-mono text-lg">
           {data.sol.sol.toLocaleString(undefined, { maximumFractionDigits: 9 })}
-        </p>
-        <p className="text-xs text-[--color-fg-muted]">
-          spendable {data.sol.spendable_sol.toLocaleString(undefined, { maximumFractionDigits: 9 })}
         </p>
       </div>
       {data.spl.map((b) => (
