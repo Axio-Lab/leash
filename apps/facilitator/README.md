@@ -22,7 +22,12 @@ with zero code changes.
 ## Run locally
 
 ```bash
-# 1. Generate a keypair the facilitator can sign as
+# 1. Generate a DEDICATED keypair for the facilitator. It MUST be
+#    different from any wallet that signs the buyer-side SPL transfer
+#    (e.g. an agent treasury executive). x402's facilitator scheme
+#    rejects every settle with
+#      invalid_exact_svm_payload_transaction_fee_payer_transferring_funds
+#    when the fee payer is also the transfer authority.
 solana-keygen new -o .leash-fee-payer.json --no-bip39-passphrase
 
 # 2. Fund it on devnet (free, takes ~5s)
@@ -32,6 +37,24 @@ solana airdrop 1 -k .leash-fee-payer.json --url https://api.devnet.solana.com
 export LEASH_FACILITATOR_SECRET_KEY="$(cat .leash-fee-payer.json)"
 pnpm --filter @leash/facilitator-app dev
 ```
+
+> Smoke-test the local facilitator with a real on-chain settle:
+>
+> ```bash
+> # Once-only: fund a buyer treasury + delegation (re-uses .env.e2e).
+> pnpm --filter @leash/api e2e:devnet
+>
+> # Then any time:
+> LEASH_FACILITATOR_URL=http://localhost:8787 \
+>   pnpm --filter @leash/api facilitator:smoke
+> ```
+>
+> The smoke script spins up a one-route seller-kit Hono server in-
+> process and pays it through `@leash/buyer-kit`, asserting a real
+> devnet `tx_sig` lands and the receipt's `facilitator` field stamps
+> the local URL. Pair it with the API path
+> (`LEASH_API_FACILITATOR_URL=http://localhost:8787 pnpm --filter
+@leash/api e2e:devnet`) for a full-stack proof.
 
 You should see:
 

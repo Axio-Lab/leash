@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "leash-facilitator",
-    "dev": "tsx ./src/dev.ts",
+    "dev": "node --env-file-if-exists=.env --import tsx ./src/dev.ts",
     "build": "echo 'no build — uses @leash/facilitator binary'",
     "lint": "echo lint:facilitator-app",
     "typecheck": "tsc -p tsconfig.json --noEmit"

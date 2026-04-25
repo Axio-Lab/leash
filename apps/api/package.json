@@ -29,7 +29,8 @@
     "test": "vitest run",
     "e2e:devnet": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/e2e-devnet.ts",
     "withdraw": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/withdraw.ts",
-    "fund": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/fund.ts"
+    "fund": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/fund.ts",
+    "facilitator:smoke": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/facilitator-sdk-smoke.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
