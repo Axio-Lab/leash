@@ -30,7 +30,8 @@ export type EventKind =
   | 'payment_link.updated'
   | 'payment_link.deleted'
   | 'payment_link.served'
-  | 'payment_link.settled';
+  | 'payment_link.settled'
+  | 'buyer.payment.prepare';
 
 export type EventPhase = 'prepared' | 'submitted' | 'confirmed' | 'failed';
 

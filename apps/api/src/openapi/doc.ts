@@ -123,6 +123,13 @@ export function mountOpenApi(
           'Mirrors the `@leash/seller-kit` exports for polyglot SDKs and UI dropdowns.',
       },
       {
+        name: 'buyer',
+        description:
+          'Buyer-kit endpoints — quote, policy gate, payment prepare/execute, ' +
+          'receipt finalize/verify, and network/currency catalogs. Full HTTP ' +
+          'parity with `@leash/buyer-kit` for polyglot SDKs.',
+      },
+      {
         name: 'admin',
         description:
           'Operator-only API key issuance. Requires the operator secret in ' +

@@ -35,6 +35,7 @@ import { buildAdminRoutes } from './routes/admin.js';
 import { buildPaymentLinkRoutes } from './routes/payment-links.js';
 import { buildPaywallRoutes } from './routes/paywall.js';
 import { buildSellerUtilsRoutes } from './routes/seller-utils.js';
+import { buildBuyerRoutes } from './routes/buyer.js';
 
 export type CreateLeashApiArgs = AuthDeps;
 
@@ -85,6 +86,7 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   authed.route('/', buildMetricsRoutes(deps));
   authed.route('/', buildPaymentLinkRoutes(deps));
   authed.route('/', buildSellerUtilsRoutes(deps));
+  authed.route('/', buildBuyerRoutes(deps));
   app.route('/', authed);
 
   return app;

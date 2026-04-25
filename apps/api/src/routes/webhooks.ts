@@ -47,6 +47,7 @@ const EVENT_KINDS = [
   'payment_link.deleted',
   'payment_link.served',
   'payment_link.settled',
+  'buyer.payment.prepare',
 ] as const;
 
 const WebhookSchema = z
