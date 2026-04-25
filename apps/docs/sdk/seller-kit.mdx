@@ -102,3 +102,14 @@ const server = createSvmResourceServer({
 
 See [`Real x402 on Solana`](/standards/x402-on-solana) for the protocol-level
 walkthrough.
+
+## HTTP equivalent (polyglot SDKs)
+
+If you're not on TypeScript, the same primitives are exposed as
+REST under `/v1/seller/*` and `/v1/payment-links`. The
+[Seller utilities](/api/seller-utils) page covers `parse-price`,
+`facilitator`, `networks`, and `pay-to`. The
+[Payment links](/api/payment-links) page covers the hosted-paywall
+shape — declare a price + a response template, get a sharable URL.
+Both surfaces produce the same on-chain result and the same
+explorer entries as `createSeller` does in-process.

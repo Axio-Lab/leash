@@ -108,12 +108,42 @@ Receipts:
 - `POST /v1/agents/{mint}/pull-target` — register a `services.receipts`
   URL the API will poll on a cadence
 
+Payment links + public paywall (the "Stripe Payment Links" of x402):
+
+- `POST /v1/payment-links` — create a hosted x402 paywall
+- `GET /v1/payment-links` and `GET /v1/payment-links/{id}` — read / list
+- `PATCH /v1/payment-links/{id}` — update label, price, response, etc.
+- `DELETE /v1/payment-links/{id}` — soft-delete
+- `POST /v1/payment-links/preview` — render `accepts[]` for a draft
+- `GET|POST /x/{id}` — **public** paywall (anonymous; no API key)
+  — runs `createSeller` from `@leash/seller-kit` per request and
+  ingests the resulting `earn` receipt + `payment_link.settled` event
+
+Seller utilities (HTTP parity with `@leash/seller-kit` helpers):
+
+- `GET /v1/seller/networks` — full per-network token + facilitator catalog
+- `GET /v1/seller/facilitator` — resolved facilitator for the caller network
+- `POST /v1/seller/parse-price` — display string → atomic + equivalents
+- `GET /v1/agents/{mint}/pay-to` — Asset Signer PDA derivation
+
+Buyer endpoints (HTTP parity with `@leash/buyer-kit`):
+
+- `POST /v1/buyer/quote` — probe a URL, decode `payment-required`
+- `POST /v1/buyer/policy/evaluate` — pure `RulesV1` policy gate
+- `POST /v1/buyer/payment/prepare` — unsigned SPL `TransferChecked`
+- `POST /v1/buyer/payment/execute` — replay seller request with
+  `X-PAYMENT`, finalize + ingest a `spend` receipt
+- `POST /v1/buyer/receipt/finalize` and `…/verify` — pure helpers
+- `GET /v1/buyer/networks` and `GET /v1/buyer/currency` — buyer-side
+  catalogs
+
 Health + observability:
 
 - `GET /v1/health`
 - `GET /v1/version`
 - `GET /v1/indexer/status` — watchlist + cursor + recent activity counters
 - `GET /v1/metrics/usage` — per-key, per-day request rollups
+- `GET /v1/metrics/events` — per-network event rollups
 
 ## Internal devs
 

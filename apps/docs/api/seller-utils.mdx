@@ -1,0 +1,211 @@
+---
+title: 'Seller utilities'
+description: HTTP parity for the @leash/seller-kit helpers — networks, facilitator, parse-price, pay-to.
+---
+
+`@leash/seller-kit` exports a handful of small helpers that don't
+build transactions but every seller integration needs:
+
+- "Which stables can I price in on this network?"
+- "Where will my paywall settle through?"
+- "Did I write this `price` string correctly?"
+- "What's the on-chain `payTo` for this agent?"
+
+The TypeScript SDK gets these as plain function imports. Polyglot
+SDKs and UI dropdowns get them as four read-only HTTP endpoints
+under `/v1/seller/*` and `/v1/agents/{mint}/pay-to`. They do no DB
+writes and never call out to a facilitator or RPC node — every
+response is a pure derivation from the API's compile-time registry.
+
+| Endpoint                              | Mirrors                              | Use it for                                  |
+| ------------------------------------- | ------------------------------------ | ------------------------------------------- |
+| `GET  /v1/seller/networks`            | `KNOWN_TOKENS` + `KNOWN_STABLE_SYMBOLS` | Currency / network dropdowns                 |
+| `GET  /v1/seller/facilitator`         | `defaultFacilitatorFor` + config     | Showing the buyer "settles via X" label     |
+| `POST /v1/seller/parse-price`         | `parsePrice` from seller-kit         | Validating a draft `price` string           |
+| `GET  /v1/agents/{mint}/pay-to`       | `findAssetSignerPda` from `mpl-core` | Resolving the on-chain `payTo`              |
+
+Every endpoint is **network-scoped via the API key prefix** — there
+is no per-request network parameter. `lsh_test_*` keys see devnet
+mints, `lsh_live_*` keys see mainnet mints.
+
+## `GET /v1/seller/networks`
+
+Returns the full per-network token catalog plus the caller's current
+network surfaced as `current` for convenience.
+
+```http
+GET /v1/seller/networks
+Authorization: Bearer lsh_test_...
+```
+
+```json
+{
+  "items": [
+    {
+      "network": "solana-devnet",
+      "caip2": "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+      "facilitator": "https://facilitator.svmacc.tech",
+      "accepts": ["USDC", "USDT", "USDG"],
+      "tokens": [
+        {
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+          "decimals": 6,
+          "program": "spl-token",
+          "stable": true
+        },
+        {
+          "symbol": "USDT",
+          "name": "Tether USD",
+          "mint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+          "decimals": 6,
+          "program": "spl-token",
+          "stable": true
+        }
+      ]
+    },
+    { "network": "solana-mainnet", "caip2": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc", "...": "..." }
+  ],
+  "current": { "network": "solana-devnet", "...": "..." }
+}
+```
+
+`accepts[]` is the same ordered list of stables every paywall and
+buyer endpoint uses (`USDC, USDT, USDG`), so you can wire it
+directly into a UI dropdown.
+
+## `GET /v1/seller/facilitator`
+
+Resolves the facilitator URL the caller-scoped network will settle
+through, with provenance.
+
+```http
+GET /v1/seller/facilitator
+Authorization: Bearer lsh_test_...
+```
+
+```json
+{
+  "network": "solana-devnet",
+  "facilitator": "https://facilitator.svmacc.tech",
+  "source": "default"
+}
+```
+
+`source` is `"config"` when the API operator has pinned
+`LEASH_API_FACILITATOR_URL`, and `"default"` when we fell back to
+the public default for the cluster (`facilitator.svmacc.tech` on
+devnet, `facilitator.payai.network` on mainnet).
+
+UI tip: render this as a small "Settles via {host}" label next to
+your draft payment link so users know exactly which facilitator
+will broker the transfer.
+
+## `POST /v1/seller/parse-price`
+
+Parses a display `price` string into atomic units against the
+caller-scoped network's stablecoin registry, and returns
+per-stablecoin equivalents you can preview.
+
+```http
+POST /v1/seller/parse-price
+Authorization: Bearer lsh_test_...
+Content-Type: application/json
+
+{
+  "price": "$0.001"
+}
+```
+
+```json
+{
+  "amount": "1000",
+  "currency": "USDC",
+  "asset": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+  "network": "solana-devnet",
+  "equivalents": [
+    {
+      "currency": "USDT",
+      "amount": "1000",
+      "asset": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+    },
+    {
+      "currency": "USDG",
+      "amount": "1000",
+      "asset": "..."
+    }
+  ]
+}
+```
+
+Pass an explicit `currency` to anchor the price to a specific
+stable instead of the USDC default:
+
+```json
+{ "price": "0.5", "currency": "USDT" }
+```
+
+```json
+{ "amount": "500000", "currency": "USDT", "...": "..." }
+```
+
+Accepted forms (same parser as the SDK):
+
+| Form                | Resolves to                                     |
+| ------------------- | ----------------------------------------------- |
+| `"$0.001"`          | $0.001 in `currency` (default USDC).            |
+| `"0.5"` (bare num)  | 0.5 units of `currency` (default USDC).         |
+| `"0.5 USDT"`        | 0.5 USDT regardless of `currency`.              |
+| `"1000 USDC"`       | 1000 USDC.                                      |
+
+Unparseable inputs return `422 invalid_request` with a message
+explaining what was tried.
+
+## `GET /v1/agents/{mint}/pay-to`
+
+Resolves the **Asset Signer PDA** for an agent — the on-chain account
+that receives funds when buyers pay through `@leash/seller-kit` or a
+hosted [`payment link`](/api/payment-links). Pure PDA derivation
+via `mpl-core`; no RPC required.
+
+```http
+GET /v1/agents/BcN4ToBs8jE3dbYNhYqDJqGnKPjH3zRX8gsDUDH72JQp/pay-to
+Authorization: Bearer lsh_test_...
+```
+
+```json
+{
+  "agent_asset": "BcN4ToBs8jE3dbYNhYqDJqGnKPjH3zRX8gsDUDH72JQp",
+  "network": "solana-devnet",
+  "pay_to": "9pK9LhEt2zUWgSGRhJ6KCfb7vBCjwT5b7yT8sX6sR2tV"
+}
+```
+
+This is the same value the paywall and the seller-kit advertise as
+`payTo`, so you can render it in a "Funds will land on {pay_to}"
+field without ever touching `mpl-core` yourself.
+
+## Why these exist
+
+The TypeScript SDK already has all of this — it's just `import
+{ parsePrice, KNOWN_TOKENS, defaultFacilitatorFor } from
+'@leash/seller-kit'`. The HTTP surface exists for two reasons:
+
+1. **Polyglot SDKs.** A Python or Go client can't `import`
+   TypeScript. They get the same answers via REST and stay one
+   release behind nothing.
+2. **UIs.** Dashboards, internal tools, and the explorer itself
+   need a single source of truth for "supported currencies on this
+   network" + "the facilitator we'll settle through". The endpoints
+   make these dropdowns trivial without bundling the entire
+   `@leash/core` registry into the browser.
+
+## See also
+
+- [`@leash/seller-kit`](/sdk/seller-kit) — the TypeScript surface
+  these endpoints mirror.
+- [Payment links](/api/payment-links) — uses `parsePrice` internally
+  on every create / patch.
+- [Buyer endpoints](/api/buyer) — symmetric `currency` / `networks`
+  helpers for the buyer side.

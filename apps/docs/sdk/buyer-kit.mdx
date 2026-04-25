@@ -181,3 +181,14 @@ Both paths require `cfg.rpcUrl` to be set so the kit can issue a single
 See [`Real x402 on Solana`](/standards/x402-on-solana) for the protocol-level
 walkthrough and [`Fund an agent`](/guides/fund-an-agent) for the wiring
 steps.
+
+## HTTP equivalent (polyglot SDKs)
+
+The full `createBuyer` flow — quote, policy gate, prepare, execute,
+finalize, verify — is exposed as eight stateless REST endpoints under
+`/v1/buyer/*`. You stay in control of the signer; the API handles the
+seller proxy, receipt finalization, and watchlist enrollment. See
+[Buyer endpoints](/api/buyer) for the complete surface, and
+[`POST /v1/buyer/payment/execute`](/api/buyer#post-v1buyerpaymentexecute)
+in particular for the convenience path that's the closest equivalent
+to `buyer.fetch(...)`.
