@@ -20,7 +20,9 @@
  *      to anonymous probes, and 200 with `PAYMENT-RESPONSE` after a real
  *      x402 settlement,
  *   5. each settlement bumps `payment_links.{call_count,settled_count}`,
- *      ingests an `earn` `ReceiptV1`, and emits the matching
+ *      ingests both the seller-side `earn` and the buyer-side `spend`
+ *      `ReceiptV1` (the latter via `createBuyer({ onReceipt })` POSTing
+ *      to `/v1/receipts/{agent}`), and emits the matching
  *      `payment_link.served`, `payment_link.settled`, `receipt.published`
  *      events that the explorer + indexer pages read.
  *
@@ -478,7 +480,21 @@ async function main(): Promise<void> {
     networks: ['solana-devnet'],
     rpcUrl: RPC,
     sourceTokenAccount: delegation.sourceTokenAccount,
-    onReceipt: false, // the paywall's createSeller already ingests the earn receipt
+    // The seller paywall ingests the EARN receipt automatically. The
+    // SPEND receipt is a separate document that only exists on the
+    // buyer side — POST it to /v1/receipts/{agent} so the explorer can
+    // display the full pair, otherwise the receipts feed only ever
+    // shows earn rows.
+    onReceipt: async (receipt) => {
+      try {
+        await api(`/v1/receipts/${receipt.agent}`, {
+          method: 'POST',
+          body: receipt,
+        });
+      } catch (err) {
+        info(`spend-receipt ingest failed (non-fatal): ${(err as Error).message}`);
+      }
+    },
   });
 
   const before = await getSpendDelegation(umi, { agentAsset: buyerAgent, mint: USDC_MINT });
@@ -550,6 +566,21 @@ async function main(): Promise<void> {
   );
   assert(earnReceipt !== undefined, 'no earn receipt with our tx_sig');
   ok(`earn receipt: ${earnReceipt.receipt_hash.slice(0, 16)}… tx=${earnReceipt.tx_sig}`);
+
+  step('GET /v1/receipts/{buyer} — spend receipt visible');
+  // onReceipt above is async, give the POST a moment to land before reading.
+  let spendReceipt: { kind: string; tx_sig: string | null; receipt_hash: string } | undefined;
+  for (let i = 0; i < 10 && spendReceipt === undefined; i += 1) {
+    const buyerReceipts = await api<{
+      items: Array<{ kind: string; tx_sig: string | null; receipt_hash: string }>;
+    }>(`/v1/receipts/${buyerAgent}?limit=5`);
+    spendReceipt = buyerReceipts.items.find(
+      (r) => r.kind === 'spend' && r.tx_sig === callResult.receipt.tx_sig,
+    );
+    if (!spendReceipt) await sleep(500);
+  }
+  assert(spendReceipt !== undefined, 'no spend receipt with our tx_sig');
+  ok(`spend receipt: ${spendReceipt.receipt_hash.slice(0, 16)}… tx=${spendReceipt.tx_sig}`);
 
   // ───── 19. by-hash lookup is stable ─────
   step('GET /v1/receipts/by-hash/{hash} — direct lookup');

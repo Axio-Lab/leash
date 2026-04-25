@@ -137,7 +137,7 @@ export type ListEventsOptions = {
 };
 
 export async function listEvents(opts: ListEventsOptions): Promise<EventPage> {
-  const limit = opts.limit ?? 50;
+  const limit = opts.limit ?? 15;
   const items = await withDb((db) =>
     apiListEvents(db, {
       network: networkToSlug(opts.network),
@@ -210,7 +210,7 @@ export async function listRecentReceipts(opts: {
   cursor?: string;
   kind?: 'spend' | 'earn';
 }): Promise<ReceiptPage> {
-  const limit = opts.limit ?? 10;
+  const limit = opts.limit ?? 15;
   const rows = await withDb((db) =>
     apiListRecentReceipts(db, networkToSlug(opts.network), {
       limit,

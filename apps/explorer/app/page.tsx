@@ -31,7 +31,7 @@ export default async function HomePage() {
   const [eventsRes, statusRes, recentReceiptsRes] = await Promise.all([
     safe<EventPage>(() => listEvents({ network, limit: 15 })),
     safe<IndexerStatus>(() => getIndexerStatus(network)),
-    safe<ReceiptPage>(() => listRecentReceipts({ network, limit: 10 })),
+    safe<ReceiptPage>(() => listRecentReceipts({ network, limit: 15 })),
   ]);
 
   const events = eventsRes.ok ? eventsRes.data.items : [];
