@@ -35,14 +35,24 @@ stores your `EndpointV1` descriptors and the Next.js app exposes them at
 
 When someone pays a link, an x402 **facilitator** verifies the buyer’s signed SPL transfer and broadcasts it as the Solana **fee payer** (so the buyer only spends stables, not SOL for fees). The facilitator URL is stamped on every `ReceiptV1.facilitator` and appears in payment-link discovery JSON (the `docs` field points here).
 
-### Defaults by network (`@leash/core`)
+### Built-in defaults by network (`@leash/core`)
 
-| Network (`solana-*`) | Default facilitator URL             | Notes                                              |
-| -------------------- | ----------------------------------- | -------------------------------------------------- |
-| `solana-devnet`      | `https://facilitator.svmacc.tech`   | Gas-sponsored devnet; Token-2022 + `exact` scheme. |
-| `solana-mainnet`     | `https://facilitator.payai.network` | Gas-sponsored mainnet `exact` scheme (PayAI).      |
+If you do not pass a `facilitator` URL, Leash picks a **sensible public default** per cluster so a new project works out of the box. Those defaults are **not exclusive** — they are just two well-known hosts that implement the same x402 + Solana **exact** SVM surface as everyone else.
 
-Override for **any** buyer/seller process: set `LEASH_FACILITATOR_URL` or pass `facilitator: 'https://…'` into `createBuyer` / `createSeller`. Resolution order is documented in [`defaultFacilitatorFor`](https://github.com/leash-market/leash/blob/main/packages/core/src/x402/facilitator.ts).
+| Network (`solana-*`) | Default URL (when unset)            | Who runs it (examples)         |
+| -------------------- | ----------------------------------- | ------------------------------ |
+| `solana-devnet`      | `https://facilitator.svmacc.tech`   | SVMacc (gas-sponsored devnet). |
+| `solana-mainnet`     | `https://facilitator.payai.network` | PayAI (gas-sponsored mainnet). |
+
+### Other facilitators (you are not locked in)
+
+**Any** HTTPS base URL that implements the x402 facilitator contract your kits already speak — `GET /supported`, `POST /verify`, `POST /settle` — and advertises the **exact** SVM scheme for the network you are on can be used instead. Point at it with:
+
+- `facilitator: 'https://your-facilitator.example.com'` on `createBuyer` / `createSeller`, or
+- `LEASH_FACILITATOR_URL` / `NEXT_PUBLIC_LEASH_FACILITATOR_URL` / `LEASH_API_FACILITATOR_URL` (depending on surface), or
+- the hosted **Leash** binary at `https://facilitator.leash.dev` (devnet v0.1) or **self-hosted** [`@leash/facilitator`](/guides/run-a-facilitator) on `http://localhost:8787` or your own domain — same wire shape as third-party facilitators from the x402 ecosystem (e.g. other PayAI / Coinbase / community deployments), as long as they expose a compatible `/supported` for your cluster.
+
+Resolution order for SDK defaults is in [`defaultFacilitatorFor`](https://github.com/leash-market/leash/blob/main/packages/core/src/x402/facilitator.ts).
 
 ### Playground (`apps/web`)
 
@@ -55,9 +65,9 @@ Both are optional; if unset, the app uses the same defaults as the table above. 
 
 Payment links served at `https://api.leash.market/x/{id}` use whatever the API operator configured as **`LEASH_API_FACILITATOR_URL`** on the server (falls back to the public devnet default if unset). That is independent of the playground env vars.
 
-### Self-host Leash’s facilitator (devnet today; mainnet capable)
+### Self-hosting the Leash facilitator binary (optional)
 
-To run your own binary, wire devnet vs mainnet with `LEASH_FACILITATOR_NETWORKS`, fund a **dedicated** fee-payer keypair (never reuse the buyer’s signing key — x402 rejects `fee_payer_transferring_funds`), and front the listener with TLS on mainnet. Full walkthrough: [Run a Leash facilitator](/guides/run-a-facilitator).
+`@leash/facilitator` is **one** supported backend — useful when you want an operator-controlled devnet host (`https://facilitator.leash.dev`) or a private instance (`LEASH_FACILITATOR_NETWORKS`, dedicated fee payer, TLS on mainnet). It is wire-compatible with any other x402 SVM facilitator; pick whichever host you trust. Walkthrough: [Run a Leash facilitator](/guides/run-a-facilitator).
 
 ### Related docs
 
