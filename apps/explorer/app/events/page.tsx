@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 
 const KIND_OPTIONS = [
   { value: '', label: 'All' },
+  { value: 'agent.create', label: 'Create' },
   { value: 'agent.identity.register', label: 'Identity' },
   { value: 'agent.executive.register', label: 'Executive' },
   { value: 'agent.executive.delegate', label: 'Delegate' },

@@ -63,6 +63,7 @@ on the next tick.
 
 | Event kind                    | Source           | Endpoint / trigger that surfaces it                                                                                                                                     |
 | ----------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agent.create`                | API only         | `POST /v1/agents/prepare` (then `/v1/submit`). HTTP twin of the SDK's `prepareAgentMint`.                                                                               |
 | `agent.identity.register`     | API + indexer    | `POST /v1/agents/{mint}/identity/prepare` (then `/v1/submit`); or any `mpl-agent-identity::CreateIdentity` for a watched asset (e.g. an SDK-driven `prepareAgentMint`). |
 | `agent.executive.register`    | API + indexer    | `POST /v1/agents/{mint}/executive/register/prepare`; or `mpl-agent-tools::CreateExecutive`.                                                                             |
 | `agent.executive.delegate`    | API + indexer    | `POST /v1/agents/{mint}/executive/delegate/prepare`; or `mpl-agent-tools::Delegate`.                                                                                    |
@@ -84,9 +85,12 @@ on the next tick.
 | `receipt.published`           | API only         | `POST /v1/receipts/{agent}` (also auto-emitted by `POST /v1/buyer/payment/execute` and the paywall on settle).                                                          |
 | `receipt.pulled`              | Indexer only     | The pull worker fetches a receipt from a registered `pull-target` URL.                                                                                                  |
 
-Brand-new agent creation (`prepareAgentMint`) is not yet exposed as an
-HTTP endpoint — mint the asset via the SDK, then start hitting
-`/v1/agents/{mint}/...` from the second action onwards.
+Brand-new agent creation is exposed as
+[`POST /v1/agents/prepare`](/api/agents) — the HTTP twin of the
+SDK's `prepareAgentMint`. You can either mint via the SDK and start
+hitting `/v1/agents/{mint}/...` from the second action onwards, or
+do the entire lifecycle (mint → identity → executive → delegation →
+treasury) over plain HTTPS.
 
 ## Standard integration sequences
 
@@ -103,9 +107,23 @@ on-chain event for this agent will surface on the explorer
 automatically.
 
 ```bash
-# 0. Mint the agent asset locally with @leash/registry-utils
-#    (no API endpoint yet — see /sdk/registry-utils#prepareAgentMint).
-#    Save the resulting `mint` pubkey as $MINT.
+# 0. Mint the agent. Either over HTTP (recommended for polyglot
+#    integrations)…
+PREP=$(curl -sX POST https://api.leash.market/v1/agents/prepare \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -d '{ "wallet": "'$OWNER_PUBKEY'",
+        "name": "Quote Agent",
+        "uri": "https://leash.market/agents/quote.json",
+        "description": "Returns SOL/USD quotes." }')
+MINT=$(echo "$PREP" | jq -r '.echo.asset_address')
+# → sign locally → POST /v1/submit
+#
+#    …or with the SDK:
+#       const { assetAddress } = await createAgent(umi, { ... })
+#       export MINT=$assetAddress
+#
+#    Either path drops an `agent.create` event AND auto-registers
+#    asset + treasury on the indexer watchlist.
 
 # 1. Bind an executive wallet to the agent (auto-watches asset + treasury).
 curl -sX POST https://api.leash.market/v1/agents/$MINT/executive/register/prepare \

@@ -59,6 +59,7 @@ returns the wire-encoded transaction, and creates a `prepared` event:
 
 | Endpoint                                                   | SDK function                    | What it does                                                         |
 | ---------------------------------------------------------- | ------------------------------- | -------------------------------------------------------------------- |
+| `POST /v1/agents/prepare`                                  | `prepareAgentMint`              | Mint a brand-new agent (Core asset + on-chain identity).             |
 | `POST /v1/agents/{mint}/identity/prepare`                  | `prepareRegisterAgentIdentity`  | Re-register identity on an existing asset.                           |
 | `POST /v1/agents/{mint}/executive/register/prepare`        | `prepareRegisterExecutive`      | Bind a wallet as an executive for this agent.                        |
 | `POST /v1/agents/{mint}/executive/delegate/prepare`        | `prepareDelegateExecution`      | Let the executive sign `Execute` for this asset.                     |
@@ -72,17 +73,21 @@ returns the wire-encoded transaction, and creates a `prepared` event:
 | `POST /v1/agents/{mint}/treasury/withdraw-sol-all/prepare` | `prepareWithdrawTreasurySolAll` | Owner drains all SOL above a configurable safety reserve.            |
 | `POST /v1/buyer/payment/prepare`                           | (buyer-kit `prepareTransfer`)   | Build an unsigned SPL `TransferChecked` for a buyer x402 settlement. |
 
-There is no API endpoint for **minting a brand-new agent** yet — that
-flow uses `prepareAgentMint` directly from
-[`@leash/registry-utils`](/sdk/registry-utils). Once the asset exists on
-chain, every other lifecycle action above is callable over HTTP.
+`POST /v1/agents/prepare` is the HTTP twin of
+[`prepareAgentMint`](/sdk/registry-utils): it calls the Metaplex Agents
+API under the hood, returns the unsigned transaction in the same
+prepared envelope as every other route, and pre-registers the asset +
+treasury PDA on the indexer watchlist so the explorer lights up the
+moment the signed tx lands. The SDK helper remains available for
+TypeScript callers that want to skip the HTTP hop.
 
 <Note>
-  **Indexer follow-up after your first agent action.** Every
-  `/v1/agents/{mint}/...` prepare endpoint auto-registers the agent
-  asset and treasury PDA on the indexer watchlist (via
-  `ensureWatched`). That's enough for the explorer to surface
-  withdraws, identity changes, delegations, and token updates.
+  **Indexer follow-up after your first agent action.** `POST
+  /v1/agents/prepare` and every `/v1/agents/{mint}/...` prepare
+  endpoint auto-register the agent asset + treasury PDA on the
+  indexer watchlist (via `ensureWatched`). That's enough for the
+  explorer to surface mints, withdraws, identity changes,
+  delegations, and token updates.
 
 It is **not** enough to surface incoming SPL deposits, because plain
 `TransferChecked` transactions don't list the PDA — they list the

@@ -15,6 +15,7 @@ import { ApiErrorSchema, NetworkSchema, PubkeySchema } from '../openapi/common.j
 import { notFound } from '../util/errors.js';
 
 const EVENT_KINDS = [
+  'agent.create',
   'agent.identity.register',
   'agent.executive.register',
   'agent.executive.delegate',

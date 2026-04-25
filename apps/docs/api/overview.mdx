@@ -100,8 +100,8 @@ See [Authentication](/api/auth) for issuing keys, the
 | Group         | Endpoints                                                                                                                                                                             |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Health        | `GET /v1/health`, `GET /v1/version`                                                                                                                                                   |
-| Agents        | `GET /v1/agents/{mint}`, `GET /v1/agents/{mint}/treasury/balances`                                                                                                                    |
-| Prepare       | 13 routes mapped 1:1 to the SDK's `prepare*` helpers — see [Prepare → Submit](/api/prepare-submit)                                                                                    |
+| Agents        | `POST /v1/agents/prepare` (mint a new agent), `GET /v1/agents/{mint}`, `GET /v1/agents/{mint}/treasury/balances`                                                                      |
+| Prepare       | 14 routes mapped 1:1 to the SDK's `prepare*` helpers — see [Prepare → Submit](/api/prepare-submit)                                                                                    |
 | Submit        | `POST /v1/submit` (signed tx → broadcast)                                                                                                                                             |
 | Payment links | `POST/GET/PATCH/DELETE /v1/payment-links`, `POST /v1/payment-links/preview`, public `/x/{id}` paywall                                                                                 |
 | Seller utils  | `GET /v1/seller/networks`, `GET /v1/seller/facilitator`, `POST /v1/seller/parse-price`, `GET /v1/agents/{mint}/pay-to`                                                                |

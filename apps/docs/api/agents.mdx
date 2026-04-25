@@ -1,0 +1,219 @@
+---
+title: 'Agents API'
+description: Mint, read, and manage Leash agents over HTTP — the same flow the SDK exposes, callable from any language.
+---
+
+The Agents endpoints cover the full lifecycle of a Leash agent over
+plain HTTPS: **mint a new asset**, look up its identity + treasury,
+read its on-chain SOL/SPL balances, and (via the [Treasury
+endpoints](/api/treasury)) provision ATAs or withdraw funds.
+
+If you've used `@leash/registry-utils` in TypeScript, every
+endpoint here maps 1:1 to a `prepare*`/`get*` helper — so you can
+mix-and-match: mint over HTTP today, switch to the SDK later, or
+have a Python service mint while a Node worker submits, all hitting
+the same Turso event store and showing up on the same explorer.
+
+| Endpoint                                  | What it does                                                   |
+| ----------------------------------------- | -------------------------------------------------------------- |
+| `POST /v1/agents/prepare`                 | Mint a brand-new agent. Returns an unsigned tx + asset addr.   |
+| `GET /v1/agents/{mint}`                   | Identity, treasury PDA, and agent-token summary.               |
+| `GET /v1/agents/{mint}/treasury/balances` | SOL + SPL balances on the treasury PDA. Auto-arms the indexer. |
+
+For the rest of the per-agent lifecycle (executive, delegation,
+token, treasury withdraws), see the dedicated pages:
+
+- [Prepare → Submit lifecycle](/api/prepare-submit) — the contract every prepare endpoint follows.
+- [Treasury endpoints](/api/treasury) — provision ATAs, withdraw SPL/SOL.
+- [Explorer tracking](/api/explorer-tracking) — exact follow-ups to make events show up on the explorer.
+
+## Mint a new agent
+
+```http
+POST /v1/agents/prepare
+Authorization: Bearer lsh_test_...
+Idempotency-Key: 9b2…             # recommended
+Content-Type: application/json
+
+{
+  "wallet": "HQbJ…",              # owner pubkey, signs + pays
+  "name": "Quote Agent",
+  "uri": "https://leash.market/agents/quote.json",
+  "description": "Returns SOL/USD quotes for $0.001 per call.",
+  "services": [
+    { "name": "quote", "endpoint": "https://my-app.fly.dev/quote" }
+  ],
+  "registrations": [],
+  "supported_trust": [],
+  "client_reference": "demo-mint"
+}
+```
+
+This is the HTTP twin of [`prepareAgentMint`](/sdk/registry-utils):
+under the hood the API calls the Metaplex Agents API
+(`POST https://api.metaplex.com/v1/agents/mint`), which returns a
+fully-built unsigned transaction with the asset address pre-derived.
+The Leash API forwards that as a regular [prepared
+envelope](/api/prepare-submit#the-prepare-endpoints) and pre-arms
+the [indexer watchlist](/api/indexer) for the new asset + treasury
+PDA, so the explorer surfaces the mint the moment the signed tx
+lands.
+
+### Request body
+
+| Field              | Type             | Required | Notes                                                                                                                                       |
+| ------------------ | ---------------- | :------: | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `wallet`           | base58 pubkey    |    ✅    | Owner of the resulting Core asset. Pays for the mint and signs the tx.                                                                      |
+| `name`             | string (≤ 64)    |    ✅    | Human-readable agent name; stored on-chain.                                                                                                 |
+| `uri`              | URL              |    ✅    | Off-chain JSON metadata URI (NFT-style).                                                                                                    |
+| `description`      | string (≤ 2048)  |    ✅    | Stored in the on-chain identity blob.                                                                                                       |
+| `services`         | `AgentService[]` |          | Public service endpoints. The API auto-injects a `receipts` entry pointing at `/v1/receipts/{agent}` unless you pass `receipts_url: false`. |
+| `registrations`    | array            |          | Cross-registry registrations (`agent_id` + `agent_registry`).                                                                               |
+| `supported_trust`  | `string[]`       |          | Trust mechanisms (`tee`, `zkp`, `attestation`, …).                                                                                          |
+| `type`             | string           |          | On-chain `type` field. Defaults to `'agent'`.                                                                                               |
+| `receipts_url`     | URL or `false`   |          | Override or disable the auto-injected receipts service entry.                                                                               |
+| `client_reference` | string (≤ 256)   |          | Free-form caller reference echoed onto the event row.                                                                                       |
+
+### Response
+
+```json
+{
+  "event_id": "01HX…",
+  "network": "solana-devnet",
+  "transaction": {
+    "base64": "AQABAv…",
+    "message_base64": "AQABAv…",
+    "recent_blockhash": "GZNb…",
+    "last_valid_block_height": 320489201,
+    "fee_payer": "HQbJ…",
+    "signers": ["HQbJ…"]
+  },
+  "echo": {
+    "asset_address": "9pK9…",      # the brand-new agent
+    "treasury": "BcN4…",           # findAssetSignerPda(asset)
+    "blockhash": "GZNb…",
+    "last_valid_block_height": 320489201
+  }
+}
+```
+
+`asset_address` is deterministically derived by Metaplex during the
+mint API call, so you can persist it (next to `event_id`) before
+the transaction is even broadcast.
+
+### Sign + submit
+
+The mint transaction has a single required signer: `wallet`. Sign it
+locally and POST to [`/v1/submit`](/api/prepare-submit#the-submit-endpoint):
+
+```bash
+PREP=$(curl -sX POST https://api.leash.market/v1/agents/prepare \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -d "$BODY")
+
+EVENT_ID=$(echo "$PREP" | jq -r '.event_id')
+TX=$(echo "$PREP" | jq -r '.transaction.base64')
+ASSET=$(echo "$PREP" | jq -r '.echo.asset_address')
+
+# Sign locally (Umi example):
+#   const tx = umi.transactions.deserialize(base64Decode(TX))
+#   const signed = await signTransaction(tx, [walletSigner])
+
+curl -sX POST https://api.leash.market/v1/submit \
+  -H "Authorization: Bearer $LSH_TEST_KEY" \
+  -d "{ \"event_id\": \"$EVENT_ID\", \"transaction_base64\": \"$SIGNED\" }"
+
+# Track lifecycle (prepared → submitted → confirmed)
+curl -s https://api.leash.market/v1/events/$EVENT_ID \
+  -H "Authorization: Bearer $LSH_TEST_KEY" | jq '.phase, .signature'
+```
+
+After confirmation, `GET /v1/agents/$ASSET` returns the freshly-minted
+agent's identity + treasury, and the explorer shows the mint at
+`https://explorer.leash.market/tx/<signature>`.
+
+<Note>
+  **What happens automatically:**
+
+1. A `prepared` event of kind `agent.create` is created with
+   `agent_asset = asset_address`. Visible in `/v1/events` and on
+   the explorer's "Recent activity" feed.
+2. The asset + treasury PDA are added to the [indexer
+   watchlist](/api/indexer) so future on-chain activity for them
+   surfaces without any extra API calls.
+3. After submit, the event progresses through `submitted →
+confirmed` automatically. The submit endpoint returns once the
+   tx is broadcast; the background poller stamps the final state.
+
+**Recommended one-time follow-up:** After your first mint succeeds,
+call [`GET /v1/agents/{asset}/treasury/balances`](#treasury-balances)
+once. It's a free read-only call that registers every SPL ATA the
+treasury owns on the indexer watchlist, so incoming SPL transfers
+surface as `agent.treasury.fund` events on the explorer. See
+[Explorer tracking](/api/explorer-tracking) for the full per-event
+matrix.
+
+</Note>
+
+## Get an agent summary
+
+```http
+GET /v1/agents/{mint}
+Authorization: Bearer lsh_test_...
+```
+
+Returns identity, treasury PDA, and agent-token association — the
+canonical "what is this agent?" lookup. Network is bound to the API
+key prefix, so a `lsh_test_*` key looking up a mainnet-only mint
+returns `404`.
+
+```json
+{
+  "agent_asset": "9pK9…",
+  "network": "solana-devnet",
+  "treasury": "BcN4…",
+  "has_identity": true,
+  "identity": { "source": "v1", "asset": "9pK9…" },
+  "token": { "has_token": false, "mint": null, "source": "none" }
+}
+```
+
+## Treasury balances
+
+```http
+GET /v1/agents/{mint}/treasury/balances
+Authorization: Bearer lsh_test_...
+```
+
+Returns the live SOL + SPL balance on the treasury PDA. **Side
+effect:** every call here also registers the PDA + every SPL ATA it
+sees on the indexer watchlist — the cheapest way to make incoming
+deposits show up on the explorer.
+
+```json
+{
+  "agent_asset": "9pK9…",
+  "network": "solana-devnet",
+  "treasury": "BcN4…",
+  "sol": {
+    "lamports": "12340000",
+    "sol": 0.01234,
+    "spendable_lamports": "11340000",
+    "spendable_sol": 0.01134
+  },
+  "spl": [
+    {
+      "mint": "4zMM…",        # USDC devnet
+      "symbol": "USDC",
+      "ata": "DkP9…",
+      "token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+      "amount": "100000",     # atomic
+      "decimals": 6,
+      "ui_amount": 0.1
+    }
+  ]
+}
+```
+
+For the write side of the treasury (provision ATAs, withdraw SPL,
+withdraw SOL, drain), see [Treasury endpoints](/api/treasury).

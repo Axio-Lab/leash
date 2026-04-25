@@ -14,6 +14,7 @@ import { execute } from './turso.js';
 import type { SvmNetwork } from '../util/network.js';
 
 export type EventKind =
+  | 'agent.create'
   | 'agent.identity.register'
   | 'agent.executive.register'
   | 'agent.executive.delegate'

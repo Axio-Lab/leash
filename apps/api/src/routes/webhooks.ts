@@ -30,6 +30,7 @@ import { ApiErrorSchema, NetworkSchema } from '../openapi/common.js';
 import { invalidRequest, notFound } from '../util/errors.js';
 
 const EVENT_KINDS = [
+  'agent.create',
   'agent.identity.register',
   'agent.executive.register',
   'agent.executive.delegate',

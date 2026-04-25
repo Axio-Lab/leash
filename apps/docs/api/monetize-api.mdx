@@ -25,6 +25,40 @@ control:
 All three produce the same on-chain result, the same explorer
 entries, and the same receipt feed.
 
+## Before you monetise: create and prep your agent
+
+Every monetised route needs a seller agent first. The `payTo` address
+used in x402 is derived from that agent's asset, and all explorer /
+metrics attribution keys off that same mint.
+
+Run this once per agent:
+
+1. **Create the agent asset + identity.** Either:
+   - over HTTP: [`POST /v1/agents/prepare`](/api/agents) (sign →
+     `POST /v1/submit`) — works from any language, and
+     auto-registers the new asset + treasury PDA on the indexer
+     watchlist; or
+   - in TypeScript:
+     [`prepareAgentMint`](/sdk/registry-utils) /
+     [`createAgent`](/sdk/registry-utils) from
+     `@leash/registry-utils`. Both paths produce identical on-chain
+     state.
+2. **Register/delegate execution via API**:
+   - `POST /v1/agents/{mint}/executive/register/prepare`
+   - `POST /v1/agents/{mint}/executive/delegate/prepare`
+   - `POST /v1/agents/{mint}/delegation/prepare`
+     (each followed by sign → `POST /v1/submit`)
+3. **Provision treasury token accounts**:
+   `POST /v1/agents/{mint}/treasury/provision/prepare`
+   (sign → submit, or accept `no_op` if already provisioned).
+4. **Indexer visibility follow-up (important)**:
+   call `GET /v1/agents/{mint}/treasury/balances` once. This
+   registers the treasury PDA + all ATAs so incoming fund events are
+   tracked and show up on explorer/metrics.
+
+For a copy-paste sequence with request examples, see
+[Explorer tracking](/api/explorer-tracking#standard-integration-sequences).
+
 ## Hosted payment links (no code path)
 
 If your monetised endpoint is "return this JSON when paid", a
@@ -125,6 +159,11 @@ createSeller(app, {
 
 app.get('/quote', (c) => c.json({ pair: 'SOL/USD', price: 142.71 }));
 ```
+
+The `LEASH_SELLER_AGENT` value must be a real, already-created agent
+mint from the setup flow above. If you skip agent creation/provision,
+payments may settle but your explorer/indexer visibility will be
+partial (especially treasury fund events).
 
 That's the entire integration. The sidecar will:
 

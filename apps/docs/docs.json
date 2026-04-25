@@ -63,6 +63,7 @@
               "api/overview",
               "api/auth",
               "api/prepare-submit",
+              "api/agents",
               "api/monetize-api",
               "api/payment-links",
               "api/seller-utils",

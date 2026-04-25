@@ -21,6 +21,15 @@ export type EventDescriptor = {
 };
 
 const TABLE: Record<string, EventDescriptor> = {
+  'agent.create': {
+    label: 'Agent created',
+    shortLabel: 'create',
+    variant: 'identity',
+    description: (e) =>
+      e.agent_asset
+        ? `Agent ${shortAddr(e.agent_asset)} was minted.`
+        : 'A new agent was minted via the API.',
+  },
   'agent.identity.register': {
     label: 'Identity registered',
     shortLabel: 'identity',
