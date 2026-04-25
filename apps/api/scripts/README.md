@@ -216,3 +216,78 @@ pnpm --filter @leash/api withdraw
 | `owner … USDG balance (…) < required (…)`              | The owner wallet has no USDG to top up the treasury. Mint USDG to the owner wallet via the project's USDG faucet, then re-run. |
 | `withdraw did not confirm — phase=failed`              | The transaction reached the chain but the program rejected it. The event row's `error_code` + `error_logs` carry the reason.   |
 | `expected a devnet key (lsh_test_*), got "lsh_live_…"` | Don't run this against mainnet. If you need a mainnet variant, fork the script and remove the prefix guard explicitly.         |
+
+## `fund.ts`
+
+One-shot deposit script that lands a `agent.treasury.fund` event on
+the explorer feed. Useful when you want to demo the funding flow
+end-to-end (faucet → owner → treasury → indexer → explorer) without
+waiting for organic deposits to arrive.
+
+There is intentionally **no `fund/prepare` API endpoint** — deposits
+are plain SPL `TransferChecked` instructions that anyone can sign
+locally; the API learns about them after the fact through the chain
+indexer (`agent.treasury.fund` rows are emitted from the
+`treasury_ata` watch kind). This script therefore:
+
+1. Resolves the agent's treasury PDA + the treasury's ATA for the
+   chosen mint and creates the ATA via `createTokenIfMissing` if
+   it doesn't exist (Token-2022 mints route through the Token-2022
+   program automatically).
+2. Sanity-checks the owner balance, asking them to top up via the
+   matching faucet otherwise.
+3. Sends a vanilla `TransferChecked` from the owner ATA to the
+   treasury ATA. Hand-rolled to work with both classic SPL and
+   Token-2022 program ids.
+4. Hits `GET /v1/agents/{mint}/treasury/balances` once — that
+   endpoint side-effects `ensureWatched` + `ensureWatchedAta`, so
+   the indexer is guaranteed to be watching the deposit before we
+   start polling.
+5. Polls `GET /v1/events?kind=agent.treasury.fund&agent=…` until
+   the row matching the deposit signature appears (or 90s elapse).
+6. Prints the Solscan link + final treasury balance readout.
+
+### Environment
+
+Reuses `apps/api/.env` + `apps/api/.env.e2e` so callers that already
+configured the e2e suite have nothing extra to set up.
+
+| Var                        | Default                                        | Notes                                                                                                                |
+| -------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `LEASH_E2E_API_URL`        | `http://localhost:8801`                        | Base URL of the API (no trailing slash).                                                                             |
+| `LEASH_E2E_API_KEY`        | _required_                                     | A devnet `lsh_test_*` key.                                                                                           |
+| `LEASH_E2E_OWNER_SECRET`   | _required_                                     | Asset owner secret (base58 or JSON array).                                                                           |
+| `LEASH_E2E_RPC`            | `https://api.devnet.solana.com`                | Devnet RPC for `umi`.                                                                                                |
+| `LEASH_FUND_AGENT`         | `E1wVJPjADFMmdpJ2T3To9C9sBD97PCcPaxPFFqmka6rv` | Agent asset whose treasury receives the deposit.                                                                     |
+| `LEASH_FUND_SYMBOL`        | `USDG`                                         | One of `USDG` (Token-2022) or `USDC` (classic SPL). Override with `LEASH_FUND_MINT` for arbitrary mints.             |
+| `LEASH_FUND_AMOUNT`        | `100`                                          | Display units (string, e.g. `"100"` or `"0.5"`).                                                                     |
+| `LEASH_FUND_MINT`          | _from symbol_                                  | Explicit mint address — wins over `LEASH_FUND_SYMBOL` so you can fund any SPL/Token-2022 token without script edits. |
+| `LEASH_FUND_DECIMALS`      | `6`                                            | Required when `LEASH_FUND_MINT` is set; integer in `[0,18]`.                                                         |
+| `LEASH_FUND_TOKEN_PROGRAM` | `spl`                                          | Required when `LEASH_FUND_MINT` is set; `"spl"` or `"token-2022"` (or a literal program id).                         |
+
+### Run it
+
+```bash
+# default: deposit 100 USDG into the canonical demo agent
+pnpm --filter @leash/api fund
+
+# deposit a different amount of USDC
+LEASH_FUND_SYMBOL=USDC LEASH_FUND_AMOUNT=0.25 pnpm --filter @leash/api fund
+
+# arbitrary mint
+LEASH_FUND_MINT=<mint> LEASH_FUND_TOKEN_PROGRAM=spl LEASH_FUND_DECIMALS=6 \
+  LEASH_FUND_AMOUNT=10 pnpm --filter @leash/api fund
+```
+
+The indexer worker (`pnpm --filter @leash/api indexer:dev` in another
+terminal) MUST be running for step 5 to terminate — the API itself
+never observes deposits, only the indexer does.
+
+### When it fails
+
+| Symptom                                                           | Likely cause                                                                                                                  |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `owner … USDG balance (…) < required (…)`                         | Owner wallet has no funds. Top up via the printed faucet URL.                                                                 |
+| `indexer did not surface a fund event for signature … within 90s` | The indexer worker isn't running, or the public devnet RPC is rate-limiting it. Check `pnpm --filter @leash/api indexer:dev`. |
+| `expected a devnet key (lsh_test_*), got "lsh_live_…"`            | This script is devnet-only by design — fork it if you really need a mainnet variant.                                          |
+| `unknown symbol "FOO" — supported: USDG, USDC`                    | Either pick a known symbol or set `LEASH_FUND_MINT` + `LEASH_FUND_DECIMALS` + `LEASH_FUND_TOKEN_PROGRAM`.                     |
