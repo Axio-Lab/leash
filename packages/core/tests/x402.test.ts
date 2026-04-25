@@ -125,7 +125,7 @@ describe('fetchPaymentLinkMeta', () => {
       origin: 'https://example.com',
       payTo: 'CTd5VBFYJnGDGv5DbhWfPmrQ96G5ibvmZiyRPURXNyox',
       facilitator: 'https://facilitator.svmacc.tech',
-      docsUrl: 'https://leash.svmacc.tech/docs/playground/seller',
+      docsUrl: 'https://docs.leash.market/guides/create-an-endpoint#facilitator',
     });
     const meta = await fetchPaymentLinkMeta('https://example.com/x/rt-1', {
       fetch: async () =>

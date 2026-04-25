@@ -214,7 +214,7 @@ function buildDiscoveryPayload(req: Request, endpoint: EndpointV1): PaymentLinkM
     origin,
     payTo,
     facilitator: FACILITATOR_URL,
-    docsUrl: 'https://leash.svmacc.tech/docs/playground/seller',
+    docsUrl: 'https://docs.leash.market/guides/create-an-endpoint#facilitator',
   });
 }
 

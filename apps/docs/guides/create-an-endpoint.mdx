@@ -31,6 +31,39 @@ stores your `EndpointV1` descriptors and the Next.js app exposes them at
 4. Click **Create payment link**. The runner stores the descriptor and
    the live URL appears in the right column. Copy it, share it, embed it.
 
+## Facilitator
+
+When someone pays a link, an x402 **facilitator** verifies the buyer’s signed SPL transfer and broadcasts it as the Solana **fee payer** (so the buyer only spends stables, not SOL for fees). The facilitator URL is stamped on every `ReceiptV1.facilitator` and appears in payment-link discovery JSON (the `docs` field points here).
+
+### Defaults by network (`@leash/core`)
+
+| Network (`solana-*`) | Default facilitator URL             | Notes                                              |
+| -------------------- | ----------------------------------- | -------------------------------------------------- |
+| `solana-devnet`      | `https://facilitator.svmacc.tech`   | Gas-sponsored devnet; Token-2022 + `exact` scheme. |
+| `solana-mainnet`     | `https://facilitator.payai.network` | Gas-sponsored mainnet `exact` scheme (PayAI).      |
+
+Override for **any** buyer/seller process: set `LEASH_FACILITATOR_URL` or pass `facilitator: 'https://…'` into `createBuyer` / `createSeller`. Resolution order is documented in [`defaultFacilitatorFor`](https://github.com/leash-market/leash/blob/main/packages/core/src/x402/facilitator.ts).
+
+### Playground (`apps/web`)
+
+- **Browser (`/buyer`)** — set `NEXT_PUBLIC_LEASH_FACILITATOR_URL` (inlined at build time).
+- **Server routes** (`/x/<id>`, `/api/seller/echo`) — also read `LEASH_FACILITATOR_URL`.
+
+Both are optional; if unset, the app uses the same defaults as the table above. Point both at `http://localhost:8787` when running [`@leash/facilitator-app`](/guides/run-a-facilitator) locally.
+
+### Hosted API (`api.leash.market`)
+
+Payment links served at `https://api.leash.market/x/{id}` use whatever the API operator configured as **`LEASH_API_FACILITATOR_URL`** on the server (falls back to the public devnet default if unset). That is independent of the playground env vars.
+
+### Self-host Leash’s facilitator (devnet today; mainnet capable)
+
+To run your own binary, wire devnet vs mainnet with `LEASH_FACILITATOR_NETWORKS`, fund a **dedicated** fee-payer keypair (never reuse the buyer’s signing key — x402 rejects `fee_payer_transferring_funds`), and front the listener with TLS on mainnet. Full walkthrough: [Run a Leash facilitator](/guides/run-a-facilitator).
+
+### Related docs
+
+- [Payment links (API)](/api/payment-links) — CRUD, `share_url`, public `/x/{id}` semantics.
+- [Real x402 on Solana](/standards/x402-on-solana) — protocol + settlement shape.
+
 ## Post-payment hooks
 
 Once a buyer pays, the seller has two orthogonal ways to react:

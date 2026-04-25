@@ -8,6 +8,19 @@ description: 'Operate facilitator.leash.dev (or your own) with @leash/facilitato
 > binary in 60 seconds — useful for local dev, integration tests, or
 > running your own settlement infrastructure on mainnet.
 
+## Default facilitators vs Leash / self-hosted
+
+Leash **SDKs** (`@leash/buyer-kit`, `@leash/seller-kit`) resolve the facilitator URL through [`defaultFacilitatorFor`](https://github.com/leash-market/leash/blob/main/packages/core/src/x402/facilitator.ts): optional `LEASH_FACILITATOR_URL`, else a per-network default, else a universal fallback.
+
+| Network     | Default (no `LEASH_FACILITATOR_URL`) | Typical override                                                                                                                      |
+| ----------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| **Devnet**  | `https://facilitator.svmacc.tech`    | `https://facilitator.leash.dev` (Leash-operated devnet) or `http://localhost:8787` (local `pnpm --filter @leash/facilitator-app dev`) |
+| **Mainnet** | `https://facilitator.payai.network`  | Your own HTTPS endpoint with `LEASH_FACILITATOR_NETWORKS=mainnet` (see [Going to mainnet](#going-to-mainnet) below)                   |
+
+The **hosted Leash API** (`api.leash.market`) uses **`LEASH_API_FACILITATOR_URL`** for its own `/x/{id}` paywall and seller-utils — that is server-side only and does not change your SDK defaults.
+
+The **web playground** reads `NEXT_PUBLIC_LEASH_FACILITATOR_URL` (client) and `LEASH_FACILITATOR_URL` (server routes). See [Create a payment link — Facilitator](/guides/create-an-endpoint#facilitator).
+
 ## What a facilitator does
 
 In x402, the **buyer** signs a transaction transferring tokens to the
