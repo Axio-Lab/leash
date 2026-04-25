@@ -186,9 +186,34 @@ export function createSeller(app: Hono, opts: CreateSellerOptions): Seller {
    * The receipt's `price` is sourced from the **settled** payment
    * requirements (so multi-currency endpoints stamp the actual debited
    * token), then enriched with the friendly Leash network slug.
+   *
+   * We additionally stamp `result.paymentRequirements = requirements`
+   * BEFORE the x402 middleware encodes `PAYMENT-RESPONSE`. Why: the
+   * upstream x402 SDK only puts the settlement `transaction` (and
+   * payer / network / amount) into the response header, not the
+   * matched `PaymentRequirements`. That leaves any buyer reading the
+   * header — including our own buyer-kit's `parseSettlement` — unable
+   * to recover the price/asset and forces them to stamp `price: null`
+   * on the spend receipt. Mutating `result` here lets the encoder
+   * pick up the requirements via JSON spread (the field rides along
+   * inside the same base64 payload), and `parseSettlement` already
+   * looks for `obj.paymentRequirements` on the decoded side, so the
+   * fix is end-to-end with zero changes on the buyer.
+   *
+   * We also fan into `extensions['leash.paymentRequirements']` as a
+   * second carrier for future buyers that prefer the namespaced
+   * extension surface (per x402's extension contract).
    */
   server.onAfterSettle(async ({ requirements, result, transportContext }) => {
     if (!result.success) return;
+    // Cast through `unknown` because `SettleResponse` doesn't declare
+    // `paymentRequirements` in its type but the JSON encoder is
+    // permissive — extra fields round-trip cleanly.
+    (result as unknown as { paymentRequirements: typeof requirements }).paymentRequirements =
+      requirements;
+    const extensions = (result.extensions ?? {}) as Record<string, unknown>;
+    extensions['leash.paymentRequirements'] = requirements;
+    result.extensions = extensions;
     const httpCtx = transportContext as HTTPTransportContext | undefined;
     const reqCtx: HTTPRequestContext | undefined = httpCtx?.request;
     const method = reqCtx?.method ?? 'POST';

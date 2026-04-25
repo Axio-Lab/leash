@@ -1,9 +1,9 @@
+import Link from 'next/link';
 import { cn } from '@/lib/cn';
 import type { ReceiptRow } from '@/lib/types';
 import type { Network } from '@/lib/network';
 import { formatRelative } from '@/lib/format';
 import { Mono } from './mono';
-import { solscanTxUrl } from '@/lib/solscan';
 import { formatTokenAmount, tokenInfoFor } from '@/lib/token-info';
 
 const KIND_CLS = {
@@ -30,13 +30,41 @@ function Pill({ value, cls }: { value: string; cls: string }) {
   );
 }
 
+/**
+ * Counterparty pair derived from the receipts table by matching
+ * `(network, tx_sig)`. Either side can be null when only one of the
+ * two receipts (earn / spend) has been ingested for a given tx.
+ */
+export type Counterparties = ReadonlyMap<string, { payer: string | null; receiver: string | null }>;
+
+/**
+ * Resolve the (payer, receiver) pair for a given receipt row. We
+ * always know the agent on the *receipt side* (earn → receiver,
+ * spend → payer); the other side comes from the counterparty map
+ * keyed by tx_sig. Falls back to "—" when nothing is known.
+ */
+function counterpartyFor(
+  r: ReceiptRow,
+  cp: Counterparties | undefined,
+): { payer: string | null; receiver: string | null } {
+  const known = r.tx_sig ? cp?.get(r.tx_sig) : undefined;
+  if (r.kind === 'earn') {
+    return { payer: known?.payer ?? null, receiver: r.agent };
+  }
+  return { payer: r.agent, receiver: known?.receiver ?? null };
+}
+
 export function ReceiptsTable({
   rows,
   network,
+  counterparties,
   emptyTitle = 'No receipts yet.',
 }: {
   rows: ReceiptRow[];
   network: Network;
+  /** Optional `tx_sig → { payer, receiver }` map; when missing the
+   * non-receipt side of each row renders as "—". */
+  counterparties?: Counterparties;
   emptyTitle?: string;
 }) {
   if (rows.length === 0) {
@@ -54,45 +82,66 @@ export function ReceiptsTable({
           <tr>
             <th className="px-3 py-2 font-medium">Kind</th>
             <th className="px-3 py-2 font-medium">Decision</th>
-            <th className="px-3 py-2 font-medium">Agent</th>
+            <th className="px-3 py-2 font-medium">Payer</th>
+            <th className="px-3 py-2 font-medium">Receiver</th>
             <th className="px-3 py-2 font-medium">Price</th>
-            <th className="px-3 py-2 font-medium">Tx</th>
             <th className="px-3 py-2 font-medium">Hash</th>
             <th className="px-3 py-2 font-medium text-right">When</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[--color-border]">
-          {rows.map((r) => (
-            <tr key={r.receipt_hash} className="hover:bg-[oklch(0.2_0.02_280_/_0.6)]">
-              <td className="px-3 py-2.5 align-middle">
-                <Pill value={r.kind} cls={KIND_CLS[r.kind]} />
-              </td>
-              <td className="px-3 py-2.5 align-middle">
-                <Pill value={r.decision} cls={DECISION_CLS[r.decision]} />
-              </td>
-              <td className="px-3 py-2.5 align-middle">
-                <Mono value={r.agent} href={`/agent/${r.agent}`} />
-              </td>
-              <td className="px-3 py-2.5 align-middle text-xs text-[--color-fg-muted]">
-                {r.price
-                  ? formatTokenAmount(r.price.amount, tokenInfoFor(network, r.price.asset ?? null))
-                  : '—'}
-              </td>
-              <td className="px-3 py-2.5 align-middle">
-                <Mono
-                  value={r.tx_sig ?? null}
-                  href={r.tx_sig ? `/tx/${r.tx_sig}` : undefined}
-                  external={r.tx_sig ? solscanTxUrl(network, r.tx_sig) : undefined}
-                />
-              </td>
-              <td className="px-3 py-2.5 align-middle">
-                <Mono value={r.receipt_hash} href={`/receipt/${r.receipt_hash}`} />
-              </td>
-              <td className="px-3 py-2.5 text-right align-middle text-xs text-[--color-fg-muted]">
-                {formatRelative(r.ts)}
-              </td>
-            </tr>
-          ))}
+          {rows.map((r) => {
+            const { payer, receiver } = counterpartyFor(r, counterparties);
+            // Whole-row click target: tx detail when settled, receipt detail otherwise.
+            const rowHref = r.tx_sig ? `/tx/${r.tx_sig}` : `/receipt/${r.receipt_hash}`;
+            const rowLabel = r.tx_sig
+              ? `View transaction ${r.tx_sig}`
+              : `View receipt ${r.receipt_hash}`;
+            return (
+              <tr
+                key={r.receipt_hash}
+                className="group relative hover:bg-[oklch(0.2_0.02_280_/_0.6)]"
+              >
+                {/* Stretched link covers the entire row but sits BEHIND the
+                    inline cell links/buttons (Mono / CopyButton) so those
+                    keep their own click targets. */}
+                <td className="p-0">
+                  <Link
+                    href={rowHref}
+                    aria-label={rowLabel}
+                    className="absolute inset-0 z-0"
+                    tabIndex={-1}
+                  />
+                  <div className="relative z-10 px-3 py-2.5 align-middle">
+                    <Pill value={r.kind} cls={KIND_CLS[r.kind]} />
+                  </div>
+                </td>
+                <td className="relative z-10 px-3 py-2.5 align-middle">
+                  <Pill value={r.decision} cls={DECISION_CLS[r.decision]} />
+                </td>
+                <td className="relative z-10 px-3 py-2.5 align-middle">
+                  <Mono value={payer} href={payer ? `/agent/${payer}` : undefined} />
+                </td>
+                <td className="relative z-10 px-3 py-2.5 align-middle">
+                  <Mono value={receiver} href={receiver ? `/agent/${receiver}` : undefined} />
+                </td>
+                <td className="relative z-10 px-3 py-2.5 align-middle text-xs text-[--color-fg-muted]">
+                  {r.price
+                    ? formatTokenAmount(
+                        r.price.amount,
+                        tokenInfoFor(network, r.price.asset ?? null),
+                      )
+                    : '—'}
+                </td>
+                <td className="relative z-10 px-3 py-2.5 align-middle">
+                  <Mono value={r.receipt_hash} href={`/receipt/${r.receipt_hash}`} />
+                </td>
+                <td className="relative z-10 px-3 py-2.5 text-right align-middle text-xs text-[--color-fg-muted]">
+                  {formatRelative(r.ts)}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

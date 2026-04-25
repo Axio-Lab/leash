@@ -1,10 +1,23 @@
-import { DbUnavailableError, listRecentReceipts } from '@/lib/db';
-import type { ReceiptPage } from '@/lib/types';
+import { DbUnavailableError, getCounterpartiesForTxs, listRecentReceipts } from '@/lib/db';
+import type { ReceiptPage, ReceiptRow } from '@/lib/types';
+import type { Network } from '@/lib/network';
 import { getNetwork } from '@/lib/server-network';
 import { networkToSlug } from '@/lib/network';
 import { ReceiptsTable } from '@/components/receipts-table';
 import { DbUnreachable } from '@/components/empty';
-import { AutoRefresh } from '@/components/auto-refresh';
+import { LiveRefresh } from '@/components/live-refresh';
+
+/** Best-effort counterparty join: never fails the page render. */
+async function loadCounterparties(network: Network, rows: ReceiptRow[]) {
+  const sigs = rows
+    .map((r) => r.tx_sig)
+    .filter((s): s is string => typeof s === 'string' && s.length > 0);
+  try {
+    return await getCounterpartiesForTxs(network, sigs);
+  } catch {
+    return undefined;
+  }
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -52,7 +65,7 @@ export default async function ReceiptsPage({ searchParams }: Props) {
             calls; spend receipts come from buyer-side payments.
           </p>
         </div>
-        {sp.cursor ? null : <AutoRefresh intervalSec={5} />}
+        {sp.cursor ? null : <LiveRefresh network={network} intervalSec={5} />}
       </header>
 
       <nav className="flex flex-wrap gap-2">
@@ -77,7 +90,11 @@ export default async function ReceiptsPage({ searchParams }: Props) {
 
       {res.ok ? (
         <>
-          <ReceiptsTable rows={res.data.items} network={network} />
+          <ReceiptsTable
+            rows={res.data.items}
+            network={network}
+            counterparties={await loadCounterparties(network, res.data.items)}
+          />
           {res.data.next_cursor ? (
             <div className="flex justify-end">
               <a

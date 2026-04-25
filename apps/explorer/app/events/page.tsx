@@ -4,7 +4,7 @@ import { getNetwork } from '@/lib/server-network';
 import { networkToSlug } from '@/lib/network';
 import { EventsTable } from '@/components/events-table';
 import { DbUnreachable } from '@/components/empty';
-import { AutoRefresh } from '@/components/auto-refresh';
+import { LiveRefresh } from '@/components/live-refresh';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,7 +58,7 @@ export default async function EventsPage({ searchParams }: Props) {
           </p>
           <h1 className="text-2xl font-semibold tracking-tight">Event feed</h1>
         </div>
-        {sp.cursor ? null : <AutoRefresh intervalSec={5} />}
+        {sp.cursor ? null : <LiveRefresh network={network} intervalSec={5} />}
       </header>
 
       <nav className="flex flex-wrap gap-2">

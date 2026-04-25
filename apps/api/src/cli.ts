@@ -9,6 +9,7 @@ import { serve } from '@hono/node-server';
 import { boot } from './bootstrap.js';
 import { createConfig } from './config.js';
 import { createLeashApiApp } from './server.js';
+import { setEventPublisherCache } from './storage/events-pubsub.js';
 import { getCache, pingCache } from './storage/redis.js';
 import { getDb } from './storage/turso.js';
 
@@ -18,6 +19,7 @@ async function main(): Promise<void> {
   const cache = getCache(config);
   await boot({ db, config });
   await pingCache(config, cache);
+  setEventPublisherCache(cache);
   const app = createLeashApiApp({ config, db, cache });
   serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
     // eslint-disable-next-line no-console

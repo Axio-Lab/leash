@@ -1,16 +1,23 @@
 import { notFound } from 'next/navigation';
-import { DbUnavailableError, listEvents, listReceipts } from '@/lib/db';
+import { DbUnavailableError, getCounterpartiesForTxs, listEvents, listReceipts } from '@/lib/db';
 import { probeAgentOnOtherNetwork } from '@/lib/cross-network';
 import { RpcUnavailableError, getAgentSummaryFor, getTreasuryBalancesFor } from '@/lib/rpc';
-import type { AgentSummary, EventPage, ReceiptPage, TreasuryBalances } from '@/lib/types';
+import type {
+  AgentSummary,
+  EventPage,
+  ReceiptPage,
+  ReceiptRow,
+  TreasuryBalances,
+} from '@/lib/types';
 import { getNetwork } from '@/lib/server-network';
+import type { Network } from '@/lib/network';
 import { networkToSlug } from '@/lib/network';
 import { EventsTable } from '@/components/events-table';
 import { ReceiptsTable } from '@/components/receipts-table';
 import { DbUnreachable, RpcUnreachable } from '@/components/empty';
 import { Mono } from '@/components/mono';
 import { WrongNetworkNotice } from '@/components/wrong-network-notice';
-import { AutoRefresh } from '@/components/auto-refresh';
+import { LiveRefresh } from '@/components/live-refresh';
 import { solscanAddrUrl } from '@/lib/solscan';
 
 export const dynamic = 'force-dynamic';
@@ -34,6 +41,18 @@ async function safeRpc<T>(fn: () => Promise<T>): Promise<Result<T>> {
   } catch (err) {
     if (err instanceof RpcUnavailableError) return { ok: false, message: err.message };
     throw err;
+  }
+}
+
+/** Best-effort counterparty join for the agent receipt feed. */
+async function safeCounterparties(network: Network, rows: ReceiptRow[]) {
+  const sigs = rows
+    .map((r) => r.tx_sig)
+    .filter((s): s is string => typeof s === 'string' && s.length > 0);
+  try {
+    return await getCounterpartiesForTxs(network, sigs);
+  } catch {
+    return undefined;
   }
 }
 
@@ -135,7 +154,7 @@ export default async function AgentPage({ params }: Props) {
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Event timeline</h2>
-          <AutoRefresh intervalSec={5} />
+          <LiveRefresh network={network} intervalSec={5} />
         </div>
         {eventsRes.ok ? (
           <EventsTable
@@ -154,6 +173,7 @@ export default async function AgentPage({ params }: Props) {
           <ReceiptsTable
             rows={receiptsRes.data.items}
             network={network}
+            counterparties={await safeCounterparties(network, receiptsRes.data.items)}
             emptyTitle="No receipts published for this agent yet."
           />
         ) : (

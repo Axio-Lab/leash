@@ -11,6 +11,7 @@ import { serve } from '@hono/node-server';
 import { boot } from './bootstrap.js';
 import { createConfig } from './config.js';
 import { createLeashApiApp } from './server.js';
+import { setEventPublisherCache } from './storage/events-pubsub.js';
 import { getCache, pingCache } from './storage/redis.js';
 import { getDb } from './storage/turso.js';
 import { startWebhookWorker } from './webhooks/worker.js';
@@ -21,6 +22,10 @@ const cache = getCache(config);
 
 await boot({ db, config });
 await pingCache(config, cache);
+// Wire the live-event publisher to the cache client so every
+// `fanoutEvent` write also fans into Redis pub/sub for the Explorer
+// SSE stream. No-op (with logged warning) when Redis isn't configured.
+setEventPublisherCache(cache);
 
 const app = createLeashApiApp({ config, db, cache });
 const webhookHandle = startWebhookWorker(db);

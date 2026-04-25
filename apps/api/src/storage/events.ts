@@ -130,18 +130,26 @@ export async function markFailed(
 }
 
 /**
- * Best-effort webhook fanout for an event id. Looks the row up and
- * enqueues one delivery per matching subscription. Errors are
- * swallowed — webhook plumbing must never fail the underlying API
- * call. The lazy import keeps the events module free of a hard
- * dependency on the webhooks subsystem.
+ * Best-effort fanout for an event id. Looks the row up once and runs
+ * three independent side-effects in parallel:
+ *   1. Webhook delivery enqueue (durable, retries, signed POST).
+ *   2. Live pub/sub publish (ephemeral, used by Explorer SSE).
+ * Errors in either branch are swallowed — neither must ever fail the
+ * underlying API call. The lazy imports keep the events module free
+ * of hard dependencies on the webhook + pubsub subsystems.
  */
 async function fanoutEvent(db: DbClient, id: string): Promise<void> {
   try {
     const row = await getEventById(db, id);
     if (!row) return;
-    const { enqueueDeliveriesForEvent } = await import('./webhooks.js');
-    await enqueueDeliveriesForEvent(db, row);
+    const [{ enqueueDeliveriesForEvent }, { publishLiveEvent }] = await Promise.all([
+      import('./webhooks.js'),
+      import('./events-pubsub.js'),
+    ]);
+    await Promise.all([
+      enqueueDeliveriesForEvent(db, row).catch(() => undefined),
+      publishLiveEvent(row).catch(() => undefined),
+    ]);
   } catch {
     // intentionally swallowed
   }

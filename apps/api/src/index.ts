@@ -18,6 +18,14 @@ export { getDb, runMigrations, _resetDbForTests } from './storage/turso.js';
 export type { DbClient } from './storage/turso.js';
 export { getCache, pingCache, _resetCacheForTests } from './storage/redis.js';
 export {
+  createEventSubscriber,
+  liveEventChannel,
+  setEventPublisherCache,
+  publishLiveEvent,
+  type EventSubscriber,
+  type LiveEventMessage,
+} from './storage/events-pubsub.js';
+export {
   createApiKey,
   generateApiKey,
   getApiKeyByPlaintext,

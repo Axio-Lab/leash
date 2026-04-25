@@ -229,3 +229,43 @@ export async function listRecentReceipts(opts: {
 export async function getIndexerStatus(network: Network): Promise<IndexerStatus> {
   return withDb((db) => apiGetIndexerStatus(db, networkToSlug(network)));
 }
+
+/**
+ * For each `tx_sig`, return the (payer, receiver) agent pair derived
+ * from the receipts table — buyer-side `spend` receipts give us the
+ * payer, seller-side `earn` receipts give us the receiver. When only
+ * one side is present (no counterparty receipt has been ingested) the
+ * other field is `null` so the UI can render "—".
+ *
+ * This is the explorer's per-row counterparty lookup: the receipts
+ * panel calls it once per page load with the tx signatures it's about
+ * to render, so the table can show "Payer ↔ Receiver" without
+ * round-tripping the indexer for each row.
+ */
+export async function getCounterpartiesForTxs(
+  network: Network,
+  txSigs: ReadonlyArray<string>,
+): Promise<Map<string, { payer: string | null; receiver: string | null }>> {
+  const map = new Map<string, { payer: string | null; receiver: string | null }>();
+  // Filter to non-empty unique sigs. Bail if there's nothing to ask.
+  const sigs = Array.from(new Set(txSigs.filter((s): s is string => !!s && s.length > 0)));
+  if (sigs.length === 0) return map;
+  const placeholders = sigs.map(() => '?').join(',');
+  const sql = `SELECT tx_sig, kind, agent FROM receipts
+               WHERE network = ? AND tx_sig IN (${placeholders})`;
+  const rows = await withDb(async (db) => {
+    const res = await db.execute({ sql, args: [networkToSlug(network), ...sigs] });
+    return res.rows;
+  });
+  for (const row of rows) {
+    const sig = String(row.tx_sig ?? '');
+    if (!sig) continue;
+    const kind = String(row.kind ?? '');
+    const agent = String(row.agent ?? '');
+    const cur = map.get(sig) ?? { payer: null, receiver: null };
+    if (kind === 'spend') cur.payer = agent;
+    else if (kind === 'earn') cur.receiver = agent;
+    map.set(sig, cur);
+  }
+  return map;
+}

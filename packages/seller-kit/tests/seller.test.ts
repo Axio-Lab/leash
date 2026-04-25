@@ -220,6 +220,48 @@ describe('createSeller — earn receipts', () => {
   });
 });
 
+describe('createSeller — PAYMENT-RESPONSE header', () => {
+  /**
+   * Regression: the upstream `@x402/hono` middleware encodes only
+   * `{ success, transaction, payer, network, … }` into PAYMENT-RESPONSE
+   * — it does NOT include the matched `paymentRequirements`. That left
+   * `@leash/buyer-kit`'s `parseSettlement` unable to recover the price
+   * for a successful settlement, so spend receipts were stamped with
+   * `price: null` even when the trade went through.
+   *
+   * Our `onAfterSettle` mutates `result` to attach `paymentRequirements`
+   * (both at the top level and under `extensions['leash.paymentRequirements']`)
+   * so the encoded header round-trips the requirements to any buyer.
+   */
+  it('round-trips paymentRequirements so buyers can stamp price on spend receipts', async () => {
+    const app = makeApp();
+    const header = await buildPaidHeader(app, 'POST /tag');
+    const res = await app.request('http://localhost/tag', {
+      method: 'POST',
+      headers: { 'PAYMENT-SIGNATURE': header },
+    });
+    expect(res.status).toBe(200);
+    const encoded = res.headers.get('PAYMENT-RESPONSE');
+    expect(encoded, 'seller did not emit PAYMENT-RESPONSE header').not.toBeNull();
+    const decoded = JSON.parse(Buffer.from(encoded!, 'base64').toString('utf8')) as {
+      transaction?: string;
+      paymentRequirements?: PaymentRequirements;
+      extensions?: Record<string, unknown>;
+    };
+    expect(decoded.transaction).toMatch(/^sig-/);
+    // Top-level field — what existing buyer-kit `parseSettlement` reads.
+    // `asset` is the resolved USDC devnet mint (not our seller's agent
+    // ASSET), because `$0.001` is parsed against the USDC token registry.
+    expect(decoded.paymentRequirements).toBeTruthy();
+    expect(decoded.paymentRequirements?.asset).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
+    expect(decoded.paymentRequirements?.amount).toBe('1000');
+    expect(decoded.paymentRequirements?.network).toBe(SOLANA_DEVNET_CAIP2);
+    // Namespaced extension surface — for future buyers that prefer it.
+    expect(decoded.extensions).toBeTruthy();
+    expect(decoded.extensions?.['leash.paymentRequirements']).toEqual(decoded.paymentRequirements);
+  });
+});
+
 describe('parsePrice', () => {
   // Devnet USDC mint — must match `@leash/core/tokens` so format helpers
   // can reverse-resolve decimals correctly.

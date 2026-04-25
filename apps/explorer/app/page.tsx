@@ -1,6 +1,12 @@
 import Link from 'next/link';
 import { Activity, FileSignature, Wallet, Zap } from 'lucide-react';
-import { DbUnavailableError, getIndexerStatus, listEvents, listRecentReceipts } from '@/lib/db';
+import {
+  DbUnavailableError,
+  getCounterpartiesForTxs,
+  getIndexerStatus,
+  listEvents,
+  listRecentReceipts,
+} from '@/lib/db';
 import type { EventPage, IndexerStatus, ReceiptPage } from '@/lib/types';
 import { getNetwork } from '@/lib/server-network';
 import { networkToSlug } from '@/lib/network';
@@ -8,7 +14,7 @@ import { EventsTable } from '@/components/events-table';
 import { ReceiptsTable } from '@/components/receipts-table';
 import { DbUnreachable } from '@/components/empty';
 import { SearchBar } from '@/components/search-bar';
-import { AutoRefresh } from '@/components/auto-refresh';
+import { LiveRefresh } from '@/components/live-refresh';
 import { formatRelative } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -38,6 +44,15 @@ export default async function HomePage() {
   const events = eventsRes.ok ? eventsRes.data.items : [];
   const recentReceipts = recentReceiptsRes.ok ? recentReceiptsRes.data.items : [];
 
+  // Resolve payer/receiver per row from the receipts table itself —
+  // best-effort: a DB hiccup here just falls back to "—" rather than
+  // failing the whole homepage render.
+  const recentTxSigs = recentReceipts
+    .map((r) => r.tx_sig)
+    .filter((s): s is string => typeof s === 'string' && s.length > 0);
+  const counterpartiesRes = await safe(() => getCounterpartiesForTxs(network, recentTxSigs));
+  const counterparties = counterpartiesRes.ok ? counterpartiesRes.data : undefined;
+
   return (
     <div className="space-y-8">
       <section className="space-y-5">
@@ -60,7 +75,7 @@ export default async function HomePage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Recent activity</h2>
           <div className="flex items-center gap-3">
-            <AutoRefresh intervalSec={5} />
+            <LiveRefresh network={network} intervalSec={5} />
             <Link
               href="/events"
               className="text-xs text-[--color-fg-muted] hover:text-[--color-fg]"
@@ -87,7 +102,7 @@ export default async function HomePage() {
           </Link>
         </div>
         {recentReceiptsRes.ok ? (
-          <ReceiptsTable rows={recentReceipts} network={network} />
+          <ReceiptsTable rows={recentReceipts} network={network} counterparties={counterparties} />
         ) : (
           <DbUnreachable network={network} message={recentReceiptsRes.message} />
         )}

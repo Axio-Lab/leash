@@ -9,6 +9,7 @@ import { createClient } from '@libsql/client';
 import { createLeashApiApp } from '../src/server.js';
 import { boot } from '../src/bootstrap.js';
 import { createApiKey } from '../src/storage/api-keys.js';
+import { setEventPublisherCache } from '../src/storage/events-pubsub.js';
 import { _resetCacheForTests, getCache } from '../src/storage/redis.js';
 import { _resetDbForTests, type DbClient } from '../src/storage/turso.js';
 import type { LeashApiConfig } from '../src/config.js';
@@ -44,6 +45,11 @@ export async function createTestRig(overrides: Partial<LeashApiConfig> = {}): Pr
     ...overrides,
   };
   const cache = getCache(config);
+  // Tests exercise the same fanout path production uses, so pub/sub
+  // delivery is wired up automatically. Without this, `publishLiveEvent`
+  // in `events.ts` is a no-op and the SSE-bridge tests can't verify
+  // delivery from inside vitest.
+  setEventPublisherCache(cache);
   await boot({ db, config });
   const { plaintext } = await createApiKey(db, {
     label: 'test',

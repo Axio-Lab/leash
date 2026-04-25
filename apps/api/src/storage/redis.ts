@@ -23,6 +23,14 @@ export type CacheClient = {
   incr(key: string, opts: { ttlSec: number }): Promise<number>;
   /** Delete a key (no-op if missing). */
   del(key: string): Promise<void>;
+  /**
+   * Fire-and-forget publish to a Redis channel. Used for cross-process
+   * live-event fanout to subscribers (e.g. the Explorer's SSE route).
+   * Returns the number of subscribers that received the message; `0`
+   * when no listeners are connected, which is the common single-process
+   * case during local dev or tests.
+   */
+  publish(channel: string, payload: string): Promise<number>;
   /** Best-effort close. */
   close(): Promise<void>;
 };
@@ -80,9 +88,41 @@ class RedisCacheClient implements CacheClient {
   async del(key: string): Promise<void> {
     await this.r.del(key);
   }
+  async publish(channel: string, payload: string): Promise<number> {
+    // Publishing is a one-shot command — safe to share with the rest
+    // of the cache traffic on the same connection. Subscribers, by
+    // contrast, MUST live on a dedicated connection (see
+    // {@link createEventSubscriber} in `events-pubsub.ts`).
+    return this.r.publish(channel, payload);
+  }
   async close(): Promise<void> {
     await this.r.quit().catch(() => undefined);
   }
+}
+
+/**
+ * Module-local pub/sub bridge for the in-memory cache. Subscribers
+ * registered here only receive messages published in the SAME Node
+ * process — that's enough for unit tests (publisher + subscriber both
+ * run in vitest) but NOT for cross-process delivery (the Explorer
+ * lives in a separate Next.js process). Production must use Redis.
+ */
+const memorySubscribers = new Map<string, Set<(payload: string) => void>>();
+
+export function _subscribeMemoryChannel(
+  channel: string,
+  handler: (payload: string) => void,
+): () => void {
+  let set = memorySubscribers.get(channel);
+  if (!set) {
+    set = new Set();
+    memorySubscribers.set(channel, set);
+  }
+  set.add(handler);
+  return () => {
+    set?.delete(handler);
+    if (set && set.size === 0) memorySubscribers.delete(channel);
+  };
 }
 
 /**
@@ -132,6 +172,20 @@ class MemoryCacheClient implements CacheClient {
   }
   async del(key: string): Promise<void> {
     this.store.delete(key);
+  }
+  async publish(channel: string, payload: string): Promise<number> {
+    const subs = memorySubscribers.get(channel);
+    if (!subs || subs.size === 0) return 0;
+    // Snapshot before iterating so handlers that synchronously
+    // unsubscribe themselves don't mutate the live set.
+    for (const handler of [...subs]) {
+      try {
+        handler(payload);
+      } catch {
+        // intentionally swallowed — pubsub is best-effort
+      }
+    }
+    return subs.size;
   }
   async close(): Promise<void> {
     this.store.clear();
@@ -209,4 +263,5 @@ export function _resetCacheForTests(): void {
     void cached.close();
   }
   cached = null;
+  memorySubscribers.clear();
 }

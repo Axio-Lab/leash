@@ -53,6 +53,8 @@ export function tokenInfoFor(_network: Network, mint: string | null | undefined)
  *     → '0.001 USDC (~$0.001)'
  *   formatTokenAmount('500000', { symbol: 'USDC', decimals: 6, isStable: true })
  *     → '0.5 USDC (~$0.50)'
+ *   formatTokenAmount('1', { symbol: 'USDC', decimals: 6, isStable: true })
+ *     → '0.000001 USDC (~$0.000001)'   // trailing zeros stripped
  *   formatTokenAmount('1000', { symbol: 'tokens', decimals: 6, isStable: false })
  *     → '0.001 tokens'
  */
@@ -107,7 +109,12 @@ function atomicToUiNumber(n: bigint, decimals: number): number {
 
 function formatUsd(amount: number): string {
   if (amount === 0) return '$0';
-  if (amount < 0.01) return `$${amount.toFixed(amount < 0.0001 ? 6 : 4)}`;
+  // Sub-cent: render up to 6 decimals but strip trailing zeros so
+  // `0.001 USDC` shows as `~$0.001` (not the misleading `~$0.0010`).
+  if (amount < 0.01) {
+    const fixed = amount.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+    return `$${fixed}`;
+  }
   if (amount < 1) return `$${amount.toFixed(2)}`;
   return amount.toLocaleString(undefined, {
     style: 'currency',
