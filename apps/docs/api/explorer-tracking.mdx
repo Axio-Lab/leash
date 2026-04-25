@@ -38,15 +38,15 @@ exist: `asset`, `treasury`, and `treasury_ata`. Once an agent is on
 the watchlist, every transaction touching its asset, treasury PDA,
 or any of its ATAs is decoded and emitted as the right event kind.
 
-| Endpoint                                                    | Watchlist side-effect                            |
-| ----------------------------------------------------------- | ------------------------------------------------ |
-| Any `prepare*` endpoint targeting `/v1/agents/{mint}/...`   | Adds `asset` + `treasury` rows for the agent.    |
-| `POST /v1/agents/{mint}/treasury/provision/prepare`         | Adds the provisioned ATAs as `treasury_ata`.     |
-| `POST /v1/agents/{mint}/treasury/withdraw/prepare`          | Adds the source ATA as `treasury_ata`.           |
-| `POST /v1/agents/{mint}/treasury/withdraw-all/prepare`      | Adds the source ATA as `treasury_ata`.           |
-| `GET  /v1/agents/{mint}/treasury/balances`                  | Adds the PDA + every SPL ATA it surfaces.        |
-| `POST /v1/receipts/{agent}` (first push for the agent)      | Adds an `asset` row.                             |
-| `POST /v1/agents/{mint}/pull-target` (registers a feed URL) | Adds an `asset` row.                             |
+| Endpoint                                                    | Watchlist side-effect                         |
+| ----------------------------------------------------------- | --------------------------------------------- |
+| Any `prepare*` endpoint targeting `/v1/agents/{mint}/...`   | Adds `asset` + `treasury` rows for the agent. |
+| `POST /v1/agents/{mint}/treasury/provision/prepare`         | Adds the provisioned ATAs as `treasury_ata`.  |
+| `POST /v1/agents/{mint}/treasury/withdraw/prepare`          | Adds the source ATA as `treasury_ata`.        |
+| `POST /v1/agents/{mint}/treasury/withdraw-all/prepare`      | Adds the source ATA as `treasury_ata`.        |
+| `GET  /v1/agents/{mint}/treasury/balances`                  | Adds the PDA + every SPL ATA it surfaces.     |
+| `POST /v1/receipts/{agent}` (first push for the agent)      | Adds an `asset` row.                          |
+| `POST /v1/agents/{mint}/pull-target` (registers a feed URL) | Adds an `asset` row.                          |
 
 The indexer also self-bootstraps on startup: for every `treasury`
 row it has never paged, it issues one `getTokenAccountsByOwner`
@@ -61,28 +61,28 @@ on the next tick.
 
 ## Per-event-kind matrix
 
-| Event kind                    | Source           | Endpoint / trigger that surfaces it                                                                                        |
-| ----------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Event kind                    | Source           | Endpoint / trigger that surfaces it                                                                                                                                     |
+| ----------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `agent.identity.register`     | API + indexer    | `POST /v1/agents/{mint}/identity/prepare` (then `/v1/submit`); or any `mpl-agent-identity::CreateIdentity` for a watched asset (e.g. an SDK-driven `prepareAgentMint`). |
-| `agent.executive.register`    | API + indexer    | `POST /v1/agents/{mint}/executive/register/prepare`; or `mpl-agent-tools::CreateExecutive`.                                |
-| `agent.executive.delegate`    | API + indexer    | `POST /v1/agents/{mint}/executive/delegate/prepare`; or `mpl-agent-tools::Delegate`.                                       |
-| `agent.delegation.set`        | API + indexer    | `POST /v1/agents/{mint}/delegation/prepare`; or an `Execute`-wrapped SPL `Approve` for the asset's signer PDA.             |
-| `agent.delegation.revoke`     | API + indexer    | `POST /v1/agents/{mint}/delegation/revoke/prepare`; or an `Execute`-wrapped SPL `Revoke`.                                  |
-| `agent.token.set`             | API + indexer    | `POST /v1/agents/{mint}/token/set/prepare`; or `mpl-agent-identity::SetAgentToken`.                                        |
-| `agent.treasury.provision`    | API + indexer    | `POST /v1/agents/{mint}/treasury/provision/prepare` (skipped if every ATA already exists); or any `CreateAssociatedTokenAccount` for the PDA. |
-| `agent.treasury.withdraw`     | API + indexer    | `POST /v1/agents/{mint}/treasury/withdraw[-all]/prepare`; or any `Execute`-wrapped `TransferChecked` debiting the PDA's ATA. |
-| `agent.treasury.withdraw_sol` | API + indexer    | `POST /v1/agents/{mint}/treasury/withdraw-sol[-all]/prepare`; or any `Execute` reducing the PDA's lamport balance.         |
-| `agent.treasury.fund`         | **Indexer only** | A plain SPL `TransferChecked` *into* a treasury ATA. Make sure the ATA is registered (see auto-registration table above).   |
-| `agent.treasury.fund_sol`     | **Indexer only** | A plain `SystemProgram::Transfer` ≥ 5 000 lamports *into* the treasury PDA. Sub-fee wobbles are filtered out as noise.      |
-| `submit.raw`                  | API only         | `POST /v1/submit` (any signed tx broadcast through the API).                                                                |
-| `payment_link.created`        | API only         | `POST /v1/payment-links`.                                                                                                   |
-| `payment_link.updated`        | API only         | `PATCH /v1/payment-links/{id}`.                                                                                             |
-| `payment_link.deleted`        | API only         | `DELETE /v1/payment-links/{id}`.                                                                                            |
-| `payment_link.served`         | API only         | An anonymous client hits `/x/{id}` with no `X-PAYMENT` header (paywall serves a `402`).                                     |
-| `payment_link.settled`        | API only         | An anonymous client hits `/x/{id}` with a valid `X-PAYMENT` header and the facilitator settles the payment.                 |
-| `buyer.payment.prepare`       | API only         | `POST /v1/buyer/payment/prepare`.                                                                                           |
-| `receipt.published`           | API only         | `POST /v1/receipts/{agent}` (also auto-emitted by `POST /v1/buyer/payment/execute` and the paywall on settle).              |
-| `receipt.pulled`              | Indexer only     | The pull worker fetches a receipt from a registered `pull-target` URL.                                                      |
+| `agent.executive.register`    | API + indexer    | `POST /v1/agents/{mint}/executive/register/prepare`; or `mpl-agent-tools::CreateExecutive`.                                                                             |
+| `agent.executive.delegate`    | API + indexer    | `POST /v1/agents/{mint}/executive/delegate/prepare`; or `mpl-agent-tools::Delegate`.                                                                                    |
+| `agent.delegation.set`        | API + indexer    | `POST /v1/agents/{mint}/delegation/prepare`; or an `Execute`-wrapped SPL `Approve` for the asset's signer PDA.                                                          |
+| `agent.delegation.revoke`     | API + indexer    | `POST /v1/agents/{mint}/delegation/revoke/prepare`; or an `Execute`-wrapped SPL `Revoke`.                                                                               |
+| `agent.token.set`             | API + indexer    | `POST /v1/agents/{mint}/token/set/prepare`; or `mpl-agent-identity::SetAgentToken`.                                                                                     |
+| `agent.treasury.provision`    | API + indexer    | `POST /v1/agents/{mint}/treasury/provision/prepare` (skipped if every ATA already exists); or any `CreateAssociatedTokenAccount` for the PDA.                           |
+| `agent.treasury.withdraw`     | API + indexer    | `POST /v1/agents/{mint}/treasury/withdraw[-all]/prepare`; or any `Execute`-wrapped `TransferChecked` debiting the PDA's ATA.                                            |
+| `agent.treasury.withdraw_sol` | API + indexer    | `POST /v1/agents/{mint}/treasury/withdraw-sol[-all]/prepare`; or any `Execute` reducing the PDA's lamport balance.                                                      |
+| `agent.treasury.fund`         | **Indexer only** | A plain SPL `TransferChecked` _into_ a treasury ATA. Make sure the ATA is registered (see auto-registration table above).                                               |
+| `agent.treasury.fund_sol`     | **Indexer only** | A plain `SystemProgram::Transfer` ≥ 5 000 lamports _into_ the treasury PDA. Sub-fee wobbles are filtered out as noise.                                                  |
+| `submit.raw`                  | API only         | `POST /v1/submit` (any signed tx broadcast through the API).                                                                                                            |
+| `payment_link.created`        | API only         | `POST /v1/payment-links`.                                                                                                                                               |
+| `payment_link.updated`        | API only         | `PATCH /v1/payment-links/{id}`.                                                                                                                                         |
+| `payment_link.deleted`        | API only         | `DELETE /v1/payment-links/{id}`.                                                                                                                                        |
+| `payment_link.served`         | API only         | An anonymous client hits `/x/{id}` with no `X-PAYMENT` header (paywall serves a `402`).                                                                                 |
+| `payment_link.settled`        | API only         | An anonymous client hits `/x/{id}` with a valid `X-PAYMENT` header and the facilitator settles the payment.                                                             |
+| `buyer.payment.prepare`       | API only         | `POST /v1/buyer/payment/prepare`.                                                                                                                                       |
+| `receipt.published`           | API only         | `POST /v1/receipts/{agent}` (also auto-emitted by `POST /v1/buyer/payment/execute` and the paywall on settle).                                                          |
+| `receipt.pulled`              | Indexer only     | The pull worker fetches a receipt from a registered `pull-target` URL.                                                                                                  |
 
 Brand-new agent creation (`prepareAgentMint`) is not yet exposed as an
 HTTP endpoint — mint the asset via the SDK, then start hitting
@@ -319,7 +319,7 @@ that gives you a full "API traffic in → on-chain volume out" picture.
 
 ## Quick checklist
 
-When something *should* be on the explorer but isn't:
+When something _should_ be on the explorer but isn't:
 
 1. Is the indexer worker running? `GET /v1/indexer/status` —
    `cursors.last_run_at` should be < 30 seconds old.

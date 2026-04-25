@@ -57,19 +57,19 @@ The split is the difference between a vendor and an HSM:
 Each one wraps a `prepare*` function from `@leash/registry-utils`,
 returns the wire-encoded transaction, and creates a `prepared` event:
 
-| Endpoint                                                   | SDK function                    | What it does                                                |
-| ---------------------------------------------------------- | ------------------------------- | ----------------------------------------------------------- |
-| `POST /v1/agents/{mint}/identity/prepare`                  | `prepareRegisterAgentIdentity`  | Re-register identity on an existing asset.                  |
-| `POST /v1/agents/{mint}/executive/register/prepare`        | `prepareRegisterExecutive`      | Bind a wallet as an executive for this agent.               |
-| `POST /v1/agents/{mint}/executive/delegate/prepare`        | `prepareDelegateExecution`      | Let the executive sign `Execute` for this asset.            |
-| `POST /v1/agents/{mint}/delegation/prepare`                | `prepareSetSpendDelegation`     | Owner approves the executive as SPL delegate up to a cap.   |
-| `POST /v1/agents/{mint}/delegation/revoke/prepare`         | `prepareRevokeSpendDelegation`  | Drop the SPL delegate to zero.                              |
-| `POST /v1/agents/{mint}/token/set/prepare`                 | `prepareSetAgentToken`          | Set the `agent_token` field on the identity plugin.         |
-| `POST /v1/agents/{mint}/treasury/provision/prepare`        | `prepareProvisionTreasuryAtas`  | Pre-create stable ATAs on the treasury PDA.                 |
-| `POST /v1/agents/{mint}/treasury/withdraw/prepare`         | `prepareWithdrawTreasury`       | Owner moves a specific SPL amount out of the treasury.      |
-| `POST /v1/agents/{mint}/treasury/withdraw-all/prepare`     | `prepareWithdrawTreasuryAll`    | Owner drains the full SPL balance (or `no_op` when zero).   |
-| `POST /v1/agents/{mint}/treasury/withdraw-sol/prepare`     | `prepareWithdrawTreasurySol`    | Owner moves lamports out of the treasury.                   |
-| `POST /v1/agents/{mint}/treasury/withdraw-sol-all/prepare` | `prepareWithdrawTreasurySolAll` | Owner drains all SOL above a configurable safety reserve.   |
+| Endpoint                                                   | SDK function                    | What it does                                                         |
+| ---------------------------------------------------------- | ------------------------------- | -------------------------------------------------------------------- |
+| `POST /v1/agents/{mint}/identity/prepare`                  | `prepareRegisterAgentIdentity`  | Re-register identity on an existing asset.                           |
+| `POST /v1/agents/{mint}/executive/register/prepare`        | `prepareRegisterExecutive`      | Bind a wallet as an executive for this agent.                        |
+| `POST /v1/agents/{mint}/executive/delegate/prepare`        | `prepareDelegateExecution`      | Let the executive sign `Execute` for this asset.                     |
+| `POST /v1/agents/{mint}/delegation/prepare`                | `prepareSetSpendDelegation`     | Owner approves the executive as SPL delegate up to a cap.            |
+| `POST /v1/agents/{mint}/delegation/revoke/prepare`         | `prepareRevokeSpendDelegation`  | Drop the SPL delegate to zero.                                       |
+| `POST /v1/agents/{mint}/token/set/prepare`                 | `prepareSetAgentToken`          | Set the `agent_token` field on the identity plugin.                  |
+| `POST /v1/agents/{mint}/treasury/provision/prepare`        | `prepareProvisionTreasuryAtas`  | Pre-create stable ATAs on the treasury PDA.                          |
+| `POST /v1/agents/{mint}/treasury/withdraw/prepare`         | `prepareWithdrawTreasury`       | Owner moves a specific SPL amount out of the treasury.               |
+| `POST /v1/agents/{mint}/treasury/withdraw-all/prepare`     | `prepareWithdrawTreasuryAll`    | Owner drains the full SPL balance (or `no_op` when zero).            |
+| `POST /v1/agents/{mint}/treasury/withdraw-sol/prepare`     | `prepareWithdrawTreasurySol`    | Owner moves lamports out of the treasury.                            |
+| `POST /v1/agents/{mint}/treasury/withdraw-sol-all/prepare` | `prepareWithdrawTreasurySolAll` | Owner drains all SOL above a configurable safety reserve.            |
 | `POST /v1/buyer/payment/prepare`                           | (buyer-kit `prepareTransfer`)   | Build an unsigned SPL `TransferChecked` for a buyer x402 settlement. |
 
 There is no API endpoint for **minting a brand-new agent** yet — that
@@ -84,22 +84,23 @@ chain, every other lifecycle action above is callable over HTTP.
   `ensureWatched`). That's enough for the explorer to surface
   withdraws, identity changes, delegations, and token updates.
 
-  It is **not** enough to surface incoming SPL deposits, because plain
-  `TransferChecked` transactions don't list the PDA — they list the
-  ATA. To make `agent.treasury.fund` events show up too, do **one**
-  of the following exactly once per agent:
+It is **not** enough to surface incoming SPL deposits, because plain
+`TransferChecked` transactions don't list the PDA — they list the
+ATA. To make `agent.treasury.fund` events show up too, do **one**
+of the following exactly once per agent:
 
-  - Hit `POST /v1/agents/{mint}/treasury/provision/prepare` (registers
-    the ATAs it provisions), **or**
-  - Hit `POST /v1/agents/{mint}/treasury/withdraw/prepare` (registers
-    the source ATA), **or**
-  - Hit `GET /v1/agents/{mint}/treasury/balances` — read-only, free,
-    and registers the PDA + every SPL ATA it sees in one call.
+- Hit `POST /v1/agents/{mint}/treasury/provision/prepare` (registers
+  the ATAs it provisions), **or**
+- Hit `POST /v1/agents/{mint}/treasury/withdraw/prepare` (registers
+  the source ATA), **or**
+- Hit `GET /v1/agents/{mint}/treasury/balances` — read-only, free,
+  and registers the PDA + every SPL ATA it sees in one call.
 
-  The `/treasury/balances` call is the recommended "make this agent
-  fully visible to the explorer" step right after your first
-  successful submit. See [Explorer tracking](/api/explorer-tracking)
-  for the full per-event matrix.
+The `/treasury/balances` call is the recommended "make this agent
+fully visible to the explorer" step right after your first
+successful submit. See [Explorer tracking](/api/explorer-tracking)
+for the full per-event matrix.
+
 </Note>
 
 Each response uses the same shape:
@@ -139,7 +140,9 @@ They return a "no-op" envelope with a `null` event id and no
   "event_id": null,
   "network": "solana-devnet",
   "transaction": null,
-  "echo": { /* same shape as the active envelope */ },
+  "echo": {
+    /* same shape as the active envelope */
+  },
   "no_op": true
 }
 ```

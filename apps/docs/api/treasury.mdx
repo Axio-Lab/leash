@@ -10,14 +10,14 @@ CPI-sign on behalf of the PDA.
 
 This page documents the five HTTP routes that drive that PDA:
 
-| Endpoint                                                        | Method | Purpose                                                      |
-| --------------------------------------------------------------- | ------ | ------------------------------------------------------------ |
-| `GET  /v1/agents/{mint}/treasury/balances`                      | read   | Native SOL + every SPL token sitting on the PDA right now.   |
-| `POST /v1/agents/{mint}/treasury/provision/prepare`             | write  | Pre-create the curated stable ATAs (USDC / USDT / USDG).     |
-| `POST /v1/agents/{mint}/treasury/withdraw/prepare`              | write  | Owner moves a specific atomic amount of one SPL mint out.    |
-| `POST /v1/agents/{mint}/treasury/withdraw-all/prepare`          | write  | Same shape; drains the full balance (or `no_op` when zero).  |
-| `POST /v1/agents/{mint}/treasury/withdraw-sol/prepare`          | write  | Owner moves a specific lamport amount of native SOL out.     |
-| `POST /v1/agents/{mint}/treasury/withdraw-sol-all/prepare`      | write  | Same shape; drains all SOL above a configurable reserve.     |
+| Endpoint                                                   | Method | Purpose                                                     |
+| ---------------------------------------------------------- | ------ | ----------------------------------------------------------- |
+| `GET  /v1/agents/{mint}/treasury/balances`                 | read   | Native SOL + every SPL token sitting on the PDA right now.  |
+| `POST /v1/agents/{mint}/treasury/provision/prepare`        | write  | Pre-create the curated stable ATAs (USDC / USDT / USDG).    |
+| `POST /v1/agents/{mint}/treasury/withdraw/prepare`         | write  | Owner moves a specific atomic amount of one SPL mint out.   |
+| `POST /v1/agents/{mint}/treasury/withdraw-all/prepare`     | write  | Same shape; drains the full balance (or `no_op` when zero). |
+| `POST /v1/agents/{mint}/treasury/withdraw-sol/prepare`     | write  | Owner moves a specific lamport amount of native SOL out.    |
+| `POST /v1/agents/{mint}/treasury/withdraw-sol-all/prepare` | write  | Same shape; drains all SOL above a configurable reserve.    |
 
 Every write route follows the standard
 [Prepare → Submit lifecycle](/api/prepare-submit): the API never holds
@@ -96,7 +96,11 @@ entry must include `"token_program": "token-2022"`:
   "authority": "FFvP…owner",
   "mints": [
     { "mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU", "symbol": "USDC" },
-    { "mint": "4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7", "symbol": "USDG", "token_program": "token-2022" }
+    {
+      "mint": "4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7",
+      "symbol": "USDG",
+      "token_program": "token-2022"
+    }
   ]
 }
 ```
@@ -150,7 +154,15 @@ The "no-op" envelope skips the round-trip entirely:
   "transaction": null,
   "echo": {
     "treasury": "AssetSigner…",
-    "atas": [{ "mint": "4zMMC…", "symbol": "USDC", "address": "TreasuryUSDCAta…", "token_program": "Tokenkeg…", "created": false }]
+    "atas": [
+      {
+        "mint": "4zMMC…",
+        "symbol": "USDC",
+        "address": "TreasuryUSDCAta…",
+        "token_program": "Tokenkeg…",
+        "created": false
+      }
+    ]
   },
   "no_op": true
 }
@@ -179,16 +191,16 @@ curl -sX POST https://api.leash.market/v1/agents/$MINT/treasury/withdraw/prepare
   }'
 ```
 
-| Field                               | Required | Notes                                                                                                            |
-| ----------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------- |
-| `payer`                             | yes      | Wallet that pays SOL fees + ATA rent. Usually the owner.                                                         |
-| `authority`                         | yes      | Asset owner. Only the owner can authorise `mpl-core::Execute`.                                                   |
-| `spl_mint`                          | yes      | The SPL mint to debit (USDC / USDT / USDG / arbitrary).                                                          |
-| `destination`                       | yes      | Receiving wallet (its ATA is derived; no need to pre-create).                                                    |
-| `amount`                            | yes      | Atomic units (USDG has 6 decimals, so `99000000` = 99 USDG).                                                     |
-| `token_program`                     | no       | `"spl"` (default) or `"token-2022"`. USDG **requires** `"token-2022"`.                                           |
-| `decimals`                          | no       | Pre-fetched mint decimals — saves an RPC roundtrip in the API.                                                   |
-| `create_destination_ata_if_missing` | no       | Defaults to `true`. Set `false` to fail loudly when the destination has no ATA yet.                              |
+| Field                               | Required | Notes                                                                               |
+| ----------------------------------- | -------- | ----------------------------------------------------------------------------------- |
+| `payer`                             | yes      | Wallet that pays SOL fees + ATA rent. Usually the owner.                            |
+| `authority`                         | yes      | Asset owner. Only the owner can authorise `mpl-core::Execute`.                      |
+| `spl_mint`                          | yes      | The SPL mint to debit (USDC / USDT / USDG / arbitrary).                             |
+| `destination`                       | yes      | Receiving wallet (its ATA is derived; no need to pre-create).                       |
+| `amount`                            | yes      | Atomic units (USDG has 6 decimals, so `99000000` = 99 USDG).                        |
+| `token_program`                     | no       | `"spl"` (default) or `"token-2022"`. USDG **requires** `"token-2022"`.              |
+| `decimals`                          | no       | Pre-fetched mint decimals — saves an RPC roundtrip in the API.                      |
+| `create_destination_ata_if_missing` | no       | Defaults to `true`. Set `false` to fail loudly when the destination has no ATA yet. |
 
 Response shape:
 
@@ -196,7 +208,13 @@ Response shape:
 {
   "event_id": "01J…",
   "network": "solana-devnet",
-  "transaction": { "base64": "AQABAv…", "message_base64": "…", "recent_blockhash": "…", "fee_payer": "FFvP…", "signers": ["FFvP…"] },
+  "transaction": {
+    "base64": "AQABAv…",
+    "message_base64": "…",
+    "recent_blockhash": "…",
+    "fee_payer": "FFvP…",
+    "signers": ["FFvP…"]
+  },
   "echo": {
     "treasury": "AssetSigner…",
     "source_token_account": "TreasuryUSDGAta…",
@@ -266,7 +284,7 @@ There are five kinds:
   `withdraw-sol-all/prepare`, plus by the indexer when the treasury
   PDA's lamport balance drops via an `Execute` instruction.
 - `agent.treasury.fund` — emitted **only by the indexer** when the
-  treasury PDA *receives* an SPL transfer. There is no
+  treasury PDA _receives_ an SPL transfer. There is no
   `fund/prepare` endpoint because deposits are plain SPL transfers
   initiated by anyone (the owner topping up, an x402 payment landing,
   a third-party donation). The fund row is what makes those visible
@@ -282,6 +300,7 @@ There are five kinds:
   you previously deposited before any of those calls happened, run
   `GET /v1/agents/{mint}/treasury/balances` once to backfill the
   watch rows.
+
 - `agent.treasury.fund_sol` — same idea for native SOL transfers
   landing in the treasury PDA. Sub-fee-amount wobbles (under 5 000
   lamports) are filtered out as noise.

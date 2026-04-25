@@ -16,11 +16,11 @@ the API itself.
 
 Three roles are tracked per address:
 
-| Kind           | What it is                                   | When it gets added                                                                                     |
-| -------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `asset`        | The Core asset pubkey (the agent mint)       | First `prepare*` call against the agent, or first receipt ingest.                                      |
-| `treasury`     | The Asset Signer PDA derived from the asset  | Same trigger; computed via `findAssetSignerPda`.                                                       |
-| `treasury_ata` | A stable ATA owned by the treasury PDA       | When `provision/prepare`, `withdraw/prepare`, or `treasury/balances` runs; on indexer ATA discovery.   |
+| Kind           | What it is                                  | When it gets added                                                                                   |
+| -------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `asset`        | The Core asset pubkey (the agent mint)      | First `prepare*` call against the agent, or first receipt ingest.                                    |
+| `treasury`     | The Asset Signer PDA derived from the asset | Same trigger; computed via `findAssetSignerPda`.                                                     |
+| `treasury_ata` | A stable ATA owned by the treasury PDA      | When `provision/prepare`, `withdraw/prepare`, or `treasury/balances` runs; on indexer ATA discovery. |
 
 Why three? `getSignaturesForAddress(treasury_pda)` only surfaces
 transactions in which the PDA itself is in the account list — that
@@ -84,14 +84,14 @@ Decoding is log-driven. The indexer fetches each transaction with
 `getTransaction(signature, { jsonParsed, maxSupportedTransactionVersion: 0 })`
 and matches program logs against a known table:
 
-| Program                                 | Logs / signal we match                          | EventKind                                                   |
-| --------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------- |
-| `mpl-agent-identity`                    | `CreateIdentity`, `SetAgentToken`               | `agent.identity.register`, `agent.token.set`                |
-| `mpl-agent-tools`                       | `CreateExecutive`, `Delegate`, `Revoke`         | `agent.executive.register`, `agent.executive.delegate`      |
-| `mpl-core` (`Execute` wrapping SPL/Sys) | `Approve`, `TransferChecked`, lamport delta < 0 | `agent.delegation.set`, `agent.treasury.withdraw[_sol]`     |
-| SPL Token / Token-2022                  | `Approve`, `Revoke`, `TransferChecked`          | Same as above when wrapped in `Execute` for an asset signer |
-| Any program (no `Execute`)              | `tokenBalanceDeltas[ata].delta > 0` where the ATA is on the watchlist and its owner is the treasury PDA | `agent.treasury.fund` (one row per mint that increased)    |
-| `system`                                | `lamportDeltas[treasury].delta ≥ 5 000` with no matching withdraw row in the same tx | `agent.treasury.fund_sol` (sub-fee wobbles dropped as noise) |
+| Program                                 | Logs / signal we match                                                                                  | EventKind                                                    |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `mpl-agent-identity`                    | `CreateIdentity`, `SetAgentToken`                                                                       | `agent.identity.register`, `agent.token.set`                 |
+| `mpl-agent-tools`                       | `CreateExecutive`, `Delegate`, `Revoke`                                                                 | `agent.executive.register`, `agent.executive.delegate`       |
+| `mpl-core` (`Execute` wrapping SPL/Sys) | `Approve`, `TransferChecked`, lamport delta < 0                                                         | `agent.delegation.set`, `agent.treasury.withdraw[_sol]`      |
+| SPL Token / Token-2022                  | `Approve`, `Revoke`, `TransferChecked`                                                                  | Same as above when wrapped in `Execute` for an asset signer  |
+| Any program (no `Execute`)              | `tokenBalanceDeltas[ata].delta > 0` where the ATA is on the watchlist and its owner is the treasury PDA | `agent.treasury.fund` (one row per mint that increased)      |
+| `system`                                | `lamportDeltas[treasury].delta ≥ 5 000` with no matching withdraw row in the same tx                    | `agent.treasury.fund_sol` (sub-fee wobbles dropped as noise) |
 
 Amounts are taken from the parsed instruction data (for SPL) or the
 `postTokenBalances` / `postBalances` deltas keyed to the treasury
