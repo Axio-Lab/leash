@@ -3,63 +3,13 @@ import { Hono } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
 import { ReceiptV1Schema, type ReceiptV1 } from '@leash/schemas';
-import type { FacilitatorClient } from '@x402/core/server';
-import type {
-  PaymentPayload,
-  PaymentRequirements,
-  SettleResponse,
-  SupportedResponse,
-  VerifyResponse,
-} from '@x402/core/types';
+import type { PaymentRequirements } from '@x402/core/types';
 import { SOLANA_DEVNET_CAIP2 } from '@x402/svm';
 import { createSeller } from '../src/hono/create-seller.js';
 import { parsePrice } from '../src/receipts/price.js';
+import { stubFacilitator } from '../src/test-utils/stub-facilitator.js';
 
 const ASSET = '11111111111111111111111111111111';
-const FACILITATOR_FEEPAYER = 'FaciliTatoR1111111111111111111111111111111';
-
-/**
- * Stub facilitator that approves every request and returns a deterministic
- * Solana signature. Lets us exercise the real `@x402/hono` middleware
- * without touching network or chain.
- */
-function stubFacilitator(opts?: { txSig?: string }): FacilitatorClient {
-  let nonce = 0;
-  return {
-    async getSupported(): Promise<SupportedResponse> {
-      return {
-        kinds: [
-          {
-            x402Version: 2,
-            scheme: 'exact',
-            network: SOLANA_DEVNET_CAIP2,
-            extra: { feePayer: FACILITATOR_FEEPAYER },
-          },
-        ],
-        extensions: [],
-        signers: {},
-      };
-    },
-    async verify(
-      _payload: PaymentPayload,
-      _requirements: PaymentRequirements,
-    ): Promise<VerifyResponse> {
-      return { isValid: true, payer: 'Buyer1111111111111111111111111111111111' };
-    },
-    async settle(
-      _payload: PaymentPayload,
-      requirements: PaymentRequirements,
-    ): Promise<SettleResponse> {
-      nonce += 1;
-      return {
-        success: true,
-        transaction: `${opts?.txSig ?? 'sig'}-${nonce}`,
-        network: requirements.network,
-        payer: 'Buyer1111111111111111111111111111111111',
-      };
-    },
-  };
-}
 
 /**
  * Probe the seller for its `accepts[]` (the body is empty, but the

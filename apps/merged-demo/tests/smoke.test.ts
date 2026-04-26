@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
 import { createSeller } from '@leash/seller-kit';
+import { stubFacilitator } from '@leash/seller-kit/test-utils';
 import { createBuyer } from '@leash/buyer-kit';
 import type { ClientSvmSigner, LeashFetch } from '@leash/core';
 import type { ReceiptV1, RulesV1 } from '@leash/schemas';
@@ -27,6 +28,7 @@ describe('merged-demo: in-process buyer ↔ seller ↔ receipt store', () => {
       umi,
       sellerAgent: { asset: AGENT },
       routes: { 'POST /echo': { price: '$0.001', description: 'echo' } },
+      facilitator: stubFacilitator(),
     });
     app.post('/echo', (c) => c.json({ echo: true }));
 

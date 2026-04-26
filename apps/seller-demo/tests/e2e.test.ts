@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
 import { createSeller } from '@leash/seller-kit';
+import { stubFacilitator } from '@leash/seller-kit/test-utils';
 
 describe('seller-demo shape', () => {
   it('returns 402 + a base64 PAYMENT-REQUIRED header on an unpaid request', async () => {
@@ -12,6 +13,7 @@ describe('seller-demo shape', () => {
       umi,
       sellerAgent: { asset: '11111111111111111111111111111111' },
       routes: { 'POST /tag': { price: '$0.001', description: 'x' } },
+      facilitator: stubFacilitator(),
     });
     app.post('/tag', (c) => c.json({ ok: 1 }));
 

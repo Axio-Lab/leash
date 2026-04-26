@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./test-utils": {
+      "types": "./dist/test-utils/stub-facilitator.d.ts",
+      "import": "./dist/test-utils/stub-facilitator.js"
     }
   },
   "files": [
