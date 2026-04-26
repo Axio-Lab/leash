@@ -74,17 +74,22 @@ const swaggerHtml = (specUrl: string) => `<!doctype html>
 
 export function mountOpenApi(
   app: OpenAPIHono,
-  config: Pick<LeashApiConfig, 'docsEnabled' | 'host' | 'port'>,
+  config: Pick<LeashApiConfig, 'docsEnabled' | 'host' | 'port' | 'publicOrigin'>,
 ): void {
-  // In dev (docs on) point Swagger at this server so "Try it out" hits
-  // localhost. In prod the only advertised server is the production URL.
-  // `host` is normally `0.0.0.0` (bind to all interfaces); rewrite that
-  // to `localhost` for the URL since 0.0.0.0 isn't routable from a browser.
+  // OpenAPI `servers` drives Swagger "Try it out" and codegen. Never
+  // advertise `http://localhost:${PORT}` in production behind 0.0.0.0 +
+  // Railway — use `LEASH_API_PUBLIC_ORIGIN` when set, else a sensible default.
   const localHost = config.host === '0.0.0.0' || config.host === '::' ? 'localhost' : config.host;
   const localUrl = `http://${localHost}:${config.port}`;
-  const servers = config.docsEnabled
-    ? [{ url: localUrl, description: 'Local dev (this server)' }]
-    : [{ url: 'https://api.leash.market', description: 'Production' }];
+  const publicBase = config.publicOrigin.replace(/\/+$/, '');
+  const envPublicOrigin =
+    typeof process !== 'undefined' && Boolean(process.env.LEASH_API_PUBLIC_ORIGIN?.trim());
+  const servers =
+    envPublicOrigin && publicBase.length > 0
+      ? [{ url: publicBase, description: 'This deployment' }]
+      : process.env.NODE_ENV === 'production'
+        ? [{ url: 'https://api.leash.market', description: 'Production' }]
+        : [{ url: localUrl, description: 'Local dev (this server)' }];
 
   app.doc('/openapi.json', {
     openapi: '3.1.0',
