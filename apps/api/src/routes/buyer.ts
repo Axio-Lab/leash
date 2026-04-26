@@ -40,7 +40,6 @@ import {
   computeReceiptHash,
   currencyForAsset,
   decodePaymentResponseHeader,
-  defaultFacilitatorFor,
   evaluate,
   finalizeReceipt,
   KNOWN_STABLE_SYMBOLS,
@@ -61,7 +60,7 @@ import { transferTokensChecked } from '@metaplex-foundation/mpl-toolbox';
 import { publicKey } from '@metaplex-foundation/umi';
 
 import type { AuthVariables } from '../auth/types.js';
-import type { LeashApiConfig } from '../config.js';
+import { type LeashApiConfig, facilitatorForNetwork } from '../config.js';
 import type { DbClient } from '../storage/turso.js';
 import {
   ApiErrorSchema,
@@ -597,8 +596,7 @@ export function buildBuyerRoutes(deps: BuyerRoutesDeps): OpenAPIHono<{ Variables
       const body = c.req.valid('json') as z.infer<typeof PaymentExecuteBody>;
       const network = c.var.network;
       const apiKey = c.var.apiKey;
-      const facilitator =
-        body.facilitator ?? deps.config.facilitatorUrl ?? defaultFacilitatorFor([network]);
+      const facilitator = body.facilitator ?? facilitatorForNetwork(deps.config, network);
 
       const headers: Record<string, string> = {
         ...(body.headers ?? {}),
@@ -962,9 +960,7 @@ function safeBase64Json(input: string): unknown {
 
 function buildBuyerNetwork(config: LeashApiConfig, network: SvmNetwork) {
   const tokenNetwork: TokenNetwork = network === 'solana-devnet' ? 'devnet' : 'mainnet';
-  const configured = config.facilitatorUrl?.trim();
-  const facilitator =
-    configured && configured.length > 0 ? configured : defaultFacilitatorFor([network]);
+  const facilitator = facilitatorForNetwork(config, network);
   const currencies = KNOWN_STABLE_SYMBOLS.flatMap((sym) => {
     const tok = lookupTokenBySymbol(sym, tokenNetwork);
     return tok

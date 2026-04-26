@@ -51,7 +51,7 @@ You are **not locked in** to the Leash facilitators. Any HTTPS base URL that imp
 - `facilitator: 'https://…'` on `createBuyer` / `createSeller`, or
 - `LEASH_FACILITATOR_URL` / `NEXT_PUBLIC_LEASH_FACILITATOR_URL` / `LEASH_API_FACILITATOR_URL` (depending on surface).
 
-Third-party examples: `facilitator.svmacc.tech` (devnet), `facilitator.payai.network` (mainnet), community deployments, or your own self-hosted instance. Resolution order: [`defaultFacilitatorFor`](https://github.com/leash-market/leash/blob/main/packages/core/src/x402/facilitator.ts).
+Third-party examples: `devnet-facilitator.leash.market` (devnet), `facilitator.leash.market` (mainnet), community deployments, or your own self-hosted instance. Resolution order: [`defaultFacilitatorFor`](https://github.com/leash-market/leash/blob/main/packages/core/src/x402/facilitator.ts).
 
 ### Playground (`apps/web`)
 
@@ -66,7 +66,7 @@ Payment links served at `https://api.leash.market/x/{id}` use whatever the API o
 
 ### Self-hosting or using a third-party facilitator (optional)
 
-The Leash defaults work for most users. If you need a custom settlement path — self-hosted [`@leash/facilitator`](/guides/run-a-facilitator), a community host, or a third-party provider like `facilitator.svmacc.tech` / `facilitator.payai.network` — pass a `facilitator:` override or set the env var. The wire contract is the same across all of them. See [Run a Leash facilitator](/guides/run-a-facilitator).
+The Leash defaults work for most users. If you need a custom settlement path — self-hosted [`@leash/facilitator`](/guides/run-a-facilitator), a community host, or a third-party provider like `devnet-facilitator.leash.market` / `facilitator.leash.market` — pass a `facilitator:` override or set the env var. The wire contract is the same across all of them. See [Run a Leash facilitator](/guides/run-a-facilitator).
 
 ### Related docs
 

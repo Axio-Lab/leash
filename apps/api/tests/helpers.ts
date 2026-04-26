@@ -102,7 +102,7 @@ export async function createTestRig(overrides: Partial<LeashApiConfig> = {}): Pr
     redisUrl: null,
     rateLimitRpm: 5,
     docsEnabled: false,
-    facilitatorUrl: 'https://facilitator.test.invalid',
+    facilitatorUrlDevnet: 'https://facilitator.test.invalid',
     publicOrigin: 'http://test.local',
     ...overrides,
   };

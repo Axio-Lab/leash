@@ -124,7 +124,7 @@ describe('fetchPaymentLinkMeta', () => {
       },
       origin: 'https://example.com',
       payTo: 'CTd5VBFYJnGDGv5DbhWfPmrQ96G5ibvmZiyRPURXNyox',
-      facilitator: 'https://facilitator.svmacc.tech',
+      facilitator: 'https://devnet-facilitator.leash.market',
       docsUrl: 'https://docs.leash.market/guides/create-an-endpoint#facilitator',
     });
     const meta = await fetchPaymentLinkMeta('https://example.com/x/rt-1', {
@@ -138,7 +138,7 @@ describe('fetchPaymentLinkMeta', () => {
     expect(meta.endpoint.url).toBe('https://example.com/x/rt-1');
     expect(meta.endpoint.response.body_kind).toBe('json');
     expect(meta.endpoint.hooks.wrap_receipt).toBe(true);
-    expect(meta.facilitator).toBe('https://facilitator.svmacc.tech');
+    expect(meta.facilitator).toBe('https://devnet-facilitator.leash.market');
   });
 
   it('derives body_kind="text" when seller body is a string', () => {

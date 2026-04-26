@@ -8,24 +8,17 @@
  * environment-level override (`LEASH_FACILITATOR_URL`) flows through the
  * stack uniformly.
  *
- * Picks (April 2026):
+ * Defaults (as of April 2026):
  *
- *   - **Solana devnet** → `https://facilitator.svmacc.tech` — free,
- *     gas-sponsored, supports the `exact` scheme and Token-2022, run by the
- *     SVMacc team. Battle-tested under the playground's load.
- *   - **Solana mainnet** → `https://facilitator.payai.network` — gas-
- *     sponsored mainnet exact-scheme facilitator run by PayAI. Drop in your
- *     own URL if you want to self-host.
+ *   - **Solana devnet** → `https://devnet-facilitator.leash.market`
+ *     Leash-operated `@leash/facilitator` instance. Gas-sponsored, supports
+ *     the `exact` SVM scheme (x402 v1 + v2), Token-2022, and the Leash
+ *     1% protocol fee leg. The facilitator auto-provisions destination ATAs
+ *     (seller payTo + fee vault) so first-time USDG/USDT settlements work
+ *     without manual ATA setup.
  *
- * Coming soon:
- *
- *   - **Leash devnet facilitator** → `https://facilitator.leash.dev` —
- *     `@leash/facilitator` running x402's `exact` SVM scheme (v1 + v2)
- *     against Solana devnet. Operationally equivalent to svmacc but
- *     under our control, so we can tie settlements back to receipts in
- *     the explorer (Order #6 from the roadmap). Opt in by exporting
- *     `LEASH_FACILITATOR_URL=https://facilitator.leash.dev` until we
- *     promote it to the default in {@link DEFAULT_FACILITATORS}.
+ *   - **Solana mainnet** → `https://facilitator.leash.market`
+ *     Leash-operated mainnet instance. Same wire contract as devnet.
  *
  * To override: set `LEASH_FACILITATOR_URL` in the buyer/seller process, or
  * pass `facilitator: '…'` directly to `createBuyer` / `createSeller`.
@@ -34,22 +27,15 @@
 import type { LeashX402Network } from './client.js';
 
 export const DEFAULT_FACILITATORS: Partial<Record<LeashX402Network, string>> = {
-  'solana-devnet': 'https://facilitator.svmacc.tech',
-  'solana-mainnet': 'https://facilitator.payai.network',
+  'solana-devnet': 'https://devnet-facilitator.leash.market',
+  'solana-mainnet': 'https://facilitator.leash.market',
 };
 
-/**
- * Public URL of the Leash-operated facilitator. **Devnet only** in v0.1.
- *
- * Not yet wired into {@link DEFAULT_FACILITATORS} — once the host is
- * stable and we've topped up the fee-payer wallet, devnet will switch
- * over here. Exposed today so demos and docs can reference it as an
- * opt-in via `LEASH_FACILITATOR_URL=…`.
- */
-export const LEASH_FACILITATOR_URL = 'https://facilitator.leash.dev';
+/** Canonical Leash devnet facilitator URL. */
+export const LEASH_FACILITATOR_URL = 'https://devnet-facilitator.leash.market';
 
 /** Universal fallback when nothing else resolves. */
-export const FALLBACK_FACILITATOR_URL = 'https://facilitator.svmacc.tech';
+export const FALLBACK_FACILITATOR_URL = 'https://devnet-facilitator.leash.market';
 
 /**
  * Resolve the facilitator URL Leash should default to.

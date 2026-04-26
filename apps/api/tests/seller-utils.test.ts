@@ -68,7 +68,7 @@ describe('seller utility endpoints', () => {
     });
 
     it('falls back to the public default when no override is configured', async () => {
-      const rig = await createTestRig({ facilitatorUrl: '' });
+      const rig = await createTestRig({ facilitatorUrlDevnet: '' });
       const res = await authedFetch(rig, '/v1/seller/facilitator');
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
@@ -76,8 +76,7 @@ describe('seller utility endpoints', () => {
         source: 'config' | 'default';
       };
       expect(body.source).toBe('default');
-      // svmacc is the v0.1 devnet default for facilitator resolution.
-      expect(body.facilitator).toBe('https://facilitator.svmacc.tech');
+      expect(body.facilitator).toBe('https://devnet-facilitator.leash.market');
     });
   });
 

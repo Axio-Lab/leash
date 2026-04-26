@@ -52,10 +52,17 @@ export type LeashApiConfig = {
    * paywall on `/x/{id}`. Same URL is recorded on every `earn` receipt
    * the paywall emits, so explorers can verify settlement out-of-band.
    *
-   * Defaults to `https://facilitator.svmacc.tech` (free, gas-sponsored).
-   * Override with `LEASH_API_FACILITATOR_URL`.
+   * Devnet default: `https://devnet-facilitator.leash.market`
+   * Override with `LEASH_API_FACILITATOR_URL` (devnet) and
+   * `LEASH_API_FACILITATOR_URL_MAINNET` (mainnet). For mainnet keys,
+   * also set `LEASH_API_FACILITATOR_URL_MAINNET=https://facilitator.leash.market`.
    */
-  facilitatorUrl: string;
+  facilitatorUrlDevnet: string;
+  /**
+   * Mainnet-specific facilitator URL. Falls back to `facilitatorUrlDevnet`
+   * when unset. Override with `LEASH_API_FACILITATOR_URL_MAINNET`.
+   */
+  facilitatorUrlMainnet?: string;
   /**
    * Public origin the API is reachable on (e.g.
    * `https://api.leash.market`). Used by `POST /v1/payment-links` to
@@ -126,7 +133,13 @@ export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConf
     redisUrl: env.LEASH_API_REDIS_URL?.trim() || null,
     rateLimitRpm: readNumber('LEASH_API_RATELIMIT_RPM', 120),
     docsEnabled: readBool(env.LEASH_API_DOCS_ENABLED, docsDefault),
-    facilitatorUrl: readEnv('LEASH_API_FACILITATOR_URL', 'https://facilitator.svmacc.tech'),
+    facilitatorUrlDevnet: readEnv(
+      'LEASH_API_FACILITATOR_URL_DEVNET',
+      'https://devnet-facilitator.leash.market',
+    ),
+    ...(env.LEASH_API_FACILITATOR_URL_MAINNET?.trim()
+      ? { facilitatorUrlMainnet: env.LEASH_API_FACILITATOR_URL_MAINNET.trim() }
+      : {}),
     publicOrigin,
     ...(adminSecretRaw ? { adminSecret: adminSecretRaw } : {}),
     ...(bootstrapKey
@@ -141,6 +154,15 @@ export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConf
 }
 
 /**
+ * Leash-operated facilitator URLs (permanent domain; may not be live yet).
+ * Used as fallback when no explicit env override is provided.
+ */
+const LEASH_FACILITATORS: Record<SvmNetwork, string> = {
+  'solana-devnet': 'https://devnet-facilitator.leash.market',
+  'solana-mainnet': 'https://facilitator.leash.market',
+};
+
+/**
  * Map a key prefix back to the network it controls. Throws on unknown
  * prefixes so misconfigured callers get an early, clear failure.
  */
@@ -150,4 +172,19 @@ export function networkFromKey(key: string): SvmNetwork {
   throw new Error(
     `unknown api key prefix; expected lsh_test_* (devnet) or lsh_live_* (mainnet), got "${key.slice(0, 12)}…"`,
   );
+}
+
+/**
+ * Return the configured facilitator URL for a given network, falling back to
+ * the Leash-operated defaults if no explicit override is set.
+ */
+export function facilitatorForNetwork(config: LeashApiConfig, network: SvmNetwork): string {
+  if (network === 'solana-mainnet') {
+    const mainnet = config.facilitatorUrlMainnet?.trim() || '';
+    if (mainnet.length > 0) return mainnet;
+    return LEASH_FACILITATORS['solana-mainnet'];
+  }
+  const devnet = config.facilitatorUrlDevnet?.trim() || '';
+  if (devnet.length > 0) return devnet;
+  return LEASH_FACILITATORS['solana-devnet'];
 }

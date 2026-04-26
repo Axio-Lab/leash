@@ -42,7 +42,7 @@ import { publicKey } from '@metaplex-foundation/umi';
 import { createSeller } from '@leash/seller-kit';
 import type { ReceiptV1 } from '@leash/schemas';
 
-import type { LeashApiConfig } from '../config.js';
+import { type LeashApiConfig, facilitatorForNetwork } from '../config.js';
 import type { CacheClient } from '../storage/redis.js';
 import type { DbClient } from '../storage/turso.js';
 import {
@@ -143,7 +143,7 @@ function buildSellerSubApp(deps: PaywallRoutesDeps, link: PaymentLinkRow): Hono 
       },
     },
     network: link.network,
-    facilitator: deps.config.facilitatorUrl,
+    facilitator: facilitatorForNetwork(deps.config, link.network),
     onReceipt: async (receipt) => {
       await ingestPaywallReceipt(deps, link, receipt);
     },

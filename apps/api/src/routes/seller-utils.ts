@@ -27,14 +27,13 @@ import { publicKey } from '@metaplex-foundation/umi';
 import {
   KNOWN_STABLE_SYMBOLS,
   KNOWN_TOKENS,
-  defaultFacilitatorFor,
   type KnownStableSymbol,
   type TokenNetwork,
 } from '@leash/core';
 import { parsePrice } from '@leash/seller-kit';
 
 import type { AuthVariables } from '../auth/types.js';
-import type { LeashApiConfig } from '../config.js';
+import { type LeashApiConfig, facilitatorForNetwork } from '../config.js';
 import type { DbClient } from '../storage/turso.js';
 import { umiReadOnly } from '../util/umi.js';
 import { ApiErrorSchema, NetworkSchema, PubkeySchema } from '../openapi/common.js';
@@ -179,11 +178,13 @@ export function buildSellerUtilsRoutes(
     }),
     async (c) => {
       const network = c.var.network;
-      const configured = deps.config.facilitatorUrl?.trim();
-      const facilitator =
-        configured && configured.length > 0 ? configured : defaultFacilitatorFor([network]);
-      const source: 'config' | 'default' =
-        configured && configured.length > 0 ? 'config' : 'default';
+      const facilitator = facilitatorForNetwork(deps.config, network);
+      // "config" when the operator set an explicit env var; "default" otherwise.
+      const hasDevnetOverride = (deps.config.facilitatorUrlDevnet?.trim().length ?? 0) > 0;
+      const hasMainnetOverride = (deps.config.facilitatorUrlMainnet?.trim().length ?? 0) > 0;
+      const isConfigured =
+        network === 'solana-mainnet' ? hasMainnetOverride || hasDevnetOverride : hasDevnetOverride;
+      const source: 'config' | 'default' = isConfigured ? 'config' : 'default';
       return c.json({ network, facilitator, source }, 200);
     },
   );
@@ -271,12 +272,7 @@ export function buildSellerUtilsRoutes(
 
 function buildNetworkInfo(config: LeashApiConfig, network: 'solana-devnet' | 'solana-mainnet') {
   const tokenNetwork: TokenNetwork = network === 'solana-devnet' ? 'devnet' : 'mainnet';
-  const configured = config.facilitatorUrl?.trim();
-  // Per-network facilitator: prefer the explicit override (so docs +
-  // CLIs see exactly what the paywall will use), fall back to the
-  // public default for that cluster.
-  const facilitator =
-    configured && configured.length > 0 ? configured : defaultFacilitatorFor([network]);
+  const facilitator = facilitatorForNetwork(config, network);
   return {
     network,
     caip2: networkToCaip2(network),

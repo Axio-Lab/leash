@@ -28,7 +28,6 @@ import {
   KNOWN_STABLE_SYMBOLS,
   buildLeashFeeExtra,
   computeFeeAtoms,
-  defaultFacilitatorFor,
   resolveLeashFeeBps,
   type KnownStableSymbol,
   type LeashFeeExtra,
@@ -38,7 +37,7 @@ import { EndpointIdSchema, EndpointMethodSchema } from '@leash/schemas';
 import { parsePrice } from '@leash/seller-kit';
 
 import type { AuthVariables } from '../auth/types.js';
-import type { LeashApiConfig } from '../config.js';
+import { type LeashApiConfig, facilitatorForNetwork } from '../config.js';
 import type { CacheClient } from '../storage/redis.js';
 import type { DbClient } from '../storage/turso.js';
 import {
@@ -673,7 +672,7 @@ export function buildDiscoveryView(
   const [signer] = findAssetSignerPda(umi, { asset: publicKey(args.ownerAgent) });
   const payTo = String(signer);
   const networkCaip2 = networkToCaip2(network);
-  const facilitator = config.facilitatorUrl || defaultFacilitatorFor([network]);
+  const facilitator = facilitatorForNetwork(config, network);
   const shareUrl = `${config.publicOrigin.replace(/\/+$/, '')}/x/${args.id}`;
 
   // Stamp every advertised entry with the same Leash fee block. Bps +
