@@ -244,8 +244,11 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
       } catch (err) {
         networkError = err instanceof Error ? err.message : String(err);
         // Synthesize a Response so callers always see a uniform shape.
+        // Modern Node disallows `status: 0` (must be 200–599), so we use
+        // a 599 sentinel and rely on `networkError` to flag the synthetic
+        // path downstream rather than the status code alone.
         response = new Response(JSON.stringify({ error: networkError }), {
-          status: 0,
+          status: 599,
           statusText: 'Network error',
         });
       }

@@ -43,6 +43,7 @@
  * ------------
  *   LEASH_E2E_RPC              Devnet RPC (default: https://api.devnet.solana.com)
  *   LEASH_E2E_USDC_MINT        Default: Circle's devnet USDC.
+ *   LEASH_E2E_USDG_MINT        Default: Paxos devnet USDG (Token-2022).
  *   LEASH_E2E_PRICE            Display price string (default: "$0.001")
  *   LEASH_E2E_BUYER_AGENT      Skip buyer mint and reuse this asset.
  *   LEASH_E2E_SELLER_AGENT     Skip seller mint and reuse this asset.
@@ -54,6 +55,12 @@
  *                              dozens of $0.001 calls.
  *   LEASH_E2E_DELEGATE_USDC    Atomic units to set as the spend allowance.
  *                              Default: 100_000.
+ *   LEASH_E2E_FUND_USDG        Atomic units of USDG to ensure the buyer
+ *                              treasury holds. Owner must have at least
+ *                              this much USDG in their ATA. Default:
+ *                              5_000_000 (= 5 USDG).
+ *   LEASH_E2E_DELEGATE_USDG    Atomic units to set as the USDG spend
+ *                              allowance. Default: 5_000_000.
  *   LEASH_E2E_KEEP_LINK        "1" to skip cleanup at the end so you can
  *                              poke the link in the explorer manually.
  *
@@ -68,7 +75,14 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { createKeyPairSignerFromBytes } from '@solana/kit';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { keypairIdentity, publicKey, type Umi, type PublicKey } from '@metaplex-foundation/umi';
+import {
+  keypairIdentity,
+  publicKey,
+  transactionBuilder,
+  type Instruction,
+  type Umi,
+  type PublicKey,
+} from '@metaplex-foundation/umi';
 import { base58 } from '@metaplex-foundation/umi/serializers';
 import { mplCore, findAssetSignerPda } from '@metaplex-foundation/mpl-core';
 import { mplToolbox, findAssociatedTokenPda } from '@metaplex-foundation/mpl-toolbox';
@@ -461,13 +475,36 @@ async function main(): Promise<void> {
   });
   info(`buyer treasury USDG ATA    : ${usdgDelegation.sourceTokenAccount}`);
   info(`buyer treasury USDG balance: ${usdgDelegation.balance.toString()} atomic`);
-  if (usdgDelegation.balance < FUND_USDG) {
-    warn(
-      `buyer USDG balance (${usdgDelegation.balance}) < ${FUND_USDG} — skipping USDG settlement. ` +
-        `Fund the treasury ATA (${usdgDelegation.sourceTokenAccount}) with devnet USDG from faucet.solana.com ` +
-        `or set LEASH_E2E_FUND_USDG lower to skip this check.`,
-    );
+
+  let usdgFunded = usdgDelegation.balance >= FUND_USDG;
+  if (!usdgFunded) {
+    const need = FUND_USDG - usdgDelegation.balance;
+    info(`balance below ${FUND_USDG.toString()}, sending ${need.toString()} USDG from owner…`);
+    const result = await ensureBuyerHasUsdg(umi, {
+      owner: ownerPubkey,
+      destAta: usdgDelegation.sourceTokenAccount,
+      need,
+    });
+    if (!result.funded) {
+      warn(`USDG top-up skipped — ${result.reason ?? 'unknown reason'}`);
+    } else {
+      // Wait for the new balance to land before reading delegation again.
+      usdgDelegation = await pollDelegationMint(
+        umi,
+        buyerAgent,
+        USDG_MINT,
+        TOKEN_2022_PROGRAM_ID,
+        (s) => s.balance >= FUND_USDG,
+        'usdg-balance',
+      );
+      info(`buyer USDG balance after top-up: ${usdgDelegation.balance.toString()} atomic`);
+      usdgFunded = true;
+    }
   } else {
+    ok(`balance already covers e2e (${usdgDelegation.balance} >= ${FUND_USDG})`);
+  }
+
+  if (usdgFunded) {
     if (usdgDelegation.delegate !== ownerPubkey || usdgDelegation.delegatedAmount < DELEGATE_USDG) {
       const res = await setSpendDelegation(umi, {
         agentAsset: buyerAgent,
@@ -533,6 +570,7 @@ async function main(): Promise<void> {
       method: 'GET',
       price: PRICE,
       currency: 'USDC',
+      accepts_currencies: ['USDC', 'USDG'],
       response: {
         status: 200,
         mimeType: 'application/json',
@@ -648,7 +686,7 @@ async function main(): Promise<void> {
 
   // ───── 15b. USDG settlement (if buyer has enough USDG + delegation) ─────
   let usdgTxSig: string | undefined;
-  if (usdgDelegation.balance >= FUND_USDG && usdgDelegation.delegate === ownerPubkey) {
+  if (usdgFunded && usdgDelegation.delegate === ownerPubkey) {
     step('createBuyer.fetch(share_url) — USDG settlement on devnet (Token-2022)');
     const usdgBuyer = createBuyer({
       agent: buyerAgent,
@@ -710,6 +748,114 @@ async function main(): Promise<void> {
     );
   }
 
+  // ───── 15c. Deliberate failure — payment exceeds buyer balance ─────
+  // Create a second payment link with a price the buyer can't afford
+  // (e.g. $5 = 5_000_000 atomic USDC vs delegation cap of DELEGATE_USDC),
+  // then attempt to settle it with permissive rules so the buyer-kit
+  // doesn't deny at policy time and we exercise the *settlement* failure
+  // path. The resulting `decision: 'rejected'` receipt is POSTed to the
+  // API and surfaced in the explorer's receipts feed, proving failed
+  // transactions are observable end-to-end.
+  step('POST /v1/payment-links — create over-budget link for failure test');
+  const FAIL_PRICE = '$5'; // 5_000_000 atomic USDC, way above DELEGATE_USDC (100_000)
+  const failLink = await api<{ id: string; share_url: string; pay_to: string }>(
+    '/v1/payment-links',
+    {
+      method: 'POST',
+      body: {
+        label: `e2e-fail-${Date.now()}`,
+        owner_agent: sellerAgent,
+        method: 'GET',
+        price: FAIL_PRICE,
+        currency: 'USDC',
+        response: {
+          status: 200,
+          mimeType: 'application/json',
+          body: { ok: true, message: 'unreachable — buyer cannot afford' },
+        },
+        metadata: { source: 'apps/api/scripts/e2e-devnet.ts', expect: 'failure' },
+      },
+    },
+  );
+  ok(`fail link id : ${failLink.id}`);
+  ok(`fail link url: ${failLink.share_url} (price=${FAIL_PRICE})`);
+
+  step('createBuyer.fetch(fail_link) — must surface decision=rejected');
+  type CapturedReceipt = { receipt_hash: string; decision: string; reason: string | null };
+  let failReceipt = null as CapturedReceipt | null;
+  const failBuyer = createBuyer({
+    agent: buyerAgent,
+    rules: {
+      v: '0.1',
+      // Permissive policy so the kit doesn't deny at policy time — we
+      // want the *settlement* path to fail (insufficient_balance /
+      // simulation_failed), not the policy gate.
+      budget: { daily: '1000', perCall: '100', currency: 'USDC' },
+      hosts: { allow: [new URL(failLink.share_url).hostname] },
+      triggers: [],
+    },
+    signer: ownerSigner,
+    networks: ['solana-devnet'],
+    rpcUrl: RPC,
+    sourceTokenAccount: delegation.sourceTokenAccount,
+    onReceipt: async (receipt) => {
+      failReceipt = {
+        receipt_hash: receipt.receipt_hash,
+        decision: receipt.decision,
+        reason: receipt.reason ?? null,
+      };
+      try {
+        await api(`/v1/receipts/${receipt.agent}`, { method: 'POST', body: receipt });
+      } catch (err) {
+        info(`fail spend-receipt ingest failed (non-fatal): ${(err as Error).message}`);
+      }
+    },
+  });
+
+  const failResult = await failBuyer.fetch(`${failLink.share_url}?network=solana-devnet`, {
+    method: 'GET',
+  });
+  assert(
+    failResult.receipt.decision === 'rejected',
+    `expected rejected, got ${failResult.receipt.decision}`,
+  );
+  assert(failResult.receipt.tx_sig === null, 'rejected receipts should have null tx_sig');
+  ok(`response status   : ${failResult.response.status} (rejected as expected)`);
+  ok(`failure reason    : ${failResult.failureReason ?? '(none)'}`);
+  ok(`receipt decision  : ${failResult.receipt.decision}`);
+  ok(`receipt hash      : ${failResult.receipt.receipt_hash}`);
+
+  // Wait for the rejected spend receipt to land in the explorer feed.
+  step('GET /v1/receipts/{buyer} — rejected spend receipt visible in explorer');
+  let rejectedReceipt:
+    | { kind: string; decision: string; receipt_hash: string; reason: string | null }
+    | undefined;
+  for (let i = 0; i < 12 && rejectedReceipt === undefined; i += 1) {
+    const buyerReceipts = await api<{
+      items: Array<{
+        kind: string;
+        decision: string;
+        receipt_hash: string;
+        reason: string | null;
+      }>;
+    }>(`/v1/receipts/${buyerAgent}?limit=10`);
+    rejectedReceipt = buyerReceipts.items.find(
+      (r) =>
+        r.kind === 'spend' &&
+        r.decision === 'rejected' &&
+        r.receipt_hash === failResult.receipt.receipt_hash,
+    );
+    if (!rejectedReceipt) await sleep(500);
+  }
+  assert(rejectedReceipt !== undefined, 'no rejected spend receipt visible in explorer feed');
+  ok(
+    `rejected receipt visible: ${rejectedReceipt.receipt_hash.slice(0, 16)}… reason=${rejectedReceipt.reason ?? '(none)'}`,
+  );
+  // Sanity: the in-memory onReceipt callback should have fired with the same hash.
+  assert(
+    failReceipt?.receipt_hash === failResult.receipt.receipt_hash,
+    'onReceipt did not fire for the rejected pass',
+  );
   // ───── 16. counters bumped on the link ─────
   step('GET /v1/payment-links/{id} — counters bumped');
   // Counters update inside the paywall handler; give it a moment.
@@ -721,9 +867,12 @@ async function main(): Promise<void> {
     bumped = await api(`/v1/payment-links/${linkId}`);
   }
   assert(bumped.counters.settled_count >= 1, 'settled_count never bumped');
+  // The USDG settlement (when it ran) overwrites `last_tx_sig` with its own
+  // signature, so accept either the USDC or USDG tx as the last_tx_sig.
+  const validLastTxSigs = [callResult.receipt.tx_sig, usdgTxSig].filter(Boolean) as string[];
   assert(
-    bumped.counters.last_tx_sig === callResult.receipt.tx_sig,
-    'last_tx_sig should match settled tx',
+    bumped.counters.last_tx_sig != null && validLastTxSigs.includes(bumped.counters.last_tx_sig),
+    `last_tx_sig (${bumped.counters.last_tx_sig}) should match one of ${validLastTxSigs.join(', ')}`,
   );
   ok(
     `call_count=${bumped.counters.call_count}, settled_count=${bumped.counters.settled_count}, last_tx_sig=${bumped.counters.last_tx_sig}`,
@@ -803,14 +952,13 @@ async function main(): Promise<void> {
   // ───── 21. cleanup (soft) ─────
   if (KEEP_LINK) {
     step('Cleanup skipped (LEASH_E2E_KEEP_LINK=1)');
-    info(`probe the link in the explorer: /payment-links/${linkId}`);
+    info(`probe the success link in the explorer: /payment-links/${linkId}`);
+    info(`probe the failure link in the explorer: /payment-links/${failLink.id}`);
   } else {
     step('PATCH /v1/payment-links/{id} — soft-disable for cleanup');
-    await api(`/v1/payment-links/${linkId}`, {
-      method: 'PATCH',
-      body: { disabled: true },
-    });
-    ok('payment link disabled (set LEASH_E2E_KEEP_LINK=1 to skip)');
+    await api(`/v1/payment-links/${linkId}`, { method: 'PATCH', body: { disabled: true } });
+    await api(`/v1/payment-links/${failLink.id}`, { method: 'PATCH', body: { disabled: true } });
+    ok('payment links disabled (set LEASH_E2E_KEEP_LINK=1 to skip)');
   }
 
   console.log('\n============================================================');
@@ -821,6 +969,8 @@ async function main(): Promise<void> {
   if (usdgTxSig) {
     console.log(`usdg tx sig   : https://solscan.io/tx/${usdgTxSig}?cluster=devnet`);
   }
+  console.log(`fail link     : ${failLink.share_url}`);
+  console.log(`fail receipt  : ${failResult.receipt.receipt_hash} (decision=rejected)`);
   console.log(`seller agent  : ${sellerAgent}`);
   console.log(`buyer  agent  : ${buyerAgent}`);
 }
@@ -946,6 +1096,135 @@ async function transferOwnerUsdcTo(
   });
   const res = await builder.sendAndConfirm(umi);
   return base58.deserialize(res.signature)[0];
+}
+
+/**
+ * Owner-driven Token-2022 `TransferChecked` (discriminator 12). Used to
+ * fund the buyer treasury USDG ATA from the owner's wallet — `mpl-toolbox`'s
+ * `transferTokens` only targets the classic SPL Token program, and Token-2022
+ * mints with extensions (USDG has a transfer hook) reject the legacy
+ * `Transfer` discriminator. We hand-build the instruction so we can target
+ * `TOKEN_2022_PROGRAM_ID` explicitly and supply the `decimals` byte the
+ * runtime cross-checks against the mint.
+ */
+async function transferOwnerToken2022To(
+  umi: Umi,
+  args: {
+    mint: string;
+    owner: string;
+    destAta: string;
+    amount: bigint;
+    decimals: number;
+    tokenProgram: PublicKey;
+  },
+): Promise<string> {
+  const [sourceAta] = findAssociatedTokenPda(umi, {
+    mint: publicKey(args.mint),
+    owner: publicKey(args.owner),
+    tokenProgramId: args.tokenProgram,
+  });
+  info(`transfer source     : ${String(sourceAta)} (owner=${args.owner}, token-2022)`);
+  info(`transfer destination: ${args.destAta}`);
+  info(`transfer amount     : ${args.amount.toString()} (atomic, decimals=${args.decimals})`);
+
+  const data = new Uint8Array(1 + 8 + 1);
+  data[0] = 12; // SPL Token TransferChecked discriminator
+  new DataView(data.buffer).setBigUint64(1, args.amount, true);
+  data[9] = args.decimals & 0xff;
+
+  const ix: Instruction = {
+    programId: args.tokenProgram,
+    keys: [
+      { pubkey: sourceAta, isSigner: false, isWritable: true },
+      { pubkey: publicKey(args.mint), isSigner: false, isWritable: false },
+      { pubkey: publicKey(args.destAta), isSigner: false, isWritable: true },
+      { pubkey: umi.identity.publicKey, isSigner: true, isWritable: false },
+    ],
+    data,
+  };
+
+  const builder = transactionBuilder().add({
+    instruction: ix,
+    signers: [umi.identity],
+    bytesCreatedOnChain: 0,
+  });
+  const res = await builder.sendAndConfirm(umi);
+  return base58.deserialize(res.signature)[0];
+}
+
+/**
+ * Read SPL Token mint `decimals` byte (works for both classic Token and
+ * Token-2022; the layout is identical for the first 45 bytes).
+ */
+async function readMintDecimals(umi: Umi, mint: string): Promise<number> {
+  const account = await umi.rpc.getAccount(publicKey(mint));
+  if (!account.exists) {
+    throw new Error(`mint ${mint} does not exist on this RPC`);
+  }
+  if (account.data.length < 45) {
+    throw new Error(`mint ${mint} has unexpected data length ${account.data.length} (<45)`);
+  }
+  return account.data[44] ?? 0;
+}
+
+/**
+ * Ensure the buyer treasury USDG ATA is funded with at least `need` atomic
+ * units, transferred from `owner`'s USDG ATA. The destination ATA was
+ * already created by `provisionTreasuryAtas` upstream, so this only handles
+ * the transfer. Returns `{ funded: false, reason }` when the owner doesn't
+ * hold enough USDG so the caller can decide to skip the USDG settlement
+ * pass instead of aborting the whole run.
+ */
+async function ensureBuyerHasUsdg(
+  umi: Umi,
+  args: {
+    owner: string;
+    destAta: string;
+    need: bigint;
+  },
+): Promise<{ funded: boolean; reason?: string }> {
+  const [ownerAta] = findAssociatedTokenPda(umi, {
+    mint: publicKey(USDG_MINT),
+    owner: publicKey(args.owner),
+    tokenProgramId: TOKEN_2022_PROGRAM_ID,
+  });
+  const ownerAcct = await umi.rpc.getAccount(ownerAta);
+  if (!ownerAcct.exists) {
+    return {
+      funded: false,
+      reason: `owner ${args.owner} has no USDG ATA (${String(ownerAta)}). Fund it via faucet.solana.com first.`,
+    };
+  }
+  if (ownerAcct.data.length < 72) {
+    return {
+      funded: false,
+      reason: `owner USDG ATA has unexpected length ${ownerAcct.data.length}`,
+    };
+  }
+  const dv = new DataView(
+    ownerAcct.data.buffer,
+    ownerAcct.data.byteOffset,
+    ownerAcct.data.byteLength,
+  );
+  const ownerBalance = dv.getBigUint64(64, true);
+  if (ownerBalance < args.need) {
+    return {
+      funded: false,
+      reason: `owner USDG balance (${ownerBalance}) < required (${args.need}). Fund ${args.owner} (ATA ${String(ownerAta)}) and rerun.`,
+    };
+  }
+
+  const decimals = await readMintDecimals(umi, USDG_MINT);
+  const sig = await transferOwnerToken2022To(umi, {
+    mint: USDG_MINT,
+    owner: args.owner,
+    destAta: args.destAta,
+    amount: args.need,
+    decimals,
+    tokenProgram: TOKEN_2022_PROGRAM_ID,
+  });
+  ok(`USDG top-up tx: ${sig}`);
+  return { funded: true };
 }
 
 main().catch((err) => {

@@ -8,10 +8,17 @@ export function shortAddr(value: string | null | undefined, head = 4, tail = 4):
   return `${value.slice(0, head)}…${value.slice(-tail)}`;
 }
 
+function normalizeIsoUtc(value: string): string {
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?$/.test(value)) {
+    return `${value.replace(' ', 'T')}Z`;
+  }
+  return value;
+}
+
 export function formatTs(value: string | null | undefined): string {
   if (!value) return '—';
   try {
-    const d = new Date(value);
+    const d = new Date(normalizeIsoUtc(value));
     if (Number.isNaN(d.getTime())) return value;
     return d.toLocaleString(undefined, {
       year: 'numeric',
@@ -29,7 +36,7 @@ export function formatTs(value: string | null | undefined): string {
 export function formatRelative(value: string | null | undefined): string {
   if (!value) return '—';
   try {
-    const d = new Date(value);
+    const d = new Date(normalizeIsoUtc(value));
     const ms = Date.now() - d.getTime();
     if (Number.isNaN(ms)) return value;
     if (ms < 0) return 'in the future';

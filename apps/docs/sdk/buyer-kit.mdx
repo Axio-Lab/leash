@@ -65,7 +65,7 @@ const { response, receipt } = await buyer.fetch('https://api.example.com/quote',
    - Picks the entry matching `preferredCurrency` (by mint address). Throws
      `preferred_asset_unavailable` if the seller doesn't offer it.
    - Builds the Solana transaction: `[setLimit, setPrice, sellerAtaCreate,
-     feeVaultAtaCreate?, TransferChecked(seller), TransferChecked(fee)?, memo]`.
+feeVaultAtaCreate?, TransferChecked(seller), TransferChecked(fee)?, memo]`.
      The two idempotent ATA-create instructions are always included so first
      payments on a fresh mint (e.g. USDG on devnet) succeed without manual
      setup — the facilitator pays the ATA rent.

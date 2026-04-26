@@ -279,14 +279,16 @@ export async function updatePaymentLink(
     values.push(JSON.stringify(p.metadata));
   }
   if (p.disabled !== undefined) {
-    sets.push(p.disabled ? `disabled_at = datetime('now')` : `disabled_at = NULL`);
+    sets.push(
+      p.disabled ? `disabled_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')` : `disabled_at = NULL`,
+    );
   }
   if (sets.length === 0) {
     // No-op patch: return the row unchanged so callers don't have to
     // special-case empty-object PATCH bodies.
     return getPaymentLinkScoped(db, args);
   }
-  sets.push(`updated_at = datetime('now')`);
+  sets.push(`updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`);
   const sql = `UPDATE payment_links
     SET ${sets.join(', ')}
     WHERE network = ? AND api_key_id = ? AND id = ?`;
@@ -320,7 +322,7 @@ export async function recordCall(
   await execute(
     db,
     `UPDATE payment_links
-       SET call_count = call_count + 1, last_called_at = datetime('now')
+       SET call_count = call_count + 1, last_called_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
        WHERE network = ? AND id = ?`,
     [args.network, args.id],
   );
@@ -345,7 +347,7 @@ export async function recordSettlement(
     db,
     `UPDATE payment_links
        SET settled_count = settled_count + 1,
-           last_settled_at = datetime('now'),
+           last_settled_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
            last_tx_sig = ?,
            last_settled_amount_atomic = ?,
            last_settled_currency = ?

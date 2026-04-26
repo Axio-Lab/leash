@@ -107,7 +107,11 @@ export async function getApiKeyById(db: DbClient, id: string): Promise<ApiKeyRec
 }
 
 export async function disableApiKey(db: DbClient, id: string): Promise<void> {
-  await execute(db, `UPDATE api_keys SET disabled_at = datetime('now') WHERE id = ?`, [id]);
+  await execute(
+    db,
+    `UPDATE api_keys SET disabled_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`,
+    [id],
+  );
 }
 
 export type ListApiKeysArgs = {

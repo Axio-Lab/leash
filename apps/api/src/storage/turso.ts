@@ -19,7 +19,23 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
+
+/**
+ * SQLite expression that produces a real ISO-8601 UTC timestamp
+ * (`YYYY-MM-DDTHH:MM:SS.fffZ`). We use this everywhere instead of
+ * `datetime('now')` because the latter emits `YYYY-MM-DD HH:MM:SS`
+ * (UTC, but missing the `T` and `Z`), which V8's `Date` parser
+ * silently interprets as **local time** — leading to `formatRelative`
+ * showing "1h ago" for fresh rows in any timezone other than UTC.
+ *
+ * Lex ordering between two strings produced by this expression matches
+ * chronological ordering, same as `datetime('now')` did, so any
+ * `ORDER BY ts` / `WHERE next_attempt_at <= ?` comparison keeps working
+ * — provided **both sides** use this format. The v4 migration backfills
+ * historical rows so mixed-format comparisons never occur.
+ */
+export const NOW_ISO_SQL = "strftime('%Y-%m-%dT%H:%M:%fZ','now')";
 
 const SCHEMA_SQL: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS schema_version (
@@ -33,7 +49,7 @@ const SCHEMA_SQL: readonly string[] = [
     prefix TEXT NOT NULL,
     last4 TEXT NOT NULL,
     hash TEXT NOT NULL UNIQUE,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     disabled_at TEXT
   )`,
 
@@ -47,14 +63,14 @@ const SCHEMA_SQL: readonly string[] = [
     latency_ms INTEGER NOT NULL,
     error_code TEXT,
     client_reference TEXT,
-    ts TEXT NOT NULL DEFAULT (datetime('now')),
+    ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     FOREIGN KEY (api_key_id) REFERENCES api_keys(id)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_api_requests_key_ts ON api_requests(api_key_id, ts DESC)`,
 
   `CREATE TABLE IF NOT EXISTS events (
     id TEXT PRIMARY KEY,
-    ts TEXT NOT NULL DEFAULT (datetime('now')),
+    ts TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     kind TEXT NOT NULL,
     phase TEXT NOT NULL CHECK (phase IN ('prepared','submitted','confirmed','failed')),
     network TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
@@ -89,7 +105,7 @@ const SCHEMA_SQL: readonly string[] = [
     tx_sig TEXT,
     payment_requirements_hash TEXT,
     raw_json TEXT NOT NULL,
-    ingested_at TEXT NOT NULL DEFAULT (datetime('now')),
+    ingested_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     PRIMARY KEY (network, receipt_hash)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_receipts_agent_ts ON receipts(agent, ingested_at DESC)`,
@@ -142,7 +158,7 @@ const SCHEMA_SQL: readonly string[] = [
     address TEXT NOT NULL,
     kind TEXT NOT NULL,
     agent_asset TEXT NOT NULL,
-    added_at TEXT NOT NULL DEFAULT (datetime('now')),
+    added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     PRIMARY KEY (network, address, kind)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_indexer_watchlist_agent ON indexer_watchlist(agent_asset)`,
@@ -160,7 +176,7 @@ const SCHEMA_SQL: readonly string[] = [
     secret TEXT NOT NULL,
     events_json TEXT NOT NULL DEFAULT '[]',
     disabled_at TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     UNIQUE (api_key_id, url),
     FOREIGN KEY (api_key_id) REFERENCES api_keys(id)
   )`,
@@ -177,11 +193,11 @@ const SCHEMA_SQL: readonly string[] = [
     payload_json TEXT NOT NULL,
     attempts INTEGER NOT NULL DEFAULT 0,
     delivered INTEGER NOT NULL DEFAULT 0,
-    next_attempt_at TEXT NOT NULL DEFAULT (datetime('now')),
+    next_attempt_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     last_status INTEGER,
     last_error TEXT,
     last_attempt_at TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     FOREIGN KEY (webhook_id) REFERENCES webhooks(id),
     UNIQUE (webhook_id, event_id)
   )`,
@@ -225,8 +241,8 @@ const SCHEMA_SQL: readonly string[] = [
     last_settled_amount_atomic TEXT,
     last_settled_currency TEXT,
     disabled_at TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     PRIMARY KEY (network, id),
     FOREIGN KEY (api_key_id) REFERENCES api_keys(id)
   )`,
@@ -268,6 +284,16 @@ export async function runMigrations(db: Client): Promise<void> {
     await migrateWatchlistKindCheck(db);
   }
 
+  // v4: backfill SQLite-style `YYYY-MM-DD HH:MM:SS` timestamps to real
+  // ISO-8601 UTC (`YYYY-MM-DDTHH:MM:SS.000Z`). Without this, the
+  // explorer's `formatRelative` would render historical rows as "1h
+  // ago" in any timezone other than UTC, and any post-deploy
+  // `next_attempt_at <= strftime(...)` check would compare strings of
+  // different shapes (lex-incorrect).
+  if (currentVersion < 4) {
+    await migrateTimestampsToIso(db);
+  }
+
   if (currentVersion < SCHEMA_VERSION) {
     await db.execute({
       sql: 'INSERT OR REPLACE INTO schema_version(version) VALUES(?)',
@@ -291,7 +317,7 @@ async function migrateWatchlistKindCheck(db: Client): Promise<void> {
     address TEXT NOT NULL,
     kind TEXT NOT NULL,
     agent_asset TEXT NOT NULL,
-    added_at TEXT NOT NULL DEFAULT (datetime('now')),
+    added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     PRIMARY KEY (network, address, kind)
   )`);
   await db.execute(
@@ -303,6 +329,71 @@ async function migrateWatchlistKindCheck(db: Client): Promise<void> {
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_indexer_watchlist_agent ON indexer_watchlist(agent_asset)`,
   );
+}
+
+/**
+ * Every timestamp column historically populated by `datetime('now')`.
+ * The v4 migration rewrites any row matching the SQLite default's
+ * shape (`YYYY-MM-DD HH:MM:SS`) to the new ISO-8601 form. The list is
+ * conservative — if a column was renamed or dropped over the lifetime
+ * of the schema we'd just need to re-add it here for a fresh deploy
+ * to be a no-op (the GLOB filter only updates rows that match the old
+ * format anyway).
+ */
+const TIMESTAMP_COLUMNS: ReadonlyArray<{ table: string; column: string }> = [
+  { table: 'api_keys', column: 'created_at' },
+  { table: 'api_keys', column: 'disabled_at' },
+  { table: 'api_requests', column: 'ts' },
+  { table: 'events', column: 'ts' },
+  { table: 'events', column: 'confirmed_at' },
+  { table: 'events', column: 'failed_at' },
+  { table: 'receipts', column: 'ingested_at' },
+  { table: 'pull_targets', column: 'last_polled_at' },
+  { table: 'indexer_cursors', column: 'last_run_at' },
+  { table: 'indexer_watchlist', column: 'added_at' },
+  { table: 'webhooks', column: 'created_at' },
+  { table: 'webhooks', column: 'disabled_at' },
+  { table: 'webhook_deliveries', column: 'next_attempt_at' },
+  { table: 'webhook_deliveries', column: 'last_attempt_at' },
+  { table: 'webhook_deliveries', column: 'created_at' },
+  { table: 'payment_links', column: 'last_called_at' },
+  { table: 'payment_links', column: 'last_settled_at' },
+  { table: 'payment_links', column: 'disabled_at' },
+  { table: 'payment_links', column: 'created_at' },
+  { table: 'payment_links', column: 'updated_at' },
+];
+
+/**
+ * Rewrite legacy `datetime('now')` timestamps (`YYYY-MM-DD HH:MM:SS`,
+ * UTC but missing the `T` and `Z`) into proper ISO-8601 UTC strings
+ * (`YYYY-MM-DDTHH:MM:SS.000Z`). The GLOB guard makes it idempotent and
+ * leaves any already-ISO row (or NULL) untouched. The table-exists
+ * check tolerates older schemas where a column hasn't been created
+ * yet.
+ */
+async function migrateTimestampsToIso(db: Client): Promise<void> {
+  for (const { table, column } of TIMESTAMP_COLUMNS) {
+    // SQLite reports a `no such column` error for tables that don't
+    // exist yet; we just skip those — this branch only runs for
+    // existing DBs upgrading from <= v3, where every table above has
+    // already been created.
+    try {
+      await db.execute(
+        `UPDATE ${table}
+            SET ${column} = REPLACE(${column}, ' ', 'T') || '.000Z'
+          WHERE ${column} IS NOT NULL
+            AND ${column} NOT LIKE '%Z'
+            AND ${column} GLOB '????-??-?? ??:??:??'`,
+      );
+    } catch (err) {
+      // Best-effort: don't fail the whole migration just because one
+      // column is missing on an exotic install.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[leash] timestamp backfill skipped for ${table}.${column}: ${(err as Error).message}`,
+      );
+    }
+  }
 }
 
 /** Execute helper that surfaces typed args. */

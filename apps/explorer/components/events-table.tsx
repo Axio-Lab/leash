@@ -129,7 +129,7 @@ export function EventsTable({
               ? `View transaction ${row.signature}`
               : `View event ${row.id}`;
             return (
-              <tr key={row.id} className="group relative hover:bg-[oklch(0.2_0.02_280_/_0.6)]">
+              <tr key={row.id} className="group relative hover:bg-[oklch(0.2_0.02_280/0.6)]">
                 {/* Stretched link sits behind the inline cell links so they
                     retain their own click targets (agent / signature /
                     reference deep-links). */}

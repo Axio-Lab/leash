@@ -122,7 +122,7 @@ export async function runReceiptPullTick(args: {
       }
       await execute(
         args.db,
-        `UPDATE pull_targets SET last_polled_at = datetime('now'),
+        `UPDATE pull_targets SET last_polled_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'),
                                  last_cursor = ?
            WHERE id = ?`,
         [added > 0 ? `+${added}@${new Date().toISOString()}` : null, t.id],

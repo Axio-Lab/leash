@@ -98,7 +98,11 @@ export async function getWebhookByUrl(
 }
 
 export async function disableWebhook(db: DbClient, id: string): Promise<void> {
-  await execute(db, `UPDATE webhooks SET disabled_at = datetime('now') WHERE id = ?`, [id]);
+  await execute(
+    db,
+    `UPDATE webhooks SET disabled_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`,
+    [id],
+  );
 }
 
 export async function deleteWebhook(db: DbClient, id: string): Promise<void> {
@@ -170,7 +174,7 @@ export async function listDuePending(db: DbClient, limit: number): Promise<Deliv
   const res = await execute(
     db,
     `SELECT * FROM webhook_deliveries
-       WHERE delivered = 0 AND next_attempt_at <= datetime('now')
+       WHERE delivered = 0 AND next_attempt_at <= strftime('%Y-%m-%dT%H:%M:%fZ','now')
        ORDER BY next_attempt_at ASC
        LIMIT ?`,
     [limit],
@@ -199,7 +203,7 @@ export async function markDelivered(db: DbClient, id: string, status: number): P
     db,
     `UPDATE webhook_deliveries
        SET delivered = 1, attempts = attempts + 1, last_status = ?,
-           last_error = NULL, last_attempt_at = datetime('now')
+           last_error = NULL, last_attempt_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
        WHERE id = ?`,
     [status, id],
   );
@@ -216,7 +220,7 @@ export async function markDeliveryFailed(
     db,
     `UPDATE webhook_deliveries
        SET attempts = attempts + 1, last_status = ?, last_error = ?,
-           last_attempt_at = datetime('now'), next_attempt_at = ?
+           last_attempt_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), next_attempt_at = ?
        WHERE id = ?`,
     [status, error, nextAttemptAt, id],
   );

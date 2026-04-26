@@ -247,9 +247,11 @@ describe('webhook delivery worker', () => {
       kind: 'agent.identity.register',
       network: 'solana-devnet',
     });
-    await execute(rig.db, `UPDATE webhooks SET disabled_at = datetime('now') WHERE id = ?`, [
-      sub.id,
-    ]);
+    await execute(
+      rig.db,
+      `UPDATE webhooks SET disabled_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`,
+      [sub.id],
+    );
 
     const fetchMock = async () => new Response('ok', { status: 200 });
     const result = await runWebhookTick(rig.db, { fetchImpl: fetchMock as typeof fetch });

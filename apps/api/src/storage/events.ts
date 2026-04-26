@@ -120,7 +120,7 @@ export async function markSubmitted(db: DbClient, id: string, signature: string)
 export async function markConfirmed(db: DbClient, id: string): Promise<void> {
   await execute(
     db,
-    `UPDATE events SET phase = 'confirmed', confirmed_at = datetime('now')
+    `UPDATE events SET phase = 'confirmed', confirmed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
        WHERE id = ?`,
     [id],
   );
@@ -135,7 +135,7 @@ export async function markFailed(
 ): Promise<void> {
   await execute(
     db,
-    `UPDATE events SET phase = 'failed', error_code = ?, error_message = ?, failed_at = datetime('now')
+    `UPDATE events SET phase = 'failed', error_code = ?, error_message = ?, failed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
        WHERE id = ?`,
     [errorCode, errorMessage, id],
   );
@@ -243,8 +243,8 @@ export async function ingestChainEvent(
                          mint, amount_atomic, metadata_json,
                          confirmed_at, failed_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
-         CASE WHEN ?='confirmed' THEN datetime('now') ELSE NULL END,
-         CASE WHEN ?='failed' THEN datetime('now') ELSE NULL END)`,
+         CASE WHEN ?='confirmed' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE NULL END,
+         CASE WHEN ?='failed' THEN strftime('%Y-%m-%dT%H:%M:%fZ','now') ELSE NULL END)`,
     [
       id,
       input.kind,

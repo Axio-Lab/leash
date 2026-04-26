@@ -182,7 +182,7 @@ export async function upsertCursor(
     db,
     `INSERT INTO indexer_cursors (network, address, kind, last_signature, last_slot,
                                   last_run_at, backfill_complete)
-       VALUES (?, ?, ?, ?, ?, datetime('now'), ?)
+       VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)
        ON CONFLICT (network, address, kind) DO UPDATE SET
          last_signature = excluded.last_signature,
          last_slot = excluded.last_slot,

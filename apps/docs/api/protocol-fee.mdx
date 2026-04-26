@@ -10,15 +10,15 @@ description: >-
 Every x402 settlement routed through a Leash facilitator is a **single
 buyer-signed Solana transaction** with up to seven instructions:
 
-| # | Instruction | Who pays rent |
-|---|-------------|---------------|
-| 0 | `SetComputeUnitLimit` | — |
-| 1 | `SetComputeUnitPrice` | — |
-| 2 | `CreateAssociatedTokenAccountIdempotent` — seller's `payTo` ATA | **Facilitator** |
-| 3 | `CreateAssociatedTokenAccountIdempotent` — fee vault ATA _(only when a fee leg is present)_ | **Facilitator** |
-| 4 | `TransferChecked(mint, amount)` — seller leg | Buyer delegate |
-| 5 | `TransferChecked(mint, fee)` — protocol fee leg _(only when `extra['leash.fee']` is present)_ | Buyer delegate |
-| 6 | `Memo` | — |
+| #   | Instruction                                                                                   | Who pays rent   |
+| --- | --------------------------------------------------------------------------------------------- | --------------- |
+| 0   | `SetComputeUnitLimit`                                                                         | —               |
+| 1   | `SetComputeUnitPrice`                                                                         | —               |
+| 2   | `CreateAssociatedTokenAccountIdempotent` — seller's `payTo` ATA                               | **Facilitator** |
+| 3   | `CreateAssociatedTokenAccountIdempotent` — fee vault ATA _(only when a fee leg is present)_   | **Facilitator** |
+| 4   | `TransferChecked(mint, amount)` — seller leg                                                  | Buyer delegate  |
+| 5   | `TransferChecked(mint, fee)` — protocol fee leg _(only when `extra['leash.fee']` is present)_ | Buyer delegate  |
+| 6   | `Memo`                                                                                        | —               |
 
 Instructions 2 and 3 are idempotent: if the ATA already exists they are a
 no-op (small CU cost, no rent). This lets the first ever payment of a new
