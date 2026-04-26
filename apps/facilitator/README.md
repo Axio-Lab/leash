@@ -1,7 +1,7 @@
 # `@leash/facilitator-app`
 
 Thin runner around [`@leash/facilitator`](../../packages/facilitator) for
-operating `https://facilitator.leash.dev`. The Hono server speaks the
+operating `https://facilitator.leash.market`. The Hono server speaks the
 [x402 facilitator HTTP protocol](https://github.com/x402-foundation/x402)
 (`/verify`, `/settle`, `/supported`, plus a `/health` extra) and is
 wire-compatible with `HTTPFacilitatorClient` from `@x402/core`, so any
@@ -83,7 +83,7 @@ pnpm --filter @leash/merged-demo start
 To use the production endpoint (devnet only for v0.1):
 
 ```bash
-export LEASH_FACILITATOR_URL=https://facilitator.leash.dev
+export LEASH_FACILITATOR_URL=https://facilitator.leash.market
 ```
 
 ## Production

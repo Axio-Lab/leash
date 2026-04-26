@@ -69,7 +69,7 @@ Because both halves run in this single process, flipping
 
 ```bash
 # Hosted (devnet, when DNS is live)
-export LEASH_FACILITATOR_URL=https://facilitator.leash.dev
+export LEASH_FACILITATOR_URL=https://facilitator.leash.market
 
 # Self-hosted: requires apps/facilitator running in another terminal
 export LEASH_FACILITATOR_URL=http://localhost:8787

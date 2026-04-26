@@ -2,7 +2,7 @@
 /**
  * `leash-facilitator` — boots a stand-alone Leash facilitator HTTP
  * server. Reads config from env vars; this is what runs behind
- * `https://facilitator.leash.dev` in production.
+ * `https://facilitator.leash.market` in production.
  *
  * Required env:
  *

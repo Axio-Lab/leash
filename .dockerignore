@@ -1,10 +1,36 @@
-node_modules
-.next
-.turbo
-dist
-coverage
+# Keep build context small + reproducible.
+# Anything listed here is invisible to `docker build`.
+
+# Dependency / build outputs (we always (re)build inside the image)
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/coverage
+**/.vite
+**/.cache
+
+# VCS / IDE / OS noise
 .git
-**/*.log
+.gitignore
+.github
+.husky
+.vscode
+.idea
+**/.DS_Store
+
+# Local env files — services receive env from the platform, never from
+# baked-in files. Keep .env.example so Dockerfiles can copy it if they
+# want defaults.
 .env
 .env.*
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs
+**/*.log
+
+# Generated docs / large assets that no service needs at build time
 apps/docs/schemas/*.mdx
+**/*.tsbuildinfo
