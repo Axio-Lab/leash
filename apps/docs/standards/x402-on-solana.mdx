@@ -14,12 +14,12 @@ buyer or stand up a seller, see the SDK pages for
 
 ## The cast
 
-| Role                                                                                    | What it signs                                                  | Holds funds in                   | Pays gas                                      |
-| --------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------- | --------------------------------------------- |
-| **Executive** (Privy wallet, Node keypair, TEE)                                         | The SPL transfer (as **delegate** of the buyer agent treasury) | —                                | Pays the buyer-side fee on the transfer       |
-| **Buyer agent** (Core asset)                                                            | Nothing — passive owner                                        | Asset Signer PDA → SPL token ATA | —                                             |
-| **Seller** (`@leash/seller-kit` middleware)                                             | Nothing                                                        | Asset Signer PDA (`payTo`)       | —                                             |
-| **Facilitator** (`devnet-facilitator.leash.market` devnet, `facilitator.leash.market` mainnet, or any compatible host) | Nothing | — | Pays the **network fee** to broadcast `payTo` |
+| Role                                                                                                                   | What it signs                                                  | Holds funds in                   | Pays gas                                      |
+| ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------- | --------------------------------------------- |
+| **Executive** (Privy wallet, Node keypair, TEE)                                                                        | The SPL transfer (as **delegate** of the buyer agent treasury) | —                                | Pays the buyer-side fee on the transfer       |
+| **Buyer agent** (Core asset)                                                                                           | Nothing — passive owner                                        | Asset Signer PDA → SPL token ATA | —                                             |
+| **Seller** (`@leash/seller-kit` middleware)                                                                            | Nothing                                                        | Asset Signer PDA (`payTo`)       | —                                             |
+| **Facilitator** (`devnet-facilitator.leash.market` devnet, `facilitator.leash.market` mainnet, or any compatible host) | Nothing                                                        | —                                | Pays the **network fee** to broadcast `payTo` |
 
 Both parties address themselves via Core Asset Signer PDAs. Funds land in
 the seller agent's treasury directly, and they leave the buyer agent's
@@ -45,7 +45,7 @@ Leash sidesteps this with a one-time delegation:
    `ExactSvmScheme`. The on-chain transfer is still a vanilla
    `TransferChecked` — only the `source` field switches from "executive's
    ATA" to "agent treasury's ATA", and `authority` is the executive
-   (signing as delegate).    Every facilitator Leash tested settles it without modification.
+   (signing as delegate). Every facilitator Leash tested settles it without modification.
 3. The SPL token program automatically reduces `delegated_amount` after
    each transfer; once exhausted the next call returns
    `402 + insufficient_funds`. Re-approve to top up; revoke to lock down.
@@ -93,15 +93,25 @@ payment link or `createSeller` route config). Each row carries the same atomic
 }
 ```
 
-### Buyer mint choice (no silent fallback)
+### Buyer mint choice
 
-`@leash/core`'s `createSvmBuyerFetch` accepts optional `preferredAsset` (mint).
-`@leash/buyer-kit` maps `preferredCurrency` (`USDC` | `USDT` | `USDG`) to that
-mint on the buyer's configured cluster. If the buyer names a mint the seller
-did **not** include in `accepts[]`, the client **throws** before building a
-transfer — Leash does not fall back to a different stable. Integrations should
-surface that error or validate against discovery metadata
-(`fetchPaymentLinkMeta`) first.
+`@leash/buyer-kit` maps `preferredCurrency` (`'USDC' | 'USDT' | 'USDG'`)
+to a concrete mint address for the buyer's configured cluster, then passes
+it to the x402 client selector as `preferredAsset`. The selector finds the
+matching `accepts[i]` entry by mint and pays that one.
+
+**Strict, no silent fallback.** If the seller's `accepts[]` does not contain
+the chosen mint, the fetch throws with
+`preferred_asset_unavailable: requested <mint>; seller offers <other mints>`
+before building any transaction. The `ReceiptV1` records the thrown reason.
+
+**Receipt reflects the chosen mint.** On a failed 402, the buyer-kit
+decodes the `payment-required` header and prefers the entry matching the
+buyer's mint — so a failed USDG attempt stamps `currency: "USDG"` and
+`asset: 4F6PM96…` on the receipt, not the seller's primary (often USDC).
+
+Validate the seller's `accepts[]` before firing via `fetchPaymentLinkMeta`
+(`@leash/core`) or the discovery JSON at the link URL.
 
 Notes:
 
@@ -116,9 +126,12 @@ Notes:
 
 ### `PAYMENT-SIGNATURE` (client → server, retry)
 
-The buyer's signed SPL transfer + a copy of the `accepted` requirement
-(the middleware does a deep equality check). `@leash/core` builds and
-signs this for you via `ExactSvmScheme`.
+The buyer's partially-signed transaction + a copy of the `accepted`
+requirement (the middleware does a deep equality check). `@leash/core`
+builds and signs this automatically via `LeashDelegateExactSvmScheme`
+(agent treasury / delegate flow) or `LeashExactSvmScheme` (executive's
+own wallet). Both are wire-compatible with the `exact` scheme — the
+on-chain instruction is always a plain `TransferChecked`.
 
 ### `PAYMENT-RESPONSE` (server → client, 200)
 
@@ -132,10 +145,10 @@ into the corresponding `ReceiptV1` so explorers can chain the buyer's
 
 Any HTTPS x402 facilitator works. The Leash defaults:
 
-| Network          | Default facilitator                               | Notes                                                           |
-| ---------------- | ------------------------------------------------- | --------------------------------------------------------------- |
-| `solana-devnet`  | `https://devnet-facilitator.leash.market`         | Leash-operated devnet, gas-sponsored, Token-2022 supported.     |
-| `solana-mainnet` | `https://facilitator.leash.market`                | Leash-operated mainnet, gas-sponsored.                          |
+| Network          | Default facilitator                       | Notes                                                       |
+| ---------------- | ----------------------------------------- | ----------------------------------------------------------- |
+| `solana-devnet`  | `https://devnet-facilitator.leash.market` | Leash-operated devnet, gas-sponsored, Token-2022 supported. |
+| `solana-mainnet` | `https://facilitator.leash.market`        | Leash-operated mainnet, gas-sponsored.                      |
 
 Third-party alternatives (all wire-compatible): `facilitator.svmacc.tech` (devnet), `facilitator.payai.network` (mainnet), community hosts, self-hosted `@leash/facilitator`.
 
@@ -185,19 +198,25 @@ currency and links to faucets when it sees zero.
 ## End-to-end flow (sequence)
 
 ```
-Buyer           Seller (createSeller)         Facilitator
-  |   POST /tag  ───────────────────────►         |
-  |   ◄────────  402 + PAYMENT-REQUIRED           |
-  |                                               |
-  |   build + sign SPL transfer                   |
-  |                                               |
-  |   POST /tag (PAYMENT-SIGNATURE)  ────────►    |
-  |               middleware → settle ──────────► broadcasts tx
-  |               ◄────────────── tx_sig          |
-  |   ◄──── 200 + body + PAYMENT-RESPONSE         |
-  |                                               |
-  | finalizeReceipt → spend ReceiptV1             |
-  | (onAfterSettle on seller → earn ReceiptV1)    |
+Buyer                    Seller (createSeller)        Facilitator
+  |   POST /tag  ──────────────────────────►               |
+  |   ◄──────────  402 + PAYMENT-REQUIRED                  |
+  |                                                        |
+  |   pick accepts[i] by preferredCurrency / mint          |
+  |   build tx: [setLimit, setPrice,                       |
+  |     sellerAtaCreate, feeVaultAtaCreate?,                |
+  |     TransferChecked(seller),                            |
+  |     TransferChecked(fee)?, memo]                        |
+  |   partial-sign (buyer delegate)                        |
+  |                                                        |
+  |   POST /tag (PAYMENT-SIGNATURE) ─────────────────────► |
+  |               middleware → POST /verify ─────────────► walk ATAs, check legs, simulate
+  |               middleware → POST /settle ─────────────► co-sign (fee payer) + broadcast
+  |               ◄───────────────────── tx_sig            |
+  |   ◄────  200 + body + PAYMENT-RESPONSE                 |
+  |                                                        |
+  | finalizeReceipt → spend ReceiptV1 (chosen mint)        |
+  | (onAfterSettle on seller → earn ReceiptV1)             |
 ```
 
 Both receipts are deterministic (SHA-256 chained, identical hash inputs

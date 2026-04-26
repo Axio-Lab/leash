@@ -7,19 +7,26 @@ description: >-
   to buyers before they sign.
 ---
 
-Every x402 settlement routed through a Leash facilitator is a
-**two-leg buyer-signed transaction**:
+Every x402 settlement routed through a Leash facilitator is a **single
+buyer-signed Solana transaction** with up to seven instructions:
 
-1. **Seller leg** — `TransferChecked(mint, amount)` from the buyer's
-   treasury ATA to the seller's `payTo` ATA. Same as plain x402.
-2. **Protocol fee leg** — `TransferChecked(mint, fee)` from the **same**
-   buyer treasury ATA to the **Leash fee authority's** ATA on the same
-   mint.
+| # | Instruction | Who pays rent |
+|---|-------------|---------------|
+| 0 | `SetComputeUnitLimit` | — |
+| 1 | `SetComputeUnitPrice` | — |
+| 2 | `CreateAssociatedTokenAccountIdempotent` — seller's `payTo` ATA | **Facilitator** |
+| 3 | `CreateAssociatedTokenAccountIdempotent` — fee vault ATA _(only when a fee leg is present)_ | **Facilitator** |
+| 4 | `TransferChecked(mint, amount)` — seller leg | Buyer delegate |
+| 5 | `TransferChecked(mint, fee)` — protocol fee leg _(only when `extra['leash.fee']` is present)_ | Buyer delegate |
+| 6 | `Memo` | — |
 
-Both legs ride the same buyer signature, the same compute budget, the
-same blockhash, and the same `tx_sig`. There is no second confirmation
-to wait for and no separate failure mode — either the whole settlement
-lands or none of it does.
+Instructions 2 and 3 are idempotent: if the ATA already exists they are a
+no-op (small CU cost, no rent). This lets the first ever payment of a new
+mint (e.g. devnet USDG) land without any manual ATA setup — the facilitator
+auto-provisions both destinations and pays the rent.
+
+The two `TransferChecked` legs share the same buyer signature, blockhash,
+and `tx_sig`. Either both land or neither does.
 
 This is the only economic hook in the entire stack. There is **no**
 per-call subscription, **no** facilitator markup, **no** per-agent
@@ -29,13 +36,13 @@ anyone running `@leash/facilitator` can opt into.
 
 ## The numbers
 
-| Field             | Value                                              | Where it lives                                                                  |
-| ----------------- | -------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Rate              | `100` bps (`1.00%`)                                | `LEASH_FEE_BPS` env on facilitator + API                                        |
-| Rounding          | Ceiling, in atomic units                           | `computeFeeAtoms` in `@leash/core/fees`                                         |
-| Mainnet authority | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`     | `LEASH_FEE_AUTHORITY_MAINNET` (override only if self-hosting your own facilitator) |
-| Devnet authority  | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`     | `LEASH_FEE_AUTHORITY_DEVNET`                                                    |
-| Live snapshot     | `GET /v1/health` `.protocol_fee` block             | API + `@leash/facilitator` `/health`                                            |
+| Field             | Value                                          | Where it lives                                                                     |
+| ----------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Rate              | `100` bps (`1.00%`)                            | `LEASH_FEE_BPS` env on facilitator + API                                           |
+| Rounding          | Ceiling, in atomic units                       | `computeFeeAtoms` in `@leash/core/fees`                                            |
+| Mainnet authority | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W` | `LEASH_FEE_AUTHORITY_MAINNET` (override only if self-hosting your own facilitator) |
+| Devnet authority  | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W` | `LEASH_FEE_AUTHORITY_DEVNET`                                                       |
+| Live snapshot     | `GET /v1/health` `.protocol_fee` block         | API + `@leash/facilitator` `/health`                                               |
 
 The hosted Leash mainnet and devnet facilitators always serve the
 defaults. Override the env only if you are **operating your own
@@ -101,9 +108,9 @@ having to coordinate ahead of time.
     "leash.fee": {
       "v": "1",
       "bps": 100,
-      "feeAuthority": "3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W"
-    }
-  }
+      "feeAuthority": "3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W",
+    },
+  },
 }
 ```
 
@@ -175,23 +182,34 @@ const { fee, gross } = applyFeeGrossUp(sellerNetAtoms, resolveLeashFeeBps());
 
 ## What the facilitator does
 
-`@leash/facilitator` registers two custom schemes
-(`LeashExactSvmFacilitator` and its `V1` counterpart) that replay the
-upstream `@x402/svm` verification, then **additionally**:
+`@leash/facilitator` registers two custom schemes —
+`LeashExactSvmFacilitator` (x402 v2) and `LeashExactSvmFacilitatorV1`
+(legacy v1) — instead of the upstream `@x402/svm` defaults. On every
+`POST /verify` call they:
 
-1. Confirm the buyer-signed transaction has exactly **two**
-   `TransferChecked` instructions for the advertised mint.
-2. Confirm the second leg sources from the same buyer ATA, targets the
-   `feeAuthority`'s ATA, and has the exact `feeAtomic` value derived
-   from the requirement's `amount` and `bps`.
-3. Reject (`enforce`), warn (`warn`), or ignore (`off`) per the
-   `LEASH_FEE_ENFORCE` env. The hosted facilitators run `enforce` on
-   both clusters; `warn` is intended for staged cutovers when buyer
-   SDKs are still rolling out the fee leg.
+1. **Walk past leading `CreateAssociatedTokenAccountIdempotent`
+   instructions** (up to two — one for the seller's `payTo` ATA, one
+   for the fee vault ATA). Each is validated: payer must be the
+   facilitator's fee-payer, mint and token program must match the
+   transfer leg, and each target ATA must be either the seller's `payTo`
+   or the fee authority's ATA for the same mint. Unknown ATA creates are
+   rejected.
+2. **Identify the seller `TransferChecked`** immediately after any ATA
+   creates. Confirm it debits the buyer's source ATA and credits the
+   seller's `payTo` ATA for the advertised `amount` on the advertised
+   `mint`.
+3. **If `extra['leash.fee']` is present**, confirm a second
+   `TransferChecked` follows: same source ATA, same mint, targets the
+   `feeAuthority`'s ATA, exact `feeAtomic` as derived from `amount × bps`.
+4. **Reject (`enforce`), warn (`warn`), or ignore (`off`)** per
+   `LEASH_FEE_ENFORCE`. The hosted facilitators run `enforce`; `warn`
+   is for staged rollouts.
+5. **Simulate** the fully co-signed transaction against the RPC to catch
+   balance / blockhash problems before broadcast.
 
-Settlement (`/settle`) delegates to the unmodified upstream scheme, so
-broadcast semantics, fee-payer simulation, and signature compatibility
-are unchanged.
+Settlement (`/settle`) adds the facilitator's signature as fee payer and
+broadcasts. The facilitator pays all SOL transaction fees and ATA rent — buyers
+only spend stables.
 
 ## What the indexer does
 
@@ -221,12 +239,12 @@ charge their own protocol fee against their own treasury, or disable
 the fee entirely while still benefiting from the rest of the
 verification stack:
 
-| Env                              | Default                                          | Effect                                                                              |
-| -------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `LEASH_FEE_BPS`                  | `100`                                            | Fee rate in basis points. Set to `0` to disable.                                    |
-| `LEASH_FEE_ENFORCE`              | `enforce`                                        | `enforce` rejects bad/missing fee legs; `warn` logs them; `off` skips verification. |
-| `LEASH_FEE_AUTHORITY_MAINNET`    | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`   | Pubkey that receives the mainnet fee leg.                                           |
-| `LEASH_FEE_AUTHORITY_DEVNET`     | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`   | Same, for devnet.                                                                   |
+| Env                           | Default                                        | Effect                                                                              |
+| ----------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `LEASH_FEE_BPS`               | `100`                                          | Fee rate in basis points. Set to `0` to disable.                                    |
+| `LEASH_FEE_ENFORCE`           | `enforce`                                      | `enforce` rejects bad/missing fee legs; `warn` logs them; `off` skips verification. |
+| `LEASH_FEE_AUTHORITY_MAINNET` | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W` | Pubkey that receives the mainnet fee leg.                                           |
+| `LEASH_FEE_AUTHORITY_DEVNET`  | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W` | Same, for devnet.                                                                   |
 
 Run [`@leash/facilitator`](/guides/run-a-facilitator) with the env you
 want, point sellers at `LEASH_FACILITATOR_URL=https://your-host`, and

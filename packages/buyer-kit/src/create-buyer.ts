@@ -277,9 +277,15 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
       // If the seller returned 402, decode its `payment-required` header so we
       // can record what was actually demanded and *why* it didn't settle.
       // We need to .clone() because callers will still want to read the body.
+      // Pass `preferredAsset` so the quoted price reflects the entry the
+      // buyer would have actually attempted (e.g. USDG) instead of the
+      // seller's primary `accepts[0]` (e.g. USDC). Otherwise multi-currency
+      // sellers always stamp the receipt with the primary even on a USDG
+      // settlement attempt — which is technically wrong and hides the
+      // real failure surface from explorers.
       const quote =
         response.status === 402 && !settlement
-          ? await parsePaymentRequired(response.clone(), networks)
+          ? await parsePaymentRequired(response.clone(), networks, preferredAsset)
           : null;
 
       const sellerReason = settlement ? null : (quote?.error ?? networkError ?? null);
@@ -485,6 +491,7 @@ type Quote = {
 async function parsePaymentRequired(
   response: Response,
   networks: LeashX402Network[],
+  preferredAsset?: string | null,
 ): Promise<Quote | null> {
   let headerError: string | null = null;
   let bodyError: string | null = null;
@@ -503,7 +510,16 @@ async function parsePaymentRequired(
           headerError = decoded.error;
         }
         const list = Array.isArray(decoded.accepts) ? decoded.accepts : [];
-        chosen = list.find((p) => networkMatches(p.network, networks)) ?? list[0] ?? null;
+        // Prefer the buyer's chosen mint (so the receipt records what we
+        // actually attempted), then any entry on a configured network,
+        // then fall back to the first entry. Without this, multi-currency
+        // sellers always report `accepts[0]` (the primary, often USDC)
+        // even when the buyer attempted USDG.
+        const onConfiguredNetwork = list.filter((p) => networkMatches(p.network, networks));
+        const matchByAsset = preferredAsset
+          ? onConfiguredNetwork.find((p) => p.asset === preferredAsset)
+          : null;
+        chosen = matchByAsset ?? onConfiguredNetwork[0] ?? list[0] ?? null;
       }
     } catch {
       /* malformed header — ignore */

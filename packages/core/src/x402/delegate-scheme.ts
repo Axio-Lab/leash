@@ -17,13 +17,20 @@
  *     agents whose Privy embedded wallet is the delegate of a treasury
  *     it doesn't own.
  *
- * Transaction shape (always 5 instructions when fee is enabled):
+ * Transaction shape (with fee leg + auto-provisioning of destination ATAs):
  *
  *   ix[0] SetComputeUnitLimit
  *   ix[1] SetComputeUnitPrice
- *   ix[2] TransferChecked  (seller leg, amount = paymentRequirements.amount)
- *   ix[3] TransferChecked  (fee leg,   amount = extra['leash.fee'].feeAtomic)
- *   ix[4] Memo
+ *   ix[2] CreateAssociatedTokenAccountIdempotent (seller `payTo` ATA; payer = facilitator)
+ *   ix[3] CreateAssociatedTokenAccountIdempotent (fee vault ATA;     payer = facilitator)
+ *   ix[4] TransferChecked  (seller leg, amount = paymentRequirements.amount)
+ *   ix[5] TransferChecked  (fee leg,    amount = extra['leash.fee'].feeAtomic)
+ *   ix[6] Memo
+ *
+ * Idempotent creates are always emitted so first-time settlements on a
+ * fresh mint (e.g. devnet USDG) succeed without an out-of-band ATA-init.
+ * The facilitator skips any leading idempotent ATA creates whose target
+ * matches the seller-`payTo` or fee-vault ATA.
  *
  * When `extra['leash.fee']` is absent (vanilla x402 seller, no Leash
  * facilitator), the fee leg is skipped and the transaction degrades to
@@ -34,7 +41,7 @@
  * transaction semantics — either the seller AND treasury get paid, or
  * neither does.
  */
-import { address as toAddress, type Address } from '@solana/kit';
+import { address as toAddress, type Address, type TransactionSigner } from '@solana/kit';
 import {
   appendTransactionMessageInstructions,
   createTransactionMessage,
@@ -52,6 +59,7 @@ import {
 import {
   fetchMint,
   findAssociatedTokenPda,
+  getCreateAssociatedTokenIdempotentInstruction,
   getTransferCheckedInstruction,
   TOKEN_2022_PROGRAM_ADDRESS,
 } from '@solana-program/token-2022';
@@ -62,6 +70,13 @@ import type { PaymentPayload, PaymentRequirements, SchemeNetworkClient } from '@
 
 import { computeLeashFeeForRequirements, parseLeashFeeExtra } from '../fees/leash-fee.js';
 import type { TokenNetwork } from '../tokens/index.js';
+
+/** Map x402 `paymentRequirements.network` (CAIP-2) to fee-module network. */
+function tokenNetworkFromPaymentNetwork(network: string): TokenNetwork {
+  const lower = network.toLowerCase();
+  if (lower === 'solana-mainnet' || lower.startsWith('solana:5eykt4u')) return 'mainnet';
+  return 'devnet';
+}
 
 const DEFAULT_COMPUTE_UNIT_LIMIT = 200_000;
 const DEFAULT_COMPUTE_UNIT_PRICE_MICROLAMPORTS = 10_000;
@@ -249,7 +264,7 @@ async function buildLeashPaymentPayload(
       ? 'spl-token-2022'
       : 'spl-token';
   const resolvedFee = await computeLeashFeeForRequirements({
-    network: paymentRequirements.network as TokenNetwork,
+    network: tokenNetworkFromPaymentNetwork(paymentRequirements.network as string),
     asset: paymentRequirements.asset as string,
     tokenProgram: tokenProgramKind,
     amount: paymentRequirements.amount as string,
@@ -274,6 +289,34 @@ async function buildLeashPaymentPayload(
   if (!feePayer) {
     throw new Error('feePayer is required in paymentRequirements.extra for SVM transactions');
   }
+  /** Create-ATA helper types `payer` as a signer; the facilitator co-signs later. */
+  const feePayerSigner = feePayer as unknown as TransactionSigner<string>;
+
+  /**
+   * Ensure the seller `payTo` ATA exists before `TransferChecked`. New
+   * stables (devnet USDG, etc.) frequently land on a wallet that has
+   * never received that mint, so the seller ATA hasn't been created.
+   * Idempotent — a no-op (small CU cost) when it already exists.
+   */
+  const provisionSellerAtaIx = getCreateAssociatedTokenIdempotentInstruction({
+    payer: feePayerSigner,
+    ata: destinationATA,
+    owner: paymentRequirements.payTo as Address,
+    mint: paymentRequirements.asset as Address,
+    tokenProgram: tokenProgramAddress,
+  });
+
+  /** Ensures the fee vault ATA exists before the second `TransferChecked`. */
+  const provisionFeeVaultAtaIx =
+    resolvedFee && resolvedFee.feeAtomic > 0n
+      ? getCreateAssociatedTokenIdempotentInstruction({
+          payer: feePayerSigner,
+          ata: resolvedFee.feeDestination,
+          owner: resolvedFee.feeAuthority,
+          mint: paymentRequirements.asset as Address,
+          tokenProgram: tokenProgramAddress,
+        })
+      : null;
 
   const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
   const sellerMemo = (paymentRequirements.extra as { memo?: string } | undefined)?.memo;
@@ -297,12 +340,14 @@ async function buildLeashPaymentPayload(
     data: memoData,
   };
 
-  // Order: [setLimit, setPrice, transferIx, feeIx?, memoIx]. The
-  // upstream facilitator only allows ix[3..5] to be Lighthouse / Memo,
-  // so a vanilla x402 facilitator will reject the fee-bearing variant —
-  // by design. Use a Leash facilitator (or another fee-aware one) to
-  // settle it.
-  const trailingIxs = feeIx ? [transferIx, feeIx, memoIx] : [transferIx, memoIx];
+  // Order: [setLimit, setPrice, sellerAtaCreate, feeAtaCreate?, transferIx, feeIx?, memoIx].
+  // ATA creates are paid for by the facilitator (`feePayer`) so a fresh
+  // mint settles first try without the buyer pre-funding rent.
+  const trailingIxs = feeIx
+    ? provisionFeeVaultAtaIx
+      ? [provisionSellerAtaIx, provisionFeeVaultAtaIx, transferIx, feeIx, memoIx]
+      : [provisionSellerAtaIx, transferIx, feeIx, memoIx]
+    : [provisionSellerAtaIx, transferIx, memoIx];
 
   const tx = pipe(
     createTransactionMessage({ version: 0 }),

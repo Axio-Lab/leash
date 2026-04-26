@@ -243,7 +243,7 @@ transaction:
 - The seller is **always quoted net.** The price you set on the link or
   in `createSeller` is exactly what lands in your `payTo` ATA.
 - The buyer pays `gross = amount + fee`, where `fee = ceil(amount *
-  100 / 10_000)` — `1.00%` ceiling-rounded in atoms.
+100 / 10_000)` — `1.00%` ceiling-rounded in atoms.
 - The fee leg targets a Leash-owned wallet identical on both clusters:
   `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`. Verify it live on
   `GET /v1/health` (`protocol_fee.authorities`).

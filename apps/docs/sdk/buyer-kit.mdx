@@ -57,16 +57,26 @@ const { response, receipt } = await buyer.fetch('https://api.example.com/quote',
    pause check. A `deny` short-circuits and emits a `deny` receipt; no
    network traffic, no spend.
 2. **`paidFetch`** = `wrapFetchWithPayment` from `@x402/fetch`, registered
-   with `ExactSvmScheme` from `@x402/svm`. The first request is normal; on
-   `402 Payment Required` the wrapper:
+   with `LeashDelegateExactSvmScheme` (when `sourceTokenAccount` is set) or
+   `LeashExactSvmScheme` (owner mode) from `@leash/core`. Both use the `exact`
+   scheme id and are wire-compatible with every x402 facilitator. The first
+   request is normal; on `402 Payment Required` the wrapper:
    - Decodes `PAYMENT-REQUIRED` to the seller's `accepts[]`.
-   - Builds an SPL transfer matching the chosen requirement.
-   - Hands it to your `signer` for partial signing.
-   - Replays the request with `PAYMENT-SIGNATURE`.
+   - Picks the entry matching `preferredCurrency` (by mint address). Throws
+     `preferred_asset_unavailable` if the seller doesn't offer it.
+   - Builds the Solana transaction: `[setLimit, setPrice, sellerAtaCreate,
+     feeVaultAtaCreate?, TransferChecked(seller), TransferChecked(fee)?, memo]`.
+     The two idempotent ATA-create instructions are always included so first
+     payments on a fresh mint (e.g. USDG on devnet) succeed without manual
+     setup — the facilitator pays the ATA rent.
+   - Partially signs as the buyer delegate, then replays the request with
+     `PAYMENT-SIGNATURE`.
 3. **Receipt finalization** (`finalizeReceipt`) — hashes the request,
    pulls `tx_sig` + `payment_requirements_hash` from the seller's
    `PAYMENT-RESPONSE` header, chains against `prev_receipt_hash`, and
-   returns a fully-formed `ReceiptV1`.
+   returns a fully-formed `ReceiptV1` stamped with the **settled mint**
+   (USDC, USDG, etc.). On a failed 402 the receipt's `price` reflects the
+   mint the buyer _attempted_ to pay with, not the seller's primary.
 
 ## Browser usage (Privy / wallet-adapter)
 

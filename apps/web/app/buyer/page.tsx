@@ -67,6 +67,12 @@ type FireResult =
       quotedPrice?: ReceiptV1['price'];
       failureReason?: string;
       /**
+       * `Pay with` value when `fire()` ran. The seller 402 header often
+       * still names the link primary (e.g. USDC) even when `accepts[]`
+       * includes USDG — this field drives accurate failure copy.
+       */
+      attemptedPayCurrency?: KnownStableSymbol;
+      /**
        * Snapshot of the treasury balance / approved allowance at fire-time.
        * Used by `ResultPanel` to reclassify a generic 402 ("transaction
        * simulation failed") into a precise "insufficient balance" /
@@ -501,6 +507,7 @@ export default function BuyerPage() {
         receipt: callResult.receipt,
         quotedPrice: callResult.quotedPrice,
         failureReason: callResult.failureReason,
+        attemptedPayCurrency: payCurrency,
         ...(live
           ? {
               treasury: {
@@ -566,14 +573,14 @@ export default function BuyerPage() {
         const need = formatReceiptPriceWithCurrency(callResult.quotedPrice) ?? 'unknown';
         toast.error(
           'Insufficient balance to complete payment',
-          `Treasury holds ${have} USDC but the seller requires ${need}.`,
+          `Treasury holds ${have} ${payCurrency} but the seller requires ${need}.`,
         );
       } else if (status === 402 && !settled && insufficient === 'allowance' && live) {
         const have = (Number(live.delegatedAmount) / 1_000_000).toFixed(6);
         const need = formatReceiptPriceWithCurrency(callResult.quotedPrice) ?? 'unknown';
         toast.error(
           'Insufficient allowance to complete payment',
-          `Executive is approved for ${have} USDC but the seller requires ${need}. Re-approve a higher allowance on the agent profile.`,
+          `Executive is approved for ${have} ${payCurrency} but the seller requires ${need}. Re-approve a higher allowance on the agent profile.`,
         );
       } else if (status === 402 && !settled) {
         const quoted = formatReceiptPriceWithCurrency(callResult.quotedPrice);
@@ -1017,6 +1024,51 @@ export default function BuyerPage() {
   );
 }
 
+/** Devnet-only: show the correct mint + faucet guidance for the stable actually paid. */
+function DevnetStableFundHint({ symbol }: { symbol: string }) {
+  if (networkFromRpc(SOLANA_RPC) !== 'devnet') return null;
+  const upper = symbol.trim().toUpperCase();
+  if (!KNOWN_STABLE_SYMBOLS.includes(upper as KnownStableSymbol)) return null;
+  const meta = lookupTokenBySymbol(upper, 'devnet');
+  if (!meta) return null;
+  const isUsdc = upper === 'USDC';
+  return (
+    <li>
+      {isUsdc ? 'Mint' : 'Obtain'} devnet {meta.symbol} (<InlineCode>{meta.mint}</InlineCode>) and
+      send it to the agent treasury ATA
+      {isUsdc ? (
+        <>
+          {' '}
+          via{' '}
+          <a
+            href="https://faucet.circle.com"
+            target="_blank"
+            rel="noreferrer"
+            className="text-brand hover:underline"
+          >
+            faucet.circle.com
+          </a>
+          .
+        </>
+      ) : (
+        <>
+          {' '}
+          (try{' '}
+          <a
+            href="https://faucet.solana.com"
+            target="_blank"
+            rel="noreferrer"
+            className="text-brand hover:underline"
+          >
+            faucet.solana.com
+          </a>{' '}
+          or swap from devnet USDC).
+        </>
+      )}
+    </li>
+  );
+}
+
 function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) {
   const leash = result.response.leash;
   const settled = !!result.receipt.tx_sig;
@@ -1061,6 +1113,9 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
     (result.receipt.price?.currency as string | undefined) ??
     (result.quotedPrice?.currency as string | undefined) ??
     'tokens';
+  /** When 402 fails, the quoted header may still say USDC while `Pay with` was USDG. */
+  const failurePanelCurrency =
+    (result.attemptedPayCurrency as string | undefined) ?? settledOrQuotedCurrency;
   const haveBalanceUsdc = result.treasury
     ? (Number(result.treasury.balanceAtomic) / 1_000_000).toLocaleString(undefined, {
         minimumFractionDigits: 2,
@@ -1074,6 +1129,13 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
       })
     : null;
   const needPretty = formatReceiptPriceWithCurrency(result.quotedPrice);
+  const needDisplay: React.ReactNode =
+    quotedAtomic != null && result.attemptedPayCurrency
+      ? `${(Number(quotedAtomic) / 1_000_000).toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 6,
+        })} ${result.attemptedPayCurrency}`
+      : (needPretty ?? 'unknown');
 
   // Special-case: the SDK selector threw because the seller doesn't accept
   // the buyer's chosen currency. We surface this as its own panel because
@@ -1172,30 +1234,17 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
           <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
             <dt className="text-fg-muted">Treasury holds</dt>
             <dd className="text-fg font-mono">
-              {haveBalanceUsdc} {settledOrQuotedCurrency}
+              {haveBalanceUsdc} {failurePanelCurrency}
             </dd>
             <dt className="text-fg-muted">Seller requires</dt>
-            <dd className="text-fg font-mono">{needPretty ?? 'unknown'}</dd>
+            <dd className="text-fg font-mono">{needDisplay}</dd>
           </dl>
           <p className="mt-2">
-            Top up the agent&apos;s {settledOrQuotedCurrency} ATA, then click{' '}
+            Top up the agent&apos;s {failurePanelCurrency} ATA, then click{' '}
             <strong>Fire request</strong> again.
           </p>
           <ul className="ml-4 mt-1 list-disc space-y-0.5">
-            <li>
-              Mint devnet USDC (
-              <InlineCode>4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU</InlineCode>) to the agent
-              treasury ATA from{' '}
-              <a
-                href="https://faucet.circle.com"
-                target="_blank"
-                rel="noreferrer"
-                className="text-brand hover:underline"
-              >
-                faucet.circle.com
-              </a>
-              .
-            </li>
+            <DevnetStableFundHint symbol={failurePanelCurrency} />
           </ul>
         </div>
       )}
@@ -1206,14 +1255,14 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
           <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
             <dt className="text-fg-muted">Executive approved for</dt>
             <dd className="text-fg font-mono">
-              {haveAllowanceUsdc} {settledOrQuotedCurrency}
+              {haveAllowanceUsdc} {failurePanelCurrency}
             </dd>
             <dt className="text-fg-muted">Seller requires</dt>
-            <dd className="text-fg font-mono">{needPretty ?? 'unknown'}</dd>
+            <dd className="text-fg font-mono">{needDisplay}</dd>
           </dl>
           <p className="mt-2">
-            Open the agent profile and run <strong>Set allowance</strong> for{' '}
-            {settledOrQuotedCurrency} with a higher cap before re-firing.
+            Open the agent profile and run <strong>Set allowance</strong> for {failurePanelCurrency}{' '}
+            with a higher cap before re-firing.
           </p>
         </div>
       )}
@@ -1223,9 +1272,7 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
           <p className="text-sm text-fg">Seller returned 402 — payment did not settle.</p>
           <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1">
             <dt className="text-fg-muted">Seller demanded</dt>
-            <dd className="text-fg">
-              {needPretty ?? <span className="text-fg-muted">unknown</span>}
-            </dd>
+            <dd className="text-fg">{needDisplay}</dd>
             <dt className="text-fg-muted">Reason</dt>
             <dd className="text-fg">
               {result.failureReason ?? (
@@ -1237,20 +1284,7 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
           </dl>
           <p className="mt-2">Most common fixes:</p>
           <ul className="ml-4 mt-1 list-disc space-y-0.5">
-            <li>
-              Mint devnet USDC (
-              <InlineCode>4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU</InlineCode>) to the agent
-              treasury ATA from{' '}
-              <a
-                href="https://faucet.circle.com"
-                target="_blank"
-                rel="noreferrer"
-                className="text-brand hover:underline"
-              >
-                faucet.circle.com
-              </a>
-              .
-            </li>
+            <DevnetStableFundHint symbol={failurePanelCurrency} />
             <li>
               Top up a tiny bit of devnet SOL for ATA rent via{' '}
               <a

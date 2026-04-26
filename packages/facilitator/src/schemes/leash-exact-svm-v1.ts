@@ -18,7 +18,9 @@ import {
   TOKEN_PROGRAM_ADDRESS,
 } from '@solana-program/token';
 import {
+  ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
   findAssociatedTokenPda,
+  parseCreateAssociatedTokenIdempotentInstruction,
   parseTransferCheckedInstruction as parseTransferCheckedToken2022,
   TOKEN_2022_PROGRAM_ADDRESS,
 } from '@solana-program/token-2022';
@@ -58,7 +60,7 @@ import { networkFromCaip2ToTokenNetwork } from './util.js';
 const COMPUTE_LIMIT_DISC = 2 as const;
 const COMPUTE_PRICE_DISC = 3 as const;
 const MIN_INSTRUCTIONS = 3;
-const MAX_INSTRUCTIONS = 6;
+const MAX_INSTRUCTIONS = 8;
 
 function fail(reason: string, payer = ''): VerifyResponse {
   return { isValid: false, invalidReason: reason, payer };
@@ -294,7 +296,29 @@ export class LeashExactSvmFacilitatorV1 implements SchemeNetworkFacilitator {
       return fail(e instanceof Error ? e.message : String(e));
     }
 
-    const sellerLeg = parseTransferChecked(instructions[2]!);
+    let sellerIdx = 2;
+    const ataCreates: ReturnType<typeof parseCreateAssociatedTokenIdempotentInstruction>[] = [];
+    while (sellerIdx < instructions.length && sellerIdx <= 4) {
+      const ix = instructions[sellerIdx]!;
+      if (ix.programAddress.toString() !== ASSOCIATED_TOKEN_PROGRAM_ADDRESS.toString()) {
+        break;
+      }
+      let parsed: ReturnType<typeof parseCreateAssociatedTokenIdempotentInstruction>;
+      try {
+        parsed = parseCreateAssociatedTokenIdempotentInstruction(
+          ix as Parameters<typeof parseCreateAssociatedTokenIdempotentInstruction>[0],
+        );
+      } catch {
+        return fail('invalid_exact_svm_payload_unexpected_ata_create');
+      }
+      ataCreates.push(parsed);
+      sellerIdx += 1;
+    }
+    const sellerIxRaw = instructions[sellerIdx];
+    if (!sellerIxRaw) {
+      return fail('invalid_exact_svm_payload_no_transfer_instruction');
+    }
+    const sellerLeg = parseTransferChecked(sellerIxRaw);
     if (!sellerLeg) {
       return fail('invalid_exact_svm_payload_no_transfer_instruction');
     }
@@ -333,7 +357,60 @@ export class LeashExactSvmFacilitatorV1 implements SchemeNetworkFacilitator {
       (requirementsV1.extra ?? null) as Record<string, unknown> | null,
     );
 
-    const optionalInstructions = instructions.slice(3) as Instruction[];
+    if (ataCreates.length > 0) {
+      const feePayerStr = requirementsV1.extra.feePayer as string;
+      const expectedTp =
+        sellerLeg.tokenProgram === 'spl-token-2022'
+          ? TOKEN_2022_PROGRAM_ADDRESS.toString()
+          : TOKEN_PROGRAM_ADDRESS.toString();
+      const allowed: Array<{ ata: string; owner: string }> = [
+        { ata: sellerLeg.destination, owner: requirements.payTo as string },
+      ];
+      if (feeBlock) {
+        const serverAuthorityPreview = tokenNetwork
+          ? resolveLeashFeeAuthority(tokenNetwork)
+          : feeBlock.feeAuthority;
+        try {
+          const [ata] = await findAssociatedTokenPda({
+            mint: toAddress(requirements.asset as string),
+            owner: toAddress(serverAuthorityPreview),
+            tokenProgram: tokenProgramAddress,
+          });
+          allowed.push({ ata: ata.toString(), owner: serverAuthorityPreview });
+        } catch {
+          return fail('leash_fee_destination_unresolvable', payer);
+        }
+      }
+      const seen = new Set<string>();
+      for (const parsedCreate of ataCreates) {
+        if (
+          parsedCreate.programAddress.toString() !== ASSOCIATED_TOKEN_PROGRAM_ADDRESS.toString()
+        ) {
+          return fail('invalid_exact_svm_payload_unexpected_ata_create', payer);
+        }
+        if (parsedCreate.accounts.payer.address.toString() !== feePayerStr) {
+          return fail('invalid_exact_svm_payload_unexpected_ata_create', payer);
+        }
+        if (parsedCreate.accounts.mint.address.toString() !== (requirements.asset as string)) {
+          return fail('invalid_exact_svm_payload_unexpected_ata_create', payer);
+        }
+        if (parsedCreate.accounts.tokenProgram.address.toString() !== expectedTp) {
+          return fail('invalid_exact_svm_payload_unexpected_ata_create', payer);
+        }
+        const ataStr = parsedCreate.accounts.ata.address.toString();
+        const ownerStr = parsedCreate.accounts.owner.address.toString();
+        const match = allowed.find((a) => a.ata === ataStr && a.owner === ownerStr);
+        if (!match) {
+          return fail('invalid_exact_svm_payload_unexpected_ata_create', payer);
+        }
+        if (seen.has(ataStr)) {
+          return fail('invalid_exact_svm_payload_unexpected_ata_create', payer);
+        }
+        seen.add(ataStr);
+      }
+    }
+
+    const optionalInstructions = instructions.slice(sellerIdx + 1) as Instruction[];
     let leftoverOptional: Instruction[] = optionalInstructions;
 
     if (enforcement === 'enforce' && !feeBlock) {
