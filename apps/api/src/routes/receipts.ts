@@ -27,6 +27,7 @@ import {
   listPullTargets,
 } from '../storage/receipts.js';
 import { createPreparedEvent, markConfirmed, markSubmitted } from '../storage/events.js';
+import { emitProtocolFeeEvent } from '../storage/fee-events.js';
 import { ensureWatched } from '../indexer/watchlist.js';
 import { umiReadOnly } from '../util/umi.js';
 import { findAssetSignerPda } from '@metaplex-foundation/mpl-core';
@@ -163,6 +164,14 @@ export function buildReceiptRoutes(deps: {
         // the explorer's tx column isn't blank.
         if (receipt.tx_sig) await markSubmitted(deps.db, eventId, receipt.tx_sig);
         await markConfirmed(deps.db, eventId);
+        // Best-effort: emit a protocol-fee row when the receipt is a
+        // settled earn carrying a `price.fee`. Idempotent on
+        // (network, receipt_hash) so retries don't double-count.
+        await emitProtocolFeeEvent(deps.db, {
+          network,
+          receipt,
+          apiKeyId: apiKey.id,
+        });
       }
       return c.json(
         {

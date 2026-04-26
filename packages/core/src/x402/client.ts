@@ -4,7 +4,7 @@ import { wrapFetchWithPayment } from '@x402/fetch';
 import { ExactSvmScheme } from '@x402/svm';
 import { SOLANA_DEVNET_CAIP2, SOLANA_MAINNET_CAIP2, SOLANA_TESTNET_CAIP2 } from '@x402/svm';
 import type { ClientSvmSigner } from '@x402/svm';
-import { LeashDelegateExactSvmScheme } from './delegate-scheme.js';
+import { LeashDelegateExactSvmScheme, LeashExactSvmScheme } from './delegate-scheme.js';
 import type { Address } from '@solana/kit';
 
 export type LeashFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -110,17 +110,30 @@ export function createSvmBuyerFetch(opts: CreateSvmBuyerClientOptions): LeashFet
       })
     : new x402Client();
   for (const n of networks) {
+    // Both Leash schemes append the protocol fee leg when the seller's
+    // `paymentRequirements.extra['leash.fee']` is present and degrade
+    // to the upstream wire shape otherwise — so callers don't need to
+    // branch on whether the seller is using a Leash facilitator.
     const scheme = opts.sourceTokenAccount
       ? new LeashDelegateExactSvmScheme({
           signer: opts.signer,
           sourceTokenAccount: opts.sourceTokenAccount,
           ...(opts.rpcUrl ? { rpcUrl: opts.rpcUrl } : {}),
         })
-      : new ExactSvmScheme(opts.signer, { rpcUrl: opts.rpcUrl });
+      : new LeashExactSvmScheme({
+          signer: opts.signer,
+          ...(opts.rpcUrl ? { rpcUrl: opts.rpcUrl } : {}),
+        });
     client.register(NETWORK_TO_CAIP2[n], scheme);
   }
   return wrapFetchWithPayment(globalThis.fetch, client);
 }
 
-export { wrapFetchWithPayment, x402Client, ExactSvmScheme, LeashDelegateExactSvmScheme };
+export {
+  wrapFetchWithPayment,
+  x402Client,
+  ExactSvmScheme,
+  LeashDelegateExactSvmScheme,
+  LeashExactSvmScheme,
+};
 export type { ClientSvmSigner };

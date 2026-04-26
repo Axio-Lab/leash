@@ -71,6 +71,7 @@
               "api/payment-links",
               "api/seller-utils",
               "api/buyer",
+              "api/protocol-fee",
               "api/treasury",
               "api/receipts",
               "api/indexer",

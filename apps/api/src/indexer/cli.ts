@@ -27,6 +27,7 @@ import { createRpcClient } from './rpc.js';
 import { runIndexerTick } from './run.js';
 import { runReceiptPullTick } from './receipt-pull.js';
 import { discoverTreasuryAtas } from './ata-discovery.js';
+import { seedLeashFeeWatchlist } from './leash-fee-watchlist.js';
 
 async function main(): Promise<void> {
   const config = createConfig();
@@ -45,6 +46,21 @@ async function main(): Promise<void> {
   console.log(
     `[indexer] starting; networks=[${enabled.join(',')}] interval=${intervalMs}ms perAddrLimit=${perAddrLimit} pull=${!pullDisabled}`,
   );
+
+  // Seed Leash protocol-fee ATAs into the watchlist once at boot so the
+  // first tick already includes them. Idempotent — safe to repeat on
+  // every restart. Failures are non-fatal: revenue tracking just stays
+  // receipts-only (which is best-effort) until we restart.
+  for (const network of enabled) {
+    try {
+      const seeded = await seedLeashFeeWatchlist(db, network);
+      console.log(
+        `[indexer] seeded ${seeded.ataAddresses.length} fee ATA(s) for ${network} authority=${seeded.feeAuthority}`,
+      );
+    } catch (err) {
+      console.error(`[indexer] fee-ata seed failed (${network}): ${(err as Error).message}`);
+    }
+  }
 
   let stopped = false;
   const stop = () => {

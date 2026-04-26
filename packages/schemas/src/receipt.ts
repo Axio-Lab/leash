@@ -7,6 +7,33 @@ const PriceSchema = z.object({
   currency: z.string(),
   network: z.string().optional(),
   asset: z.string().optional(),
+  /**
+   * Atomic Leash protocol fee charged on this settlement, base-10 string.
+   * Optional + additive — receipts written before the fee rollout (and
+   * settlements that bypass a Leash facilitator) leave this `null`.
+   * When present, `gross = amount + fee`.
+   */
+  fee: z.string().nullable().optional(),
+  /**
+   * Atomic total the buyer signed on the wire (`amount + fee`). When
+   * absent, callers should treat `amount` as both net and gross. Stored
+   * separately so the explorer can render `gross / fee / net` without
+   * re-doing arithmetic on every render.
+   */
+  gross: z.string().nullable().optional(),
+  /**
+   * Fee rate in basis points (e.g. `100` for 1%) the seller priced this
+   * settlement at. Useful for the explorer when the global default
+   * shifts so historical receipts continue to display the rate they
+   * were actually charged.
+   */
+  feeBps: z.number().int().nullable().optional(),
+  /**
+   * Treasury authority pubkey that received the fee leg. Lets the
+   * explorer link to the right account and lets the indexer attribute
+   * `protocol.fee.collected` events to the right destination.
+   */
+  feeAuthority: z.string().nullable().optional(),
 });
 
 const RequestSummarySchema = z.object({

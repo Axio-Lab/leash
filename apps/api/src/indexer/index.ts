@@ -9,6 +9,7 @@ export { decodeTransaction, type DecodedEvent, type DecodeContext } from './deco
 export {
   ensureWatched,
   ensureWatchedAta,
+  ensureWatchedFeeAta,
   getCursor,
   listWatchlist,
   upsertCursor,
@@ -16,6 +17,7 @@ export {
   type WatchKind,
   type WatchRow,
 } from './watchlist.js';
+export { seedLeashFeeWatchlist } from './leash-fee-watchlist.js';
 export {
   runIndexerTick,
   _resetDiscoveryCacheForTests,

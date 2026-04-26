@@ -6,10 +6,14 @@ import useSWR from 'swr';
 import { ExternalLink, Plus, Receipt, Send, Shield, ShieldOff, Trash2, Wallet } from 'lucide-react';
 import { createBuyer, type BuyerCallResult } from '@leash/buyer-kit';
 import {
+  applyFeeGrossUp,
   deriveAgentTreasuryAta,
   fetchPaymentLinkMeta,
   KNOWN_STABLE_SYMBOLS,
+  lookupToken,
   lookupTokenBySymbol,
+  networkFromRpc,
+  TOKEN_2022_PROGRAM_ADDRESS,
   type KnownStableSymbol,
 } from '@leash/core';
 import type { EndpointV1, ReceiptV1, RulesV1 } from '@leash/schemas';
@@ -35,7 +39,11 @@ import {
   loadAgent,
   type StoredAgent,
 } from '@/lib/agent-storage';
-import { getSpendDelegation, type SpendDelegationStatus } from '@leash/registry-utils';
+import {
+  getSpendDelegation,
+  TOKEN_2022_PROGRAM_ID,
+  type SpendDelegationStatus,
+} from '@leash/registry-utils';
 import { formatReceiptPriceWithCurrency } from '@/lib/format-receipt-price';
 
 const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
@@ -185,7 +193,9 @@ export default function BuyerPage() {
    * derivation, balance/allowance display — re-derives whenever the
    * dropdown changes.
    */
-  const tokenNetwork = agentRecord?.network === 'solana-mainnet' ? 'mainnet' : 'devnet';
+  // Match `/api/agents/balance` + agent profile: mint addresses follow the
+  // configured RPC cluster, not only `StoredAgent.network` (which can skew).
+  const tokenNetwork = React.useMemo(() => networkFromRpc(SOLANA_RPC), []);
   const payCurrencyToken = React.useMemo(
     () => lookupTokenBySymbol(payCurrency, tokenNetwork) ?? null,
     [payCurrency, tokenNetwork],
@@ -195,6 +205,12 @@ export default function BuyerPage() {
     if (agentRecord?.fundingMint) return agentRecord.fundingMint;
     return agentRecord?.network === 'solana-mainnet' ? USDC_MAINNET : USDC_DEVNET;
   }, [payCurrencyToken, agentRecord]);
+
+  /** Registry row for `fundingMint` — drives Token vs Token-2022 ATA layout. */
+  const fundingTokenMeta = React.useMemo(
+    () => (fundingMint ? lookupToken(fundingMint, tokenNetwork) : undefined),
+    [fundingMint, tokenNetwork],
+  );
 
   // Re-derive the treasury source ATA from `(agent_treasury_pda, fundingMint)`
   // every time the user switches currency, so we never spend out of a USDC
@@ -212,6 +228,9 @@ export default function BuyerPage() {
         const { ata } = await deriveAgentTreasuryAta({
           asset: selectedAgent,
           mint: fundingMint,
+          ...(fundingTokenMeta?.program === 'spl-token-2022'
+            ? { tokenProgram: TOKEN_2022_PROGRAM_ADDRESS }
+            : {}),
         });
         if (!cancelled) setDerivedSourceAta(String(ata));
       } catch {
@@ -221,7 +240,7 @@ export default function BuyerPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedAgent, fundingMint]);
+  }, [selectedAgent, fundingMint, fundingTokenMeta?.program]);
 
   const sourceTokenAccountForFire =
     derivedSourceAta ??
@@ -243,6 +262,9 @@ export default function BuyerPage() {
       const status = await getSpendDelegation(privyUmi, {
         agentAsset: selectedAgent,
         mint: fundingMint,
+        ...(fundingTokenMeta?.program === 'spl-token-2022'
+          ? { tokenProgram: TOKEN_2022_PROGRAM_ID }
+          : {}),
       });
       setDelegation(status);
     } catch (err) {
@@ -251,7 +273,7 @@ export default function BuyerPage() {
     } finally {
       setDelegationLoading(false);
     }
-  }, [privyUmi, selectedAgent, fundingMint]);
+  }, [privyUmi, selectedAgent, fundingMint, fundingTokenMeta?.program]);
 
   React.useEffect(() => {
     void refreshDelegation();
@@ -262,11 +284,27 @@ export default function BuyerPage() {
   // All Leash-supported stables (USDC/USDT/USDG) share 6 decimals so the
   // atomic conversion is currency-independent; if we ever add a non-6dp
   // stable this will need to key off `decimalToAtomic(s, token.decimals)`.
+  //
+  // We gross-up by the default 1% protocol fee here so the balance /
+  // allowance pre-flights check against what the buyer will actually
+  // sign (`net + fee`), not just the seller's quoted net. The
+  // facilitator's authoritative fee block arrives on the 402 round-trip
+  // (`callResult.quotedPrice.gross`) and overrides this estimate
+  // post-fire — the env-default keeps the Fire button accurate even
+  // before the first probe.
   const quotedAtomic: bigint | null = React.useMemo(() => {
+    const grossUp = (net: bigint | null): bigint | null => {
+      if (net == null) return null;
+      try {
+        return net + applyFeeGrossUp(net).fee;
+      } catch {
+        return net;
+      }
+    };
     const fromDiscovery = discoveredLinkMeta?.endpoint.price;
     if (fromDiscovery) {
       const m = fromDiscovery.match(/^([\d.]+)\s*([A-Z]+)$/);
-      if (m) return decimalToAtomicUsdc(m[1]);
+      if (m) return grossUp(decimalToAtomicUsdc(m[1]));
     }
     try {
       const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://x');
@@ -276,7 +314,7 @@ export default function BuyerPage() {
       if (!ep?.price) return null;
       const priceMatch = ep.price.match(/^([\d.]+)\s*([A-Z]+)$/);
       if (!priceMatch) return null;
-      return decimalToAtomicUsdc(priceMatch[1]);
+      return grossUp(decimalToAtomicUsdc(priceMatch[1]));
     } catch {
       return null;
     }
@@ -365,6 +403,9 @@ export default function BuyerPage() {
         live = await getSpendDelegation(privyUmi, {
           agentAsset: selectedAgent,
           mint: fundingMint,
+          ...(fundingTokenMeta?.program === 'spl-token-2022'
+            ? { tokenProgram: TOKEN_2022_PROGRAM_ID }
+            : {}),
         });
         setDelegation(live);
       }
@@ -491,9 +532,12 @@ export default function BuyerPage() {
 
       // Authoritative quoted price from the seller's payment-required header
       // (parsed by buyer-kit). Convert to bigint atomic units so we can
-      // compare against treasury / allowance.
+      // compare against treasury / allowance. Prefer `gross` (net + fee)
+      // when present so the comparison reflects what the buyer actually
+      // signs on the wire — falling back to `amount` for vanilla x402
+      // settlements that bypass the Leash facilitator (no fee leg).
       const quotedAtomicFromSeller: bigint | null = (() => {
-        const raw = callResult.quotedPrice?.amount;
+        const raw = callResult.quotedPrice?.gross ?? callResult.quotedPrice?.amount;
         if (!raw) return null;
         try {
           return BigInt(raw);
@@ -987,7 +1031,10 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
   // so the visual matches the toast. We cannot reuse the closure scope from
   // `fire()` here because `ResultPanel` is rendered at a higher level.
   const quotedAtomic: bigint | null = (() => {
-    const raw = result.quotedPrice?.amount;
+    // Prefer `gross` (net + Leash fee) when present so the
+    // balance / allowance reclassification matches what the buyer
+    // actually had to sign on the wire.
+    const raw = result.quotedPrice?.gross ?? result.quotedPrice?.amount;
     if (!raw) return null;
     try {
       return BigInt(raw);
@@ -1252,6 +1299,7 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
           </span>
         </a>
       ) : null}
+      <FeeBreakdown price={result.receipt.price ?? result.quotedPrice ?? null} />
       <div>
         <Label className="mb-1 block">Leash response headers (X-Leash-*)</Label>
         <JsonViewer data={leash} maxHeight="10rem" />
@@ -1283,6 +1331,66 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
       <div className="text-[10px] uppercase tracking-wider text-fg-subtle">{label}</div>
       <div className="font-mono text-sm">{value}</div>
       {sub && <div className="text-[10px] text-fg-subtle">{sub}</div>}
+    </div>
+  );
+}
+
+/**
+ * Per-call settlement breakdown: net / fee / gross.
+ *
+ * Renders nothing for vanilla x402 settlements (no `fee` field on the
+ * receipt price). For Leash-flavoured settlements, surfaces the three
+ * numbers side by side so the buyer can sanity-check what the
+ * facilitator actually charged versus what the seller quoted.
+ *
+ * All Leash-supported stables share 6 decimals — see the comment on
+ * `decimalToAtomicUsdc` above; if we ever add a non-6dp stable this
+ * div needs to key off the receipt's resolved decimals.
+ */
+function FeeBreakdown({ price }: { price: ReceiptV1['price'] | null | undefined }) {
+  if (!price) return null;
+  if (!price.fee) return null;
+  const currency = price.currency || 'tokens';
+  const fmt = (atoms: string): string => {
+    try {
+      return (Number(BigInt(atoms)) / 1_000_000).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 6,
+      });
+    } catch {
+      return atoms;
+    }
+  };
+  const bpsLabel = typeof price.feeBps === 'number' ? ` (${(price.feeBps / 100).toFixed(2)}%)` : '';
+  return (
+    <div className="rounded-md border border-border bg-bg-elev/40 p-3 text-xs">
+      <div className="mb-1.5 text-[10px] uppercase tracking-wider text-fg-subtle">
+        Settlement breakdown
+      </div>
+      <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 font-mono">
+        <dt className="text-fg-muted">Net (seller)</dt>
+        <dd className="text-fg">
+          {fmt(price.amount)} {currency}
+        </dd>
+        <dt className="text-fg-muted">Protocol fee{bpsLabel}</dt>
+        <dd className="text-amber-500">
+          {fmt(price.fee)} {currency}
+        </dd>
+        {price.gross ? (
+          <>
+            <dt className="text-fg-muted">Gross (you signed)</dt>
+            <dd className="text-fg">
+              {fmt(price.gross)} {currency}
+            </dd>
+          </>
+        ) : null}
+        {price.feeAuthority ? (
+          <>
+            <dt className="text-fg-muted">Fee authority</dt>
+            <dd className="break-all text-fg-subtle">{price.feeAuthority}</dd>
+          </>
+        ) : null}
+      </dl>
     </div>
   );
 }

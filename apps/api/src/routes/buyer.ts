@@ -36,6 +36,7 @@
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import {
+  computeFeeAtoms,
   computeReceiptHash,
   currencyForAsset,
   decodePaymentResponseHeader,
@@ -46,8 +47,10 @@ import {
   KNOWN_TOKENS,
   lookupTokenBySymbol,
   networkFromCaip2,
+  parseLeashFeeExtra,
   paymentRequirementsHash,
   requestHash,
+  resolveLeashFeeBps,
   verifyReceiptChain,
   type KnownStableSymbol,
   type PaymentRequirements,
@@ -117,6 +120,22 @@ const PriceSchema = z
     currency: z.string(),
     network: z.string().optional(),
     asset: z.string().optional(),
+    /**
+     * Leash protocol fee in atomic units. Present when the seller's
+     * `paymentRequirements.extra['leash.fee']` is set — this is the
+     * additional amount the buyer pays on top of `amount` (the seller's
+     * net). Absent on vanilla x402 settlements.
+     */
+    fee: z.string().optional(),
+    /**
+     * Buyer-signed total in atomic units (`amount + fee`). Same provenance
+     * rule as `fee` — only set when the seller advertised a Leash fee.
+     */
+    gross: z.string().optional(),
+    /** Fee rate in basis points (e.g. `100` = 1%). */
+    fee_bps: z.number().int().min(0).max(10_000).optional(),
+    /** Pubkey of the wallet that received the fee leg. */
+    fee_authority: z.string().optional(),
   })
   .openapi('Price');
 
@@ -869,11 +888,31 @@ function caip2NetworkMatches(headerNetwork: string, network: SvmNetwork): boolea
 function toPrice(req: PaymentRequirements) {
   const slug = networkFromCaip2(req.network) ?? req.network;
   const tokenNetwork: TokenNetwork = slug === 'solana-mainnet' ? 'mainnet' : 'devnet';
-  return {
+  // Surface fee + gross when the seller advertised a Leash fee in
+  // `extra['leash.fee']`. Computed off the same `amount` (net) so the
+  // numbers always reconcile with what the facilitator + buyer-kit
+  // derived for the actual on-chain transaction.
+  const feeExtra = parseLeashFeeExtra(req.extra ?? null);
+  const base = {
     amount: req.amount,
     currency: currencyForAsset(req.asset, tokenNetwork),
     network: slug,
     asset: req.asset,
+  };
+  if (!feeExtra) return base;
+  let net: bigint;
+  try {
+    net = BigInt(req.amount);
+  } catch {
+    return base;
+  }
+  const fee = computeFeeAtoms(net, feeExtra.bps);
+  return {
+    ...base,
+    fee: fee.toString(),
+    gross: (net + fee).toString(),
+    fee_bps: feeExtra.bps,
+    fee_authority: feeExtra.feeAuthority,
   };
 }
 

@@ -53,6 +53,7 @@ import {
 } from '../storage/payment-links.js';
 import { ingestReceipt } from '../storage/receipts.js';
 import { createPreparedEvent, markConfirmed, markSubmitted } from '../storage/events.js';
+import { emitProtocolFeeEvent } from '../storage/fee-events.js';
 import { ensureWatched } from '../indexer/watchlist.js';
 import { umiReadOnly } from '../util/umi.js';
 import { isSvmNetwork, type SvmNetwork } from '../util/network.js';
@@ -239,10 +240,26 @@ export async function ingestPaywallReceipt(
       tx_sig: receipt.tx_sig,
       currency: receipt.price?.currency ?? null,
       receipt_hash: receipt.receipt_hash,
+      // Fee context lets revenue dashboards split gross vs. net without
+      // re-deriving from the receipt blob. Optional — vanilla x402
+      // settlements (no Leash facilitator) leave these undefined.
+      ...(receipt.price?.fee ? { fee_amount: receipt.price.fee } : {}),
+      ...(receipt.price?.gross ? { gross_amount: receipt.price.gross } : {}),
+      ...(receipt.price?.feeBps != null ? { fee_bps: receipt.price.feeBps } : {}),
+      ...(receipt.price?.feeAuthority ? { fee_authority: receipt.price.feeAuthority } : {}),
     },
   });
   if (receipt.tx_sig) await markSubmitted(deps.db, settledId, receipt.tx_sig);
   await markConfirmed(deps.db, settledId);
+
+  // Mirror the receipt-level fee event so the explorer's "Protocol
+  // fees" feed picks up paywall settlements alongside push/pull
+  // ingest. Idempotent on (network, receipt_hash).
+  await emitProtocolFeeEvent(deps.db, {
+    network,
+    receipt,
+    apiKeyId: link.apiKeyId,
+  });
 }
 
 function resolveNetwork(raw: string | undefined): SvmNetwork {

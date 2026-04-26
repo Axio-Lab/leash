@@ -55,18 +55,6 @@ import { LaunchTokenCard } from '@/components/launch-token-card';
 import { loadAgent, saveAgent, type StoredAgent } from '@/lib/agent-storage';
 import { useToast } from '@/components/ui/toast';
 
-const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
-const USDC_MAINNET = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
-
-function defaultUsdcMint(network: 'mainnet' | 'devnet' | undefined): {
-  mint: string;
-  label: string;
-} {
-  return network === 'mainnet'
-    ? { mint: USDC_MAINNET, label: 'USDC' }
-    : { mint: USDC_DEVNET, label: 'USDC (devnet)' };
-}
-
 /**
  * Cheap client-side guard for the withdraw destination input — verifies
  * the string looks like a base58-encoded Solana address (32–44 chars,
@@ -153,7 +141,20 @@ export default function AgentPage() {
 
   // ---- Spend allowance (treasury → executive SPL Approve) ----
   const toast = useToast();
-  const usdcInfo = defaultUsdcMint(balance?.network);
+  const [allowanceCurrency, setAllowanceCurrency] = React.useState<KnownStableSymbol>('USDC');
+  const allowanceToken = React.useMemo(() => {
+    const network = balance?.network ?? 'devnet';
+    const token =
+      KNOWN_TOKENS[network].find((t) => t.symbol.toUpperCase() === allowanceCurrency) ??
+      KNOWN_TOKENS[network].find((t) => t.symbol === 'USDC')!;
+    return {
+      symbol: token.symbol,
+      mint: token.mint,
+      decimals: token.decimals,
+      program: token.program,
+      label: network === 'devnet' ? `${token.symbol} (devnet)` : token.symbol,
+    };
+  }, [allowanceCurrency, balance?.network]);
   const [delegation, setDelegation] = React.useState<SpendDelegationStatus | null>(null);
   const [delegationLoading, setDelegationLoading] = React.useState(false);
   const [delegationError, setDelegationError] = React.useState<string | null>(null);
@@ -173,7 +174,10 @@ export default function AgentPage() {
     try {
       const status = await getSpendDelegation(privyUmi, {
         agentAsset: mint,
-        mint: usdcInfo.mint,
+        mint: allowanceToken.mint,
+        ...(allowanceToken.program === 'spl-token-2022'
+          ? { tokenProgram: TOKEN_2022_PROGRAM_ID }
+          : {}),
       });
       setDelegation(status);
       return status;
@@ -183,7 +187,7 @@ export default function AgentPage() {
     } finally {
       setDelegationLoading(false);
     }
-  }, [privyUmi, mint, usdcInfo.mint]);
+  }, [privyUmi, mint, allowanceToken.mint, allowanceToken.program]);
 
   /**
    * Re-read the delegation up to `maxAttempts` times with exponential
@@ -221,18 +225,21 @@ export default function AgentPage() {
     }
     const decimal = Number(allowanceDraft);
     if (!Number.isFinite(decimal) || decimal <= 0) {
-      toast.error('Invalid amount', 'Enter a positive USDC amount.');
+      toast.error('Invalid amount', `Enter a positive ${allowanceToken.symbol} amount.`);
       return;
     }
     setAllowanceBusy('set');
     setAllowanceLastSig(null);
     try {
-      const atomic = BigInt(Math.round(decimal * 1_000_000));
+      const atomic = BigInt(Math.round(decimal * 10 ** allowanceToken.decimals));
       const res = await setSpendDelegation(privyUmi, {
         agentAsset: mint,
-        mint: usdcInfo.mint,
+        mint: allowanceToken.mint,
         executive: privyWallet.address,
         amount: atomic,
+        ...(allowanceToken.program === 'spl-token-2022'
+          ? { tokenProgram: TOKEN_2022_PROGRAM_ID }
+          : {}),
       });
       setAllowanceLastSig(res.signature);
       saveAgent({
@@ -244,7 +251,7 @@ export default function AgentPage() {
         owner: localRecord?.owner ?? privyWallet.address,
         rules: localRecord?.rules ?? null,
         sourceTokenAccount: res.sourceTokenAccount,
-        fundingMint: usdcInfo.mint,
+        fundingMint: allowanceToken.mint,
         treasury: res.treasury,
         allowanceCap: atomic.toString(),
         allowanceUpdatedAt: new Date().toISOString(),
@@ -263,7 +270,7 @@ export default function AgentPage() {
         delegatedAmount: atomic,
       }));
 
-      toast.success('Allowance updated', `${allowanceDraft} ${usdcInfo.label} approved.`);
+      toast.success('Allowance updated', `${allowanceDraft} ${allowanceToken.label} approved.`);
 
       // Belt-and-braces: re-read on-chain a few times so we self-correct
       // if the RPC lagged the first time around.
@@ -324,7 +331,10 @@ export default function AgentPage() {
     try {
       const res = await revokeSpendDelegation(privyUmi, {
         agentAsset: mint,
-        mint: usdcInfo.mint,
+        mint: allowanceToken.mint,
+        ...(allowanceToken.program === 'spl-token-2022'
+          ? { tokenProgram: TOKEN_2022_PROGRAM_ID }
+          : {}),
       });
       setAllowanceLastSig(res.signature);
       saveAgent({
@@ -336,7 +346,7 @@ export default function AgentPage() {
         owner: localRecord?.owner ?? privyWallet.address,
         rules: localRecord?.rules ?? null,
         sourceTokenAccount: res.sourceTokenAccount,
-        fundingMint: usdcInfo.mint,
+        fundingMint: allowanceToken.mint,
         treasury: res.treasury,
         allowanceCap: '0',
         allowanceUpdatedAt: new Date().toISOString(),
@@ -414,12 +424,19 @@ export default function AgentPage() {
   // and is more responsive after a fresh approve/withdraw cycle.
   const withdrawBalanceUi = React.useMemo(() => {
     if (isSolWithdraw) return balance?.sol ?? 0;
-    if (withdrawToken.symbol === 'USDC' && delegation) {
+    if (withdrawToken.mint === allowanceToken.mint && delegation) {
       return Number(delegation.balance) / 10 ** withdrawToken.decimals;
     }
     const tok = balance?.tokens.find((t) => t.mint === withdrawToken.mint);
     return tok?.ui ?? 0;
-  }, [isSolWithdraw, balance?.sol, withdrawToken, delegation, balance?.tokens]);
+  }, [
+    isSolWithdraw,
+    balance?.sol,
+    withdrawToken,
+    allowanceToken.mint,
+    delegation,
+    balance?.tokens,
+  ]);
   const withdrawBalanceAtomic = React.useMemo(() => {
     if (isSolWithdraw) {
       // `/api/agents/balance` returns lamports as a string for lossless
@@ -431,7 +448,7 @@ export default function AgentPage() {
         return 0n;
       }
     }
-    if (withdrawToken.symbol === 'USDC' && delegation) return delegation.balance;
+    if (withdrawToken.mint === allowanceToken.mint && delegation) return delegation.balance;
     const tok = balance?.tokens.find((t) => t.mint === withdrawToken.mint);
     if (!tok) return 0n;
     try {
@@ -439,7 +456,14 @@ export default function AgentPage() {
     } catch {
       return 0n;
     }
-  }, [isSolWithdraw, balance?.lamports, withdrawToken, delegation, balance?.tokens]);
+  }, [
+    isSolWithdraw,
+    balance?.lamports,
+    withdrawToken,
+    allowanceToken.mint,
+    delegation,
+    balance?.tokens,
+  ]);
 
   // Default the destination to the connected (owner) wallet whenever it
   // changes. The user can still type a different address — we surface a
@@ -714,10 +738,10 @@ export default function AgentPage() {
                       const otherTokens = balance.tokens.filter(
                         (t) => !stables.includes(t) && t.ui > 0,
                       );
-                      const stablePart =
-                        stables.length > 0
-                          ? `${usdcLike.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${stables[0]?.symbol ?? 'USDC'}`
-                          : '0.00 USDC';
+                      const stablePart = `$${usdcLike.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 6,
+                      })}`;
                       const extra = otherTokens.length > 0 ? ` · +${otherTokens.length} other` : '';
                       return `${stablePart}${extra}`;
                     })()}
@@ -904,16 +928,31 @@ export default function AgentPage() {
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <KeyRound className="size-4 text-brand" /> Spend allowance ({usdcInfo.label})
+              <KeyRound className="size-4 text-brand" /> Spend allowance ({allowanceToken.label})
             </CardTitle>
             <CardDescription>
-              How much of the agent treasury your wallet (the executive) is allowed to move per x402
-              call. Re-approve to top up; revoke to lock everything down.
+              Set per-token spend caps for your executive wallet. Re-approve to top up; revoke to
+              lock spending for the selected stablecoin.
             </CardDescription>
           </div>
-          <Button variant="ghost" size="icon" onClick={refreshDelegation} title="Refresh">
-            <RefreshCw className="size-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <select
+              value={allowanceCurrency}
+              onChange={(e) => setAllowanceCurrency(e.target.value as KnownStableSymbol)}
+              className="h-8 rounded-md border border-border bg-bg-elev px-2 text-xs"
+              disabled={allowanceBusy != null}
+              title="Select token for allowance management"
+            >
+              {KNOWN_STABLE_SYMBOLS.map((sym) => (
+                <option key={sym} value={sym}>
+                  {sym}
+                </option>
+              ))}
+            </select>
+            <Button variant="ghost" size="icon" onClick={refreshDelegation} title="Refresh">
+              <RefreshCw className="size-4" />
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {!privyWallet ? (
@@ -931,11 +970,12 @@ export default function AgentPage() {
               const cap = computeCap(localRecord?.allowanceCap, remaining);
               const used = cap > remaining ? cap - remaining : 0n;
               const usedPct = cap > 0n ? Math.min(100, Number((used * 10000n) / cap) / 100) : 0;
-              const remainingUsdc = Number(remaining) / 1_000_000;
-              const balanceUsdc = Number(treasuryBalance) / 1_000_000;
-              const capUsdc = Number(cap) / 1_000_000;
-              const usedUsdc = Number(used) / 1_000_000;
-              const effectiveSpend = Math.min(remainingUsdc, balanceUsdc);
+              const tokenFactor = 10 ** allowanceToken.decimals;
+              const remainingUi = Number(remaining) / tokenFactor;
+              const balanceUi = Number(treasuryBalance) / tokenFactor;
+              const capUi = Number(cap) / tokenFactor;
+              const usedUi = Number(used) / tokenFactor;
+              const effectiveSpend = Math.min(remainingUi, balanceUi);
               const spotPriceUsdc = 0.005;
               const callsLeft = spotPriceUsdc > 0 ? Math.floor(effectiveSpend / spotPriceUsdc) : 0;
               const isPolling = allowanceBusy == null && delegationLoading && delegation != null;
@@ -948,11 +988,11 @@ export default function AgentPage() {
                         Treasury balance
                       </span>
                       <div className="font-mono text-sm">
-                        {balanceUsdc.toLocaleString(undefined, {
+                        {balanceUi.toLocaleString(undefined, {
                           minimumFractionDigits: 2,
-                          maximumFractionDigits: 6,
+                          maximumFractionDigits: allowanceToken.decimals,
                         })}{' '}
-                        {usdcInfo.label}
+                        {allowanceToken.label}
                       </div>
                       <span className="text-[10px] text-fg-subtle">
                         {delegation.sourceExists ? 'ATA initialised' : 'ATA not yet created'}
@@ -971,11 +1011,11 @@ export default function AgentPage() {
                         )}
                       </div>
                       <div className="font-mono text-sm">
-                        {remainingUsdc.toLocaleString(undefined, {
+                        {remainingUi.toLocaleString(undefined, {
                           minimumFractionDigits: 2,
-                          maximumFractionDigits: 6,
+                          maximumFractionDigits: allowanceToken.decimals,
                         })}{' '}
-                        {usdcInfo.label}
+                        {allowanceToken.label}
                       </div>
                       <span className="text-[10px] text-fg-subtle">
                         {delegation.delegate
@@ -1007,8 +1047,8 @@ export default function AgentPage() {
                           Allowance usage
                         </span>
                         <span className="font-mono text-fg-muted">
-                          {usedUsdc.toFixed(usedUsdc < 1 ? 4 : 2)} /{' '}
-                          {capUsdc.toFixed(capUsdc < 1 ? 4 : 2)} {usdcInfo.label} used
+                          {usedUi.toFixed(usedUi < 1 ? 4 : 2)} / {capUi.toFixed(capUi < 1 ? 4 : 2)}{' '}
+                          {allowanceToken.label} used
                         </span>
                       </div>
                       <div
@@ -1027,7 +1067,7 @@ export default function AgentPage() {
                         />
                       </div>
                       <span className="text-[10px] text-fg-subtle">
-                        {remainingUsdc <= 0
+                        {remainingUi <= 0
                           ? 'Cap exhausted — re-approve below to keep going.'
                           : `≈ ${callsLeft.toLocaleString()} more calls @ $${spotPriceUsdc.toFixed(3)} (or ${Math.floor(effectiveSpend / 0.05).toLocaleString()} @ $0.05) before you re-approve.`}
                       </span>
@@ -1036,7 +1076,7 @@ export default function AgentPage() {
 
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="allowance" className="text-xs">
-                      New allowance ({usdcInfo.label})
+                      New allowance ({allowanceToken.label})
                     </Label>
                     <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
                       <Input
@@ -1077,10 +1117,10 @@ export default function AgentPage() {
 
                   {delegation.sourceExists && delegation.balance === 0n && (
                     <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-[11px] text-warning leading-relaxed">
-                      Treasury holds <strong>0 {usdcInfo.label}</strong>. Send some to{' '}
+                      Treasury holds <strong>0 {allowanceToken.label}</strong>. Send some to{' '}
                       <code className="font-mono">{delegation.sourceTokenAccount}</code> (or to the
                       treasury PDA <code className="font-mono">{delegation.treasury}</code> — the
-                      ATA is auto-created on first deposit). Devnet faucet:{' '}
+                      ATA is auto-created on first deposit). Devnet faucets:{' '}
                       <a
                         href="https://faucet.circle.com/"
                         target="_blank"

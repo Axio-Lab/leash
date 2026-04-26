@@ -3,6 +3,7 @@
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
+import { applyFeeGrossUp, resolveLeashFeeBps } from '@leash/core';
 import {
   prepareRevokeSpendDelegation,
   prepareSetSpendDelegation,
@@ -37,7 +38,18 @@ export function buildDelegationRoutes(deps: {
   const setEcho = z.object({
     treasury: PubkeySchema,
     source_token_account: PubkeySchema,
+    /**
+     * The actual atomic amount the executive will be approved for. May
+     * differ from the request `amount` when `pad_for_protocol_fee=true`
+     * — see the body schema for the gross-up math.
+     */
     delegated_amount: z.string(),
+    /**
+     * The Leash protocol fee (atoms) baked into `delegated_amount` when
+     * the request opted into padding. `0` for un-padded approvals so the
+     * caller can tell the two cases apart without re-doing the math.
+     */
+    fee_padding_atoms: z.string(),
     delegate: PubkeySchema,
     will_create_ata: z.boolean(),
   });
@@ -59,6 +71,16 @@ export function buildDelegationRoutes(deps: {
                 executive: PubkeySchema,
                 amount: z.string().regex(/^\d+$/),
                 token_program: TokenProgramFlavorSchema.optional(),
+                /**
+                 * When `true`, the API gross-ups the requested `amount`
+                 * by the current Leash protocol fee rate before building
+                 * the SPL Approve. Use this on agent-creation flows so
+                 * the executive's allowance covers both the seller's net
+                 * leg AND the fee leg of every x402 call up to that
+                 * budget. Defaults to `false` for back-compat with
+                 * pre-fee callers.
+                 */
+                pad_for_protocol_fee: z.boolean().optional(),
               }),
             },
           },
@@ -85,7 +107,17 @@ export function buildDelegationRoutes(deps: {
         payer: body.payer,
         ...(body.authority ? { authority: body.authority } : {}),
       });
-      const amount = BigInt(body.amount);
+      const requested = BigInt(body.amount);
+      // Optionally gross-up the executive's allowance so it covers both
+      // the seller's net leg AND the Leash protocol fee leg on every
+      // x402 settlement, up to the requested budget. Without padding
+      // an agent set to e.g. `5 USDC` would fail the very last call
+      // because the fee leg pushes the gross past the cap.
+      const padding =
+        body.pad_for_protocol_fee === true
+          ? applyFeeGrossUp(requested, resolveLeashFeeBps()).fee
+          : 0n;
+      const amount = requested + padding;
       const prepared = await prepareSetSpendDelegation(umi, {
         agentAsset: publicKey(mint),
         mint: publicKey(body.spl_mint),
@@ -108,6 +140,7 @@ export function buildDelegationRoutes(deps: {
           treasury: prepared.treasury,
           source_token_account: prepared.sourceTokenAccount,
           delegated_amount: prepared.delegatedAmount.toString(),
+          fee_padding_atoms: padding.toString(),
           delegate: prepared.delegate,
           will_create_ata: prepared.willCreateAta,
         },

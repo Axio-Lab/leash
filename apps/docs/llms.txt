@@ -52,6 +52,7 @@
 - [Payment links](https://docs.leash.market/api/payment-links.md): Create hosted x402 payment links served at `/x/{id}` — the "Stripe Payment Link" of x402.
 - [Seller utilities](https://docs.leash.market/api/seller-utils.md): HTTP parity for the `@leash/seller-kit` helpers — networks, facilitator, parse-price, pay-to.
 - [Buyer endpoints](https://docs.leash.market/api/buyer.md): HTTP parity for `@leash/buyer-kit` — quote, policy gate, payment prepare/execute, receipt finalize/verify.
+- [Protocol fee](https://docs.leash.market/api/protocol-fee.md): The 1% Leash protocol fee on every settlement — wire shape (`extra['leash.fee']`), math, allowance gross-up, and how to enforce or relax it on a self-hosted facilitator.
 - [Treasury](https://docs.leash.market/api/treasury.md): Read SOL + SPL balances, provision stable ATAs, prepare owner-driven withdrawals.
 - [Receipts](https://docs.leash.market/api/receipts.md): Push receipts in, pull receipts out, register pull targets the indexer will poll.
 - [Indexer](https://docs.leash.market/api/indexer.md): Dual-network watchlist-driven worker that turns on-chain activity into queryable events.

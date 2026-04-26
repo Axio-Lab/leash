@@ -72,6 +72,52 @@ describe('prepare → events lifecycle', () => {
     expect(ev.agent_asset).toBe(DUMMY_AGENT_MINT);
   }, 30_000);
 
+  it('pad_for_protocol_fee gross-ups the SPL Approve by 1% (default bps)', async () => {
+    const rig = await createTestRig();
+    const res = await authedFetch(rig, `/v1/agents/${DUMMY_AGENT_MINT}/delegation/prepare`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        payer: DUMMY_PAYER,
+        spl_mint: USDC_DEVNET,
+        executive: DUMMY_EXECUTIVE,
+        amount: '1000000',
+        pad_for_protocol_fee: true,
+      }),
+    });
+    if (res.status !== 200) {
+      const text = await res.text();
+      throw new Error(`prepare failed (${res.status}): ${text}`);
+    }
+    const body = (await res.json()) as {
+      echo: { delegated_amount: string; fee_padding_atoms: string };
+      // amount_atomic on the event row mirrors `delegated_amount` so
+      // accounting / metering reports the gross figure too.
+    };
+    expect(body.echo.delegated_amount).toBe('1010000');
+    expect(body.echo.fee_padding_atoms).toBe('10000');
+  }, 30_000);
+
+  it('omitting pad_for_protocol_fee leaves the request amount intact', async () => {
+    const rig = await createTestRig();
+    const res = await authedFetch(rig, `/v1/agents/${DUMMY_AGENT_MINT}/delegation/prepare`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        payer: DUMMY_PAYER,
+        spl_mint: USDC_DEVNET,
+        executive: DUMMY_EXECUTIVE,
+        amount: '1000000',
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      echo: { delegated_amount: string; fee_padding_atoms: string };
+    };
+    expect(body.echo.delegated_amount).toBe('1000000');
+    expect(body.echo.fee_padding_atoms).toBe('0');
+  }, 30_000);
+
   it('rejects mainnet event lookups with a devnet key', async () => {
     const rig = await createTestRig();
     // Create an event row directly in the DB on mainnet.

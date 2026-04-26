@@ -19,13 +19,17 @@
  */
 
 import { x402Facilitator } from '@x402/core/facilitator';
-import { registerExactSvmScheme } from '@x402/svm/exact/facilitator';
-import { ExactSvmSchemeV1 } from '@x402/svm/exact/v1/facilitator';
 import type { Network } from '@x402/core/types';
 import { SOLANA_DEVNET_CAIP2, SOLANA_MAINNET_CAIP2, SOLANA_TESTNET_CAIP2 } from '@x402/svm';
+import {
+  resolveLeashFeeAuthority,
+  resolveLeashFeeBps,
+  resolveLeashFeeEnforcement,
+} from '@leash/core';
 import type { Hono } from 'hono';
 
 import { createFacilitatorHttpServer } from './http/server.js';
+import { registerLeashExactSvmScheme } from './schemes/index.js';
 import {
   buildFacilitatorSigner,
   type LeashFacilitatorSignerOptions,
@@ -101,18 +105,49 @@ export async function createLeashFacilitator(
   const signer = await buildFacilitatorSigner(opts);
 
   const facilitator = new x402Facilitator();
-  // V2 (current) — uses the helper that auto-derives the wildcard pattern.
-  registerExactSvmScheme(facilitator, { signer: signer.signer, networks: networkArg });
-  // V1 (back-compat) — register the scheme class directly. Older buyer-kits
-  // that haven't migrated to the v2 client will still reach us.
-  facilitator.registerV1(networkArg, new ExactSvmSchemeV1(signer.signer));
+  // The Leash registrar handles BOTH v2 and v1 wire shapes, so we no
+  // longer call the upstream `registerExactSvmScheme` + `registerV1`
+  // separately. Both versions share a settlement cache internally so a
+  // buyer can't double-settle by hopping protocol versions.
+  registerLeashExactSvmScheme(facilitator, { signer: signer.signer, networks: networkArg });
 
   const app = createFacilitatorHttpServer({
     facilitator,
     signerAddresses: signer.addresses,
     networks,
     build: LEASH_FACILITATOR_BUILD,
+    protocolFee: buildProtocolFeeHealthBlock(slugs),
   });
 
   return { app, facilitator, signer, caip2Networks: networks };
+}
+
+/**
+ * Snapshot of the protocol-fee config used at startup. Surfaced on
+ * `/health` so operators can confirm a deploy is in `enforce` mode
+ * without grepping logs. Each enabled network gets its own block so a
+ * single facilitator running both devnet + mainnet can advertise the
+ * (possibly different) enforcement modes.
+ */
+function buildProtocolFeeHealthBlock(slugs: readonly LeashNetworkSlug[]): {
+  bps: number;
+  networks: Record<string, { enforce: string; authority: string }>;
+} {
+  const bps = resolveLeashFeeBps();
+  const networks: Record<string, { enforce: string; authority: string }> = {};
+  for (const slug of slugs) {
+    if (slug === 'mainnet') {
+      networks.mainnet = {
+        enforce: resolveLeashFeeEnforcement('mainnet'),
+        authority: resolveLeashFeeAuthority('mainnet'),
+      };
+    } else if (slug === 'devnet' || slug === 'testnet') {
+      // Testnet shares the devnet authority/enforcement today.
+      networks[slug] = {
+        enforce: resolveLeashFeeEnforcement('devnet'),
+        authority: resolveLeashFeeAuthority('devnet'),
+      };
+    }
+  }
+  return { bps, networks };
 }

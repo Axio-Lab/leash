@@ -2,13 +2,17 @@ import type { Hono } from 'hono';
 import type { Context as UmiContext } from '@metaplex-foundation/umi';
 import type { ReceiptV1 } from '@leash/schemas';
 import {
+  buildLeashFeeExtra,
+  computeFeeAtoms as computeFeeAtomsHelper,
   finalizeReceipt,
   KNOWN_STABLE_SYMBOLS,
   lookupTokenBySymbol,
   networkFromCaip2,
+  parseLeashFeeExtra,
   paymentRequirementsHash,
   requestHash,
   type KnownStableSymbol,
+  type LeashFeeExtra,
   type TokenNetwork,
 } from '@leash/core';
 import { paymentMiddlewareFromHTTPServer } from '@x402/hono';
@@ -223,11 +227,31 @@ export function createSeller(app: Hono, opts: CreateSellerOptions): Seller {
       lookupTokenBySymbol('USDC', tokenNetwork)?.mint === requirements.asset
         ? 'USDC'
         : (lookupCurrencyBySymbol(requirements.asset, tokenNetwork) ?? route?.currency ?? 'USDC');
+    // Enrich the receipt's price with protocol-fee context when the
+    // settled requirements carry an `extra['leash.fee']` block. We
+    // compute the atomic fee + gross from the seller's net amount + bps
+    // (same logic as the buyer scheme + facilitator), so explorers can
+    // render `gross / fee / net` without re-deriving anything. Vanilla
+    // x402 settlements (no fee block) keep the slim shape.
+    const feeExtra = parseLeashFeeExtra(
+      (requirements.extra ?? null) as Record<string, unknown> | null,
+    );
+    const netAtomic = BigInt(requirements.amount);
+    const feeAtomic = feeExtra ? computeFeeAtomsHelper(netAtomic, feeExtra.bps) : 0n;
+    const grossAtomic = netAtomic + feeAtomic;
     const enrichedPrice: ReceiptV1['price'] = {
       amount: requirements.amount,
       currency: settledCurrency,
       network: networkFromCaip2(networkCaip2) ?? sellerNetwork,
       asset: requirements.asset,
+      ...(feeExtra
+        ? {
+            fee: feeAtomic.toString(),
+            gross: grossAtomic.toString(),
+            feeBps: feeExtra.bps,
+            feeAuthority: feeExtra.feeAuthority,
+          }
+        : {}),
     };
     await emitEarnReceipt({
       state,
@@ -289,6 +313,12 @@ function buildAccepts(args: {
   extraCurrencies: KnownStableSymbol[];
 }): PaymentOption[] {
   const all = uniq<KnownStableSymbol>([args.currency, ...args.extraCurrencies]);
+  // One-shot fee descriptor reused across every accepts[] entry. Bps +
+  // authority are the same for the whole route — only the destination
+  // ATA differs per asset, and that's derived buyer/facilitator-side
+  // from `(asset, tokenProgram, authority)` so it never lives on the
+  // wire.
+  const leashFee: LeashFeeExtra = buildLeashFeeExtra({ network: args.tokenNetwork });
   return all.map((currency) => {
     const parsed = parsePrice(args.priceString, {
       network: args.tokenNetwork,
@@ -299,11 +329,15 @@ function buildAccepts(args: {
         `Invalid price "${args.priceString}" for currency ${currency} on ${args.tokenNetwork}.`,
       );
     }
+    // `extra['leash.fee']` rides along inside the `AssetAmount.extra`
+    // bag and surfaces on `paymentRequirements.extra` at 402 time. The
+    // x402 SDK forwards arbitrary extras through verbatim, so the
+    // buyer-kit / facilitator can read it without touching this layer.
     return {
       scheme: 'exact',
       network: args.networkCaip2 as PaymentOption['network'],
       payTo: args.payTo,
-      price: { asset: parsed.asset!, amount: parsed.amount, extra: {} },
+      price: { asset: parsed.asset!, amount: parsed.amount, extra: { 'leash.fee': leashFee } },
     };
   });
 }

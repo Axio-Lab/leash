@@ -11,6 +11,7 @@ const VARIANT_CLS: Record<EventDescriptor['variant'], string> = {
   receipt: 'bg-[oklch(0.32_0.14_320_/_0.5)] text-[oklch(0.85_0.14_320)]',
   'payment-link': 'bg-[oklch(0.32_0.13_30_/_0.5)] text-[oklch(0.88_0.15_40)]',
   buyer: 'bg-[oklch(0.32_0.12_260_/_0.5)] text-[oklch(0.85_0.14_260)]',
+  'protocol-fee': 'bg-[oklch(0.32_0.16_85_/_0.55)] text-[oklch(0.9_0.18_95)]',
 };
 
 export function EventBadge({

@@ -119,13 +119,33 @@ pnpm --filter @leash/merged-demo start
 
 ## Configuration
 
-| Env var                        | Default        | Description                                                                                                       |
-| ------------------------------ | -------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `LEASH_FACILITATOR_SECRET_KEY` | _required_     | Solana 64-byte secret. Either a JSON byte array (Solana CLI export) or a base58 string (Phantom/Solflare export). |
-| `LEASH_FACILITATOR_NETWORKS`   | `devnet`       | Comma list. Allowed: `devnet`, `testnet`, `mainnet`.                                                              |
-| `LEASH_FACILITATOR_PORT`       | `8787`         | HTTP port.                                                                                                        |
-| `LEASH_FACILITATOR_HOST`       | `0.0.0.0`      | Bind address.                                                                                                     |
-| `LEASH_FACILITATOR_RPC_URL`    | _kit defaults_ | Override the RPC URL used for ALL networks.                                                                       |
+| Env var                        | Default                                          | Description                                                                                                                  |
+| ------------------------------ | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `LEASH_FACILITATOR_SECRET_KEY` | _required_                                       | Solana 64-byte secret. Either a JSON byte array (Solana CLI export) or a base58 string (Phantom/Solflare export).            |
+| `LEASH_FACILITATOR_NETWORKS`   | `devnet`                                         | Comma list. Allowed: `devnet`, `testnet`, `mainnet`.                                                                         |
+| `LEASH_FACILITATOR_PORT`       | `8787`                                           | HTTP port.                                                                                                                   |
+| `LEASH_FACILITATOR_HOST`       | `0.0.0.0`                                        | Bind address.                                                                                                                |
+| `LEASH_FACILITATOR_RPC_URL`    | _kit defaults_                                   | Override the RPC URL used for ALL networks.                                                                                  |
+| `LEASH_FEE_BPS`                | `100`                                            | Protocol fee rate in basis points (`100` = 1.00%). Set to `0` to disable the fee leg entirely.                               |
+| `LEASH_FEE_ENFORCE`            | `enforce`                                        | `enforce` rejects bad/missing fee legs. `warn` logs them but still settles. `off` skips fee verification (vanilla x402).     |
+| `LEASH_FEE_AUTHORITY_MAINNET`  | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`   | Pubkey that receives the mainnet fee leg. Override only if running your own facilitator with your own treasury.              |
+| `LEASH_FEE_AUTHORITY_DEVNET`   | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`   | Same, for devnet.                                                                                                            |
+
+The Leash protocol fee block is published on `/health`:
+
+```bash
+$ curl -sS http://localhost:8787/health | jq .protocol_fee
+{
+  "bps": 100,
+  "enforcement": "enforce",
+  "authority": "3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W"
+}
+```
+
+Buyer SDKs poll this on boot and refuse to settle if their locally
+computed `feeAuthority` disagrees with what the facilitator publishes.
+See [Protocol fee](/api/protocol-fee) for the full wire shape, math
+worked examples, and self-host guidance.
 
 ## Going to mainnet
 
@@ -149,11 +169,13 @@ The CLI prints a `WARNING` line when mainnet is enabled. Heed it.
 `x402Facilitator` from `@x402/core` (which knows the protocol) and
 `ExactSvmScheme`/`ExactSvmSchemeV1` from `@x402/svm` (which know how to
 build, verify, and submit Solana token transfers). The Leash-specific
-parts are: env-driven config (`LEASH_FACILITATOR_*`), a base58
-secret-key decoder so you can paste a Phantom export verbatim, and a
-`/health` endpoint that reports the fee-payer addresses for monitoring.
-Total dependency footprint stays under what `@leash/seller-kit`
-already pulls in.
+parts are: env-driven config (`LEASH_FACILITATOR_*` + `LEASH_FEE_*`),
+a base58 secret-key decoder so you can paste a Phantom export verbatim,
+the [`LeashExactSvmFacilitator`](/api/protocol-fee) verification
+wrappers that enforce the 1% protocol fee leg, and a `/health` endpoint
+that reports both the fee-payer addresses and the live `protocol_fee`
+block for monitoring. Total dependency footprint stays under what
+`@leash/seller-kit` already pulls in.
 
 ## Roadmap
 

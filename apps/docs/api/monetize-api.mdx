@@ -140,7 +140,10 @@ hosted paywall.
 
 [`@leash/seller-kit`](/sdk/seller-kit) exposes `createSeller(app,
 options)` — real `@x402/hono` middleware, Asset Signer PDA as `payTo`,
-optional receipt POST to the Leash API when both env vars are set.
+and **implicit** receipt fan-out to the Leash API when both env vars are
+set and you **omit** a custom `onReceipt` callback (same rules as
+[`@leash/buyer-kit`](/sdk/buyer-kit): a function passed as `onReceipt`
+replaces the default sink entirely).
 
 ```ts
 import { Hono } from 'hono';
@@ -169,11 +172,14 @@ app.get('/quote', (c) => c.json({ pair: 'SOL/USD', price: 142.71 }));
 provision + balances ping). Skipping provisioning does not block every
 settle, but treasury **fund** lines on the explorer may never appear.
 
-**How forwarding works:** when `LEASH_API_URL` and `LEASH_API_KEY` are
-set, seller-kit's `onReceipt` hook POSTs each settled `ReceiptV1` to
+**How forwarding works:** when `onReceipt` is **undefined** (as in the
+snippet above) and `LEASH_API_URL` plus `LEASH_API_KEY` are set, the
+**default receipt sink** POSTs each settled `ReceiptV1` to
 `POST /v1/receipts/{agent}` on the API. That ingests the row, emits
 `receipt.published`, and joins the explorer timeline. Omit those env
-vars and receipts stay local (`receipts: false` is explicit opt-out).
+vars and nothing is forwarded to the API (only runner, if
+`LEASH_RUNNER_URL` is set). Pass `onReceipt: false` to disable publishing
+entirely, even when env vars are present.
 
 ## Edge mode (any language)
 
@@ -188,7 +194,12 @@ first.
 ### Option B — buyer HTTP utilities
 
 For a true 402 dance on a URL you control, the
-[buyer endpoints](/api/buyer) mirror `@leash/buyer-kit`:
+[buyer endpoints](/api/buyer) mirror `@leash/buyer-kit` **but execute on
+Leash’s servers**: your server calls `api.leash.market` with your API key,
+and **`POST /v1/buyer/payment/execute`** finalises the spend receipt **inside
+the API** — so explorer / `receipt.published` do **not** depend on
+`LEASH_API_URL` in your buyer process (unlike a Node app that uses
+`createBuyer` with the default sink and no custom `onReceipt`).
 
 ```bash
 curl -sS -X POST https://api.leash.market/v1/buyer/quote \
@@ -220,6 +231,36 @@ For seller-side helpers without Node (`networks`, `facilitator`,
 
 Automated **refunds / cashback** are on the [roadmap](/api/roadmap) (not
 shipped yet). Until then, use owner withdraw to move stables manually.
+
+## What you owe — the 1% Leash protocol fee
+
+Every settlement routed through a Leash facilitator (devnet or mainnet
+hosted, or any self-hosted facilitator running `@leash/facilitator`)
+adds a **second `TransferChecked`** for the same mint to the Leash fee
+treasury. The math is unconditional and visible in the buyer's signed
+transaction:
+
+- The seller is **always quoted net.** The price you set on the link or
+  in `createSeller` is exactly what lands in your `payTo` ATA.
+- The buyer pays `gross = amount + fee`, where `fee = ceil(amount *
+  100 / 10_000)` — `1.00%` ceiling-rounded in atoms.
+- The fee leg targets a Leash-owned wallet identical on both clusters:
+  `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`. Verify it live on
+  `GET /v1/health` (`protocol_fee.authorities`).
+- Receipts (`earn` _and_ `spend`) carry the breakdown:
+  `price.amount`, `price.fee`, `price.gross`, `price.feeBps`,
+  `price.feeAuthority`. The explorer surfaces this as a "Settlement
+  breakdown" panel and aggregates collected fees per mint under
+  `protocol.fee.collected` events.
+- Sellers stamp `paymentRequirements.extra['leash.fee']` on the 402 so
+  buyers can verify the rate _before_ signing. Vanilla x402
+  facilitators (no Leash semantics on `/health`) settle for `amount`
+  flat — the fee leg is only enforced when the facilitator advertises
+  it.
+
+For the wire shape, math worked examples, allowance gross-up guidance,
+and the `LEASH_FEE_*` env knobs, see
+[Protocol fee](/api/protocol-fee).
 
 ## Which shape should I pick?
 

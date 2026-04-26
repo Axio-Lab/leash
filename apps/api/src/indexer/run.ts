@@ -191,7 +191,13 @@ export async function runIndexerTick(args: {
           continue;
         }
         if (!tx) continue;
-        const treasuryForAgent = treasuryByAgent.get(watch.agentAsset);
+        // For `leash_fee_ata` rows the `agent_asset` column carries
+        // the fee authority pubkey (the SPL owner of the fee ATA),
+        // not a real mpl-core asset. We pass it through as
+        // `treasuryAddress` so the decoder's delta keying matches
+        // the on-chain `tokenBalanceDeltas[].owner` field.
+        const treasuryForAgent =
+          watch.kind === 'leash_fee_ata' ? watch.agentAsset : treasuryByAgent.get(watch.agentAsset);
         const events = decodeTransaction(tx, {
           watchedAddress: watch.address,
           watchedKind: watch.kind as WatchKind,

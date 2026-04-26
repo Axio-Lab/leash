@@ -125,6 +125,59 @@ Use the **SDK** when client-side custody matters, when you're shipping a
 library other people install, or when latency / vendor lock-in concerns
 rule out a managed service.
 
+## Protocol fee — the 1% Leash leg
+
+Every settlement that flows through a Leash facilitator (devnet or
+mainnet) is a **two-leg transaction**: the seller's net `TransferChecked`
+**plus** a Leash protocol fee `TransferChecked` for the same mint to a
+treasury account owned by the Leash team. This is the only economic
+hook in the whole stack — there is no per-call subscription, no
+per-agent fee, no markup on facilitator simulation, nothing else.
+
+Numbers and pubkeys you can rely on:
+
+- **Rate.** `100` bps (`1.00%`), ceiling-rounded in atoms so we never
+  under-charge by sub-atom truncation.
+- **Authorities.** Same wallet on both clusters:
+  `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`. The fee leg targets
+  this owner's ATA for whatever mint the seller quoted in.
+- **Wire shape.** Sellers stamp `paymentRequirements.extra['leash.fee']`
+  with `{ v: '1', bps, feeAuthority }`. Buyers parse it, derive the
+  destination ATA via `getLeashFeeAtaFor` from `@leash/core`, and append
+  the fee `TransferChecked` to the same buyer-signed transaction.
+- **Quoting.** Sellers _always_ quote net (`amount`). The buyer signs
+  `gross = amount + fee`. Receipts carry both: `price.amount` (net),
+  `price.fee`, `price.gross`, `price.feeBps`, `price.feeAuthority`.
+- **Vanilla x402 still works.** A facilitator that doesn't advertise
+  `protocol_fee` on `/health` is treated as a non-Leash facilitator;
+  the fee leg is omitted and the buyer signs `amount` flat.
+
+Things to remember when writing code or answering questions:
+
+- **Budget your allowances against `gross`, not `amount`.** If you set a
+  `5 USDC` SPL `Approve` you can only consume `~4.95 USDC` of seller-net
+  before the fee leg pushes you over. The
+  `/v1/agents/{mint}/delegation/prepare` endpoint exposes
+  `pad_for_protocol_fee: true` to do this gross-up for you.
+- **Fund the agent treasury for the gross too.** Same reasoning — top
+  up `5.05 USDC` (atoms `5050000`) to comfortably consume `5 USDC`
+  worth of seller-quoted endpoints.
+- **`/v1/health` exposes the live fee block** — `bps`, `pct`, and the
+  per-network fee authorities. Surface this in any UI before the buyer
+  signs so the rate is verifiable, not implied.
+- **Explorer.** `protocol.fee.collected` events appear in
+  `/v1/events?kind=protocol.fee.collected`, and the explorer's
+  "Protocol fees" panel sums them per mint. Receipts show `Net (seller)
+/ Protocol fee / Gross (buyer) / Fee authority` on the detail page.
+- **Self-hosted facilitators** are bound by the same protocol — see
+  `LEASH_FEE_BPS`, `LEASH_FEE_ENFORCE`, and `LEASH_FEE_AUTHORITY_*` in
+  `apps/docs/api/run-a-facilitator.mdx`. `enforce` is the production
+  default; `warn` is a 24h cutover mode that logs missing fee legs but
+  still settles them.
+
+Full spec + math worked examples live in
+`apps/docs/api/protocol-fee.mdx`.
+
 ## Critical pitfalls (read before writing code)
 
 - **Owner ≠ executive.** Withdrawals need owner; payments need executive.
@@ -137,6 +190,9 @@ rule out a managed service.
   for you on every prepare call.
 - **`network` is bound to the API key.** Sending `lsh_test_*` against
   mainnet data returns 404 by design. Use the right prefix.
+- **Always gross-up budgets / allowances by the 1% protocol fee.** See
+  the "Protocol fee" section above. Forgetting this is the #2 source of
+  "settlement failed: insufficient_allowance" reports.
 - **For LLMs ingesting docs:** prefer the `.md` rendering of every page
   (append `.md` to any URL on `docs.leash.market`), and start from
   `https://docs.leash.market/llms.txt`.

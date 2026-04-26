@@ -24,7 +24,9 @@ devnet, `lsh_live_*` → mainnet).
 
 ### Health & meta
 
-- `GET /v1/health`
+- `GET /v1/health` — also returns a `protocol_fee` block:
+  `{ bps, pct, authorities: { 'solana-mainnet', 'solana-devnet' } }`.
+  Mirrors the same block on `@leash/facilitator` `/health`.
 - `GET /v1/version`
 - `GET /openapi.json`
 
@@ -44,7 +46,7 @@ Poll `GET /v1/events/{id}` until `phase === 'confirmed'`.
 Prepare routes (mirror SDK `prepare*` helpers):
 
 - `POST /v1/agents/prepare`
-- `POST /v1/agents/{mint}/delegation/prepare` → SPL `Approve` to executive.
+- `POST /v1/agents/{mint}/delegation/prepare` → SPL `Approve` to executive. Pass `pad_for_protocol_fee: true` to gross-up the allowance by the live Leash fee bps; the response echo includes `fee_padding_atoms` so the caller can audit.
 - `POST /v1/agents/{mint}/treasury/provision/prepare` → idempotent ATA create.
 - `POST /v1/agents/{mint}/treasury/withdraw/prepare`
 - `POST /v1/agents/{mint}/treasury/withdraw-all/prepare`
@@ -107,7 +109,14 @@ Submit:
 
 Common `kind`s: `prepared`, `submitted`, `confirmed`, `failed`,
 `receipt.published`, `receipt.pulled`, `payment_link.served`,
-`payment_link.settled`, `treasury.funded`, `treasury.withdrawn`.
+`payment_link.settled`, `treasury.funded`, `treasury.withdrawn`,
+`protocol.fee.collected`.
+
+`protocol.fee.collected` is emitted exactly once per settled `earn`
+receipt that carries `price.fee` (and once per on-chain fee inflow when
+the indexer sees the fee ATA receive funds). Metadata always includes
+`{ fee_amount, gross_amount, net_amount, fee_bps, fee_authority,
+currency, asset, receipt_hash, tx_sig? }`.
 
 ### Webhooks
 
@@ -145,6 +154,10 @@ Common `kind`s: `prepared`, `submitted`, `confirmed`, `failed`,
 | `LEASH_FACILITATOR_SECRET_KEY`        | Facilitator | Solana keypair (JSON byte array OR base58). MUST be separate from any buyer key.                                                                    |
 | `LEASH_FACILITATOR_NETWORKS`          | Facilitator | Comma list. Devnet only in v0.1.                                                                                                                    |
 | `LEASH_FACILITATOR_PORT/HOST/RPC_URL` | Facilitator | HTTP listener + RPC override.                                                                                                                       |
+| `LEASH_FEE_BPS`                       | Facilitator | Override the protocol fee rate (default `100` = 1.00%). Set on the API server too if you self-host.                                                 |
+| `LEASH_FEE_ENFORCE`                   | Facilitator | `enforce` (default), `warn`, or `off`. Controls whether a missing or malformed fee leg is rejected, logged, or silently accepted.                   |
+| `LEASH_FEE_AUTHORITY_MAINNET`         | Facilitator | Override the mainnet fee authority pubkey (default `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`). API server reads the same env.                  |
+| `LEASH_FEE_AUTHORITY_DEVNET`          | Facilitator | Same, for devnet.                                                                                                                                   |
 | `LEASH_RECEIPTS_URL`                  | SDK         | Override the auto-injected `services.receipts.endpoint` on new agents.                                                                              |
 | `LEASH_NO_RECEIPTS_URL=1`             | SDK         | Skip the auto-inject entirely (self-host).                                                                                                          |
 
@@ -191,6 +204,16 @@ Frequent codes:
 - **"My `e2e-devnet.ts` doesn't update fund/withdraw on the explorer but `withdraw.ts` does."** The e2e script bypasses the API; the explorer indexer only sees activity for watchlisted agents. Add a one-line API call (any `prepare*` works) to enrol the agent, or run the dedicated scripts.
 - **"Local facilitator rejects my settle."** The facilitator's `LEASH_FACILITATOR_SECRET_KEY` MUST be a different keypair from the buyer-side signer. Generate one with `solana-keygen new -o .leash-fee-payer.json`, fund 0.05 SOL, restart.
 - **"Token-2022 (USDG) transfers fail."** Use `TOKEN_2022_PROGRAM_ID`, not `TOKEN_PROGRAM_ID`. The seller/buyer kits handle this; raw SPL calls don't.
+- **"My agent runs out of allowance one call early."** You forgot the
+  1% Leash protocol fee — the buyer signs `gross = amount + fee`, not
+  `amount`. Re-approve via `/v1/agents/{mint}/delegation/prepare` with
+  `pad_for_protocol_fee: true`, or compute the gross-up yourself via
+  `applyFeeGrossUp` from `@leash/core`. Same fix applies to "treasury
+  balance is short by ~1%".
+- **"Where do my fees go?"** A single Leash-owned wallet on both
+  clusters: `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`. Confirm via
+  `GET /v1/health` (`protocol_fee.authorities`) before signing. Fee
+  inflows show up as `protocol.fee.collected` events in the explorer.
 
 ## Where the canonical docs live
 

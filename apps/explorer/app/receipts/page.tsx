@@ -1,4 +1,9 @@
-import { DbUnavailableError, getCounterpartiesForTxs, listRecentReceipts } from '@/lib/db';
+import {
+  DbUnavailableError,
+  getCounterpartiesForTxs,
+  listProtocolFeeTotals,
+  listRecentReceipts,
+} from '@/lib/db';
 import type { ReceiptPage, ReceiptRow } from '@/lib/types';
 import type { Network } from '@/lib/network';
 import { getNetwork } from '@/lib/server-network';
@@ -6,6 +11,7 @@ import { networkToSlug } from '@/lib/network';
 import { ReceiptsTable } from '@/components/receipts-table';
 import { DbUnreachable } from '@/components/empty';
 import { LiveRefresh } from '@/components/live-refresh';
+import { formatTokenAmount, tokenInfoFor } from '@/lib/token-info';
 
 /** Best-effort counterparty join: never fails the page render. */
 async function loadCounterparties(network: Network, rows: ReceiptRow[]) {
@@ -88,6 +94,8 @@ export default async function ReceiptsPage({ searchParams }: Props) {
         })}
       </nav>
 
+      <ProtocolFeesPanel network={network} />
+
       {res.ok ? (
         <>
           <ReceiptsTable
@@ -113,5 +121,53 @@ export default async function ReceiptsPage({ searchParams }: Props) {
         <DbUnreachable network={network} message={res.message} />
       )}
     </div>
+  );
+}
+
+/**
+ * Protocol fee revenue summary, grouped by mint. Renders nothing when
+ * no `protocol.fee.collected` events have landed yet on this network
+ * — keeps the page clean for fresh deploys / local dev.
+ */
+async function ProtocolFeesPanel({ network }: { network: Network }) {
+  let totals: Awaited<ReturnType<typeof listProtocolFeeTotals>>;
+  try {
+    totals = await listProtocolFeeTotals(network);
+  } catch {
+    return null;
+  }
+  if (totals.length === 0) return null;
+
+  return (
+    <section className="rounded-lg border border-[--color-border] bg-[--color-bg-elev] px-4 py-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold">Protocol fees collected</h2>
+        <span className="text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">
+          {networkToSlug(network)}
+        </span>
+      </div>
+      <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {totals.map((t, i) => {
+          const info = tokenInfoFor(network, t.mint);
+          const formatted = formatTokenAmount(t.totalAtomic, info);
+          return (
+            <li
+              key={`${t.mint ?? 'native'}-${i}`}
+              className="flex items-center justify-between rounded-md bg-[oklch(0.18_0.02_280)] px-3 py-2 text-xs"
+            >
+              <span className="text-[--color-fg-muted]">
+                {info.symbol ?? t.currency ?? 'unknown'}
+              </span>
+              <span className="text-right">
+                <div className="font-mono text-sm text-[--color-fg]">{formatted}</div>
+                <div className="text-[10px] text-[--color-fg-subtle]">
+                  {t.count} settled call{t.count === 1 ? '' : 's'}
+                </div>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

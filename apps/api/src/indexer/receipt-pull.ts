@@ -20,6 +20,7 @@ import type { DbClient } from '../storage/turso.js';
 import { execute } from '../storage/turso.js';
 import { ingestReceipt, listPullTargets } from '../storage/receipts.js';
 import { createPreparedEvent, markConfirmed } from '../storage/events.js';
+import { emitProtocolFeeEvent } from '../storage/fee-events.js';
 import type { SvmNetwork } from '../util/network.js';
 import type { FetchLike } from './rpc.js';
 
@@ -110,6 +111,13 @@ export async function runReceiptPullTick(args: {
             },
           });
           await markConfirmed(args.db, eventId);
+          // Mirror push-ingest behaviour: emit `protocol.fee.collected`
+          // when the pulled receipt is a settled earn carrying a fee.
+          await emitProtocolFeeEvent(args.db, {
+            network: args.network,
+            receipt: parsed.data,
+            log,
+          });
         }
       }
       await execute(

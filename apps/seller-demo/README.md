@@ -80,3 +80,28 @@ export LEASH_FACILITATOR_URL=http://localhost:8787
 The seller-kit reads this env on startup and persists the resolved URL
 into every `earn` ReceiptV1 (`receipt.facilitator_url`) so explorers
 can independently re-verify the on-chain settlement.
+
+### Pricing under the 1% Leash protocol fee
+
+`@leash/seller-kit` always **quotes you the net** — the price you set
+when you wired the middleware is exactly what lands in your `payTo` ATA
+on every settlement. The Leash facilitator gross-ups the buyer's signed
+transaction with a second `TransferChecked` for the protocol fee, so
+the buyer pays `amount + fee` while you pocket `amount`.
+
+What that means for this demo:
+
+- The price you advertise on `POST /tag` (e.g. `0.01 USDC`) is the
+  **seller-net price**. No extra config required.
+- The 402 response stamps `extra['leash.fee']` so buyers know the rate
+  before they sign — this is what makes the gross-up agreed-upon
+  rather than facilitator-imposed.
+- Every emitted `earn` `ReceiptV1` includes `price.fee`, `price.gross`,
+  `price.feeBps`, and `price.feeAuthority` so the runner / explorer can
+  reconcile your earnings against on-chain fee inflows.
+- Vanilla x402 callers (no Leash facilitator in the loop) still settle
+  for `amount` flat — the fee leg is only enforced when the
+  facilitator advertises Leash semantics on `/health`.
+
+See [`apps/docs/api/protocol-fee.mdx`](../../apps/docs/api/protocol-fee.mdx)
+for the wire-shape spec and `LEASH_FEE_ENFORCE` cutover guidance.

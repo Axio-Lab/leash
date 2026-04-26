@@ -5,6 +5,7 @@ import {
   _resetDiscoveryCacheForTests,
   ensureWatched,
   ensureWatchedAta,
+  ensureWatchedFeeAta,
   getCursor,
   listWatchlist,
   runIndexerTick,
@@ -529,6 +530,113 @@ describe('indexer', () => {
     expect(r.addressesScanned).toBe(0);
     const wl = await listWatchlist(rig.db, 'solana-mainnet');
     expect(wl).toHaveLength(0);
+  });
+
+  it('decodes positive SPL inflows on a `leash_fee_ata` watch as protocol.fee.collected', async () => {
+    // The fee-ata branch is the on-chain fallback: even if the seller
+    // never POSTs a receipt, an inflow to the configured Leash fee
+    // authority's ATA should still surface in the explorer's
+    // "Protocol fees collected" feed.
+    const rig = await createTestRig();
+    const FEE_AUTHORITY = '3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W';
+    const FEE_ATA = 'GfeeAtaUsdcDevnet111111111111111111111111111';
+    await ensureWatchedFeeAta(rig.db, {
+      network: 'solana-devnet',
+      feeAuthority: FEE_AUTHORITY,
+      ataAddress: FEE_ATA,
+    });
+
+    const sigs: RpcSignature[] = [{ signature: 'sigFeeIn', slot: 600, blockTime: null, err: null }];
+    const txsBySig: Record<string, RpcParsedTransaction> = {
+      sigFeeIn: tx({
+        signature: 'sigFeeIn',
+        programIds: [SPL_TOKEN_PROGRAM_ID],
+        accountKeys: [PAYER, FEE_ATA, USDC, SPL_TOKEN_PROGRAM_ID],
+        logs: [
+          `Program ${SPL_TOKEN_PROGRAM_ID} invoke [1]`,
+          'Program log: Instruction: TransferChecked',
+          `Program ${SPL_TOKEN_PROGRAM_ID} success`,
+        ],
+        tokenBalanceDeltas: [
+          { owner: PAYER, mint: USDC, delta: '-10000' },
+          { owner: FEE_AUTHORITY, mint: USDC, delta: '10000' },
+        ],
+      }),
+    };
+    const rpc = makeStubRpc({
+      sigsByAddress: { [FEE_ATA]: sigs },
+      txsBySig,
+    });
+
+    const r = await runIndexerTick({ db: rig.db, rpc, network: 'solana-devnet' });
+    expect(r.eventsWritten).toBe(1);
+
+    const all = await listEvents(rig.db, {
+      kind: 'protocol.fee.collected',
+      network: 'solana-devnet',
+      limit: 10,
+    });
+    expect(all.length).toBe(1);
+    const ev = all[0]!;
+    expect(ev.amountAtomic).toBe('10000');
+    expect(ev.mint).toBe(USDC);
+    expect(ev.signature).toBe('sigFeeIn');
+    expect(ev.metadata['fee_authority']).toBe(FEE_AUTHORITY);
+    expect(ev.metadata['fee_ata']).toBe(FEE_ATA);
+    // The chain-event writer stamps `source: 'indexer'` over whatever
+    // the decoder set, so the explorer can tell on-chain rows apart
+    // from receipt-side ingestion.
+    expect(ev.metadata['source']).toBe('indexer');
+    // Crucially: NO treasury.fund event was minted for the fee leg.
+    const fund = (await listEvents(rig.db, { network: 'solana-devnet', limit: 50 })).find(
+      (e) => e.kind === 'agent.treasury.fund',
+    );
+    expect(fund).toBeUndefined();
+  });
+
+  it('does not emit protocol.fee.collected when the fee authority has no positive delta', async () => {
+    const rig = await createTestRig();
+    const FEE_AUTHORITY = '3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W';
+    const FEE_ATA = 'GfeeAtaUsdcDevnet222222222222222222222222222';
+    await ensureWatchedFeeAta(rig.db, {
+      network: 'solana-devnet',
+      feeAuthority: FEE_AUTHORITY,
+      ataAddress: FEE_ATA,
+    });
+    const sigs: RpcSignature[] = [
+      { signature: 'sigFeeNeg', slot: 601, blockTime: null, err: null },
+    ];
+    const txsBySig: Record<string, RpcParsedTransaction> = {
+      // Outflow from the fee authority — must not register as a fee
+      // collection. (The withdraw path is intentionally out of scope
+      // for the explorer's fee feed; treasury operations are tracked
+      // via a separate dashboard.)
+      sigFeeNeg: tx({
+        signature: 'sigFeeNeg',
+        programIds: [SPL_TOKEN_PROGRAM_ID],
+        accountKeys: [FEE_ATA, PAYER, USDC, SPL_TOKEN_PROGRAM_ID],
+        logs: [
+          `Program ${SPL_TOKEN_PROGRAM_ID} invoke [1]`,
+          'Program log: Instruction: TransferChecked',
+          `Program ${SPL_TOKEN_PROGRAM_ID} success`,
+        ],
+        tokenBalanceDeltas: [
+          { owner: FEE_AUTHORITY, mint: USDC, delta: '-5000' },
+          { owner: PAYER, mint: USDC, delta: '5000' },
+        ],
+      }),
+    };
+    const rpc = makeStubRpc({
+      sigsByAddress: { [FEE_ATA]: sigs },
+      txsBySig,
+    });
+    await runIndexerTick({ db: rig.db, rpc, network: 'solana-devnet' });
+    const evs = await listEvents(rig.db, {
+      kind: 'protocol.fee.collected',
+      network: 'solana-devnet',
+      limit: 10,
+    });
+    expect(evs.length).toBe(0);
   });
 
   it('pulls receipts from a registered URL and writes receipt.pulled events', async () => {

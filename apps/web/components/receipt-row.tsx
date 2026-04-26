@@ -48,10 +48,24 @@ export function ReceiptRow({ receipt }: { receipt: ReceiptV1 }) {
         <span className="ml-auto flex items-center gap-3 text-xs text-fg-subtle">
           {price ? (
             <span
-              className="font-mono text-fg"
-              title={`${formatReceiptPriceWithCurrency(price)} · ${price.amount} atomic`}
+              className="font-mono text-fg flex items-baseline gap-1.5"
+              title={`${formatReceiptPriceWithCurrency(price)} · ${price.amount} atomic${
+                price.fee ? ` · fee ${price.fee} atomic` : ''
+              }${price.gross ? ` · gross ${price.gross} atomic` : ''}`}
             >
               {formatReceiptPriceUsd(price)}
+              {price.fee ? (
+                <span
+                  className="text-[10px] uppercase tracking-wider text-amber-500"
+                  title={
+                    typeof price.feeBps === 'number'
+                      ? `Leash protocol fee · ${(price.feeBps / 100).toFixed(2)}%`
+                      : 'Leash protocol fee'
+                  }
+                >
+                  + fee
+                </span>
+              ) : null}
             </span>
           ) : null}
           <span title={new Date(ts).toISOString()}>{formatReceiptTs(ts)}</span>

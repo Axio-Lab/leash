@@ -16,7 +16,8 @@ export type EventDescriptor = {
     | 'submit'
     | 'receipt'
     | 'payment-link'
-    | 'buyer';
+    | 'buyer'
+    | 'protocol-fee';
   description: (e: EventRow) => string;
 };
 
@@ -184,6 +185,21 @@ const TABLE: Record<string, EventDescriptor> = {
     shortLabel: 'buyer prepare',
     variant: 'buyer',
     description: () => 'Buyer prepared (but did not yet sign) an x402 payment envelope.',
+  },
+  'protocol.fee.collected': {
+    label: 'Protocol fee collected',
+    shortLabel: 'fee',
+    variant: 'protocol-fee',
+    description: (e) => {
+      const amount = (e.metadata?.['fee_amount'] as string | undefined) ?? null;
+      const currency = (e.metadata?.['currency'] as string | undefined) ?? null;
+      const bps = e.metadata?.['fee_bps'];
+      const bpsText = typeof bps === 'number' ? ` @ ${(bps / 100).toFixed(2)}%` : '';
+      if (amount && currency) {
+        return `Leash treasury collected ${amount} ${currency}${bpsText}.`;
+      }
+      return 'Leash treasury collected the protocol fee on a settled x402 call.';
+    },
   },
 };
 

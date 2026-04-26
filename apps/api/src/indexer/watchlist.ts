@@ -28,12 +28,13 @@ import type { DbClient } from '../storage/turso.js';
 import { execute } from '../storage/turso.js';
 import type { SvmNetwork } from '../util/network.js';
 
-export type WatchKind = 'asset' | 'treasury' | 'treasury_ata';
+export type WatchKind = 'asset' | 'treasury' | 'treasury_ata' | 'leash_fee_ata';
 
 const VALID_WATCH_KINDS: ReadonlySet<string> = new Set<WatchKind>([
   'asset',
   'treasury',
   'treasury_ata',
+  'leash_fee_ata',
 ]);
 
 export type WatchRow = {
@@ -87,6 +88,32 @@ export async function ensureWatchedAta(
     `INSERT OR IGNORE INTO indexer_watchlist (network, address, kind, agent_asset)
        VALUES (?, ?, 'treasury_ata', ?)`,
     [args.network, args.ataAddress, args.agentAsset],
+  );
+}
+
+/**
+ * Idempotently add a Leash protocol-fee ATA to the watchlist for a
+ * network. `feeAuthority` plays the same role here that a treasury PDA
+ * plays for `treasury_ata` rows — it's the SPL owner of the ATA and
+ * therefore what the parsed transaction's `tokenBalanceDeltas` is
+ * keyed by. We re-use the `agent_asset` column to carry the fee
+ * authority pubkey because the indexer schema requires a non-null
+ * value there; the fee authority is a synthetic "agent" with no real
+ * mpl-core asset, but the column makes the join shape uniform with
+ * regular treasury ATAs.
+ *
+ * The decoder branches on `watchedKind === 'leash_fee_ata'` to emit
+ * `protocol.fee.collected` events instead of treasury-fund events.
+ */
+export async function ensureWatchedFeeAta(
+  db: DbClient,
+  args: { network: SvmNetwork; feeAuthority: string; ataAddress: string },
+): Promise<void> {
+  await execute(
+    db,
+    `INSERT OR IGNORE INTO indexer_watchlist (network, address, kind, agent_asset)
+       VALUES (?, ?, 'leash_fee_ata', ?)`,
+    [args.network, args.ataAddress, args.feeAuthority],
   );
 }
 

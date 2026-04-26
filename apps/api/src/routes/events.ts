@@ -36,6 +36,7 @@ const EVENT_KINDS = [
   'payment_link.served',
   'payment_link.settled',
   'buyer.payment.prepare',
+  'protocol.fee.collected',
 ] as const satisfies readonly EventKind[];
 
 const EventResponseSchema = z.object({

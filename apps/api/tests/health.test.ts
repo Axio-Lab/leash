@@ -12,6 +12,28 @@ describe('health routes', () => {
     expect(typeof body.ts).toBe('string');
   });
 
+  it('GET /v1/health includes a protocol_fee block with the live config', async () => {
+    const rig = await createTestRig();
+    const res = await rig.app.fetch(new Request('http://test.local/v1/health'));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      protocol_fee: {
+        bps: number;
+        pct: string;
+        authorities: { 'solana-mainnet': string; 'solana-devnet': string };
+      };
+    };
+    expect(body.protocol_fee).toBeDefined();
+    expect(body.protocol_fee.bps).toBe(100);
+    expect(body.protocol_fee.pct).toBe('1.00%');
+    expect(body.protocol_fee.authorities['solana-mainnet']).toBe(
+      '3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W',
+    );
+    expect(body.protocol_fee.authorities['solana-devnet']).toBe(
+      '3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W',
+    );
+  });
+
   it('GET /v1/version reports both networks', async () => {
     const rig = await createTestRig();
     const res = await rig.app.fetch(new Request('http://test.local/v1/version'));

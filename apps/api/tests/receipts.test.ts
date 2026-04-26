@@ -155,6 +155,128 @@ describe('receipts ingest + read', () => {
     expect(againBody.pull_targets).toHaveLength(1);
   });
 
+  it('emits a single protocol.fee.collected event when an earn receipt with price.fee is ingested', async () => {
+    const rig = await createTestRig();
+    const r = finalizeReceipt({
+      v: '0.1',
+      kind: 'earn',
+      agent: AGENT_F,
+      nonce: 1,
+      ts: '2026-07-01T00:00:00.000Z',
+      policy_v: '0.1',
+      request: {
+        method: 'POST',
+        url: 'http://merchant.test/echo',
+        body_hash: null,
+      },
+      decision: 'allow',
+      reason: null,
+      price: {
+        amount: '1000000',
+        currency: 'USDC',
+        network: 'solana-devnet',
+        asset: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+        fee: '10000',
+        gross: '1010000',
+        feeBps: 100,
+        feeAuthority: '3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W',
+      },
+      facilitator: 'https://facilitator.svmacc.tech',
+      tx_sig: 'feeSig11111111111111111111111111111111111111111111111111111111aa',
+      response: { status: 200, body_hash: null },
+      prev_receipt_hash: null,
+    });
+
+    // First ingest -> protocol.fee.collected event row should appear.
+    const first = await authedFetch(rig, `/v1/receipts/${AGENT_F}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(r),
+    });
+    expect(first.status).toBe(200);
+
+    const { listEvents } = await import('../src/storage/events.js');
+    const after = await listEvents(rig.db, {
+      kind: 'protocol.fee.collected',
+      network: 'solana-devnet',
+      limit: 10,
+    });
+    expect(after.length).toBeGreaterThanOrEqual(1);
+    const row = after.find((e) => {
+      const md = e.metadata as Record<string, unknown> | null;
+      return md?.['receipt_hash'] === r.receipt_hash;
+    });
+    expect(row).toBeDefined();
+    expect(row!.amountAtomic).toBe('10000');
+    expect(row!.mint).toBe('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
+    const md = row!.metadata as Record<string, unknown>;
+    expect(md['fee_amount']).toBe('10000');
+    expect(md['gross_amount']).toBe('1010000');
+    expect(md['net_amount']).toBe('1000000');
+    expect(md['fee_bps']).toBe(100);
+    expect(md['fee_authority']).toBe('3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W');
+    expect(md['currency']).toBe('USDC');
+
+    // Re-ingest the same receipt -> NO duplicate fee event.
+    const dup = await authedFetch(rig, `/v1/receipts/${AGENT_F}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(r),
+    });
+    expect(dup.status).toBe(200);
+    const afterDup = await listEvents(rig.db, {
+      kind: 'protocol.fee.collected',
+      network: 'solana-devnet',
+      limit: 50,
+    });
+    const matches = afterDup.filter((e) => {
+      const m = e.metadata as Record<string, unknown> | null;
+      return m?.['receipt_hash'] === r.receipt_hash;
+    });
+    expect(matches.length).toBe(1);
+  });
+
+  it('does NOT emit a protocol.fee.collected event when the earn receipt carries no fee', async () => {
+    const rig = await createTestRig();
+    const r = finalizeReceipt({
+      v: '0.1',
+      kind: 'earn',
+      agent: AGENT_E,
+      nonce: 2,
+      ts: '2026-07-02T00:00:00.000Z',
+      policy_v: '0.1',
+      request: {
+        method: 'POST',
+        url: 'http://merchant.test/echo',
+        body_hash: null,
+      },
+      decision: 'allow',
+      reason: null,
+      price: { amount: '1000000', currency: 'USDC' },
+      facilitator: 'https://facilitator.svmacc.tech',
+      tx_sig: 'noFeeSig111111111111111111111111111111111111111111111111111111aa',
+      response: { status: 200, body_hash: null },
+      prev_receipt_hash: null,
+    });
+    const res = await authedFetch(rig, `/v1/receipts/${AGENT_E}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(r),
+    });
+    expect(res.status).toBe(200);
+    const { listEvents } = await import('../src/storage/events.js');
+    const events = await listEvents(rig.db, {
+      kind: 'protocol.fee.collected',
+      network: 'solana-devnet',
+      limit: 50,
+    });
+    const matches = events.filter((e) => {
+      const m = e.metadata as Record<string, unknown> | null;
+      return m?.['receipt_hash'] === r.receipt_hash;
+    });
+    expect(matches.length).toBe(0);
+  });
+
   it('writes a receipt.published event into the events feed on first ingest only', async () => {
     const rig = await createTestRig();
     const r = makeReceipt({ agent: AGENT_F, ts: '2026-06-01T00:00:00.000Z' });

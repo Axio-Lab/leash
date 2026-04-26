@@ -26,8 +26,12 @@ import { publicKey } from '@metaplex-foundation/umi';
 import { ulid } from 'ulid';
 import {
   KNOWN_STABLE_SYMBOLS,
+  buildLeashFeeExtra,
+  computeFeeAtoms,
   defaultFacilitatorFor,
+  resolveLeashFeeBps,
   type KnownStableSymbol,
+  type LeashFeeExtra,
   type TokenNetwork,
 } from '@leash/core';
 import { EndpointIdSchema, EndpointMethodSchema } from '@leash/schemas';
@@ -57,6 +61,45 @@ import { networkToCaip2 } from '../util/network.js';
 const StableSchema = z.enum(
   KNOWN_STABLE_SYMBOLS as readonly [KnownStableSymbol, ...KnownStableSymbol[]],
 );
+
+const LeashFeeExtraSchema = z
+  .object({
+    v: z.literal('1'),
+    bps: z.number().int().nonnegative().max(10_000),
+    feeAuthority: PubkeySchema,
+  })
+  .openapi('LeashFeeExtra');
+
+const AcceptsEntrySchema = z
+  .object({
+    scheme: z.literal('exact'),
+    network: z.string(),
+    pay_to: PubkeySchema,
+    asset: PubkeySchema,
+    amount: z.string().openapi({
+      description:
+        'Net (seller-quoted) atomic amount. The buyer actually signs ' +
+        'for `gross_amount = amount + fee_amount`.',
+    }),
+    currency: StableSchema,
+    fee_amount: z.string().openapi({
+      description: 'Leash protocol fee in atomic units of `asset`.',
+    }),
+    gross_amount: z.string().openapi({
+      description: 'Total atomic amount the buyer signs (`amount + fee_amount`).',
+    }),
+    fee_bps: z.number().int().nonnegative().max(10_000),
+    fee_authority: PubkeySchema.openapi({
+      description: 'Treasury wallet that owns the destination fee ATA.',
+    }),
+    leash_fee: LeashFeeExtraSchema.openapi({
+      description:
+        'Wire shape stamped onto x402 ' +
+        "`paymentRequirements.extra['leash.fee']`. Buyers and facilitators " +
+        'derive the destination ATA from `(feeAuthority, asset, tokenProgram)`.',
+    }),
+  })
+  .openapi('PaymentLinkAcceptsEntry');
 
 const ResponseTemplateSchema = z
   .object({
@@ -131,16 +174,7 @@ const PaymentLinkSchema = z
     share_url: z.string().url().openapi({
       description: 'Public paywall URL — share this. Resolves to `/x/{id}` on the API.',
     }),
-    accepts: z.array(
-      z.object({
-        scheme: z.literal('exact'),
-        network: z.string(),
-        pay_to: PubkeySchema,
-        asset: PubkeySchema,
-        amount: z.string(),
-        currency: StableSchema,
-      }),
-    ),
+    accepts: z.array(AcceptsEntrySchema),
     counters: z.object({
       call_count: z.number().int().nonnegative(),
       settled_count: z.number().int().nonnegative(),
@@ -161,8 +195,30 @@ type AcceptsEntry = {
   network: string;
   pay_to: string;
   asset: string;
+  /**
+   * Net (seller-quoted) atomic amount. Equal to `parsePrice(price).amount`.
+   * Buyers actually sign for `gross_amount = amount + fee_amount`.
+   */
   amount: string;
   currency: KnownStableSymbol;
+  /**
+   * Atomic Leash protocol fee that will be debited on top of `amount`,
+   * always in the same `asset`. `null` only when fees are explicitly
+   * disabled by env override (`LEASH_FEE_BPS=0`).
+   */
+  fee_amount: string;
+  /** Atomic total the buyer signs (`amount + fee_amount`). */
+  gross_amount: string;
+  /** Fee rate in basis points used to derive `fee_amount`. */
+  fee_bps: number;
+  /**
+   * Treasury authority (wallet pubkey) that owns the destination ATA on
+   * `asset`. Buyer + facilitator both derive the destination ATA from
+   * `(authority, asset, tokenProgram)` so it never lives on the wire.
+   */
+  fee_authority: string;
+  /** Wire shape stamped onto x402 `paymentRequirements.extra['leash.fee']`. */
+  leash_fee: LeashFeeExtra;
 };
 
 type DiscoveryView = {
@@ -527,16 +583,7 @@ export function buildPaymentLinkRoutes(
                 pay_to: PubkeySchema,
                 facilitator: z.string().url(),
                 share_url: z.string().url(),
-                accepts: z.array(
-                  z.object({
-                    scheme: z.literal('exact'),
-                    network: z.string(),
-                    pay_to: PubkeySchema,
-                    asset: PubkeySchema,
-                    amount: z.string(),
-                    currency: StableSchema,
-                  }),
-                ),
+                accepts: z.array(AcceptsEntrySchema),
               }),
             },
           },
@@ -629,11 +676,19 @@ export function buildDiscoveryView(
   const facilitator = config.facilitatorUrl || defaultFacilitatorFor([network]);
   const shareUrl = `${config.publicOrigin.replace(/\/+$/, '')}/x/${args.id}`;
 
+  // Stamp every advertised entry with the same Leash fee block. Bps +
+  // authority are constant per network — only the destination ATA
+  // differs by asset, and that's derived buyer/facilitator-side from
+  // `(authority, asset, tokenProgram)` so it stays off the wire.
+  const leashFee = buildLeashFeeExtra({ network: tokenNetwork });
+  const feeBps = resolveLeashFeeBps();
   const allCurrencies = uniq([args.currency, ...args.acceptsCurrencies]);
   const accepts: AcceptsEntry[] = [];
   for (const currency of allCurrencies) {
     const parsed = parsePrice(args.price, { network: tokenNetwork, defaultCurrency: currency });
     if (!parsed || !parsed.asset) continue;
+    const netAtomic = BigInt(parsed.amount);
+    const feeAtomic = computeFeeAtoms(netAtomic, feeBps);
     accepts.push({
       scheme: 'exact',
       network: networkCaip2,
@@ -641,6 +696,11 @@ export function buildDiscoveryView(
       asset: parsed.asset,
       amount: parsed.amount,
       currency,
+      fee_amount: feeAtomic.toString(),
+      gross_amount: (netAtomic + feeAtomic).toString(),
+      fee_bps: feeBps,
+      fee_authority: leashFee.feeAuthority,
+      leash_fee: leashFee,
     });
   }
 

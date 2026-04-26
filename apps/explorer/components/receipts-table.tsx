@@ -84,7 +84,8 @@ export function ReceiptsTable({
             <th className="px-3 py-2 font-medium">Decision</th>
             <th className="px-3 py-2 font-medium">Payer</th>
             <th className="px-3 py-2 font-medium">Receiver</th>
-            <th className="px-3 py-2 font-medium">Price</th>
+            <th className="px-3 py-2 font-medium">Net</th>
+            <th className="px-3 py-2 font-medium">Fee</th>
             <th className="px-3 py-2 font-medium">Hash</th>
             <th className="px-3 py-2 font-medium text-right">When</th>
           </tr>
@@ -132,6 +133,25 @@ export function ReceiptsTable({
                         tokenInfoFor(network, r.price.asset ?? null),
                       )
                     : '—'}
+                  {r.price?.gross && r.price.gross !== r.price.amount ? (
+                    <div className="text-[10px] text-[--color-fg-subtle]">
+                      gross{' '}
+                      {formatTokenAmount(
+                        r.price.gross,
+                        tokenInfoFor(network, r.price.asset ?? null),
+                      )}
+                    </div>
+                  ) : null}
+                </td>
+                <td className="relative z-10 px-3 py-2.5 align-middle text-xs text-[--color-fg-muted]">
+                  {r.price?.fee
+                    ? formatTokenAmount(r.price.fee, tokenInfoFor(network, r.price.asset ?? null))
+                    : '—'}
+                  {typeof r.price?.feeBps === 'number' ? (
+                    <div className="text-[10px] text-[--color-fg-subtle]">
+                      {(r.price.feeBps / 100).toFixed(2)}%
+                    </div>
+                  ) : null}
                 </td>
                 <td className="relative z-10 px-3 py-2.5 align-middle">
                   <Mono value={r.receipt_hash} href={`/receipt/${r.receipt_hash}`} />

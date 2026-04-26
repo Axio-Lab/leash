@@ -4,7 +4,45 @@
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 
+import { resolveLeashFeeAuthority, resolveLeashFeeBps } from '@leash/core';
+
 import { LEASH_API_VERSION } from '../config.js';
+
+const ProtocolFeeBlockSchema = z
+  .object({
+    bps: z.number().int().min(0).max(10_000),
+    pct: z.string(),
+    authorities: z.object({
+      'solana-mainnet': z.string(),
+      'solana-devnet': z.string(),
+    }),
+  })
+  .openapi('ProtocolFeeBlock');
+
+const HealthResponseSchema = z
+  .object({
+    ok: z.literal(true),
+    ts: z.string(),
+    /**
+     * Snapshot of the API server's resolved Leash protocol fee config.
+     * Mirrors the `/health` block on `@leash/facilitator`. Buyer SDKs
+     * surface this so users can verify the rate before signing.
+     */
+    protocol_fee: ProtocolFeeBlockSchema,
+  })
+  .openapi('HealthResponse');
+
+function buildProtocolFeeBlock(): z.infer<typeof ProtocolFeeBlockSchema> {
+  const bps = resolveLeashFeeBps();
+  return {
+    bps,
+    pct: `${(bps / 100).toFixed(2)}%`,
+    authorities: {
+      'solana-mainnet': resolveLeashFeeAuthority('mainnet'),
+      'solana-devnet': resolveLeashFeeAuthority('devnet'),
+    },
+  };
+}
 
 export function buildHealthRoutes(): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -20,13 +58,18 @@ export function buildHealthRoutes(): OpenAPIHono {
           description: 'Server is up.',
           content: {
             'application/json': {
-              schema: z.object({ ok: z.literal(true), ts: z.string() }),
+              schema: HealthResponseSchema,
             },
           },
         },
       },
     }),
-    (c) => c.json({ ok: true as const, ts: new Date().toISOString() }),
+    (c) =>
+      c.json({
+        ok: true as const,
+        ts: new Date().toISOString(),
+        protocol_fee: buildProtocolFeeBlock(),
+      }),
   );
 
   app.openapi(

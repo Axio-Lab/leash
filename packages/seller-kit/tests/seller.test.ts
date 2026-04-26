@@ -119,6 +119,55 @@ describe('createSeller — gate', () => {
   });
 });
 
+describe('createSeller — protocol fee', () => {
+  // The seller is the source of truth for "what does the buyer owe?".
+  // It MUST stamp `extra['leash.fee']` so that:
+  //   1. The buyer's payment scheme can append the fee TransferChecked.
+  //   2. The facilitator can verify both legs.
+  //   3. The buyer's pre-flight quote can render the gross.
+  it("stamps extra['leash.fee'] on every accepts[] entry in the 402 challenge", async () => {
+    const app = makeApp();
+    const probe = await app.request('http://localhost/tag', { method: 'POST' });
+    expect(probe.status).toBe(402);
+    const required = probe.headers.get('PAYMENT-REQUIRED');
+    expect(required).toBeTruthy();
+    const decoded = JSON.parse(Buffer.from(required!, 'base64').toString('utf8')) as {
+      accepts: Array<PaymentRequirements & { extra?: Record<string, unknown> }>;
+    };
+    expect(decoded.accepts.length).toBeGreaterThan(0);
+    const entry = decoded.accepts[0]!;
+    const fee = (entry.extra ?? {})['leash.fee'] as
+      | { v?: string; bps?: number; feeAuthority?: string }
+      | undefined;
+    expect(fee).toBeDefined();
+    expect(fee?.v).toBe('1');
+    expect(fee?.bps).toBe(100);
+    expect(fee?.feeAuthority).toBe('3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W');
+  });
+
+  it('enriches earn receipts with fee / gross / feeBps / feeAuthority on settled calls', async () => {
+    const sink: ReceiptV1[] = [];
+    const app = makeApp({ onReceipt: (r) => void sink.push(r) });
+    const header = await buildPaidHeader(app, 'POST /tag');
+    const res = await app.request('http://localhost/tag', {
+      method: 'POST',
+      headers: { 'PAYMENT-SIGNATURE': header },
+    });
+    expect(res.status).toBe(200);
+    expect(sink).toHaveLength(1);
+    const r = sink[0]!;
+    // `$0.001` = 1000 atoms (USDC). 1% gross-up = +10 (ceil) = gross 1010.
+    expect(r.price?.amount).toBe('1000');
+    expect(r.price?.fee).toBe('10');
+    expect(r.price?.gross).toBe('1010');
+    expect(r.price?.feeBps).toBe(100);
+    expect(r.price?.feeAuthority).toBe('3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W');
+    // Round-trip through the schema so we catch any drift between
+    // the receipt finalizer and the wire schema.
+    expect(ReceiptV1Schema.parse(r)).toEqual(r);
+  });
+});
+
 describe('createSeller — earn receipts', () => {
   it('emits a valid earn ReceiptV1 with a real tx_sig on a settled call', async () => {
     const sink: ReceiptV1[] = [];

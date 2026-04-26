@@ -113,3 +113,16 @@ For the production "client funds the agent, the agent makes them money" flow:
 4. Set `LEASH_BUYER_SOURCE_TOKEN_ACCOUNT` to the printed
    `sourceTokenAccount` and run as usual. Every settled call now debits the
    agent treasury and decreases the remaining delegation.
+
+> **Budget for the 1% Leash protocol fee.** Every settlement routed
+> through a Leash facilitator (devnet or mainnet) appends a second
+> `TransferChecked` for the fee leg, so a quote of `1.00 USDC` actually
+> debits `1.01 USDC` from the agent treasury. When you set the SPL
+> `Approve` allowance in step 2, gross-up your budget the same way — for
+> example use `5.05 USDC` (atoms `5050000`) if you want to be able to
+> consume `5 USDC` worth of seller-quoted endpoints. The web playground's
+> _Set allowance_ button does this automatically; the
+> `/v1/agents/{mint}/delegation/prepare` API exposes it as
+> `pad_for_protocol_fee: true`. See
+> [`apps/docs/api/protocol-fee.mdx`](../../apps/docs/api/protocol-fee.mdx)
+> for the full math and the `extra['leash.fee']` wire shape.

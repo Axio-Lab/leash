@@ -148,6 +148,53 @@ describe('createBuyer', () => {
     expect(result.failureReason).toBeUndefined();
   });
 
+  it("decorates spend receipts with fee/gross when settlement carries `extra['leash.fee']`", async () => {
+    const settle = {
+      success: true,
+      transaction:
+        '5UfDvnh6f4eS2RHJtcZTKbiaT3iuHowBbZBJekMNF1S25o1y2VW9KUYfh4ymcKeevQNcm9DMZSk1cSMz4iHUnCpu',
+      paymentRequirements: {
+        scheme: 'exact',
+        network: 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1',
+        amount: '1000000',
+        asset: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+        payTo: 'CTd5VBFYJnGDGv5DbhWfPmrQ96G5ibvmZiyRPURXNyox',
+        maxTimeoutSeconds: 300,
+        extra: {
+          feePayer: 'FYB56sVBW2r4Ka7W9kdJWTPY9FKQLxbT6h4Ysr6aLPZD',
+          'leash.fee': {
+            v: '1',
+            bps: 100,
+            feeAuthority: '3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W',
+          },
+        },
+      },
+    };
+    const headerB64 = Buffer.from(JSON.stringify(settle), 'utf8').toString('base64');
+    const stubFetch: LeashFetch = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'payment-response': headerB64 },
+      }),
+    );
+    const buyer = createBuyer({
+      agent: 'A1',
+      rules,
+      signer: stubSigner,
+      fetch: stubFetch,
+      sourceTokenAccount: 'AgentTreasuryUsdcAtaXXXXXXXXXXXXXXXXXXXXXXX',
+    });
+    const result = await buyer.fetch('http://merchant.test/tag', { method: 'POST' });
+    expect(result.response.status).toBe(200);
+    expect(result.receipt.decision).toBe('allow');
+    // 1,000,000 atoms (1 USDC) net + 1% gross-up = 10,000 atoms fee + 1,010,000 gross
+    expect(result.receipt.price?.amount).toBe('1000000');
+    expect(result.receipt.price?.fee).toBe('10000');
+    expect(result.receipt.price?.gross).toBe('1010000');
+    expect(result.receipt.price?.feeBps).toBe(100);
+    expect(result.receipt.price?.feeAuthority).toBe('3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W');
+  });
+
   it('handles a facilitator failure (delegation exhausted) and records the demanded price', async () => {
     // Simulates the wire shape after the facilitator rejects the partially
     // signed tx because the SPL Approve has been fully consumed: the

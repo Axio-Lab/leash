@@ -18,6 +18,7 @@ export * from './treasury/inspect-token-account.js';
 export * from './treasury/list-balances.js';
 export * from './treasury/pause.js';
 export * from './tokens/index.js';
+export * from './fees/leash-fee.js';
 export * from './explorer/index.js';
 export * from './format/index.js';
 export * from './wallet/index.js';

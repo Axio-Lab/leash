@@ -34,7 +34,17 @@ export type EventKind =
   | 'payment_link.deleted'
   | 'payment_link.served'
   | 'payment_link.settled'
-  | 'buyer.payment.prepare';
+  | 'buyer.payment.prepare'
+  /**
+   * 1% Leash protocol fee collected (one per settled earn receipt that
+   * carries a `price.fee` field). Emitted by the receipts ingest path
+   * (paywall + `/v1/receipts`) and surfaced in the explorer's
+   * "Protocol fees" feed. Metadata always carries
+   * `{ fee_amount, gross_amount, net_amount, fee_bps, fee_authority,
+   *   currency, asset, receipt_hash, tx_sig? }` so the dashboard can
+   * render every row without re-parsing the raw receipt blob.
+   */
+  | 'protocol.fee.collected';
 
 export type EventPhase = 'prepared' | 'submitted' | 'confirmed' | 'failed';
 

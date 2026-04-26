@@ -494,6 +494,48 @@ describe('buyer endpoints', () => {
       expect(body.chosen).toBeNull();
     });
 
+    it("decodes price.fee + price.gross when the seller stamps `extra['leash.fee']`", async () => {
+      const rig = await createTestRig();
+      const accepts = [
+        {
+          ...devnetRequirements('1000000'),
+          extra: {
+            'leash.fee': {
+              v: '1',
+              bps: 100,
+              feeAuthority: '3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W',
+            },
+          },
+        } as unknown as PaymentRequirements,
+      ];
+      stub.setResponse(() => ({
+        status: 402,
+        headers: { 'payment-required': base64UrlJson({ accepts }) },
+        body: '{}',
+      }));
+      const res = await authedFetch(rig, '/v1/buyer/quote', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url: `${stub.url}/paid` }),
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        price: {
+          amount: string;
+          currency: string;
+          fee?: string;
+          gross?: string;
+          fee_bps?: number;
+          fee_authority?: string;
+        } | null;
+      };
+      expect(body.price?.amount).toBe('1000000');
+      expect(body.price?.fee).toBe('10000');
+      expect(body.price?.gross).toBe('1010000');
+      expect(body.price?.fee_bps).toBe(100);
+      expect(body.price?.fee_authority).toBe('3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W');
+    });
+
     it('returns 502 when the probe target is unreachable', async () => {
       const rig = await createTestRig();
       const res = await authedFetch(rig, '/v1/buyer/quote', {

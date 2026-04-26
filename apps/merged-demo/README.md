@@ -78,3 +78,27 @@ export LEASH_FACILITATOR_URL=http://localhost:8787
 This is the fastest way to smoke-test a brand-new facilitator deploy:
 boot it, point the merged demo at it, and watch real `spend`/`earn`
 pairs flow through against devnet.
+
+### What the 1% Leash protocol fee looks like in this loop
+
+Because `merged-demo` exercises the full buyer→facilitator→seller flow
+in a single process, it's the easiest place to actually _see_ both legs
+of a Leash settlement land:
+
+- The seller-quoted price stays at `0.001 USDC` (the seller-net amount).
+- The Leash facilitator appends a second `TransferChecked` for
+  `0.00001 USDC` (the 1% fee leg) so the buyer signs `0.00101 USDC`.
+- The runner receives **two** receipts per tick:
+  - the `spend` receipt from the buyer (with `price.fee` /
+    `price.gross` populated) and
+  - the `earn` receipt from the seller (with the same fee block plus
+    `price.feeAuthority`).
+- The runner / explorer also records one
+  `protocol.fee.collected` event per settled tick — see the explorer's
+  "Protocol fees" panel and the
+  [`apps/docs/api/protocol-fee.mdx`](../../apps/docs/api/protocol-fee.mdx)
+  spec for the wire shape.
+
+Vanilla x402 facilitators (no `protocol_fee` block on `/health`) keep
+working unchanged: the buyer signs `0.001 USDC` flat and no fee leg
+appears in the transaction.

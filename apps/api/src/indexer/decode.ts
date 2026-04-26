@@ -46,7 +46,14 @@ export type DecodeContext = {
    * a single transaction touches both.
    */
   watchedAddress: string;
-  watchedKind: 'asset' | 'treasury' | 'treasury_ata';
+  watchedKind: 'asset' | 'treasury' | 'treasury_ata' | 'leash_fee_ata';
+  /**
+   * For `'asset' | 'treasury' | 'treasury_ata'` rows this is the
+   * mpl-core asset pubkey of the agent. For `'leash_fee_ata'` rows
+   * the agent column carries the **fee authority** pubkey (the SPL
+   * owner of the fee ATA) — it's not a real agent, but the decoder
+   * uses it the same way to look up the SPL owner for delta keying.
+   */
   agentAsset: string;
   /**
    * Treasury PDA owned by `agentAsset`. Required when
@@ -55,6 +62,10 @@ export type DecodeContext = {
    * are keyed by the ATA's owner (= the PDA). The indexer derives
    * this once per agent and passes it down so the decoder doesn't
    * need a Umi instance.
+   *
+   * For `'leash_fee_ata'` rows we re-use the same field to carry the
+   * fee-authority pubkey (which is the ATA owner), so the inflow
+   * detection branch doesn't need a separate plumbing path.
    */
   treasuryAddress?: string;
 };
@@ -168,6 +179,44 @@ export function decodeTransaction(tx: RpcParsedTransaction, ctx: DecodeContext):
     ) {
       events.push(baseEvent('agent.treasury.provision', tx, ctx));
     }
+  }
+
+  // ---- Leash protocol fee inflows ----
+  // Watchlist rows with `kind='leash_fee_ata'` track the fee
+  // treasury's ATAs directly. Any positive token delta on the
+  // configured fee authority is a protocol-fee collection; we emit
+  // one `protocol.fee.collected` event per (mint, signature) pair.
+  // The receipt-side ingest path emits the same event with
+  // richer context (receipt_hash, gross/net split). To avoid
+  // duplicates the chain-event writer dedups on
+  // `(network, signature, kind, mint)` — see `ingestChainEvent`.
+  if (ctx.watchedKind === 'leash_fee_ata') {
+    const feeAuthority = ctx.treasuryAddress ?? ctx.agentAsset;
+    const splIns = tx.tokenBalanceDeltas.filter(
+      (d) => d.owner === feeAuthority && BigInt(d.delta) > 0n,
+    );
+    for (const d of splIns) {
+      events.push({
+        ...baseEvent('protocol.fee.collected', tx, ctx),
+        agentAsset: null, // fee authority is not a real agent
+        mint: d.mint,
+        amountAtomic: BigInt(d.delta).toString(),
+        metadata: {
+          fee_amount: BigInt(d.delta).toString(),
+          fee_ata: ctx.watchedAddress,
+          fee_authority: feeAuthority,
+          source: 'on_chain',
+        },
+      });
+    }
+    // Fee ATAs only carry inflow signal — short-circuit the rest of
+    // the decoder so we don't accidentally double-classify.
+    if (isFailed) {
+      for (const e of events) {
+        e.metadata = { ...e.metadata, on_chain_failed: true, on_chain_err: tx.err };
+      }
+    }
+    return events;
   }
 
   // ---- Treasury funding (incoming transfers) ----

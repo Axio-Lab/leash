@@ -1,5 +1,6 @@
 import type { ReceiptV1, RulesV1 } from '@leash/schemas';
 import {
+  computeFeeAtoms,
   createSvmBuyerFetch,
   currencyForAsset,
   decodePaymentResponseHeader,
@@ -11,6 +12,7 @@ import {
   KNOWN_STABLE_SYMBOLS,
   lookupTokenBySymbol,
   networkFromCaip2,
+  parseLeashFeeExtra,
   paymentRequirementsHash,
   requestHash,
   type ClientSvmSigner,
@@ -423,15 +425,41 @@ function parseSettlement(response: Response): Settlement | null {
     typeof obj.transaction === 'string' && obj.transaction.length > 0 ? obj.transaction : null;
   const requirements = obj.paymentRequirements ?? null;
   const requirementsHash = paymentRequirementsHash(requirements);
-  const price: ReceiptV1['price'] = requirements
-    ? {
-        amount: requirements.amount,
-        currency: currencyForAsset(requirements.asset, tokenNetworkFromCaip2(requirements.network)),
-        network: networkFromCaip2(requirements.network) ?? requirements.network,
-        asset: requirements.asset,
-      }
-    : null;
+  const price = priceFromRequirements(requirements);
   return { txSig, price, requirementsHash };
+}
+
+/**
+ * Build a `ReceiptV1['price']` from a `PaymentRequirements`, enriching
+ * with Leash protocol fee fields when the seller advertised a
+ * `extra['leash.fee']` block. Mirrors {@link computeLeashFeeForRequirements}'s
+ * math so the receipt's `gross / fee / net` matches what the buyer
+ * actually signed on the wire.
+ */
+function priceFromRequirements(
+  requirements: PaymentRequirements | null | undefined,
+): ReceiptV1['price'] {
+  if (!requirements) return null;
+  const feeExtra = parseLeashFeeExtra(
+    (requirements.extra ?? null) as Record<string, unknown> | null,
+  );
+  const netAtomic = BigInt(requirements.amount);
+  const feeAtomic = feeExtra ? computeFeeAtoms(netAtomic, feeExtra.bps) : 0n;
+  const grossAtomic = netAtomic + feeAtomic;
+  return {
+    amount: requirements.amount,
+    currency: currencyForAsset(requirements.asset, tokenNetworkFromCaip2(requirements.network)),
+    network: networkFromCaip2(requirements.network) ?? requirements.network,
+    asset: requirements.asset,
+    ...(feeExtra
+      ? {
+          fee: feeAtomic.toString(),
+          gross: grossAtomic.toString(),
+          feeBps: feeExtra.bps,
+          feeAuthority: feeExtra.feeAuthority,
+        }
+      : {}),
+  };
 }
 
 type Quote = {
@@ -498,14 +526,7 @@ async function parsePaymentRequired(
 
   if (!chosen && !headerError && !bodyError) return null;
 
-  const price: ReceiptV1['price'] = chosen
-    ? {
-        amount: chosen.amount,
-        currency: currencyForAsset(chosen.asset, tokenNetworkFromCaip2(chosen.network)),
-        network: networkFromCaip2(chosen.network) ?? chosen.network,
-        asset: chosen.asset,
-      }
-    : null;
+  const price = priceFromRequirements(chosen);
 
   return {
     price,

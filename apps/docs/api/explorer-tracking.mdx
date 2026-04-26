@@ -33,10 +33,14 @@ specific endpoint or trigger that surfaces it.
 ## Auto-registration: how the indexer learns about your agent
 
 The indexer never crawls the cluster from scratch. It iterates a
-strict, per-network watchlist seeded by the API. Three watch kinds
-exist: `asset`, `treasury`, and `treasury_ata`. Once an agent is on
-the watchlist, every transaction touching its asset, treasury PDA,
-or any of its ATAs is decoded and emitted as the right event kind.
+strict, per-network watchlist seeded by the API. Four watch kinds
+exist: `asset`, `treasury`, `treasury_ata`, and `leash_fee_ata`. Once
+an agent is on the watchlist, every transaction touching its asset,
+treasury PDA, or any of its ATAs is decoded and emitted as the right
+event kind. `leash_fee_ata` rows are seeded automatically at indexer
+startup for every supported stablecoin, so on-chain protocol fee
+inflows surface even when no receipt is pushed (see
+[Protocol fee](/api/protocol-fee)).
 
 | Endpoint                                                    | Watchlist side-effect                         |
 | ----------------------------------------------------------- | --------------------------------------------- |
@@ -84,6 +88,7 @@ on the next tick.
 | `buyer.payment.prepare`       | API only         | `POST /v1/buyer/payment/prepare`.                                                                                                                                       |
 | `receipt.published`           | API only         | `POST /v1/receipts/{agent}` (also auto-emitted by `POST /v1/buyer/payment/execute` and the paywall on settle).                                                          |
 | `receipt.pulled`              | Indexer only     | The pull worker fetches a receipt from a registered `pull-target` URL.                                                                                                  |
+| `protocol.fee.collected`      | API + indexer    | Every settled `earn` receipt with `price.fee` (push, paywall, or pull); plus on-chain fallback when the indexer sees a positive token-balance delta to a Leash fee ATA. Idempotent on `(network, receipt_hash)` so the receipt-side and on-chain paths never double-count. See [Protocol fee](/api/protocol-fee). |
 
 Brand-new agent creation is exposed as
 [`POST /v1/agents/prepare`](/api/agents) — the HTTP twin of the

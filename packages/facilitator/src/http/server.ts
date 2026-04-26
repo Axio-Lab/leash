@@ -27,6 +27,20 @@ import { Hono } from 'hono';
 import type { x402Facilitator } from '@x402/core/facilitator';
 import type { PaymentPayload, PaymentRequirements } from '@x402/core/types';
 
+export type ProtocolFeeHealthBlock = {
+  /**
+   * Default fee rate in basis points (100 = 1%) the facilitator will
+   * enforce against. Sourced from `LEASH_FEE_BPS` (or the bundled
+   * default).
+   */
+  bps: number;
+  /**
+   * Per-network snapshot. `enforce` is one of `off | warn | enforce`,
+   * `authority` is the wallet pubkey that owns the destination fee ATA.
+   */
+  networks: Record<string, { enforce: string; authority: string }>;
+};
+
 export type CreateFacilitatorHttpOptions = {
   /** A configured `x402Facilitator` with at least one scheme registered. */
   facilitator: x402Facilitator;
@@ -36,6 +50,12 @@ export type CreateFacilitatorHttpOptions = {
   networks: readonly string[];
   /** Build identifier exposed on `/health`. Defaults to `'leash-facilitator/0.1'`. */
   build?: string;
+  /**
+   * Optional Leash protocol fee config snapshot. Surfaced on `/health`
+   * so operators can confirm the deploy is in `enforce` mode and that
+   * the right treasury authority is wired up.
+   */
+  protocolFee?: ProtocolFeeHealthBlock;
 };
 
 type VerifyOrSettleBody = {
@@ -86,6 +106,7 @@ export function createFacilitatorHttpServer(opts: CreateFacilitatorHttpOptions):
       build: opts.build ?? 'leash-facilitator/0.1',
       networks: opts.networks,
       signers: opts.signerAddresses,
+      ...(opts.protocolFee ? { protocol_fee: opts.protocolFee } : {}),
     }),
   );
 

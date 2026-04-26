@@ -231,6 +231,50 @@ export async function getIndexerStatus(network: Network): Promise<IndexerStatus>
 }
 
 /**
+ * Summary of all `protocol.fee.collected` events on a network, grouped
+ * by mint. Powers the explorer's "Protocol fees" panel — total revenue
+ * per stablecoin since the rollout, plus a count of settled calls.
+ *
+ * We sum from the events table (not the receipts table) because the
+ * receipt-side ingest is best-effort and the chain-side detection
+ * (decoder + watchlist) covers the gap; together they're the authoritative
+ * source of truth for protocol revenue.
+ */
+export type ProtocolFeeMintTotal = {
+  mint: string | null;
+  currency: string | null;
+  totalAtomic: string;
+  count: number;
+};
+
+export async function listProtocolFeeTotals(network: Network): Promise<ProtocolFeeMintTotal[]> {
+  const rows = await withDb(async (db) => {
+    // We sum amount_atomic as integers via SUM(CAST(... AS INTEGER));
+    // SQLite handles bigint up to ~2^63 which is plenty for stablecoin
+    // revenue (1B USDC = 1e15 atoms = ~2^50). Currency comes from the
+    // metadata blob — newer rows always carry it; older / chain-side
+    // rows may be null, so we coalesce to JSON-extract the field.
+    const sql = `SELECT mint,
+                        json_extract(metadata_json, '$.currency') AS currency,
+                        COALESCE(SUM(CAST(amount_atomic AS INTEGER)), 0) AS total_atomic,
+                        COUNT(*) AS n
+                   FROM events
+                  WHERE network = ?
+                    AND kind = 'protocol.fee.collected'
+                  GROUP BY mint, currency
+                  ORDER BY total_atomic DESC`;
+    const res = await db.execute({ sql, args: [networkToSlug(network)] });
+    return res.rows;
+  });
+  return rows.map((r) => ({
+    mint: r.mint != null ? String(r.mint) : null,
+    currency: r.currency != null ? String(r.currency) : null,
+    totalAtomic: String(r.total_atomic ?? '0'),
+    count: Number(r.n ?? 0),
+  }));
+}
+
+/**
  * For each `tx_sig`, return the (payer, receiver) agent pair derived
  * from the receipts table — buyer-side `spend` receipts give us the
  * payer, seller-side `earn` receipts give us the receiver. When only

@@ -1,0 +1,280 @@
+---
+title: 'Protocol fee'
+description: >-
+  How the 1% Leash protocol fee works on every x402 settlement: the wire
+  shape, the math, where the money goes, how to budget allowances, how to
+  enforce or relax it on a self-hosted facilitator, and how to surface it
+  to buyers before they sign.
+---
+
+Every x402 settlement routed through a Leash facilitator is a
+**two-leg buyer-signed transaction**:
+
+1. **Seller leg** — `TransferChecked(mint, amount)` from the buyer's
+   treasury ATA to the seller's `payTo` ATA. Same as plain x402.
+2. **Protocol fee leg** — `TransferChecked(mint, fee)` from the **same**
+   buyer treasury ATA to the **Leash fee authority's** ATA on the same
+   mint.
+
+Both legs ride the same buyer signature, the same compute budget, the
+same blockhash, and the same `tx_sig`. There is no second confirmation
+to wait for and no separate failure mode — either the whole settlement
+lands or none of it does.
+
+This is the only economic hook in the entire stack. There is **no**
+per-call subscription, **no** facilitator markup, **no** per-agent
+infra fee, and **no** spread on simulation. The 1% fee leg is the
+revenue model for the hosted Leash facilitators, and the same primitive
+anyone running `@leash/facilitator` can opt into.
+
+## The numbers
+
+| Field             | Value                                              | Where it lives                                                                  |
+| ----------------- | -------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Rate              | `100` bps (`1.00%`)                                | `LEASH_FEE_BPS` env on facilitator + API                                        |
+| Rounding          | Ceiling, in atomic units                           | `computeFeeAtoms` in `@leash/core/fees`                                         |
+| Mainnet authority | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`     | `LEASH_FEE_AUTHORITY_MAINNET` (override only if self-hosting your own facilitator) |
+| Devnet authority  | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`     | `LEASH_FEE_AUTHORITY_DEVNET`                                                    |
+| Live snapshot     | `GET /v1/health` `.protocol_fee` block             | API + `@leash/facilitator` `/health`                                            |
+
+The hosted Leash mainnet and devnet facilitators always serve the
+defaults. Override the env only if you are **operating your own
+facilitator** with your own treasury — in that case the buyer SDK
+treats your facilitator as Leash-flavoured iff you publish a
+`protocol_fee` block on `/health`.
+
+## Math worked example
+
+A buyer calls a `0.012345 USDC` endpoint (atoms `12345`, USDC has 6
+decimals):
+
+```
+amount      = 12_345        atoms (= 0.012345 USDC, what the seller quoted)
+bps         = 100           (1.00%)
+fee         = ceil(12_345 * 100 / 10_000)
+            = ceil(123.45)
+            = 124           atoms (= 0.000124 USDC)
+gross       = amount + fee
+            = 12_469        atoms (= 0.012469 USDC, what the buyer signs)
+```
+
+The buyer signs **one** transaction with **two** `TransferChecked`
+instructions: 12 345 atoms to the seller, 124 atoms to
+`Leash-fee-authority's USDC ATA`. The seller's receipt records:
+
+```json
+{
+  "kind": "earn",
+  "price": {
+    "amount": "12345",
+    "currency": "USDC",
+    "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "fee": "124",
+    "gross": "12469",
+    "feeBps": 100,
+    "feeAuthority": "3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W"
+  },
+  "tx_sig": "..."
+}
+```
+
+The buyer's `spend` receipt carries the same `price` block (modulo
+`kind: 'spend'`).
+
+## Wire shape — `extra['leash.fee']`
+
+Sellers advertise the fee rate in the 402's `accepts[]` so buyers can
+verify it **before** signing. The shape is intentionally minimal — the
+dynamic fields (`feeAtomic`, `grossAtomic`, `feeDestination`) are
+**derived on demand** by both sides from the static fields below, so
+the buyer and facilitator always agree on the destination ATA without
+having to coordinate ahead of time.
+
+```jsonc
+{
+  "scheme": "exact",
+  "network": "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+  "asset": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+  "payTo": "<seller payTo ATA>",
+  "amount": "12345",
+  "extra": {
+    "leash.fee": {
+      "v": "1",
+      "bps": 100,
+      "feeAuthority": "3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W"
+    }
+  }
+}
+```
+
+Buyers parse it with `parseLeashFeeExtra` from `@leash/core` and resolve
+the per-request triple `(bps, feeAtomic, feeDestination)` via
+`computeLeashFeeForRequirements`. Facilitators run the **same**
+function over the **same** inputs to verify the buyer's transaction
+matches.
+
+If `extra['leash.fee']` is **absent**, both sides treat the settlement
+as vanilla x402 (single-leg, no fee enforcement). This keeps non-Leash
+sellers and non-Leash facilitators interoperable.
+
+## Verifying the live rate
+
+Before any UI signs a buyer's wallet, fetch the current rate from the
+facilitator (or the API) — the rate is one source of truth, surfaced
+identically on both:
+
+```bash
+$ curl -sS https://api.leash.market/v1/health | jq .protocol_fee
+{
+  "bps": 100,
+  "pct": "1.00%",
+  "authorities": {
+    "solana-mainnet": "3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W",
+    "solana-devnet":  "3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W"
+  }
+}
+
+$ curl -sS https://devnet-facilitator.leash.market/health | jq .protocol_fee
+{ "bps": 100, "enforcement": "enforce", "authority": "3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W" }
+```
+
+The web playground polls this on boot and refuses to construct a
+`TransferChecked` if the buyer-side computed `feeAuthority` disagrees
+with what the facilitator publishes.
+
+## Budgeting allowances and treasuries
+
+Because the buyer signs `gross`, **every spend allowance and every
+treasury balance has to be sized in `gross`, not `amount`.** The two
+common foot-guns:
+
+- **SPL `Approve` (executive allowance).** A `5 USDC` Approve only
+  buys `~4.95 USDC` of seller-quoted endpoints — the last fee leg
+  pushes you over the cap and the settlement fails with
+  `insufficient_allowance`. Either gross-up yourself with
+  `applyFeeGrossUp` from `@leash/core`, or pass
+  `pad_for_protocol_fee: true` on
+  [`POST /v1/agents/{mint}/delegation/prepare`](/api/agents) — the
+  response echoes `fee_padding_atoms` so you can audit.
+- **Treasury balance.** Same reasoning at the SPL balance level. Top
+  up `5.05 USDC` (atoms `5_050_000`) if you want to comfortably
+  consume `5 USDC` of seller-quoted endpoints. The web playground's
+  "Provision stable ATAs" + "Set allowance" buttons both do the
+  gross-up automatically.
+
+Code path:
+
+```ts
+import { applyFeeGrossUp, resolveLeashFeeBps } from '@leash/core';
+
+const sellerNetAtoms = 5_000_000n; // 5 USDC
+const { fee, gross } = applyFeeGrossUp(sellerNetAtoms, resolveLeashFeeBps());
+// fee   = 50_000n   (0.05 USDC)
+// gross = 5_050_000n (5.05 USDC) — use this to size SPL Approve / fund treasury
+```
+
+## What the facilitator does
+
+`@leash/facilitator` registers two custom schemes
+(`LeashExactSvmFacilitator` and its `V1` counterpart) that replay the
+upstream `@x402/svm` verification, then **additionally**:
+
+1. Confirm the buyer-signed transaction has exactly **two**
+   `TransferChecked` instructions for the advertised mint.
+2. Confirm the second leg sources from the same buyer ATA, targets the
+   `feeAuthority`'s ATA, and has the exact `feeAtomic` value derived
+   from the requirement's `amount` and `bps`.
+3. Reject (`enforce`), warn (`warn`), or ignore (`off`) per the
+   `LEASH_FEE_ENFORCE` env. The hosted facilitators run `enforce` on
+   both clusters; `warn` is intended for staged cutovers when buyer
+   SDKs are still rolling out the fee leg.
+
+Settlement (`/settle`) delegates to the unmodified upstream scheme, so
+broadcast semantics, fee-payer simulation, and signature compatibility
+are unchanged.
+
+## What the indexer does
+
+Every Leash fee ATA on every supported stable mint is added to the
+indexer's watchlist at startup (`seedLeashFeeWatchlist` in
+`apps/api/src/indexer/leash-fee-watchlist.ts`, kind `leash_fee_ata`).
+Two paths emit `protocol.fee.collected` events:
+
+- **Receipt-side.** Whenever a settled `earn` receipt with `price.fee`
+  is ingested via `POST /v1/receipts/{agent}`, `/x/{id}` (paywall), or
+  the receipt-pull worker, `emitProtocolFeeEvent` fires once,
+  idempotent on `(network, receipt_hash)`.
+- **On-chain fallback.** When the indexer sees a positive
+  `tokenBalanceDeltas` to the fee authority on a watched ATA, it emits
+  the same event with `metadata.source = 'on_chain'`. This catches the
+  rare case of a fee landing without a receipt (e.g. a buyer that
+  never POSTed the spend receipt).
+
+The explorer's "Protocol fees collected" panel sums these by mint per
+network, and the receipt detail page renders `Net (seller) / Protocol
+fee / Gross (buyer) / Fee authority`.
+
+## Self-hosting `@leash/facilitator` with your own fee
+
+The fee primitive is generic — anyone running their own facilitator can
+charge their own protocol fee against their own treasury, or disable
+the fee entirely while still benefiting from the rest of the
+verification stack:
+
+| Env                              | Default                                          | Effect                                                                              |
+| -------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `LEASH_FEE_BPS`                  | `100`                                            | Fee rate in basis points. Set to `0` to disable.                                    |
+| `LEASH_FEE_ENFORCE`              | `enforce`                                        | `enforce` rejects bad/missing fee legs; `warn` logs them; `off` skips verification. |
+| `LEASH_FEE_AUTHORITY_MAINNET`    | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`   | Pubkey that receives the mainnet fee leg.                                           |
+| `LEASH_FEE_AUTHORITY_DEVNET`     | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`   | Same, for devnet.                                                                   |
+
+Run [`@leash/facilitator`](/guides/run-a-facilitator) with the env you
+want, point sellers at `LEASH_FACILITATOR_URL=https://your-host`, and
+the chain of effects above (sellers stamp your `feeAuthority` →
+buyers verify against your `/health` → indexer watchlists your ATAs
+→ explorer aggregates) all wires up automatically.
+
+## SDK reference
+
+```ts
+import {
+  applyFeeGrossUp,
+  buildLeashFeeExtra,
+  computeFeeAtoms,
+  computeLeashFeeForRequirements,
+  parseLeashFeeExtra,
+  resolveLeashFeeAuthority,
+  resolveLeashFeeBps,
+  type LeashFeeExtra,
+  type ResolvedLeashFee,
+} from '@leash/core';
+```
+
+- `resolveLeashFeeBps()` — current fee rate (env-overridable).
+- `resolveLeashFeeAuthority(network)` — fee owner pubkey for `'mainnet' | 'devnet'`.
+- `computeFeeAtoms(amount, bps)` — pure, ceiling-rounded.
+- `applyFeeGrossUp(amount, bps?)` — returns `{ fee, gross }`.
+- `buildLeashFeeExtra({ network, bps?, authority? })` — synchronous,
+  returns the wire shape sellers stamp on `extra['leash.fee']`.
+- `parseLeashFeeExtra(extra)` — parses the wire shape, returns `null`
+  on absence/malformation.
+- `computeLeashFeeForRequirements({ network, asset, tokenProgram, amount, extra })` —
+  async, derives `(bps, feeAtomic, grossAtomic, feeDestination)` for a
+  specific `paymentRequirements` entry. Used by both buyer scheme and
+  facilitator verifier.
+
+The SDK helpers are pure (modulo ATA derivation, which uses
+`@solana-program/token` / `@solana-program/token-2022`), so you can
+unit-test integrations without booting any Solana RPC.
+
+## See also
+
+- [Run a facilitator](/guides/run-a-facilitator) — boot your own and
+  configure the fee env.
+- [Monetise an API](/api/monetize-api) — where the fee fits in the
+  end-to-end seller flow.
+- [Explorer tracking](/api/explorer-tracking) — how
+  `protocol.fee.collected` events surface in the UI.
+- [Receipt format](/standards/receipt-format) — the canonical
+  `price.fee` / `price.gross` / `price.feeBps` / `price.feeAuthority`
+  fields on every `ReceiptV1`.
