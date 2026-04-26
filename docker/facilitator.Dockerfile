@@ -35,8 +35,7 @@ WORKDIR /app
 # context stays small.
 FROM base AS build
 COPY . .
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile --filter "@leash/facilitator..."
+RUN pnpm install --frozen-lockfile --filter "@leash/facilitator..."
 # Turbo uses tsconfig.build.json under the hood for both packages.
 RUN pnpm --filter "@leash/facilitator..." build
 
