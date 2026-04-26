@@ -68,7 +68,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import { createKeyPairSignerFromBytes } from '@solana/kit';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { keypairIdentity, publicKey, type Umi } from '@metaplex-foundation/umi';
+import { keypairIdentity, publicKey, type Umi, type PublicKey } from '@metaplex-foundation/umi';
 import { base58 } from '@metaplex-foundation/umi/serializers';
 import { mplCore, findAssetSignerPda } from '@metaplex-foundation/mpl-core';
 import { mplToolbox, findAssociatedTokenPda } from '@metaplex-foundation/mpl-toolbox';
@@ -80,6 +80,7 @@ import {
   setSpendDelegation,
   getSpendDelegation,
   provisionTreasuryAtas,
+  TOKEN_2022_PROGRAM_ID,
 } from '@leash/registry-utils';
 
 import {
@@ -100,10 +101,15 @@ const API_KEY = required('LEASH_E2E_API_KEY');
 const OWNER_SECRET = required('LEASH_E2E_OWNER_SECRET');
 const RPC = process.env.LEASH_E2E_RPC ?? 'https://api.devnet.solana.com';
 const USDC_MINT = process.env.LEASH_E2E_USDC_MINT ?? '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+// Devnet USDG (Token-2022). Override with LEASH_E2E_USDG_MINT.
+const USDG_MINT = process.env.LEASH_E2E_USDG_MINT ?? '4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7';
 const PRICE = process.env.LEASH_E2E_PRICE ?? '$0.001';
 const AGENT_URI = process.env.LEASH_E2E_AGENT_URI ?? 'https://leash.market/test-agent.json';
 const FUND_USDC = BigInt(process.env.LEASH_E2E_FUND_USDC ?? '100000'); // 0.1 USDC
 const DELEGATE_USDC = BigInt(process.env.LEASH_E2E_DELEGATE_USDC ?? '100000'); // 0.1 USDC
+// How much USDG (atomic, 6 dec) to ensure the buyer holds and is delegated.
+const FUND_USDG = BigInt(process.env.LEASH_E2E_FUND_USDG ?? '5000000'); // 5 USDG
+const DELEGATE_USDG = BigInt(process.env.LEASH_E2E_DELEGATE_USDG ?? '5000000'); // 5 USDG
 const KEEP_LINK = process.env.LEASH_E2E_KEEP_LINK === '1';
 
 if (!API_KEY.startsWith('lsh_test_')) {
@@ -200,6 +206,7 @@ async function main(): Promise<void> {
   console.log(`rpc      : ${RPC}`);
   console.log(`api key  : ${API_KEY.slice(0, 16)}…${API_KEY.slice(-4)}`);
   console.log(`usdc mint: ${USDC_MINT}`);
+  console.log(`usdg mint: ${USDG_MINT}`);
   console.log(`price    : ${PRICE}`);
 
   // ───── 1. health ─────
@@ -445,6 +452,45 @@ async function main(): Promise<void> {
   assert(delegation.delegate === ownerPubkey, 'delegate should be owner');
   assert(delegation.delegatedAmount >= DELEGATE_USDC, 'delegated amount too low');
 
+  // ───── 9b. USDG fund + delegation (Token-2022) ─────
+  step('Top up buyer treasury USDG and approve USDG spend delegation (Token-2022)');
+  let usdgDelegation = await getSpendDelegation(umi, {
+    agentAsset: buyerAgent,
+    mint: USDG_MINT,
+    tokenProgram: TOKEN_2022_PROGRAM_ID,
+  });
+  info(`buyer treasury USDG ATA    : ${usdgDelegation.sourceTokenAccount}`);
+  info(`buyer treasury USDG balance: ${usdgDelegation.balance.toString()} atomic`);
+  if (usdgDelegation.balance < FUND_USDG) {
+    warn(
+      `buyer USDG balance (${usdgDelegation.balance}) < ${FUND_USDG} — skipping USDG settlement. ` +
+        `Fund the treasury ATA (${usdgDelegation.sourceTokenAccount}) with devnet USDG from faucet.solana.com ` +
+        `or set LEASH_E2E_FUND_USDG lower to skip this check.`,
+    );
+  } else {
+    if (usdgDelegation.delegate !== ownerPubkey || usdgDelegation.delegatedAmount < DELEGATE_USDG) {
+      const res = await setSpendDelegation(umi, {
+        agentAsset: buyerAgent,
+        mint: USDG_MINT,
+        executive: ownerPubkey,
+        amount: DELEGATE_USDG,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      });
+      ok(`USDG approved tx: ${res.signature}`);
+      usdgDelegation = await pollDelegationMint(
+        umi,
+        buyerAgent,
+        USDG_MINT,
+        TOKEN_2022_PROGRAM_ID,
+        (s) => s.delegate === ownerPubkey && s.delegatedAmount >= DELEGATE_USDG,
+        'usdg-delegation',
+      );
+    }
+    info(`USDG delegate : ${usdgDelegation.delegate}`);
+    info(`USDG allowance: ${usdgDelegation.delegatedAmount.toString()} atomic`);
+    ok(`USDG delegation ready`);
+  }
+
   // ───── 10. preview a payment link draft (no persist) ─────
   step('POST /v1/payment-links/preview — render accepts[] without persisting');
   const preview = await api<{
@@ -600,6 +646,70 @@ async function main(): Promise<void> {
     `buyer balance before/after: ${before.balance.toString()} / ${after.balance.toString()} (debited ${debited.toString()})`,
   );
 
+  // ───── 15b. USDG settlement (if buyer has enough USDG + delegation) ─────
+  let usdgTxSig: string | undefined;
+  if (usdgDelegation.balance >= FUND_USDG && usdgDelegation.delegate === ownerPubkey) {
+    step('createBuyer.fetch(share_url) — USDG settlement on devnet (Token-2022)');
+    const usdgBuyer = createBuyer({
+      agent: buyerAgent,
+      rules: {
+        v: '0.1',
+        budget: { daily: '10', perCall: '0.01', currency: 'USDC' },
+        hosts: { allow: [new URL(shareUrl).hostname] },
+        triggers: [],
+      },
+      signer: ownerSigner,
+      networks: ['solana-devnet'],
+      rpcUrl: RPC,
+      sourceTokenAccount: usdgDelegation.sourceTokenAccount,
+      preferredCurrency: 'USDG',
+      onReceipt: async (receipt) => {
+        try {
+          await api(`/v1/receipts/${receipt.agent}`, {
+            method: 'POST',
+            body: receipt,
+          });
+        } catch (err) {
+          info(`usdg spend-receipt ingest failed (non-fatal): ${(err as Error).message}`);
+        }
+      },
+    });
+
+    const usdgBefore = await getSpendDelegation(umi, {
+      agentAsset: buyerAgent,
+      mint: USDG_MINT,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
+    });
+    const usdgResult = await usdgBuyer.fetch(`${shareUrl}?network=solana-devnet`, {
+      method: 'GET',
+    });
+    if (!usdgResult.receipt.tx_sig) {
+      warn(
+        `USDG settlement failed (non-fatal); reason=${usdgResult.failureReason ?? '(none)'}\n` +
+          `decision=${usdgResult.receipt.decision}`,
+      );
+    } else {
+      usdgTxSig = usdgResult.receipt.tx_sig;
+      ok(`USDG response status: ${usdgResult.response.status}`);
+      ok(`USDG tx_sig         : ${usdgTxSig}`);
+      ok(`USDG receipt_hash   : ${usdgResult.receipt.receipt_hash}`);
+      await sleep(3_000);
+      const usdgAfter = await getSpendDelegation(umi, {
+        agentAsset: buyerAgent,
+        mint: USDG_MINT,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      });
+      const usdgDebited = usdgBefore.balance - usdgAfter.balance;
+      info(
+        `USDG balance before/after: ${usdgBefore.balance.toString()} / ${usdgAfter.balance.toString()} (debited ${usdgDebited.toString()})`,
+      );
+    }
+  } else {
+    info(
+      `USDG settlement skipped — balance=${usdgDelegation.balance}, delegate=${usdgDelegation.delegate ?? 'none'} (need ≥ ${FUND_USDG} + delegation to owner)`,
+    );
+  }
+
   // ───── 16. counters bumped on the link ─────
   step('GET /v1/payment-links/{id} — counters bumped');
   // Counters update inside the paywall handler; give it a moment.
@@ -708,6 +818,9 @@ async function main(): Promise<void> {
   console.log('============================================================');
   console.log(`payment link  : ${shareUrl}`);
   console.log(`tx signature  : https://solscan.io/tx/${callResult.receipt.tx_sig}?cluster=devnet`);
+  if (usdgTxSig) {
+    console.log(`usdg tx sig   : https://solscan.io/tx/${usdgTxSig}?cluster=devnet`);
+  }
   console.log(`seller agent  : ${sellerAgent}`);
   console.log(`buyer  agent  : ${buyerAgent}`);
 }
@@ -758,6 +871,31 @@ async function pollDelegation(
     await sleep(backoff);
     backoff = Math.min(Math.floor(backoff * 1.5), 4_000);
     last = await getSpendDelegation(umi, { agentAsset: buyerAgent, mint: USDC_MINT });
+  }
+  return last;
+}
+
+async function pollDelegationMint(
+  umi: Umi,
+  buyerAgent: string,
+  mint: string,
+  tokenProgram: PublicKey,
+  predicate: (s: Awaited<ReturnType<typeof getSpendDelegation>>) => boolean,
+  label: string,
+  timeoutMs = 30_000,
+): Promise<Awaited<ReturnType<typeof getSpendDelegation>>> {
+  const started = Date.now();
+  let backoff = 750;
+  let last = await getSpendDelegation(umi, { agentAsset: buyerAgent, mint, tokenProgram });
+  while (!predicate(last)) {
+    if (Date.now() - started > timeoutMs) {
+      fatal(
+        `${label}: predicate never satisfied within ${timeoutMs}ms — last=${JSON.stringify({ delegate: last.delegate, balance: last.balance.toString(), delegatedAmount: last.delegatedAmount.toString() })}`,
+      );
+    }
+    await sleep(backoff);
+    backoff = Math.min(Math.floor(backoff * 1.5), 4_000);
+    last = await getSpendDelegation(umi, { agentAsset: buyerAgent, mint, tokenProgram });
   }
   return last;
 }

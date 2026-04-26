@@ -87,7 +87,7 @@ export default async function ReceiptPage({ params }: Props) {
             </Field>
           ) : null}
           {r.price ? (
-            <Field label="Net (seller)" hint={`Raw on-chain integer (atoms): ${r.price.amount}`}>
+            <Field label="Amount" hint={`Raw on-chain integer (atoms): ${r.price.amount}`}>
               {formatTokenAmount(r.price.amount, tokenInfoFor(network, r.price.asset ?? null))}
             </Field>
           ) : null}
@@ -98,17 +98,9 @@ export default async function ReceiptPage({ params }: Props) {
                 typeof r.price.feeBps === 'number' ? ` (${r.price.feeBps} bps)` : ''
               }`}
             >
-              {formatTokenAmount(r.price.fee, tokenInfoFor(network, r.price.asset ?? null))}
-              {typeof r.price.feeBps === 'number' ? (
-                <span className="ml-2 text-[--color-fg-subtle]">
-                  ({(r.price.feeBps / 100).toFixed(2)}%)
-                </span>
-              ) : null}
-            </Field>
-          ) : null}
-          {r.price?.gross ? (
-            <Field label="Gross (buyer)" hint={`Buyer-signed total in atoms: ${r.price.gross}`}>
-              {formatTokenAmount(r.price.gross, tokenInfoFor(network, r.price.asset ?? null))}
+              {formatTokenAmount(r.price.fee, tokenInfoFor(network, r.price.asset ?? null), {
+                withUsd: false,
+              })}
             </Field>
           ) : null}
           {r.price?.feeAuthority ? (
