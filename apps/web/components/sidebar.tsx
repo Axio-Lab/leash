@@ -101,10 +101,19 @@ export function Sidebar() {
       return (
         <div className="mt-auto flex flex-col items-center gap-2 text-fg-subtle">
           <a
-            href="https://github.com/leash-protocol"
+            href="https://github.com/Axio-Lab/leash"
             target="_blank"
             rel="noreferrer"
             title="GitHub"
+            className="hover:text-fg-muted"
+          >
+            <ExternalLink className="size-3.5" />
+          </a>
+          <a
+            href="https://docs.leash.market"
+            target="_blank"
+            rel="noreferrer"
+            title="Documentation"
             className="hover:text-fg-muted"
           >
             <ExternalLink className="size-3.5" />
@@ -116,7 +125,7 @@ export function Sidebar() {
     return (
       <div className="mt-auto flex flex-col gap-1.5 text-[10.5px] text-fg-subtle">
         <a
-          href="https://github.com/leash-protocol"
+          href="https://github.com/Axio-Lab/leash"
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1 hover:text-fg-muted"
@@ -124,7 +133,7 @@ export function Sidebar() {
           GitHub <ExternalLink className="size-3" />
         </a>
         <a
-          href="http://localhost:3001"
+          href="https://docs.leash.market"
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1 hover:text-fg-muted"
