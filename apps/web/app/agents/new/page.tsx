@@ -3,7 +3,17 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ArrowRight, Bot, Plus, Sparkles, Trash2, Wallet, Info } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Bot,
+  ExternalLink,
+  Info,
+  Plus,
+  Sparkles,
+  Trash2,
+  Wallet,
+} from 'lucide-react';
 import {
   createAgent,
   provisionTreasuryAtas,
@@ -24,6 +34,10 @@ import { usePrivyUmi } from '@/lib/privy-umi';
 import { PRIVY_APP_ID } from '@/lib/env';
 import { transactionExplorerUrl } from '@/lib/solscan';
 import { saveAgent } from '@/lib/agent-storage';
+
+/** Example MPL Core–style metadata JSON in the Leash repo (for creators to copy / adapt). */
+const METADATA_JSON_EXAMPLE_HREF =
+  'https://github.com/Axio-Lab/leash/blob/main/apps/web/lib/example.json';
 
 const NETWORKS = [
   'solana-devnet',
@@ -385,7 +399,18 @@ export default function NewAgentPage() {
                       Paste a URL to your MPL Core metadata JSON (HTTPS, IPFS gateway, Arweave,
                       etc.). Host the document yourself — include any{' '}
                       <code className="font-mono">image</code> field there if you want artwork on
-                      explorers.
+                      explorers.{' '}
+                      <a
+                        href={METADATA_JSON_EXAMPLE_HREF}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-0.5 font-medium text-brand hover:underline"
+                      >
+                        Example metadata JSON template
+                        <ExternalLink className="size-3 shrink-0" aria-hidden />
+                      </a>{' '}
+                      (same shape as <code className="font-mono text-[10px]">example.json</code> in
+                      the repo).
                     </span>
                   </div>
 
