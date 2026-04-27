@@ -136,17 +136,12 @@ You can also add custom labels (e.g. `audit-firm-x`, `proof-of-humanity`) when y
 
 The Next.js playground (`apps/web`) wraps all of this in a UI **signed by your connected Privy wallet** — there is no shared hot key:
 
-- `/agents/new` — Create Agent form, presented as a **two-step tabbed wizard**
-  ("Identity" → "Funding & policy"):
-  - **Step 1 — Identity.** Paste a **publicly fetchable JSON URL** for the on-chain Core metadata URI (HTTPS, IPFS gateway, Arweave, etc.) — you host the document yourself.
-    - Trust models are checkboxes (Reputation, Crypto-economic, TEE, ZK proof) plus a custom-add input — see "What 'Supported trust' means" above.
-  - **Step 2 — Funding & policy.** Pick a stablecoin (USDC on devnet; USDC,
-    USDT, USDG on mainnet) and an initial spend allowance. Submitting runs
-    `createAgent` → `delegateExecution` → `setSpendDelegation` → optional
-    `provisionTreasuryAtas` so the new agent ships with a working executive
-    - capped delegation in a single click.
-- `/agents/[mint]` → **Identity** tab — auto-resolves the on-chain registration URI from the AgentIdentity plugin.
-- `/agents/[mint]` → **Execute** tab — buttons for `registerExecutiveV1` + `delegateExecutionV1`, signed by the same Privy wallet.
+- `/agents/new` — Create Agent form, **two tabs**: **1 · Identity & metadata** then **2 · Services & session**.
+  - **Tab 1.** Name, description, network, and a **publicly fetchable JSON URL** for the on-chain Core metadata URI (HTTPS, IPFS gateway, Arweave, etc.) — you host that JSON yourself.
+  - **Tab 2.** Service endpoints, supported trust models (checkboxes plus custom values — see "What 'Supported trust' means" above), optional behaviour rules, then **Create agent**. Minting runs `createAgent` via your Privy wallet; devnet/mainnet flows may also call `provisionTreasuryAtas`. Executive registration, delegation, and spend caps happen on the agent profile — see [Fund an agent](/guides/fund-an-agent).
+- `/agents/[mint]` → **Identity** tab — resolves the on-chain registration URI from the AgentIdentity plugin.
+- `/agents/[mint]` → **Execute** tab — `registerExecutiveV1` + `delegateExecutionV1`, same Privy wallet.
+- `/agents/[mint]` → **Token (Genesis)** tab — paste the token image URL Metaplex accepts, then launch (see [Launch an agent token](/guides/launch-agent-token)).
 
 Configure `NEXT_PUBLIC_PRIVY_APP_ID` in `apps/web/.env.local`, log in via the wallet button (top-right), and fund your embedded wallet on devnet (`solana airdrop 1 <pubkey> --url devnet`). The bridge is `apps/web/lib/privy-umi.ts` — `usePrivyUmi()` wraps the Privy `ConnectedSolanaWallet` in Metaplex's `walletAdapterIdentity` so any `@leash/registry-utils` SDK call works straight from a React component.
 

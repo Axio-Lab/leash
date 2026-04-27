@@ -91,9 +91,9 @@ itself executes them on-chain. Full guide: [Launch an agent token](/guides/launc
 Re-exports the Genesis types callers most often need: `TokenMetadata`,
 `BondingCurveLaunchInput`, `GenesisApiConfig`, `SvmNetwork`.
 
-### Off-chain hosting
+### Registration resolution
 
-- `resolveByoUri(uri)` — fetches + validates `RegistrationV1`.
+- `resolveByoUri(uri)` — fetches + validates `RegistrationV1` from a public URL.
 - `parseLeashBlock(input)` — Zod parse helper for `LeashBlockV1`.
 
 ### Operator keypair
