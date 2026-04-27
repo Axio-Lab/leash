@@ -3,14 +3,14 @@ title: Create an agent
 description: Mint a Core asset and register an Agent Identity in one transaction with @leash/registry-utils.
 ---
 
-Leash agents follow Metaplex's [MIP-104 / Agent Identity](https://www.metaplex.com/docs/agents/mint-agent) standard: a single MPL Core asset with an `AgentIdentity` plugin attached. `@leash/registry-utils` ships a thin wrapper around `mintAndSubmitAgent` that does both in one transaction via the hosted Metaplex API, so you don't have to bring your own Pinata pin or sequence two instructions yourself.
+Leash agents follow Metaplex's [MIP-104 / Agent Identity](https://www.metaplex.com/docs/agents/mint-agent) standard: a single MPL Core asset with an `AgentIdentity` plugin attached. `@leash/registry-utils` ships a thin wrapper around `mintAndSubmitAgent` that does both in one transaction via the hosted Metaplex API, so you don't have to sequence two instructions yourself.
 
 ## When to use this vs. BYO
 
 | Flow                          | What you get                                                                                             | Use when                                                                                                                |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `createAgent`                 | Core asset + Agent Identity + off-chain `agentMetadata` stored by `api.metaplex.com` — one signed tx     | You're starting from scratch and want the simplest path                                                                 |
-| `registerAgentIdentity` (BYO) | Attaches an Agent Identity to an MPL Core asset you already own; you host the registration JSON yourself | You already minted the asset, or you need full custody of the registration document (Pinata, Arweave, your own gateway) |
+| `registerAgentIdentity` (BYO) | Attaches an Agent Identity to an MPL Core asset you already own; you host the registration JSON yourself | You already minted the asset, or you need full custody of the registration document (Arweave, IPFS gateway, your own HTTPS host) |
 
 Both paths produce the **same on-chain shape**: an `AgentIdentityV1` PDA derived from the asset's pubkey, with `Listen` lifecycle hooks on `Transfer`, `Update`, and `Execute`. The only difference is who hosts the registration JSON.
 
@@ -42,7 +42,7 @@ const { assetAddress, signature, network } = await createAgent(umi, {
   network: 'solana-devnet',
   name: 'Plexpert',
   description: 'An informational agent for Metaplex protocols.',
-  uri: 'https://gateway.pinata.cloud/ipfs/<cid>', // on-chain Core metadata
+  uri: 'https://example.com/agent-metadata.json', // on-chain Core metadata (public JSON)
   services: [{ name: 'web', endpoint: 'https://example.com/agent' }],
   supportedTrust: ['reputation'],
 });
@@ -138,9 +138,7 @@ The Next.js playground (`apps/web`) wraps all of this in a UI **signed by your c
 
 - `/agents/new` — Create Agent form, presented as a **two-step tabbed wizard**
   ("Identity" → "Funding & policy"):
-  - **Step 1 — Identity.** Two metadata modes:
-    - **Pin to Pinata for me** (default): the form builds `{ name, description, image? }`, POSTs it to `/api/registry/pin` (server-side `PINATA_JWT`), and uses the returned IPFS gateway URL as the on-chain Core URI. Set `PINATA_JWT` in `apps/web/.env.local` to enable.
-    - **I have a URI**: paste an existing publicly-fetchable JSON URL (Arweave / IPFS / HTTPS) and skip the upload step.
+  - **Step 1 — Identity.** Paste a **publicly fetchable JSON URL** for the on-chain Core metadata URI (HTTPS, IPFS gateway, Arweave, etc.) — you host the document yourself.
     - Trust models are checkboxes (Reputation, Crypto-economic, TEE, ZK proof) plus a custom-add input — see "What 'Supported trust' means" above.
   - **Step 2 — Funding & policy.** Pick a stablecoin (USDC on devnet; USDC,
     USDT, USDG on mainnet) and an initial spend allowance. Submitting runs

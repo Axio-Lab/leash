@@ -74,7 +74,7 @@
 - [`@leash/core`](https://docs.leash.market/sdk/core.md): Policy evaluation, receipt hashing, x402 client adapter, treasury, kill-switch.
 - [`@leash/seller-kit`](https://docs.leash.market/sdk/seller-kit.md): Hono integration. Asset Signer PDA payTo. Real x402 middleware on Solana.
 - [`@leash/buyer-kit`](https://docs.leash.market/sdk/buyer-kit.md): Scriptable buyer agents. `createBuyer` + real x402 fetch + chained `ReceiptV1`.
-- [`@leash/registry-utils`](https://docs.leash.market/sdk/registry-utils.md): Pinata uploads, BYO URI resolution, leash-block helpers.
+- [`@leash/registry-utils`](https://docs.leash.market/sdk/registry-utils.md): Registration URI resolution, leash-block helpers, Metaplex agent flows.
 - [`@leash/runner`](https://docs.leash.market/sdk/runner.md): HTTP service that hosts JSONL receipt feeds, payment-link endpoints, and the kill switch.
 - [`@leash/testing`](https://docs.leash.market/sdk/testing.md): Fixtures, in-memory facilitator, and the `leash-conformance` CLI.
 
@@ -83,7 +83,7 @@
 - [Receipt V1](https://docs.leash.market/schemas/receipt-v1.md): Wire-format JSONL event for every gated call.
 - [Rules V1](https://docs.leash.market/schemas/rules-v1.md): Budgets, hosts, triggers — the policy doc the runner enforces.
 - [Leash Block V1](https://docs.leash.market/schemas/leash-block-v1.md): On-chain `leash` block embedded in registration metadata.
-- [Registration V1](https://docs.leash.market/schemas/registration-v1.md): Off-chain `AgentIdentity` JSON pinned to IPFS / Pinata / R2.
+- [Registration V1](https://docs.leash.market/schemas/registration-v1.md): Off-chain `AgentIdentity` JSON (HTTPS / IPFS / Arweave / object storage).
 - [Endpoint V1](https://docs.leash.market/schemas/endpoint-v1.md): Single endpoint manifest a seller agent advertises.
 
 ## Standards

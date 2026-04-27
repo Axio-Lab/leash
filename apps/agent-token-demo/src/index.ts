@@ -21,7 +21,7 @@
  * Env vars (see `./launch-input.ts` for full schema). Required:
  *   - `LEASH_OWNER_SECRET_KEY`  — JSON array of 64 bytes (Solana keypair).
  *   - `LEASH_AGENT_ASSET`       — Core asset address of the agent.
- *   - `LEASH_TOKEN_IMAGE`       — Irys gateway URL for the token image.
+ *   - `LEASH_TOKEN_IMAGE`       — HTTPS URL for the token image (Metaplex Genesis rules).
  *
  * Run:
  *

@@ -1468,7 +1468,7 @@ export default function AgentPage() {
                     id="uri"
                     value={registryUri}
                     onChange={(e) => setRegistryUri(e.target.value)}
-                    placeholder="https://gateway.pinata.cloud/ipfs/..."
+                    placeholder="https://…/metadata.json"
                   />
                   <Button variant="secondary" onClick={() => refetchReg()}>
                     Resolve

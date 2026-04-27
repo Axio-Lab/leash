@@ -11,13 +11,13 @@ const SECRET_64 = JSON.stringify(Array.from({ length: 64 }, (_, i) => i));
 // 32-character base58 valid Solana address (System Program is a safe constant
 // the docs use as a placeholder).
 const VALID_ASSET = '11111111111111111111111111111112';
-const IRYS_URL = 'https://gateway.irys.xyz/abc123';
+const SAMPLE_TOKEN_IMAGE = 'https://cdn.example.com/demo-token.png';
 
 function baseEnv(overrides: Record<string, string | undefined> = {}) {
   return {
     LEASH_OWNER_SECRET_KEY: SECRET_64,
     LEASH_AGENT_ASSET: VALID_ASSET,
-    LEASH_TOKEN_IMAGE: IRYS_URL,
+    LEASH_TOKEN_IMAGE: SAMPLE_TOKEN_IMAGE,
     ...overrides,
   };
 }
@@ -66,7 +66,7 @@ describe('readDemoConfig', () => {
     expect(cfg.setToken).toBe(false);
     expect(cfg.firstBuyAmount).toBe(0);
     expect(cfg.agentAsset).toBe(VALID_ASSET);
-    expect(cfg.tokenImage).toBe(IRYS_URL);
+    expect(cfg.tokenImage).toBe(SAMPLE_TOKEN_IMAGE);
   });
 
   it('switches RPC when LEASH_NETWORK=solana-mainnet', () => {
@@ -113,7 +113,7 @@ describe('buildLaunchInput', () => {
       agentAsset: VALID_ASSET,
       network: 'solana-devnet',
       setToken: false,
-      token: { name: 'Demo Agent', symbol: 'DAGT', image: IRYS_URL },
+      token: { name: 'Demo Agent', symbol: 'DAGT', image: SAMPLE_TOKEN_IMAGE },
     });
     expect(input.launch).toBeUndefined();
   });

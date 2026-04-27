@@ -38,7 +38,7 @@ const result = await launchAgentToken(umi, {
   token: {
     name: 'Plexpert Token',
     symbol: 'PLX',
-    image: 'https://gateway.irys.xyz/<id>', // MUST be Irys
+    image: 'https://…', // must match Metaplex Genesis image URL rules
     description: 'The official token of Plexpert.',
     externalLinks: { website: 'https://plexpert.example' },
   },
@@ -63,22 +63,14 @@ when `setToken: true` and the bundle confirms cleanly).
 | ------ | --------------------------------------------------------------------------------------------------------- |
 | name   | 1–32 characters                                                                                           |
 | symbol | 1–10 characters                                                                                           |
-| image  | Must be `https://gateway.irys.xyz/<id>`. The Metaplex API rejects every other host. Upload to Irys first. |
+| image  | Must match the HTTPS pattern Metaplex validates for Genesis (see their docs). Other hosts are rejected. |
 
 `description` (≤250 chars) and `externalLinks` (`website`, `twitter`,
 `telegram`) are optional.
 
-> **About the image host.** The Metaplex API explicitly rejects Pinata,
-> IPFS, S3, GitHub Pages, and any non-`gateway.irys.xyz` URL on the
-> `image` field — even though those hosts are perfectly valid for the
-> agent's `RegistrationV1` blob. The playground works around this by
-> exposing `POST /api/irys/upload-image` (server-side `@irys/upload` +
-> `@irys/upload-solana`) so the user can pick a file in the UI and get
-> back a usable Irys gateway URL in one click. Files under 100 KiB
-> upload free on Irys mainnet; larger files require a small SOL balance
-> on the configured `IRYS_FUNDING_SECRET_KEY` wallet (~0.001 SOL / MB).
-> Set `IRYS_NETWORK=devnet` to use the free, ephemeral devnet for
-> testing.
+> **About the image URL.** The Metaplex Genesis API validates `token.image`
+> against a specific HTTPS host pattern (see [Create an Agent Token](https://www.metaplex.com/docs/agents/create-agent-token)).
+> Host your artwork accordingly, then paste the full URL into the playground.
 
 ## Two-step variant
 
@@ -147,18 +139,9 @@ connected Privy embedded wallet:
 1. The card reads `getAgentToken` on mount and shows the current
    binding (linked + mint, or "no token yet"), the treasury PDA where
    creator fees will accrue, and which identity flavour is on-chain.
-2. The **Image** picker takes a local file and shows an immediate
-   preview thumbnail. The actual upload to Irys is **deferred until you
-   click Launch token** — until then you can swap the file as many
-   times as you want without burning Irys credits or polluting permanent
-   storage with discarded thumbnails. On launch the card uploads the
-   final image to `/api/irys/upload-image`, pins the gateway URL into
-   `form.image`, then runs `launchAgentToken` in the same async flow
-   (the button label switches between **Uploading image…** and
-   **Launching…** so you see exactly which step is in flight). An
-   "Advanced" disclosure exposes a raw URL input for callers who
-   already uploaded out-of-band; pasting a non-Irys URL surfaces an
-   inline warning since the Metaplex API rejects everything else.
+2. The **Image URL** field accepts the HTTPS URL for your token artwork.
+   The UI validates the host pattern Metaplex requires and shows a
+   warning when the URL would fail API validation.
 3. The **Permanently bind** checkbox defaults to **off**. A second
    warning appears if you tick it on an agent that already has a
    token.
@@ -181,7 +164,7 @@ pnpm --filter @leash/agent-token-demo build
 
 LEASH_OWNER_SECRET_KEY='[1,2,3,...,64]' \
 LEASH_AGENT_ASSET='<Core asset>' \
-LEASH_TOKEN_IMAGE='https://gateway.irys.xyz/<id>' \
+LEASH_TOKEN_IMAGE='https://…' \
 LEASH_TOKEN_NAME='Plexpert' LEASH_TOKEN_SYMBOL='PLX' \
 LEASH_NETWORK='solana-devnet' \
 pnpm --filter @leash/agent-token-demo start
@@ -206,7 +189,7 @@ The Genesis SDK exposes typed errors so callers can branch precisely:
 
 | Error      | Guard                      | Cause                                            |
 | ---------- | -------------------------- | ------------------------------------------------ |
-| Validation | `isGenesisValidationError` | Bad input (non-Irys image URL, name too long, …) |
+| Validation | `isGenesisValidationError` | Bad input (invalid image URL, name too long, …) |
 | Network    | `isGenesisApiNetworkError` | Cannot reach `https://api.metaplex.com`          |
 | API 4xx    | `isGenesisApiError`        | Rejected by the API; check `err.responseBody`    |
 | API 5xx    | `isGenesisApiError`        | Metaplex API unavailable; retry with back-off    |

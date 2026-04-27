@@ -1,6 +1,6 @@
 ---
 title: '@leash/registry-utils'
-description: Pinata uploads, BYO URI resolution, leash-block helpers.
+description: Registration URI resolution, leash-block helpers, Metaplex agent flows.
 ---
 
 ### Create / register
@@ -82,6 +82,7 @@ launch transactions are wrapped in `mpl-core::Execute` so the agent
 itself executes them on-chain. Full guide: [Launch an agent token](/guides/launch-agent-token).
 
 - `launchAgentToken(umi, { agentAsset, network?, setToken?, token, launch?, wallet?, ... })` — one-shot `createAndRegisterLaunch`. Returns `{ mintAddress, genesisAccount, signatures, launch, token, agentAsset, network, agentTokenSet }` with base58-encoded signatures. **`setToken: true` is permanent** — once an agent's token is bound it cannot be changed, replaced, or unset.
+- `GENESIS_TOKEN_IMAGE_URL_PREFIX` / `isGenesisTokenImageUrl(url)` — Metaplex Genesis `token.image` URL rule helpers (see Metaplex docs).
 - `prepareAgentTokenLaunch(umi, input)` / `sendPreparedAgentTokenLaunch(umi, prepared, opts?)` — two-step variant for hardware wallets, custom retries, or inspecting the unsigned bundle before sending.
 - `setAgentToken(umi, { agentAsset, genesisAccount, collection?, payer?, authority? })` — wraps `setAgentTokenV1` in `mpl-core::Execute`. Use this when you launched a Genesis token outside Leash and want to bind it to your agent later (the docs' "Set Agent Token" snippet).
 - `getAgentToken(umi, agentAsset)` → `{ agentAsset, treasury, hasToken, mint, source }` where `source` is `'v1' | 'v2' | 'none'`.
@@ -92,10 +93,7 @@ Re-exports the Genesis types callers most often need: `TokenMetadata`,
 
 ### Off-chain hosting
 
-- `pinJson(json, opts?)` — uploads to Pinata; `PINATA_JWT` from env.
 - `resolveByoUri(uri)` — fetches + validates `RegistrationV1`.
-- `resolveOrUpload({ uri | json })` — combined entrypoint.
-- `verifyGatewayCid(gatewayUrl)` — HTTP 200 smoke check (full CIDv1 verify lands in v0.2).
 - `parseLeashBlock(input)` — Zod parse helper for `LeashBlockV1`.
 
 ### Operator keypair
