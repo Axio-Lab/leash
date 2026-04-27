@@ -408,9 +408,7 @@ export default function NewAgentPage() {
                       >
                         Example metadata JSON template
                         <ExternalLink className="size-3 shrink-0" aria-hidden />
-                      </a>{' '}
-                      (same shape as <code className="font-mono text-[10px]">example.json</code> in
-                      the repo).
+                      </a>
                     </span>
                   </div>
 
