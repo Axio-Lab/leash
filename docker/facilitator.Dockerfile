@@ -3,11 +3,7 @@
 # Per-service Dockerfile for `@leash/facilitator` (the x402 facilitator
 # HTTP server). Designed for the leash monorepo + Railway / Fly / any
 # Docker host.
-#
-# Env contract: this is a server process — it reads `process.env` at
-# request/startup time, so Railway's runtime service variables (e.g.
-# `LEASH_FACILITATOR_*`) are enough. Do NOT need build-time ARGs here
-# (no Next.js inlining).
+
 #
 # Strategy:
 #   1. `base`    — pinned Node 22 + Corepack-activated pnpm.

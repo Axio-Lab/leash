@@ -10,10 +10,7 @@
 #
 #   For this image: Root Directory = `/` (repo root), and point the
 #   service at `docker/docs.railway.json` (Config as code path).
-#
-# Env contract: Mintlify's static export has no env var dependencies,
-# and the `serve.js` runtime only reads `$PORT`. Do NOT need build-time
-# ARGs or runtime secrets here.
+
 
 FROM node:22-bookworm-slim AS base
 ENV DEBIAN_FRONTEND=noninteractive \

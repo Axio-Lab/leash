@@ -4,10 +4,6 @@
 #
 # Build context MUST be the monorepo root. On Railway: Root Directory = `/`,
 # Config as code = `docker/api.railway.json`.
-#
-# Env contract: this is a server process — it reads `process.env` at
-# request/startup time, so Railway's runtime service variables are
-# enough. Do NOT need build-time ARGs here (no Next.js inlining).
 
 FROM node:22-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm PATH="/pnpm:$PATH" CI=1
