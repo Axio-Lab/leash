@@ -39,7 +39,6 @@ pnpm --filter @leash/docs dev
 | `LEASH_ONCHAIN_PAUSED` | `1` — mirror on-chain pause from an external watcher.                 |
 | `SOLANA_RPC`           | RPC URL (demos, kits).                                                |
 | `AGENT_ASSET`          | Core asset mint (demos).                                              |
-| `PINATA_JWT`           | Pinata JWT for `upload-registration` / registry uploads.              |
 | `LEASH_RUNNER_URL`     | Web app proxy for `receipts.jsonl` (default `http://localhost:8787`). |
 
 ## Docker

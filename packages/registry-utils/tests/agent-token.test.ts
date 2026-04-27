@@ -52,7 +52,12 @@ vi.mock('@metaplex-foundation/mpl-core', () => ({
 }));
 
 // Import after mocks so the module sees them.
-import { launchAgentToken, getAgentToken, hasAgentToken } from '../src/agent-token.js';
+import {
+  launchAgentToken,
+  getAgentToken,
+  hasAgentToken,
+  isGenesisTokenImageUrl,
+} from '../src/agent-token.js';
 
 const FAKE_AGENT = '4Nd1m4mq6n3Wzx2gWVjUXjK1J4tRzuq8ASZxUgRJ6CcS';
 const FAKE_IDENTITY_WALLET = publicKey('Sysvar1nstructions1111111111111111111111111');
@@ -74,6 +79,17 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+describe('isGenesisTokenImageUrl', () => {
+  it('accepts the Metaplex-validated HTTPS gateway prefix', () => {
+    expect(isGenesisTokenImageUrl('https://gateway.irys.xyz/abc')).toBe(true);
+    expect(isGenesisTokenImageUrl('  https://gateway.irys.xyz/x  ')).toBe(true);
+  });
+  it('rejects other hosts', () => {
+    expect(isGenesisTokenImageUrl('https://example.com/logo.png')).toBe(false);
+    expect(isGenesisTokenImageUrl('')).toBe(false);
+  });
+});
+
 describe('launchAgentToken', () => {
   it('forwards token + agent fields to Genesis with sensible defaults', async () => {
     mocks.createAndRegisterLaunch.mockResolvedValueOnce({
@@ -89,7 +105,7 @@ describe('launchAgentToken', () => {
       token: {
         name: 'Plexpert',
         symbol: 'PLX',
-        image: 'https://gateway.irys.xyz/abc',
+        image: 'https://cdn.example.com/agent-token.png',
       },
     });
 
@@ -129,7 +145,7 @@ describe('launchAgentToken', () => {
       token: {
         name: 'Locked-In Token',
         symbol: 'LCK',
-        image: 'https://gateway.irys.xyz/def',
+        image: 'https://cdn.example.com/locked-token.png',
       },
       network: 'solana-mainnet',
       setToken: true,
@@ -150,7 +166,7 @@ describe('launchAgentToken', () => {
 
   it('rejects when Genesis throws (validation propagates)', async () => {
     mocks.createAndRegisterLaunch.mockRejectedValueOnce(
-      Object.assign(new Error('image must be Irys'), { name: 'GenesisValidationError' }),
+      Object.assign(new Error('Invalid token image URL'), { name: 'GenesisValidationError' }),
     );
 
     await expect(
@@ -158,7 +174,7 @@ describe('launchAgentToken', () => {
         agentAsset: FAKE_AGENT,
         token: { name: 'Bad', symbol: 'BAD', image: 'https://example.com/x.png' },
       }),
-    ).rejects.toThrow(/Irys/);
+    ).rejects.toThrow(/Invalid token image URL/);
   });
 });
 

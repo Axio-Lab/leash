@@ -18,7 +18,7 @@ describe('resolveByoUri', () => {
       vi.fn().mockResolvedValue(new Response(JSON.stringify(doc), { status: 200 })),
     );
     const r = await resolveByoUri('https://example.com/r.json');
-    expect(r.source).toBe('byo');
+    expect(r.uri).toBe('https://example.com/r.json');
     expect(r.document.name).toBe('A');
   });
 });

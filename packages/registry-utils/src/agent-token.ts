@@ -85,12 +85,22 @@ function encodeSignatures(sigs: Uint8Array[]): string[] {
   return sigs.map((s) => base58.deserialize(s)[0]);
 }
 
+/**
+ * HTTPS prefix Metaplex Genesis validates for `token.image`.
+ * @see https://www.metaplex.com/docs/agents/create-agent-token
+ */
+export const GENESIS_TOKEN_IMAGE_URL_PREFIX = 'https://gateway.irys.xyz/' as const;
+
+export function isGenesisTokenImageUrl(value: string): boolean {
+  return value.trim().startsWith(GENESIS_TOKEN_IMAGE_URL_PREFIX);
+}
+
 export type LaunchAgentTokenInput = {
   /** The agent's MPL Core asset address (mint). Required. */
   agentAsset: string | PublicKey;
   /**
-   * Token metadata. `image` MUST be an `https://gateway.irys.xyz/<id>` URL
-   * (Metaplex API rejects other hosts). Upload to Irys first.
+   * Token metadata. `image` must satisfy Metaplex Genesis API validation
+   * (HTTPS on the official gateway host — see Metaplex docs).
    */
   token: TokenMetadata;
   /**
@@ -162,7 +172,7 @@ export type LaunchAgentTokenResult = {
  * await launchAgentToken(umi, {
  *   agentAsset: '<Core asset mint>',
  *   token: { name: 'Plexpert', symbol: 'PLX',
- *            image: 'https://gateway.irys.xyz/abc' },
+ *            image: 'https://…' }, // image URL per Genesis docs
  *   network: 'solana-devnet',
  *   setToken: false, // preview on devnet — flip to true for the real one
  *   launch: { firstBuyAmount: 0.1 },
