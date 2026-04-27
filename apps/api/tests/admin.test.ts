@@ -106,4 +106,44 @@ describe('admin api-key endpoints', () => {
     );
     expect(after.status).toBe(401);
   });
+
+  it('stores and lists owner_wallet when issuing a key', async () => {
+    const rig = await createTestRig({ adminSecret: ADMIN_SECRET });
+    const headers = {
+      'content-type': 'application/json',
+      authorization: `Bearer ${ADMIN_SECRET}`,
+    };
+    const wallet = 'FFvPUNGYsQa4vjLAcCJ4zx8vZ4BSqQoCbMMyG3VNuEnd';
+
+    const created = await rig.app.fetch(
+      new Request('http://test.local/v1/admin/api-keys', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          label: 'wallet-owner',
+          network: 'solana-devnet',
+          owner_wallet: wallet,
+        }),
+      }),
+    );
+    expect(created.status).toBe(200);
+    const createBody = (await created.json()) as {
+      key: { id: string; owner_wallet: string | null };
+    };
+    expect(createBody.key.owner_wallet).toBe(wallet);
+
+    const list = await rig.app.fetch(
+      new Request(
+        `http://test.local/v1/admin/api-keys?network=solana-devnet&owner_wallet=${encodeURIComponent(wallet)}`,
+        { headers },
+      ),
+    );
+    expect(list.status).toBe(200);
+    const listBody = (await list.json()) as {
+      items: Array<{ label: string; owner_wallet: string | null }>;
+    };
+    expect(
+      listBody.items.some((k) => k.label === 'wallet-owner' && k.owner_wallet === wallet),
+    ).toBe(true);
+  });
 });

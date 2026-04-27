@@ -29,6 +29,7 @@ export {
   createApiKey,
   generateApiKey,
   getApiKeyByPlaintext,
+  normalizeOwnerWallet,
   type ApiKeyRecord,
   type CreateApiKeyResult,
 } from './storage/api-keys.js';

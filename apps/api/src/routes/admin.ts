@@ -21,7 +21,13 @@ import { markKeyRevoked } from '../auth/api-key.js';
 import type { LeashApiConfig } from '../config.js';
 import { ApiErrorSchema } from '../openapi/common.js';
 import type { CacheClient } from '../storage/redis.js';
-import { createApiKey, disableApiKey, getApiKeyById, listApiKeys } from '../storage/api-keys.js';
+import {
+  createApiKey,
+  disableApiKey,
+  getApiKeyById,
+  listApiKeys,
+  normalizeOwnerWallet,
+} from '../storage/api-keys.js';
 import type { DbClient } from '../storage/turso.js';
 import { invalidRequest, notFound } from '../util/errors.js';
 
@@ -34,6 +40,9 @@ const ApiKeyRecordSchema = z
     network: NetworkSchema,
     prefix: z.string(),
     last4: z.string(),
+    owner_wallet: z.string().nullable().openapi({
+      description: 'Solana wallet (base58) this key was issued for, if provided at creation.',
+    }),
     created_at: z.string(),
     disabled_at: z.string().nullable(),
   })
@@ -43,6 +52,10 @@ const CreateApiKeyBody = z
   .object({
     label: z.string().min(1).max(120),
     network: NetworkSchema,
+    owner_wallet: z.string().min(32).max(44).optional().openapi({
+      description:
+        'Optional Solana wallet address (base58) of the customer who owns this key — for support and analytics.',
+    }),
   })
   .openapi('AdminCreateApiKeyBody');
 
@@ -63,6 +76,7 @@ function recordToWire(r: Awaited<ReturnType<typeof getApiKeyById>>) {
     network: r.network,
     prefix: r.prefix,
     last4: r.last4,
+    owner_wallet: r.ownerWallet,
     created_at: r.createdAt,
     disabled_at: r.disabledAt,
   };
@@ -109,7 +123,13 @@ export function buildAdminRoutes(deps: AdminDeps): OpenAPIHono {
       const body = c.req.valid('json');
       let result;
       try {
-        result = await createApiKey(deps.db, { label: body.label, network: body.network });
+        result = await createApiKey(deps.db, {
+          label: body.label,
+          network: body.network,
+          ...(body.owner_wallet !== undefined
+            ? { ownerWallet: normalizeOwnerWallet(body.owner_wallet) }
+            : {}),
+        });
       } catch (err) {
         throw invalidRequest((err as Error).message);
       }
@@ -127,6 +147,9 @@ export function buildAdminRoutes(deps: AdminDeps): OpenAPIHono {
       request: {
         query: z.object({
           network: NetworkSchema.optional(),
+          owner_wallet: z.string().min(32).max(44).optional().openapi({
+            description: 'When set, only keys issued for this Solana wallet (canonical base58).',
+          }),
           include_disabled: z
             .enum(['true', 'false'])
             .optional()
@@ -151,8 +174,18 @@ export function buildAdminRoutes(deps: AdminDeps): OpenAPIHono {
     }),
     async (c) => {
       const q = c.req.valid('query');
+      let ownerWalletFilter: string | undefined;
+      if (q.owner_wallet !== undefined) {
+        try {
+          const w = normalizeOwnerWallet(q.owner_wallet);
+          ownerWalletFilter = w ?? undefined;
+        } catch {
+          throw invalidRequest('owner_wallet: invalid Solana address');
+        }
+      }
       const rows = await listApiKeys(deps.db, {
         ...(q.network ? { network: q.network } : {}),
+        ...(ownerWalletFilter ? { ownerWallet: ownerWalletFilter } : {}),
         includeDisabled: q.include_disabled === 'true',
         ...(q.limit ? { limit: q.limit } : {}),
       });

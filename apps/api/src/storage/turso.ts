@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -49,6 +49,7 @@ const SCHEMA_SQL: readonly string[] = [
     prefix TEXT NOT NULL,
     last4 TEXT NOT NULL,
     hash TEXT NOT NULL UNIQUE,
+    owner_wallet TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     disabled_at TEXT
   )`,
@@ -294,6 +295,12 @@ export async function runMigrations(db: Client): Promise<void> {
     await migrateTimestampsToIso(db);
   }
 
+  // v5: optional `owner_wallet` on api_keys — Solana pubkey of the customer
+  // who owns the key (for ops / support). Existing DBs get ALTER + index.
+  if (currentVersion < 5) {
+    await migrateApiKeysOwnerWallet(db);
+  }
+
   if (currentVersion < SCHEMA_VERSION) {
     await db.execute({
       sql: 'INSERT OR REPLACE INTO schema_version(version) VALUES(?)',
@@ -310,6 +317,17 @@ export async function runMigrations(db: Client): Promise<void> {
  * tables. Idempotent: if the target table already exists (because a
  * previous migration was interrupted), we drop it and retry.
  */
+async function migrateApiKeysOwnerWallet(db: Client): Promise<void> {
+  const info = await db.execute('PRAGMA table_info(api_keys)');
+  const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
+  if (!names.has('owner_wallet')) {
+    await db.execute('ALTER TABLE api_keys ADD COLUMN owner_wallet TEXT');
+  }
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_api_keys_owner_wallet ON api_keys(owner_wallet) WHERE owner_wallet IS NOT NULL`,
+  );
+}
+
 async function migrateWatchlistKindCheck(db: Client): Promise<void> {
   await db.execute('DROP TABLE IF EXISTS indexer_watchlist_v3_tmp');
   await db.execute(`CREATE TABLE indexer_watchlist_v3_tmp (

@@ -263,7 +263,7 @@ gated by a single shared secret in `LEASH_API_ADMIN_SECRET`.
    curl -sS -X POST http://localhost:8801/v1/admin/api-keys \
      -H "Authorization: Bearer $LEASH_API_ADMIN_SECRET" \
      -H "content-type: application/json" \
-     -d '{"label":"acme-corp","network":"solana-devnet"}'
+     -d '{"label":"acme-corp","network":"solana-devnet","owner_wallet":"<customer-solana-pubkey-base58>"}'
    ```
 
    Response:
@@ -276,6 +276,7 @@ gated by a single shared secret in `LEASH_API_ADMIN_SECRET`.
        "network": "solana-devnet",
        "prefix": "lsh_test_",
        "last4": "x7q9",
+       "owner_wallet": "FFvP…NuEnd",
        "created_at": "2026-04-24T22:11:30Z",
        "disabled_at": null
      },
@@ -289,7 +290,14 @@ gated by a single shared secret in `LEASH_API_ADMIN_SECRET`.
 4. List issued keys (no plaintext is ever recoverable):
 
    ```bash
-   curl -sS http://localhost:8801/v1/admin/api-keys?network=solana-devnet \
+   curl -sS "http://localhost:8801/v1/admin/api-keys?network=solana-devnet" \
+     -H "Authorization: Bearer $LEASH_API_ADMIN_SECRET"
+   ```
+
+   Optional filter — keys issued for one wallet:
+
+   ```bash
+   curl -sS "http://localhost:8801/v1/admin/api-keys?network=solana-devnet&owner_wallet=FFvPUNGYsQa4vjLAcCJ4zx8vZ4BSqQoCbMMyG3VNuEnd" \
      -H "Authorization: Bearer $LEASH_API_ADMIN_SECRET"
    ```
 
