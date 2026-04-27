@@ -11,8 +11,6 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
-    "@irys/upload": "^0.0.15",
-    "@irys/upload-solana": "^0.1.8",
     "@leash/buyer-kit": "workspace:*",
     "@leash/core": "workspace:*",
     "@leash/registry-utils": "workspace:*",
