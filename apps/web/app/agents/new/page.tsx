@@ -3,21 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  ArrowLeft,
-  ArrowRight,
-  Bot,
-  CloudUpload,
-  ImageIcon,
-  Link2,
-  Plus,
-  Sparkles,
-  Trash2,
-  Upload,
-  Wallet,
-  X,
-  Info,
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bot, Plus, Sparkles, Trash2, Wallet, Info } from 'lucide-react';
 import {
   createAgent,
   provisionTreasuryAtas,
@@ -53,11 +39,6 @@ const NETWORKS = [
 type Network = (typeof NETWORKS)[number];
 
 type Service = { name: string; endpoint: string };
-
-type UriMode = 'pinata' | 'manual';
-type ImageMode = 'upload' | 'url';
-
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 /**
  * Curated trust-model presets per the MIP-104 / ERC-8004 spec. These are
@@ -100,7 +81,6 @@ type CreateOk = {
   network: Network;
   owner: string;
   uri: string;
-  uriSource: UriMode;
   /** Whether rules were attached (false = limitless). */
   hasRules: boolean;
   /** Treasury ATAs created (or already-present) for supported stables. */
@@ -119,14 +99,7 @@ export default function NewAgentPage() {
   const { umi, wallet, ready } = usePrivyUmi();
   const [name, setName] = React.useState('');
   const [description, setDescription] = React.useState('');
-  const [uriMode, setUriMode] = React.useState<UriMode>('pinata');
   const [uri, setUri] = React.useState('');
-  const [imageMode, setImageMode] = React.useState<ImageMode>('upload');
-  const [imageUrl, setImageUrl] = React.useState('');
-  const [imageFile, setImageFile] = React.useState<File | null>(null);
-  const [imagePreview, setImagePreview] = React.useState<string | null>(null);
-  const [imageError, setImageError] = React.useState<string | null>(null);
-  const imageInputRef = React.useRef<HTMLInputElement | null>(null);
   const [network, setNetwork] = React.useState<Network>('solana-devnet');
   const [services, setServices] = React.useState<Service[]>([{ name: 'web', endpoint: '' }]);
   const [trustChecked, setTrustChecked] = React.useState<Record<string, boolean>>({
@@ -143,9 +116,9 @@ export default function NewAgentPage() {
   const [intervalSeconds, setIntervalSeconds] = React.useState(30);
 
   const [busy, setBusy] = React.useState(false);
-  const [busyStep, setBusyStep] = React.useState<
-    'pinning' | 'minting' | 'persisting' | 'provisioning' | null
-  >(null);
+  const [busyStep, setBusyStep] = React.useState<'minting' | 'persisting' | 'provisioning' | null>(
+    null,
+  );
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<CreateOk | null>(null);
   const [formTab, setFormTab] = React.useState<'core' | 'services'>('core');
@@ -158,10 +131,10 @@ export default function NewAgentPage() {
   const canSubmit =
     name.trim() &&
     description.trim() &&
+    uri.trim().length > 0 &&
     !busy &&
     umi != null &&
-    wallet != null &&
-    (uriMode === 'pinata' ? true : uri.trim().length > 0);
+    wallet != null;
 
   function updateService(idx: number, patch: Partial<Service>) {
     setServices((arr) => arr.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
@@ -178,53 +151,16 @@ export default function NewAgentPage() {
     setTrustCustomDraft('');
   }
 
-  React.useEffect(() => {
-    if (!imageFile) {
-      setImagePreview(null);
-      return;
-    }
-    const url = URL.createObjectURL(imageFile);
-    setImagePreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [imageFile]);
-
   // We deliberately do NOT auto-redirect after a successful mint anymore:
   // the user has to see the operator pubkey (and ideally back it up) on
   // the success card before navigating away. A button on the card opens
   // the explorer in a new tab.
 
-  function handleImageFile(file: File | null) {
-    setImageError(null);
-    if (!file) {
-      setImageFile(null);
-      return;
-    }
-    if (!file.type.startsWith('image/')) {
-      setImageError(`Only images allowed (got "${file.type || 'unknown'}").`);
-      return;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setImageError(`Max ${MAX_IMAGE_BYTES / 1024 / 1024} MB.`);
-      return;
-    }
-    setImageFile(file);
-  }
-
-  function clearImageFile() {
-    setImageFile(null);
-    setImageError(null);
-    if (imageInputRef.current) imageInputRef.current.value = '';
-  }
-
   /** Reset inputs after a successful mint so the user can create another agent without stale data. */
   function resetMintForm() {
     setName('');
     setDescription('');
-    setUriMode('pinata');
     setUri('');
-    setImageMode('upload');
-    setImageUrl('');
-    clearImageFile();
     setNetwork('solana-devnet');
     setServices([{ name: 'web', endpoint: '' }]);
     setTrustChecked({ reputation: true });
@@ -237,52 +173,6 @@ export default function NewAgentPage() {
     setIntervalSeconds(30);
     setFormTab('core');
     setError(null);
-  }
-
-  async function pinImageFile(file: File): Promise<string> {
-    const form = new FormData();
-    form.append('file', file);
-    const res = await fetch('/api/registry/pin-file', { method: 'POST', body: form });
-    const json = (await res.json()) as {
-      ok?: boolean;
-      gatewayUrl?: string;
-      error?: string;
-      detail?: string;
-    };
-    if (!res.ok || !json.ok || !json.gatewayUrl) {
-      throw new Error(json.detail ?? json.error ?? 'Image upload failed');
-    }
-    return json.gatewayUrl;
-  }
-
-  async function pinMetadata(): Promise<string> {
-    setBusyStep('pinning');
-    let imageRef: string | undefined;
-    if (imageMode === 'upload' && imageFile) {
-      imageRef = await pinImageFile(imageFile);
-    } else if (imageMode === 'url' && imageUrl.trim()) {
-      imageRef = imageUrl.trim();
-    }
-    const metadata = {
-      name: name.trim(),
-      description: description.trim(),
-      ...(imageRef ? { image: imageRef } : {}),
-    };
-    const res = await fetch('/api/registry/pin', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ json: metadata, name: `agent-${name.trim()}` }),
-    });
-    const json = (await res.json()) as {
-      ok?: boolean;
-      gatewayUrl?: string;
-      error?: string;
-      detail?: string;
-    };
-    if (!res.ok || !json.ok || !json.gatewayUrl) {
-      throw new Error(json.detail ?? json.error ?? 'Pinata upload failed');
-    }
-    return json.gatewayUrl;
   }
 
   function buildRules(): RulesV1 | null {
@@ -312,10 +202,9 @@ export default function NewAgentPage() {
     setResult(null);
 
     try {
-      // 1. Pin metadata (or use BYO URI).
-      const finalUri = uriMode === 'pinata' ? await pinMetadata() : uri.trim();
+      const finalUri = uri.trim();
 
-      // 2. Mint the Core asset + Agent Identity in one tx via the Metaplex
+      // 1. Mint the Core asset + Agent Identity in one tx via the Metaplex
       //    Agent API. The connected Privy wallet becomes the asset owner.
       setBusyStep('minting');
       const filteredServices = services.filter((s) => s.name.trim() && s.endpoint.trim());
@@ -384,7 +273,6 @@ export default function NewAgentPage() {
         ...res,
         owner: wallet.address,
         uri: finalUri,
-        uriSource: uriMode,
         hasRules: rules !== null,
         ...(treasuryAtas ? { treasuryAtas } : {}),
         ...(provisionError ? { provisionError } : {}),
@@ -482,189 +370,30 @@ export default function NewAgentPage() {
                     />
                   </div>
 
-                  {/* Metadata URI: Pinata vs Manual */}
                   <div className="flex flex-col gap-2">
-                    <Label>Metadata (on-chain Core asset URI)</Label>
-                    <div className="grid grid-cols-2 gap-2 rounded-md border border-border bg-bg-elev/40 p-1">
-                      <button
-                        type="button"
-                        onClick={() => setUriMode('pinata')}
-                        className={
-                          'flex items-center justify-center gap-2 rounded px-3 py-2 text-sm transition ' +
-                          (uriMode === 'pinata'
-                            ? 'bg-brand text-brand-fg shadow-sm'
-                            : 'text-fg-muted hover:text-fg')
-                        }
-                      >
-                        <CloudUpload className="size-4" /> Pin to Pinata for me
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setUriMode('manual')}
-                        className={
-                          'flex items-center justify-center gap-2 rounded px-3 py-2 text-sm transition ' +
-                          (uriMode === 'manual'
-                            ? 'bg-brand text-brand-fg shadow-sm'
-                            : 'text-fg-muted hover:text-fg')
-                        }
-                      >
-                        <Link2 className="size-4" /> I have a URI
-                      </button>
-                    </div>
-
-                    {uriMode === 'pinata' ? (
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-xs text-fg-muted font-normal">
-                            Image <span className="text-fg-subtle">(optional)</span>
-                          </Label>
-                          <div className="inline-flex rounded-md border border-border bg-bg-elev/40 p-0.5 text-[11px]">
-                            <button
-                              type="button"
-                              onClick={() => setImageMode('upload')}
-                              className={
-                                'inline-flex items-center gap-1 rounded px-2 py-1 transition ' +
-                                (imageMode === 'upload'
-                                  ? 'bg-brand text-brand-fg'
-                                  : 'text-fg-muted hover:text-fg')
-                              }
-                            >
-                              <Upload className="size-3" /> Upload
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setImageMode('url')}
-                              className={
-                                'inline-flex items-center gap-1 rounded px-2 py-1 transition ' +
-                                (imageMode === 'url'
-                                  ? 'bg-brand text-brand-fg'
-                                  : 'text-fg-muted hover:text-fg')
-                              }
-                            >
-                              <Link2 className="size-3" /> URL
-                            </button>
-                          </div>
-                        </div>
-
-                        {imageMode === 'upload' ? (
-                          imageFile ? (
-                            <div className="flex items-center gap-3 rounded-md border border-border bg-bg-elev/40 p-2">
-                              {imagePreview ? (
-                                // Local object-URL preview — next/image isn't worth the
-                                // Sharp dependency for a 16-px thumbnail. Plain <img> is fine.
-                                <img
-                                  src={imagePreview}
-                                  alt="Agent preview"
-                                  className="size-16 rounded object-cover border border-border"
-                                />
-                              ) : (
-                                <div className="size-16 rounded border border-border grid place-items-center text-fg-subtle">
-                                  <ImageIcon className="size-5" />
-                                </div>
-                              )}
-                              <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                                <span className="truncate text-xs font-medium">
-                                  {imageFile.name}
-                                </span>
-                                <span className="text-[11px] text-fg-subtle">
-                                  {(imageFile.size / 1024).toFixed(1)} KB · {imageFile.type}
-                                </span>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={clearImageFile}
-                                aria-label="Remove image"
-                              >
-                                <X className="size-4" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => imageInputRef.current?.click()}
-                              onDragOver={(e) => e.preventDefault()}
-                              onDrop={(e) => {
-                                e.preventDefault();
-                                const f = e.dataTransfer.files?.[0];
-                                if (f) handleImageFile(f);
-                              }}
-                              className="flex flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border bg-bg-elev/30 px-4 py-6 text-xs text-fg-muted hover:border-brand hover:text-fg transition"
-                            >
-                              <Upload className="size-5" />
-                              <span>
-                                <span className="text-fg">Click to upload</span> or drop a PNG / JPG
-                                / SVG
-                              </span>
-                              <span className="text-[11px] text-fg-subtle">
-                                Max {MAX_IMAGE_BYTES / 1024 / 1024} MB · pinned to IPFS via Pinata
-                              </span>
-                            </button>
-                          )
-                        ) : (
-                          <Input
-                            id="imageUrl"
-                            value={imageUrl}
-                            onChange={(e) => setImageUrl(e.target.value)}
-                            placeholder="https://example.com/agent.png  ·  ipfs://<cid>"
-                            spellCheck={false}
-                            className="font-mono text-xs"
-                          />
-                        )}
-
-                        <input
-                          ref={imageInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => handleImageFile(e.target.files?.[0] ?? null)}
-                        />
-
-                        {imageError && (
-                          <span className="text-[11px] text-danger">{imageError}</span>
-                        )}
-
-                        <span className="text-[11px] text-fg-subtle">
-                          We'll build{' '}
-                          <code className="font-mono">
-                            {'{ name, description'}
-                            {(imageMode === 'upload' && imageFile) ||
-                            (imageMode === 'url' && imageUrl.trim())
-                              ? ', image'
-                              : ''}
-                            {' }'}
-                          </code>
-                          , pin it to IPFS via <code className="font-mono">PINATA_JWT</code> on the
-                          server, and use the returned gateway URL as the on-chain URI. Requires{' '}
-                          <code className="font-mono">PINATA_JWT</code> in{' '}
-                          <code className="font-mono">apps/web/.env.local</code>.
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-1.5">
-                        <Input
-                          id="uri"
-                          value={uri}
-                          onChange={(e) => setUri(e.target.value)}
-                          placeholder="https://gateway.pinata.cloud/ipfs/<cid>"
-                          required
-                          spellCheck={false}
-                          className="font-mono text-xs"
-                        />
-                        <span className="text-[11px] text-fg-subtle">
-                          Must be publicly fetchable JSON (Arweave / IPFS / HTTPS) — the standard
-                          MPL Core asset metadata pointer.
-                        </span>
-                      </div>
-                    )}
+                    <Label htmlFor="uri">Metadata URI (on-chain Core asset)</Label>
+                    <Input
+                      id="uri"
+                      value={uri}
+                      onChange={(e) => setUri(e.target.value)}
+                      placeholder="https://…/metadata.json"
+                      required
+                      spellCheck={false}
+                      className="font-mono text-xs"
+                    />
+                    <span className="text-[11px] text-fg-subtle leading-relaxed">
+                      Paste a URL to your MPL Core metadata JSON (HTTPS, IPFS gateway, Arweave,
+                      etc.). Host the document yourself — include any{' '}
+                      <code className="font-mono">image</code> field there if you want artwork on
+                      explorers.
+                    </span>
                   </div>
 
                   <div className="flex items-center justify-end gap-2">
                     <Button
                       type="button"
                       onClick={() => setFormTab('services')}
-                      disabled={!name.trim() || !description.trim()}
+                      disabled={!name.trim() || !description.trim() || !uri.trim()}
                     >
                       Next: services &amp; session <ArrowRight className="size-4" />
                     </Button>
@@ -924,15 +653,13 @@ export default function NewAgentPage() {
                     </Button>
                     <Button type="submit" disabled={!canSubmit}>
                       <Sparkles className="size-4" />{' '}
-                      {busyStep === 'pinning'
-                        ? 'Pinning…'
-                        : busyStep === 'minting'
-                          ? 'Minting…'
-                          : busyStep === 'persisting'
-                            ? 'Saving…'
-                            : busyStep === 'provisioning'
-                              ? 'Provisioning ATAs…'
-                              : 'Create agent'}
+                      {busyStep === 'minting'
+                        ? 'Minting…'
+                        : busyStep === 'persisting'
+                          ? 'Saving…'
+                          : busyStep === 'provisioning'
+                            ? 'Provisioning ATAs…'
+                            : 'Create agent'}
                     </Button>
                     {!ready && <span className="text-sm text-fg-muted">Loading wallet…</span>}
                     {ready && !wallet && (
@@ -1030,10 +757,7 @@ export default function NewAgentPage() {
 
                 <div className="flex flex-col gap-1">
                   <span className="text-[11px] uppercase tracking-wider text-fg-subtle">
-                    Metadata URI{' '}
-                    <Badge variant="outline" className="ml-1">
-                      {result.uriSource === 'pinata' ? 'pinned' : 'byo'}
-                    </Badge>
+                    Metadata URI
                   </span>
                   <a
                     href={result.uri}
