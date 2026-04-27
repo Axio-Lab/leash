@@ -15,6 +15,29 @@ WORKDIR /app
 
 FROM base AS build
 COPY . .
+
+# Next.js inlines `NEXT_PUBLIC_*` values into the client bundle at
+# `next build` time — NOT at container start. Railway (and any other
+# Docker host) only forwards service variables into the build stage
+# when they are declared as `ARG`, so we declare each public env var
+# and re-export it as `ENV` for the build command.
+#
+# Set these as service variables in Railway → Variables (or pass
+# `--build-arg KEY=value` locally). If you only set them as runtime
+# env, the bundle will hard-code empty strings and the playground will
+# show "Privy not configured" / wrong RPC even though the container
+# environment looks correct.
+ARG NEXT_PUBLIC_PRIVY_APP_ID=""
+ARG NEXT_PUBLIC_PRIVY_CLIENT_ID=""
+ARG NEXT_PUBLIC_SOLANA_RPC=""
+ARG NEXT_PUBLIC_SOLANA_NETWORK=""
+ARG NEXT_PUBLIC_LEASH_FACILITATOR_URL=""
+ENV NEXT_PUBLIC_PRIVY_APP_ID=$NEXT_PUBLIC_PRIVY_APP_ID \
+    NEXT_PUBLIC_PRIVY_CLIENT_ID=$NEXT_PUBLIC_PRIVY_CLIENT_ID \
+    NEXT_PUBLIC_SOLANA_RPC=$NEXT_PUBLIC_SOLANA_RPC \
+    NEXT_PUBLIC_SOLANA_NETWORK=$NEXT_PUBLIC_SOLANA_NETWORK \
+    NEXT_PUBLIC_LEASH_FACILITATOR_URL=$NEXT_PUBLIC_LEASH_FACILITATOR_URL
+
 RUN pnpm install --frozen-lockfile --filter "@leash/web..."
 RUN pnpm turbo run build --filter=@leash/web
 
