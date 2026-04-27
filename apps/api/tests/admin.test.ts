@@ -43,10 +43,29 @@ describe('admin api-key endpoints', () => {
           'content-type': 'application/json',
           authorization: 'Bearer ' + 'b'.repeat(48),
         },
-        body: JSON.stringify({ label: 'x', network: 'solana-devnet' }),
+        body: JSON.stringify({
+          label: 'x',
+          network: 'solana-devnet',
+          owner_wallet: 'FFvPUNGYsQa4vjLAcCJ4zx8vZ4BSqQoCbMMyG3VNuEnd',
+        }),
       }),
     );
     expect(res.status).toBe(401);
+  });
+
+  it('rejects create without owner_wallet', async () => {
+    const rig = await createTestRig({ adminSecret: ADMIN_SECRET });
+    const res = await rig.app.fetch(
+      new Request('http://test.local/v1/admin/api-keys', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${ADMIN_SECRET}`,
+        },
+        body: JSON.stringify({ label: 'no-owner', network: 'solana-devnet' }),
+      }),
+    );
+    expect(res.status).toBe(400);
   });
 
   it('issues, lists, and disables an API key end-to-end', async () => {
@@ -60,7 +79,11 @@ describe('admin api-key endpoints', () => {
       new Request('http://test.local/v1/admin/api-keys', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ label: 'integration', network: 'solana-devnet' }),
+        body: JSON.stringify({
+          label: 'integration',
+          network: 'solana-devnet',
+          owner_wallet: 'FFvPUNGYsQa4vjLAcCJ4zx8vZ4BSqQoCbMMyG3VNuEnd',
+        }),
       }),
     );
     expect(created.status).toBe(200);

@@ -275,7 +275,7 @@ export async function runMigrations(db: Client): Promise<void> {
   // Versioned migrations. New databases get the latest schema directly
   // from `SCHEMA_SQL` above and skip every block (currentVersion ≥ N
   // already). Older databases ratchet forward one version at a time.
-  const cur = await db.execute('SELECT version FROM schema_version LIMIT 1');
+  const cur = await db.execute('SELECT version FROM schema_version ORDER BY version DESC LIMIT 1');
   const currentVersion = cur.rows.length > 0 ? Number(cur.rows[0]!.version) : 0;
 
   // v3: drop the `kind IN ('asset','treasury')` CHECK on

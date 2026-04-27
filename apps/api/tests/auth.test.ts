@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { createTestRig, authedFetch } from './helpers.js';
+import { createTestRig, authedFetch, TEST_API_KEY_OWNER_WALLET } from './helpers.js';
 import { createApiKey } from '../src/storage/api-keys.js';
 
 describe('api key auth', () => {
@@ -61,6 +61,7 @@ describe('api key auth', () => {
     const { plaintext } = await createApiKey(rig.db, {
       label: 'second',
       network: 'solana-devnet',
+      ownerWallet: TEST_API_KEY_OWNER_WALLET,
     });
     const res = await rig.app.fetch(
       new Request('http://test.local/v1/events', {

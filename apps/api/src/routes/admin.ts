@@ -19,7 +19,7 @@ import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { adminAuth } from '../auth/admin.js';
 import { markKeyRevoked } from '../auth/api-key.js';
 import type { LeashApiConfig } from '../config.js';
-import { ApiErrorSchema } from '../openapi/common.js';
+import { ApiErrorSchema, PubkeySchema } from '../openapi/common.js';
 import type { CacheClient } from '../storage/redis.js';
 import {
   createApiKey,
@@ -41,7 +41,8 @@ const ApiKeyRecordSchema = z
     prefix: z.string(),
     last4: z.string(),
     owner_wallet: z.string().nullable().openapi({
-      description: 'Solana wallet (base58) this key was issued for, if provided at creation.',
+      description:
+        'Solana wallet (base58) this key is attributed to; null for keys created before owner tracking or bootstrap keys.',
     }),
     created_at: z.string(),
     disabled_at: z.string().nullable(),
@@ -52,9 +53,9 @@ const CreateApiKeyBody = z
   .object({
     label: z.string().min(1).max(120),
     network: NetworkSchema,
-    owner_wallet: z.string().min(32).max(44).optional().openapi({
+    owner_wallet: PubkeySchema.openapi({
       description:
-        'Optional Solana wallet address (base58) of the customer who owns this key — for support and analytics.',
+        'Solana wallet (base58) of the customer who owns this key — required on every new issuance.',
     }),
   })
   .openapi('AdminCreateApiKeyBody');
@@ -123,12 +124,14 @@ export function buildAdminRoutes(deps: AdminDeps): OpenAPIHono {
       const body = c.req.valid('json');
       let result;
       try {
+        const ownerWallet = normalizeOwnerWallet(body.owner_wallet);
+        if (ownerWallet == null) {
+          throw new Error('owner_wallet: invalid Solana address');
+        }
         result = await createApiKey(deps.db, {
           label: body.label,
           network: body.network,
-          ...(body.owner_wallet !== undefined
-            ? { ownerWallet: normalizeOwnerWallet(body.owner_wallet) }
-            : {}),
+          ownerWallet,
         });
       } catch (err) {
         throw invalidRequest((err as Error).message);

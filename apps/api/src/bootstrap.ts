@@ -20,6 +20,7 @@ export async function boot(deps: { db: DbClient; config: LeashApiConfig }): Prom
         label: seed.label,
         network,
         plaintext: seed.value,
+        ownerWallet: null,
       });
       // eslint-disable-next-line no-console
       console.log(

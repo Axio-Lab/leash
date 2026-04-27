@@ -13,7 +13,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { createTestRig, authedFetch } from './helpers.js';
+import { createTestRig, authedFetch, TEST_API_KEY_OWNER_WALLET } from './helpers.js';
 import { createPreparedEvent, markConfirmed } from '../src/storage/events.js';
 import {
   enqueueDeliveriesForEvent,
@@ -100,6 +100,7 @@ describe('webhook subscription routes', () => {
     const { plaintext } = await createApiKey(rig.db, {
       label: 'second',
       network: 'solana-devnet',
+      ownerWallet: TEST_API_KEY_OWNER_WALLET,
     });
     const cross = await rig.app.fetch(
       new Request(`http://test.local/v1/webhooks/${sub.id}`, {

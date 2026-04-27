@@ -17,7 +17,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { authedFetch, createTestRig } from './helpers.js';
+import { authedFetch, createTestRig, TEST_API_KEY_OWNER_WALLET } from './helpers.js';
 import { listEvents } from '../src/storage/events.js';
 import { listWatchlist } from '../src/indexer/watchlist.js';
 import { execute } from '../src/storage/turso.js';
@@ -222,6 +222,7 @@ describe('GET /v1/payment-links + GET /v1/payment-links/{id}', () => {
     const { plaintext } = await createApiKey(rig.db, {
       label: 'second',
       network: 'solana-devnet',
+      ownerWallet: TEST_API_KEY_OWNER_WALLET,
     });
     const cross = await rig.app.fetch(
       new Request('http://test.local/v1/payment-links/private-link', {

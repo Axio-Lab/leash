@@ -310,6 +310,7 @@ describe('receipts ingest + read', () => {
     const mainnetKey = await createApiKey(rig.db, {
       label: 'test-mainnet',
       network: 'solana-mainnet',
+      ownerWallet: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
     });
     const headers = new Headers({
       authorization: `Bearer ${mainnetKey.plaintext}`,

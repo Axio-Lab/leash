@@ -77,8 +77,7 @@ export async function createApiKey(
     label: string;
     network: SvmNetwork;
     plaintext?: string;
-    /** Customer wallet this key is attributed to (optional). */
-    ownerWallet?: string | null;
+    ownerWallet: string | null;
   },
 ): Promise<CreateApiKeyResult> {
   const plaintext = generateApiKey(args.network, args.plaintext);

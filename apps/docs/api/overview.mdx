@@ -113,7 +113,7 @@ See [Authentication](/api/auth) for issuing keys, the
 | Indexer       | `GET /v1/indexer/status`                                                                                                                                                              |
 | Webhooks      | `POST /v1/webhooks`, `GET /v1/webhooks`, `GET /v1/webhooks/{id}/deliveries`, `DELETE /v1/webhooks/{id}`                                                                               |
 | Metrics       | `GET /v1/metrics/usage`, `GET /v1/metrics/events`                                                                                                                                     |
-| Admin         | `POST/GET /v1/admin/api-keys` (`owner_wallet` on create; list filter `owner_wallet=`), `POST /v1/admin/api-keys/{id}/disable` — admin-only                                            |
+| Admin         | `POST/GET /v1/admin/api-keys` (create **requires** `owner_wallet`; list filter `owner_wallet=`; older rows return `null`), `POST /v1/admin/api-keys/{id}/disable` — admin-only        |
 | OpenAPI       | `GET /openapi.json` — full 3.1 spec (also rendered at [API reference](/api/reference))                                                                                                |
 
 ## What's next

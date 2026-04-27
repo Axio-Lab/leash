@@ -9,6 +9,9 @@ import { createClient } from '@libsql/client';
 import { createLeashApiApp } from '../src/server.js';
 import { boot } from '../src/bootstrap.js';
 import { createApiKey } from '../src/storage/api-keys.js';
+
+/** Devnet pubkey used as `owner_wallet` when tests insert keys via `createApiKey` directly. */
+export const TEST_API_KEY_OWNER_WALLET = 'FFvPUNGYsQa4vjLAcCJ4zx8vZ4BSqQoCbMMyG3VNuEnd';
 import { setEventPublisherCache } from '../src/storage/events-pubsub.js';
 import { _resetCacheForTests, getCache } from '../src/storage/redis.js';
 import { _resetDbForTests, type DbClient } from '../src/storage/turso.js';
@@ -116,6 +119,7 @@ export async function createTestRig(overrides: Partial<LeashApiConfig> = {}): Pr
   const { plaintext } = await createApiKey(db, {
     label: 'test',
     network: 'solana-devnet',
+    ownerWallet: TEST_API_KEY_OWNER_WALLET,
   });
   const app = createLeashApiApp({ config, db, cache });
   return { app, db, config, apiKey: plaintext };

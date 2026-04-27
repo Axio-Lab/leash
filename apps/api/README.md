@@ -257,7 +257,9 @@ gated by a single shared secret in `LEASH_API_ADMIN_SECRET`.
    When this var is **unset**, the `/v1/admin/*` surface is **not
    mounted at all** — there is no "open by default" path.
 
-3. Issue a customer key:
+3. Issue a customer key (`owner_wallet` is **required** — a valid Solana
+   base58 pubkey. Keys created before this field existed, and keys from
+   `LEASH_API_BOOTSTRAP_KEY`, show `owner_wallet: null` in list responses.)
 
    ```bash
    curl -sS -X POST http://localhost:8801/v1/admin/api-keys \
