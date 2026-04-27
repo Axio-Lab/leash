@@ -127,8 +127,13 @@ export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConf
       'solana-mainnet': readEnv('LEASH_API_RPC_MAINNET', 'https://api.mainnet-beta.solana.com'),
     },
     db: {
-      url: readEnv('LEASH_API_DB_URL', 'file:./.leash-api.db'),
-      ...(env.LEASH_API_DB_AUTH_TOKEN ? { authToken: env.LEASH_API_DB_AUTH_TOKEN } : {}),
+      // Turso returns HTTP 400 "Invalid host" if the URL has stray whitespace
+      // (easy to get from copy-paste) or a hostname that does not match the
+      // database Turso issued for your org (always copy from `turso db show`).
+      url: readEnv('LEASH_API_DB_URL', 'file:./.leash-api.db').trim(),
+      ...(env.LEASH_API_DB_AUTH_TOKEN?.trim()
+        ? { authToken: env.LEASH_API_DB_AUTH_TOKEN.trim() }
+        : {}),
     },
     redisUrl: env.LEASH_API_REDIS_URL?.trim() || null,
     rateLimitRpm: readNumber('LEASH_API_RATELIMIT_RPM', 120),
