@@ -1,0 +1,21 @@
+{
+  "name": "Your Agent Name",
+  "symbol": "AGENT",
+  "description": "A description of your agent",
+  "image": "https://leash.market/your-agent-logo.png",
+  "attributes": [
+    {
+      "trait_type": "Background",
+      "value": "Blue"
+    }
+  ],
+  "properties": {
+    "files": [
+      {
+        "uri": "https://leash.market/example.png",
+        "type": "image/png"
+      }
+    ],
+    "category": "image"
+  }
+}
