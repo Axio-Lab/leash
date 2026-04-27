@@ -59,10 +59,10 @@ when `setToken: true` and the bundle confirms cleanly).
 
 ### Required inputs (from the Metaplex API)
 
-| Field  | Notes                                                                                                     |
-| ------ | --------------------------------------------------------------------------------------------------------- |
-| name   | 1–32 characters                                                                                           |
-| symbol | 1–10 characters                                                                                           |
+| Field  | Notes                                                                                                   |
+| ------ | ------------------------------------------------------------------------------------------------------- |
+| name   | 1–32 characters                                                                                         |
+| symbol | 1–10 characters                                                                                         |
 | image  | Must match the HTTPS pattern Metaplex validates for Genesis (see their docs). Other hosts are rejected. |
 
 `description` (≤250 chars) and `externalLinks` (`website`, `twitter`,
@@ -187,12 +187,12 @@ final token for the agent. Defaults to `false`.
 
 The Genesis SDK exposes typed errors so callers can branch precisely:
 
-| Error      | Guard                      | Cause                                            |
-| ---------- | -------------------------- | ------------------------------------------------ |
+| Error      | Guard                      | Cause                                           |
+| ---------- | -------------------------- | ----------------------------------------------- |
 | Validation | `isGenesisValidationError` | Bad input (invalid image URL, name too long, …) |
-| Network    | `isGenesisApiNetworkError` | Cannot reach `https://api.metaplex.com`          |
-| API 4xx    | `isGenesisApiError`        | Rejected by the API; check `err.responseBody`    |
-| API 5xx    | `isGenesisApiError`        | Metaplex API unavailable; retry with back-off    |
+| Network    | `isGenesisApiNetworkError` | Cannot reach `https://api.metaplex.com`         |
+| API 4xx    | `isGenesisApiError`        | Rejected by the API; check `err.responseBody`   |
+| API 5xx    | `isGenesisApiError`        | Metaplex API unavailable; retry with back-off   |
 
 Re-import the guards from `@metaplex-foundation/genesis` directly when
 you need them — Leash doesn't wrap them.

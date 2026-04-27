@@ -7,9 +7,9 @@ Leash agents follow Metaplex's [MIP-104 / Agent Identity](https://www.metaplex.c
 
 ## When to use this vs. BYO
 
-| Flow                          | What you get                                                                                             | Use when                                                                                                                |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `createAgent`                 | Core asset + Agent Identity + off-chain `agentMetadata` stored by `api.metaplex.com` — one signed tx     | You're starting from scratch and want the simplest path                                                                 |
+| Flow                          | What you get                                                                                             | Use when                                                                                                                         |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `createAgent`                 | Core asset + Agent Identity + off-chain `agentMetadata` stored by `api.metaplex.com` — one signed tx     | You're starting from scratch and want the simplest path                                                                          |
 | `registerAgentIdentity` (BYO) | Attaches an Agent Identity to an MPL Core asset you already own; you host the registration JSON yourself | You already minted the asset, or you need full custody of the registration document (Arweave, IPFS gateway, your own HTTPS host) |
 
 Both paths produce the **same on-chain shape**: an `AgentIdentityV1` PDA derived from the asset's pubkey, with `Listen` lifecycle hooks on `Transfer`, `Update`, and `Execute`. The only difference is who hosts the registration JSON.
