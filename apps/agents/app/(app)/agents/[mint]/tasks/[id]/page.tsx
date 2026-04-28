@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { use } from 'react';
 import useSWR from 'swr';
 
@@ -43,16 +44,43 @@ export default function TaskDetailPage({
         <Card label="Spent" value={task ? `${task.spent} / ${task.budget_cap} USDC` : '…'} />
         <Card label="Started" value={task ? new Date(task.created_at).toLocaleString() : '…'} />
       </div>
+      {task?.status === 'out_of_budget' ? (
+        <div className="rounded-lg border border-amber-900/40 bg-amber-950/30 p-4 flex items-start justify-between gap-3">
+          <div className="text-amber-200 text-sm">
+            <div className="font-medium">Out of budget.</div>
+            <div className="mt-1 opacity-90">
+              Top up the agent treasury or raise the per-task cap and try again.
+            </div>
+          </div>
+          <Link
+            href={`/agents/${mint}/fund`}
+            className="rounded-md bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600"
+          >
+            Top up
+          </Link>
+        </div>
+      ) : null}
+      {task?.status === 'failed' ? (
+        <div className="rounded-lg border border-rose-900/40 bg-rose-950/30 p-4 flex items-start justify-between gap-3">
+          <div className="text-rose-200 text-sm">
+            <div className="font-medium">Task failed.</div>
+            <div className="mt-1 opacity-90">
+              {task.error ?? 'Try a smaller scope or a different tool.'}
+            </div>
+          </div>
+          <Link
+            href={`/agents/${mint}/tasks/new`}
+            className="rounded-md bg-rose-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700"
+          >
+            Retry
+          </Link>
+        </div>
+      ) : null}
       <ActivityFeed taskId={id} />
       {task?.final_output ? (
         <div className="rounded-lg border bg-bg-elev p-4">
           <div className="text-xs text-fg-muted mb-1">Final output</div>
-          <div className="text-sm">{task.final_output}</div>
-        </div>
-      ) : null}
-      {task?.error ? (
-        <div className="rounded-lg border border-rose-900/40 bg-rose-950/30 p-4 text-rose-200 text-sm">
-          {task.error}
+          <div className="text-sm whitespace-pre-line">{task.final_output}</div>
         </div>
       ) : null}
     </div>

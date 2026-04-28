@@ -19,6 +19,7 @@ import type { AuthVariables } from './auth/types.js';
 import { ApiError, internal, jsonError } from './util/errors.js';
 import { mountOpenApi } from './openapi/doc.js';
 import { buildHealthRoutes } from './routes/health.js';
+import { buildStatsRoutes } from './routes/stats.js';
 import { buildIdentityRoutes } from './routes/identity.js';
 import { buildExecutiveRoutes } from './routes/executive.js';
 import { buildDelegationRoutes } from './routes/delegation.js';
@@ -57,6 +58,7 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   // Swagger UI) BEFORE the authed sub-app so its catch-all auth
   // middleware doesn't shadow the public surface.
   app.route('/', buildHealthRoutes());
+  app.route('/', buildStatsRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   mountOpenApi(app, deps.config);
 
   // Admin routes use their own secret-based auth. They're always

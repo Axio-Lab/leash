@@ -10,13 +10,15 @@ and a chained receipt feed (`ReceiptV1`) — all settled through real
 Solana, via any compatible facilitator. Drop it in front of any agent and it
 can buy, get paid, and prove every transfer happened.
 
-## The three surfaces
+## The five surfaces
 
-| Surface                    | Lives at                                                 | What it's for                                                                         |
-| -------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| **SDK** — `@leash/*`       | npm + this repo                                          | TypeScript-first kits for buyers, sellers, agents, runner, schemas, and testing.      |
-| **API** — REST + OpenAPI   | [`api.leash.market`](https://api.leash.market)           | Polyglot HTTP surface. Prepare/submit Solana txs, ingest receipts, monetise APIs.     |
-| **Explorer** — protocol UI | [`explorer.leash.market`](https://explorer.leash.market) | Solscan-style search across agents, transactions, receipts, and events. Dual-network. |
+| Surface                       | Lives at                                                 | What it's for                                                                         |
+| ----------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| **Agent platform**            | [`agent.leash.market`](https://agent.leash.market)       | Mint an autonomous agent on Solana, fund it, and watch it run on the open marketplace. |
+| **MCP marketplace**           | [`leash.market`](https://leash.market)                   | Open registry of MCP tools for autonomous agents. Free or paid, ranked by use.        |
+| **SDK** — `@leash/*`          | npm + this repo                                          | TypeScript-first kits for buyers, sellers, agents, runner, schemas, and testing.      |
+| **API** — REST + OpenAPI      | [`api.leash.market`](https://api.leash.market)           | Polyglot HTTP surface. Prepare/submit Solana txs, ingest receipts, monetise APIs.     |
+| **Explorer** — protocol UI    | [`explorer.leash.market`](https://explorer.leash.market) | Solscan-style search across agents, transactions, receipts, and events. Dual-network. |
 
 Pick whichever fits the layer you're building. They all read and write
 the same on-chain state, the same receipt schema, and the same event

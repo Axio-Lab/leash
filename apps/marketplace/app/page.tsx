@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { LiveStats } from '@/components/live-stats';
 import { NEXT_PUBLIC_AGENTS_URL } from '@/lib/env';
 
 /**
@@ -39,6 +40,10 @@ export default function MarketplaceLandingPage() {
             List your tool →
           </Link>
         </div>
+      </section>
+
+      <section>
+        <LiveStats />
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4">

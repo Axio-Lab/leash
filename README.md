@@ -1,6 +1,22 @@
 # Leash v0.1
 
-> **An open rail for agents that spend on the open internet.**
+> **Stablecoin rails for autonomous agents.**
+
+Two surfaces:
+
+- [`agent.leash.market`](apps/agents) — mint an autonomous agent on Solana, fund
+  its treasury with USDC, and let it run on the open MCP marketplace.
+- [`leash.market`](apps/marketplace) — open MCP registry. Agents discover tools,
+  pay per call, and rate them by what actually works.
+
+Backed by:
+
+- [`apps/api`](apps/api) — the prepare/sign/submit, agents, tasks, and
+  marketplace HTTP API (Hono + OpenAPI 3.1).
+- [`apps/agent-runtime`](apps/agent-runtime) — worker that runs the agent's LLM
+  loop, calls MCPs, settles x402 payments, and emits live activity to Redis.
+- [`apps/explorer`](apps/explorer) — public block-explorer-style view of every
+  payment receipt.
 
 ## Requirements
 
@@ -15,7 +31,28 @@ pnpm turbo run build
 pnpm turbo run test typecheck lint
 ```
 
-### 5-minute demo (local)
+### Local demo of the agent platform
+
+```bash
+# 1. spin up Postgres-equivalent (Turso file DB, pre-seeded)
+pnpm --filter @leash/api db:migrate
+pnpm --filter @leash/api seed:listings   # 3 demo MCPs in the marketplace
+pnpm --filter @leash/api seed:demo       # 1 agent + 3 pending tasks
+
+# 2. backend
+pnpm --filter @leash/api dev                       # :8787
+pnpm --filter @leash/agent-runtime dev             # picks up the demo tasks
+
+# 3. surfaces
+pnpm --filter @leash/agents dev                    # agent.leash.market on :4100
+pnpm --filter @leash/marketplace dev               # leash.market         on :4200
+pnpm --filter @leash/explorer dev                  # receipts explorer    on :3000
+```
+
+Sign in with Privy, watch the seeded agent run on `/agents/<mint>`, see
+each tool call leave a receipt on the explorer.
+
+### x402 demo (no platform)
 
 1. **Seller** — `pnpm --filter @leash/seller-demo start` (port `3001`).
 2. **Buyer** — `SELLER_URL=http://localhost:3001 pnpm --filter @leash/buyer-demo start` (polls seller).
@@ -54,6 +91,20 @@ docker compose up --build
 ```bash
 docker compose --profile merged up --build merged-demo
 ```
+
+### Production deployments
+
+Each long-running service has a Railway-ready Dockerfile in [`docker/`](./docker)
+(build context = repo root). Frontends can run on Railway _or_ Vercel — both
+work with the same `next.config.ts` (`output: 'standalone'`).
+
+| Service              | Dockerfile                        | Suggested host             |
+| -------------------- | --------------------------------- | -------------------------- |
+| `apps/api`           | `docker/api.Dockerfile`           | Railway                    |
+| `apps/agent-runtime` | `docker/agent-runtime.Dockerfile` | Railway (no public domain) |
+| `apps/agents`        | `docker/agents.Dockerfile`        | Vercel (recommended)       |
+| `apps/marketplace`   | `docker/marketplace.Dockerfile`   | Vercel (recommended)       |
+| `apps/explorer`      | `docker/explorer.Dockerfile`      | Vercel / Railway           |
 
 ## Contributing
 

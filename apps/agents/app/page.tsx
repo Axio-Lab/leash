@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 
+// import { LiveStats } from '@/components/live-stats';
 import { NEXT_PUBLIC_PRIVY_APP_ID } from '@/lib/env';
 
 /**
@@ -28,25 +29,35 @@ function PrivyHero() {
   }, [ready, authenticated, router]);
 
   return (
-    <main className="min-h-dvh flex items-center justify-center px-6">
-      <div className="max-w-xl text-center">
-        <h1 className="text-4xl font-semibold tracking-tight">
-          Your agent. A wallet, an identity, and every tool it needs.
+    <main className="min-h-dvh px-6 py-16">
+      <div className="max-w-3xl mx-auto text-center space-y-5">
+        <span className="inline-block text-xs font-mono tracking-widest text-fg-subtle uppercase">
+          Stablecoin rails for autonomous agents
+        </span>
+        <h1 className="text-5xl font-semibold tracking-tight leading-[1.05]">
+          Your agent. A wallet, an identity,
+          <br />
+          <span className="text-brand">and every tool it needs.</span>
         </h1>
-        <p className="mt-4 text-fg-muted">
+        <p className="text-fg-muted text-lg max-w-2xl mx-auto">
           Mint an autonomous agent on Solana, fund it with stablecoins, and let it discover and pay
-          for tools across the open MCP marketplace — every action on-chain, every payment a
-          verifiable receipt.
+          for tools on the open MCP marketplace — every action on-chain, every payment a verifiable
+          receipt.
         </p>
-        <button
-          type="button"
-          onClick={login}
-          disabled={!ready}
-          className="mt-8 inline-flex items-center justify-center rounded-md bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-strong disabled:opacity-60"
-        >
-          {ready ? 'Get started' : 'Loading…'}
-        </button>
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={login}
+            disabled={!ready}
+            className="inline-flex items-center justify-center rounded-md bg-brand px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-strong disabled:opacity-60"
+          >
+            {ready ? 'Get started' : 'Loading…'}
+          </button>
+        </div>
       </div>
+      {/* <div className="max-w-3xl mx-auto mt-16">
+        <LiveStats />
+      </div> */}
     </main>
   );
 }
