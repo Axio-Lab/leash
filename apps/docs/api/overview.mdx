@@ -27,9 +27,10 @@ The SDK runs in your process. The API runs on ours.
 - **Receipt + event surface for free.** Every prepare, every submit,
   every receipt your agents push lands in one queryable feed scoped to
   your account.
-- **Explorer integration.** Anything the API sees (or anything our chain
-  indexer sees on your watched agents) shows up in the explorer with no
-  extra work.
+- **Explorer integration.** Anything the API sees — specifically
+  every transaction submitted via `POST /v1/submit` — shows up in
+  the explorer with no extra work. Transactions broadcast outside
+  the API (raw RPC) are not tracked.
 
 The SDK is still the right choice when you want client-side custody
 with no remote dependency, or when you're shipping libraries other
