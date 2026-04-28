@@ -37,6 +37,7 @@
     "@hono/zod-openapi": "^0.18.0",
     "@leash/buyer-kit": "workspace:*",
     "@leash/core": "workspace:*",
+    "@leash/platform-auth": "workspace:*",
     "@leash/registry-utils": "workspace:*",
     "@leash/schemas": "workspace:*",
     "@leash/seller-kit": "workspace:*",

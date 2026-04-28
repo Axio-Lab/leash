@@ -27,6 +27,12 @@ export type ApiKeyRecord = {
   last4: string;
   /** Solana wallet (base58 pubkey) this key was issued for; null if unset. */
   ownerWallet: string | null;
+  /**
+   * Surface scopes for platform-issued keys (e.g. `['agents']`,
+   * `['marketplace']`). `null` for legacy keys and bootstrap keys; the
+   * BFFs treat `null` as "all scopes" for backwards compatibility.
+   */
+  scopes: string[] | null;
   createdAt: string;
   disabledAt: string | null;
 };
@@ -78,6 +84,7 @@ export async function createApiKey(
     network: SvmNetwork;
     plaintext?: string;
     ownerWallet: string | null;
+    scopes?: string[] | null;
   },
 ): Promise<CreateApiKeyResult> {
   const plaintext = generateApiKey(args.network, args.plaintext);
@@ -92,10 +99,11 @@ export async function createApiKey(
   const prefix = plaintext.slice(0, 9);
   const last4 = plaintext.slice(-4);
   const hash = hashKey(plaintext);
+  const scopesJson = args.scopes && args.scopes.length > 0 ? JSON.stringify(args.scopes) : null;
   await execute(
     db,
-    `INSERT INTO api_keys (id, label, network, prefix, last4, hash, owner_wallet) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [id, args.label, network, prefix, last4, hash, ownerWallet],
+    `INSERT INTO api_keys (id, label, network, prefix, last4, hash, owner_wallet, scopes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, args.label, network, prefix, last4, hash, ownerWallet, scopesJson],
   );
   const created = await getApiKeyById(db, id);
   if (!created) throw new Error('api key insert succeeded but lookup failed');
@@ -109,7 +117,7 @@ export async function getApiKeyByPlaintext(
   const hash = hashKey(plaintext);
   const res = await execute(
     db,
-    `SELECT id, label, network, prefix, last4, owner_wallet, created_at, disabled_at
+    `SELECT id, label, network, prefix, last4, owner_wallet, scopes, created_at, disabled_at
        FROM api_keys WHERE hash = ? LIMIT 1`,
     [hash],
   );
@@ -121,7 +129,7 @@ export async function getApiKeyByPlaintext(
 export async function getApiKeyById(db: DbClient, id: string): Promise<ApiKeyRecord | null> {
   const res = await execute(
     db,
-    `SELECT id, label, network, prefix, last4, owner_wallet, created_at, disabled_at
+    `SELECT id, label, network, prefix, last4, owner_wallet, scopes, created_at, disabled_at
        FROM api_keys WHERE id = ? LIMIT 1`,
     [id],
   );
@@ -163,7 +171,7 @@ export async function listApiKeys(
   if (!args.includeDisabled) {
     where.push('disabled_at IS NULL');
   }
-  const sql = `SELECT id, label, network, prefix, last4, owner_wallet, created_at, disabled_at
+  const sql = `SELECT id, label, network, prefix, last4, owner_wallet, scopes, created_at, disabled_at
     FROM api_keys
     ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY created_at DESC
@@ -178,6 +186,17 @@ function rowToRecord(row: Record<string, unknown>): ApiKeyRecord {
   if (network !== 'solana-devnet' && network !== 'solana-mainnet') {
     throw new Error(`unexpected network in api_keys: ${network}`);
   }
+  let scopes: string[] | null = null;
+  if (row.scopes != null) {
+    try {
+      const parsed = JSON.parse(String(row.scopes));
+      if (Array.isArray(parsed)) {
+        scopes = parsed.map((s) => String(s));
+      }
+    } catch {
+      scopes = null;
+    }
+  }
   return {
     id: String(row.id),
     label: String(row.label),
@@ -185,6 +204,7 @@ function rowToRecord(row: Record<string, unknown>): ApiKeyRecord {
     prefix: String(row.prefix),
     last4: String(row.last4),
     ownerWallet: row.owner_wallet != null ? String(row.owner_wallet) : null,
+    scopes,
     createdAt: String(row.created_at),
     disabledAt: row.disabled_at != null ? String(row.disabled_at) : null,
   };

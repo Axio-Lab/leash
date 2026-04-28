@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 9;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -50,6 +50,7 @@ const SCHEMA_SQL: readonly string[] = [
     last4 TEXT NOT NULL,
     hash TEXT NOT NULL UNIQUE,
     owner_wallet TEXT,
+    scopes TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     disabled_at TEXT
   )`,
@@ -249,6 +250,158 @@ const SCHEMA_SQL: readonly string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_payment_links_key_created ON payment_links(api_key_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_payment_links_agent ON payment_links(owner_agent)`,
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Platform layer (v6+) — Privy-backed users for agent.leash.market &
+  // leash.market, and the join table that maps a Privy user to one or
+  // more `lsh_*` API keys with scope metadata.
+  //
+  // `platform_users.privy_id` is the Privy DID returned by their JWT.
+  // `wallet` is the Solana pubkey of the user's connected (or embedded)
+  // wallet — same value we pass as `owner_wallet` when issuing keys, so
+  // analytics joins line up across platform_api_keys → api_keys.
+  `CREATE TABLE IF NOT EXISTS platform_users (
+    privy_id   TEXT PRIMARY KEY,
+    wallet     TEXT NOT NULL,
+    email      TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_platform_users_wallet ON platform_users(wallet)`,
+
+  // `scopes` is a JSON array like `["agents"]` / `["marketplace"]` /
+  // `["agents","marketplace"]`. The same `lsh_*` key can be used on
+  // both surfaces; scopes are advisory metadata for the BFF to enforce.
+  `CREATE TABLE IF NOT EXISTS platform_api_keys (
+    privy_id   TEXT NOT NULL,
+    key_id     TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    scopes     TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    PRIMARY KEY (privy_id, key_id),
+    FOREIGN KEY (privy_id) REFERENCES platform_users(privy_id),
+    FOREIGN KEY (key_id) REFERENCES api_keys(id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_platform_api_keys_key ON platform_api_keys(key_id)`,
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Agents (v7) — the user-facing record of an agent created through
+  // agent.leash.market. The MPL Core asset itself is minted browser-side
+  // (Privy + Umi); this row is the platform's view: who owns it, what
+  // tools it can use, what budget it operates under, and which service
+  // key the agent-runtime worker uses to call apps/api on its behalf.
+  //
+  // `encrypted_llm_key` is AES-GCM ciphertext of the user's LLM provider
+  // key (Anthropic / OpenAI). Decrypted only inside agent-runtime.
+  `CREATE TABLE IF NOT EXISTS agents (
+    mint              TEXT PRIMARY KEY,
+    owner_privy_id    TEXT NOT NULL,
+    owner_wallet      TEXT NOT NULL,
+    name              TEXT NOT NULL,
+    network           TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    model             TEXT NOT NULL,
+    system_prompt     TEXT NOT NULL,
+    capabilities      TEXT NOT NULL DEFAULT '[]',
+    budget_per_action TEXT NOT NULL DEFAULT '0.10',
+    budget_per_task   TEXT NOT NULL DEFAULT '1.00',
+    budget_per_day    TEXT NOT NULL DEFAULT '10.00',
+    treasury          TEXT NOT NULL,
+    service_key_id    TEXT NOT NULL,
+    encrypted_llm_key TEXT NOT NULL,
+    llm_provider      TEXT NOT NULL CHECK (llm_provider IN ('anthropic','openai')),
+    status            TEXT NOT NULL DEFAULT 'active',
+    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (owner_privy_id) REFERENCES platform_users(privy_id),
+    FOREIGN KEY (service_key_id) REFERENCES api_keys(id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agents_owner ON agents(owner_privy_id)`,
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Tasks (v8) — one row per "do this" the agent is given. The
+  // agent-runtime worker claims pending tasks via UPDATE WHERE status
+  // = 'pending' and runs the LLM loop until done / out_of_budget /
+  // failed.
+  `CREATE TABLE IF NOT EXISTS tasks (
+    id              TEXT PRIMARY KEY,
+    agent_mint      TEXT NOT NULL,
+    prompt          TEXT NOT NULL,
+    budget_cap      TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                      CHECK (status IN ('pending','running','done','failed','out_of_budget')),
+    spent           TEXT NOT NULL DEFAULT '0',
+    final_output    TEXT,
+    error           TEXT,
+    started_at      TEXT,
+    finished_at     TEXT,
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (agent_mint) REFERENCES agents(mint)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_tasks_agent_created ON tasks(agent_mint, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`,
+
+  // Each step inside a task: think → tool_call → payment → tool_result
+  // → done | error. Payload is JSON; cost_usdc is set on payment rows.
+  // The activity feed in the UI is live-streamed via Redis pub/sub but
+  // also persisted here so reloads can replay history.
+  `CREATE TABLE IF NOT EXISTS task_activities (
+    id           TEXT PRIMARY KEY,
+    task_id      TEXT NOT NULL,
+    type         TEXT NOT NULL,
+    payload      TEXT NOT NULL DEFAULT '{}',
+    cost_usdc    TEXT,
+    receipt_id   TEXT,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (task_id) REFERENCES tasks(id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_activities_task ON task_activities(task_id, created_at)`,
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Marketplace listings (v9) — third-party MCP servers published on
+  // leash.market. `pricing` and `tools` are JSON blobs validated at
+  // POST time. `health_status` is updated by the hourly health-check
+  // worker that pings each listing's `/.well-known/leash-mcp.json`.
+  `CREATE TABLE IF NOT EXISTS listings (
+    id              TEXT PRIMARY KEY,
+    slug            TEXT NOT NULL UNIQUE,
+    name            TEXT NOT NULL,
+    description     TEXT NOT NULL,
+    category        TEXT NOT NULL,
+    owner_privy_id  TEXT NOT NULL,
+    owner_wallet    TEXT NOT NULL,
+    endpoint        TEXT NOT NULL,
+    pricing         TEXT NOT NULL DEFAULT '{}',
+    tools           TEXT NOT NULL DEFAULT '[]',
+    docs_url        TEXT,
+    free_tier       INTEGER NOT NULL DEFAULT 0,
+    health_status   TEXT,
+    health_checked  TEXT,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                      CHECK (status IN ('pending','approved','rejected','disabled')),
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (owner_privy_id) REFERENCES platform_users(privy_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_listings_status_created ON listings(status, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_listings_category ON listings(category)`,
+
+  `CREATE TABLE IF NOT EXISTS listing_ratings (
+    listing_id   TEXT NOT NULL,
+    privy_id     TEXT NOT NULL,
+    stars        INTEGER NOT NULL CHECK (stars BETWEEN 1 AND 5),
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    PRIMARY KEY (listing_id, privy_id),
+    FOREIGN KEY (listing_id) REFERENCES listings(id),
+    FOREIGN KEY (privy_id) REFERENCES platform_users(privy_id)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS listing_reviews (
+    id          TEXT PRIMARY KEY,
+    listing_id  TEXT NOT NULL,
+    privy_id    TEXT NOT NULL,
+    body        TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (listing_id) REFERENCES listings(id),
+    FOREIGN KEY (privy_id) REFERENCES platform_users(privy_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_listing_reviews_listing ON listing_reviews(listing_id, created_at DESC)`,
 ];
 
 let cached: Client | null = null;
@@ -301,6 +454,14 @@ export async function runMigrations(db: Client): Promise<void> {
     await migrateApiKeysOwnerWallet(db);
   }
 
+  // v6: add `scopes` column to api_keys for surface-aware key issuance
+  // (`["agents"]`, `["marketplace"]`, etc.). The new platform_* tables
+  // are covered by `IF NOT EXISTS` in SCHEMA_SQL above; only the column
+  // add needs an explicit migration on existing DBs.
+  if (currentVersion < 6) {
+    await migrateApiKeysScopes(db);
+  }
+
   if (currentVersion < SCHEMA_VERSION) {
     await db.execute({
       sql: 'INSERT OR REPLACE INTO schema_version(version) VALUES(?)',
@@ -326,6 +487,14 @@ async function migrateApiKeysOwnerWallet(db: Client): Promise<void> {
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_api_keys_owner_wallet ON api_keys(owner_wallet) WHERE owner_wallet IS NOT NULL`,
   );
+}
+
+async function migrateApiKeysScopes(db: Client): Promise<void> {
+  const info = await db.execute('PRAGMA table_info(api_keys)');
+  const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
+  if (!names.has('scopes')) {
+    await db.execute('ALTER TABLE api_keys ADD COLUMN scopes TEXT');
+  }
 }
 
 async function migrateWatchlistKindCheck(db: Client): Promise<void> {

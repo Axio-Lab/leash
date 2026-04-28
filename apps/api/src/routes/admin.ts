@@ -33,6 +33,8 @@ import { invalidRequest, notFound } from '../util/errors.js';
 
 const NetworkSchema = z.enum(['solana-devnet', 'solana-mainnet']);
 
+const ScopeSchema = z.enum(['agents', 'marketplace', 'admin']);
+
 const ApiKeyRecordSchema = z
   .object({
     id: z.string(),
@@ -43,6 +45,10 @@ const ApiKeyRecordSchema = z
     owner_wallet: z.string().nullable().openapi({
       description:
         'Solana wallet (base58) this key is attributed to; null for keys created before owner tracking or bootstrap keys.',
+    }),
+    scopes: z.array(ScopeSchema).nullable().openapi({
+      description:
+        'Surface scopes for platform-issued keys (agents, marketplace, admin). null for legacy / unrestricted keys.',
     }),
     created_at: z.string(),
     disabled_at: z.string().nullable(),
@@ -57,6 +63,10 @@ const CreateApiKeyBody = z
       description:
         'Solana wallet (base58) of the customer who owns this key — required on every new issuance.',
     }),
+    scopes: z.array(ScopeSchema).optional().openapi({
+      description:
+        'Optional surface scopes (`agents`, `marketplace`, `admin`). Omit for unrestricted keys.',
+    }),
   })
   .openapi('AdminCreateApiKeyBody');
 
@@ -69,6 +79,15 @@ const CreateApiKeyResponse = z
   })
   .openapi('AdminCreateApiKeyResponse');
 
+type AdminApiScope = z.infer<typeof ScopeSchema>;
+
+function narrowScopes(scopes: string[] | null): AdminApiScope[] | null {
+  if (scopes == null) return null;
+  const allowed: AdminApiScope[] = ['agents', 'marketplace', 'admin'];
+  const filtered = scopes.filter((s): s is AdminApiScope => (allowed as string[]).includes(s));
+  return filtered;
+}
+
 function recordToWire(r: Awaited<ReturnType<typeof getApiKeyById>>) {
   if (!r) return null;
   return {
@@ -78,6 +97,7 @@ function recordToWire(r: Awaited<ReturnType<typeof getApiKeyById>>) {
     prefix: r.prefix,
     last4: r.last4,
     owner_wallet: r.ownerWallet,
+    scopes: narrowScopes(r.scopes),
     created_at: r.createdAt,
     disabled_at: r.disabledAt,
   };
@@ -132,6 +152,7 @@ export function buildAdminRoutes(deps: AdminDeps): OpenAPIHono {
           label: body.label,
           network: body.network,
           ownerWallet,
+          ...(body.scopes && body.scopes.length > 0 ? { scopes: body.scopes } : {}),
         });
       } catch (err) {
         throw invalidRequest((err as Error).message);

@@ -1,0 +1,39 @@
+{
+  "name": "@leash/platform-auth",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./leash-client": {
+      "types": "./dist/leash-client.d.ts",
+      "import": "./dist/leash-client.js"
+    },
+    "./encryption": {
+      "types": "./dist/encryption.d.ts",
+      "import": "./dist/encryption.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "echo skip",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.14.0",
+    "@privy-io/server-auth": "^1.18.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
