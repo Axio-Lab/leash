@@ -22,6 +22,7 @@
     "start": "node --env-file-if-exists=.env dist/cli.js",
     "indexer": "node --env-file-if-exists=.env dist/indexer/cli.js",
     "indexer:dev": "node --env-file-if-exists=.env --import tsx ./src/indexer/cli.ts",
+    "db:migrate": "node --env-file-if-exists=.env --import tsx ./scripts/db-migrate.ts",
     "dev": "node --env-file-if-exists=.env --import tsx ./src/dev.ts",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -30,7 +31,8 @@
     "e2e:devnet": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/e2e-devnet.ts",
     "withdraw": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/withdraw.ts",
     "fund": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/fund.ts",
-    "facilitator:smoke": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/facilitator-sdk-smoke.ts"
+    "facilitator:smoke": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/facilitator-sdk-smoke.ts",
+    "seed:listings": "node --env-file-if-exists=.env --import tsx ./scripts/seed-listings.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",

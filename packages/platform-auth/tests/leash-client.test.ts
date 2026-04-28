@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { LeashAdminError, createLeashAdminClient } from '../src/leash-client.js';
 
-function mockFetch(handler: (input: RequestInfo | URL, init?: RequestInit) => Response) {
-  return ((input, init) => Promise.resolve(handler(input, init))) as typeof fetch;
+function mockFetch(handler: (input: string | URL, init?: RequestInit) => Response) {
+  return ((input, init) => Promise.resolve(handler(input as string | URL, init))) as typeof fetch;
 }
 
 describe('createLeashAdminClient', () => {

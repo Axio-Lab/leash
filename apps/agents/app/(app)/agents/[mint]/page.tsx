@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { use, useEffect, useState } from 'react';
+import { use } from 'react';
 import useSWR from 'swr';
 
 type Agent = {

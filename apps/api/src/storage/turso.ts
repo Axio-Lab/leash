@@ -277,9 +277,7 @@ const SCHEMA_SQL: readonly string[] = [
     name       TEXT NOT NULL,
     scopes     TEXT NOT NULL DEFAULT '[]',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    PRIMARY KEY (privy_id, key_id),
-    FOREIGN KEY (privy_id) REFERENCES platform_users(privy_id),
-    FOREIGN KEY (key_id) REFERENCES api_keys(id)
+    PRIMARY KEY (privy_id, key_id)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_platform_api_keys_key ON platform_api_keys(key_id)`,
 
@@ -292,6 +290,9 @@ const SCHEMA_SQL: readonly string[] = [
   //
   // `encrypted_llm_key` is AES-GCM ciphertext of the user's LLM provider
   // key (Anthropic / OpenAI). Decrypted only inside agent-runtime.
+  // FKs to platform_users / api_keys intentionally omitted: SQLite
+  // doesn't enforce them by default, and we want admin-driven seeding
+  // (devnet, ops scripts) to work without first creating a Privy row.
   `CREATE TABLE IF NOT EXISTS agents (
     mint              TEXT PRIMARY KEY,
     owner_privy_id    TEXT NOT NULL,
@@ -309,9 +310,7 @@ const SCHEMA_SQL: readonly string[] = [
     encrypted_llm_key TEXT NOT NULL,
     llm_provider      TEXT NOT NULL CHECK (llm_provider IN ('anthropic','openai')),
     status            TEXT NOT NULL DEFAULT 'active',
-    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    FOREIGN KEY (owner_privy_id) REFERENCES platform_users(privy_id),
-    FOREIGN KEY (service_key_id) REFERENCES api_keys(id)
+    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
   )`,
   `CREATE INDEX IF NOT EXISTS idx_agents_owner ON agents(owner_privy_id)`,
 
@@ -359,6 +358,9 @@ const SCHEMA_SQL: readonly string[] = [
   // leash.market. `pricing` and `tools` are JSON blobs validated at
   // POST time. `health_status` is updated by the hourly health-check
   // worker that pings each listing's `/.well-known/leash-mcp.json`.
+  // FK to platform_users intentionally omitted — listings can be
+  // backfilled by ops scripts or seed data before the user has logged
+  // into the BFF (which is what creates the platform_users row).
   `CREATE TABLE IF NOT EXISTS listings (
     id              TEXT PRIMARY KEY,
     slug            TEXT NOT NULL UNIQUE,
@@ -376,8 +378,7 @@ const SCHEMA_SQL: readonly string[] = [
     health_checked  TEXT,
     status          TEXT NOT NULL DEFAULT 'pending'
                       CHECK (status IN ('pending','approved','rejected','disabled')),
-    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    FOREIGN KEY (owner_privy_id) REFERENCES platform_users(privy_id)
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
   )`,
   `CREATE INDEX IF NOT EXISTS idx_listings_status_created ON listings(status, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_listings_category ON listings(category)`,
@@ -387,9 +388,7 @@ const SCHEMA_SQL: readonly string[] = [
     privy_id     TEXT NOT NULL,
     stars        INTEGER NOT NULL CHECK (stars BETWEEN 1 AND 5),
     created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    PRIMARY KEY (listing_id, privy_id),
-    FOREIGN KEY (listing_id) REFERENCES listings(id),
-    FOREIGN KEY (privy_id) REFERENCES platform_users(privy_id)
+    PRIMARY KEY (listing_id, privy_id)
   )`,
 
   `CREATE TABLE IF NOT EXISTS listing_reviews (
@@ -397,9 +396,7 @@ const SCHEMA_SQL: readonly string[] = [
     listing_id  TEXT NOT NULL,
     privy_id    TEXT NOT NULL,
     body        TEXT NOT NULL,
-    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    FOREIGN KEY (listing_id) REFERENCES listings(id),
-    FOREIGN KEY (privy_id) REFERENCES platform_users(privy_id)
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
   )`,
   `CREATE INDEX IF NOT EXISTS idx_listing_reviews_listing ON listing_reviews(listing_id, created_at DESC)`,
 ];

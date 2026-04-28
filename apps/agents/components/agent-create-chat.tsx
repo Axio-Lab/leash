@@ -295,7 +295,6 @@ function ToolsStep({
       setQuery(initialAddSlug);
       void search(initialAddSlug);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialAddSlug]);
 
   async function search(q: string) {
