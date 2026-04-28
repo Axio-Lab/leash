@@ -43,6 +43,13 @@ Every `prepare*` returns `{ event_id, transaction.base64, echo }`. Sign
 the base64 client-side, then `POST /v1/submit { event_id, transaction }`.
 Poll `GET /v1/events/{id}` until `phase === 'confirmed'`.
 
+**`POST /v1/submit` is required for explorer tracking.** It is the
+step that creates the event row keyed by `event_id`, broadcasts the
+transaction, and watchlists the agent so the indexer surfaces receipts
+and on-chain activity on `explorer.leash.market`. A transaction sent via
+raw RPC (outside this endpoint) produces no event row, no receipt, and
+nothing on the explorer.
+
 Prepare routes (mirror SDK `prepare*` helpers):
 
 - `POST /v1/agents/prepare`
@@ -200,7 +207,8 @@ Frequent codes:
   `@leash/seller-kit` and re-run; the buyer-kit will populate
   `receipt.price` from the echoed requirements.
 - **"My withdraw signed but didn't show on the explorer."** Run the
-  withdraw via `apps/api/scripts/withdraw.ts` (or `POST /v1/agents/{mint}/treasury/withdraw/prepare` → submit), not a raw RPC call. The API auto-watchlists the agent so the indexer picks it up.
+  withdraw via `apps/api/scripts/withdraw.ts` (or `POST /v1/agents/{mint}/treasury/withdraw/prepare` → sign → `POST /v1/submit`), not a raw RPC call. **`POST /v1/submit` is what writes the event row and watchlists the agent**; the indexer only tracks activity for watchlisted agents.
+- **"My transaction confirmed on-chain but nothing shows in the explorer or receipt feed."** You broadcast via raw RPC instead of `POST /v1/submit`. The API is unaware of the transaction — there is no event row and no explorer entry. Always use the prepare → sign → submit path through `api.leash.market`.
 - **"My `e2e-devnet.ts` doesn't update fund/withdraw on the explorer but `withdraw.ts` does."** The e2e script bypasses the API; the explorer indexer only sees activity for watchlisted agents. Add a one-line API call (any `prepare*` works) to enrol the agent, or run the dedicated scripts.
 - **"Local facilitator rejects my settle."** The facilitator's `LEASH_FACILITATOR_SECRET_KEY` MUST be a different keypair from the buyer-side signer. Generate one with `solana-keygen new -o .leash-fee-payer.json`, fund 0.05 SOL, restart.
 - **"Token-2022 (USDG) transfers fail."** Use `TOKEN_2022_PROGRAM_ID`, not `TOKEN_PROGRAM_ID`. The seller/buyer kits handle this; raw SPL calls don't.

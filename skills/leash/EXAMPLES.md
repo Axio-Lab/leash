@@ -39,14 +39,16 @@ curl -sS https://api.leash.market/v1/agents/prepare \
   }'
 # → { event_id, transaction: { base64 }, echo: { assetAddress } }
 
-# Step 2 — sign client-side, then submit
+# Step 2 — sign client-side, then submit via the API (NOT raw RPC).
+# POST /v1/submit is what writes the event row, watchlists the agent,
+# and makes the mint visible on explorer.leash.market.
 curl -sS https://api.leash.market/v1/submit \
   -H "Authorization: Bearer $LEASH_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{ "event_id":"<event_id>", "transaction":"<signedBase64>" }'
 # → { signature }
 
-# Step 3 — track
+# Step 3 — track (poll until phase=confirmed)
 curl -sS "https://api.leash.market/v1/events/<event_id>" \
   -H "Authorization: Bearer $LEASH_API_KEY"
 # → { phase: "confirmed", signature, ... }
@@ -152,6 +154,7 @@ app.get('/quote', (c) => c.json({ pair: 'SOL/USD', price: 142.71 }));
 ## 6. Owner withdraw — drain treasury USDC to a wallet (HTTP)
 
 ```bash
+# Step 1 — prepare
 curl -sS https://api.leash.market/v1/agents/<agentAsset>/treasury/withdraw-all/prepare \
   -H "Authorization: Bearer $LEASH_API_KEY" \
   -H "Content-Type: application/json" \
@@ -160,7 +163,16 @@ curl -sS https://api.leash.market/v1/agents/<agentAsset>/treasury/withdraw-all/p
     "destination":"<destinationOwnerWallet>"
   }'
 # → { event_id, transaction.base64 }
-# sign with the OWNER keypair (not the executive!), then POST /v1/submit.
+
+# Step 2 — sign with the OWNER keypair (not the executive!), then submit
+# via POST /v1/submit — NOT via raw sendRawTransaction. The submit step
+# is what creates the event row and ensures the withdrawal appears on the
+# explorer and in the receipt feed.
+curl -sS https://api.leash.market/v1/submit \
+  -H "Authorization: Bearer $LEASH_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "event_id":"<event_id>", "transaction":"<signedBase64>" }'
+# → { signature }
 ```
 
 ## 7. Run a local facilitator (devnet)

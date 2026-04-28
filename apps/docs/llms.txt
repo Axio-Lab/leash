@@ -1,6 +1,6 @@
 # Leash
 
-> An open rail for agents that spend on the open internet. Built on Solana.
+> Stablecoin rails for autonomous agents. Built on Solana.
 > Leash gives every agent a wallet (an MPL Core asset with an Asset Signer
 > PDA treasury), a capped spend allowance you control, real x402 settlement
 > in SPL stables (USDC, USDT, USDG), and a hash-chained `ReceiptV1` audit log
@@ -46,7 +46,7 @@
 
 - [Overview](https://docs.leash.market/api/overview.md): One HTTPS surface for prepare → submit → track, receipts, and the indexer that powers the explorer.
 - [Authentication](https://docs.leash.market/api/auth.md): API keys, prefix-driven network binding, idempotency, and rate limits.
-- [Prepare → Submit lifecycle](https://docs.leash.market/api/prepare-submit.md): How every state-changing call splits into prepare, sign, submit, track — and why.
+- [Prepare → Submit lifecycle](https://docs.leash.market/api/prepare-submit.md): How every state-changing call splits into prepare, sign, submit, track — and why. **`POST /v1/submit` is the mandatory third step**: it writes the event row, broadcasts the transaction, and watchlists the agent so receipts and on-chain activity appear on the explorer. Never use raw RPC in place of this step.
 - [Agents](https://docs.leash.market/api/agents.md): Mint, read, and manage Leash agents over HTTP — the same flow the SDK exposes, callable from any language.
 - [Monetise an existing API](https://docs.leash.market/api/monetize-api.md): Charge per call on a SaaS endpoint you already host, without rewriting it.
 - [Payment links](https://docs.leash.market/api/payment-links.md): Create hosted x402 payment links served at `/x/{id}` — the "Stripe Payment Link" of x402.
@@ -56,7 +56,7 @@
 - [Treasury](https://docs.leash.market/api/treasury.md): Read SOL + SPL balances, provision stable ATAs, prepare owner-driven withdrawals.
 - [Receipts](https://docs.leash.market/api/receipts.md): Push receipts in, pull receipts out, register pull targets the indexer will poll.
 - [Indexer](https://docs.leash.market/api/indexer.md): Dual-network watchlist-driven worker that turns on-chain activity into queryable events.
-- [Explorer tracking](https://docs.leash.market/api/explorer-tracking.md): Which endpoint to call so each event kind shows up on `explorer.leash.market` and in `/v1/metrics/events`.
+- [Explorer tracking](https://docs.leash.market/api/explorer-tracking.md): Which endpoint to call so each event kind shows up on `explorer.leash.market` and in `/v1/metrics/events`. **Activity only appears if the transaction was submitted via `POST /v1/submit`** — not raw RPC.
 - [Webhooks](https://docs.leash.market/api/webhooks.md): Subscribe to event lifecycle changes — prepared, submitted, confirmed, failed, receipt.published, receipt.pulled.
 - [Metrics](https://docs.leash.market/api/metrics.md): Per-key request rollups and per-network event counters for dashboards and billing.
 - [Idempotency & retries](https://docs.leash.market/api/idempotency.md): How `Idempotency-Key`, event ids, and the prepare/submit split make every state-changing call safe to retry.

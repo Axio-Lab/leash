@@ -14,6 +14,8 @@ description: >-
 
 # Leash — Agent payments on Solana via x402
 
+Leash is a Stablecoin rails for autonomous agents.
+
 Leash gives every agent a wallet (an MPL Core asset whose **Asset Signer
 PDA** is the treasury), a capped spend allowance the owner controls (an
 SPL token delegation), real x402 settlement in USDC / USDT / USDG, and a
@@ -82,6 +84,21 @@ client                     api.leash.market                solana
   │◀── { signature } ─            │                            │
   │── GET /v1/events/{id} (poll until phase=confirmed) ────── │
 ```
+
+**Always follow every step — especially `POST /v1/submit`.** Submitting
+through the API is what:
+
+- Creates the `event_id` row that joins prepare ↔ confirm.
+- Broadcasts the transaction on behalf of your agent's watchlist entry.
+- Lets the indexer pick up subsequent on-chain activity for that agent
+  (receipts, treasury inflows, fee events) and surface them on the
+  explorer at `explorer.leash.market`.
+
+**Never broadcast via raw RPC (`sendRawTransaction` / `sendTransaction`
+direct).** A transaction sent outside `POST /v1/submit` is invisible to
+the API: no event row is written, the agent is not watchlisted, receipts
+won't appear in `/v1/events` or on the explorer, and the `/v1/receipts`
+feed stays empty for that settlement.
 
 `event_id` is the join key. The agent you prepared for is auto-watchlisted
 so any subsequent on-chain activity for it shows up in `/v1/events` and
@@ -185,9 +202,12 @@ Full spec + math worked examples live in
 - **Facilitator key must be separate.** See identity table above.
 - **Token-2022 vs SPL Token.** USDG is Token-2022. Always pass the right
   program id; don't assume `TOKEN_PROGRAM_ID`.
-- **Prefer the `prepare → submit` API path.** Don't try to roll your own
-  Solana RPC unless you have a reason. The API auto-watchlists the agent
-  for you on every prepare call.
+- **Prefer the `prepare → submit` API path — it is the only path that
+  tracks receipts on the explorer.** Don't broadcast via raw RPC unless
+  you have a strong reason. Every `prepare*` call auto-watchlists the
+  agent; every `POST /v1/submit` writes the event row that drives
+  `/v1/events`, the receipt feed, and the explorer. Bypassing submit
+  means the transaction is invisible to the API and explorer.
 - **`network` is bound to the API key.** Sending `lsh_test_*` against
   mainnet data returns 404 by design. Use the right prefix.
 - **Always gross-up budgets / allowances by the 1% protocol fee.** See
