@@ -214,7 +214,6 @@ export default function ConnectionsSettingsPage() {
                 >
                   <div className="flex items-start gap-2.5">
                     {t.logo ? (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={t.logo}
                         alt=""
@@ -363,7 +362,6 @@ function ToolkitModal({
       <div className="relative w-full max-w-2xl max-h-[90vh] sm:max-h-[80vh] flex flex-col rounded-t-2xl sm:rounded-2xl border border-border bg-bg-elev shadow-2xl">
         <div className="shrink-0 flex items-start gap-3 border-b border-border p-4 sm:p-5">
           {toolkit.logo ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={toolkit.logo}
               alt=""
