@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import * as React from 'react';
 import useSWR from 'swr';
@@ -101,7 +102,17 @@ export function ChatShell({
               <PanelLeftCloseIcon className="size-4" />
             )}
           </button>
-          <span className="font-semibold tracking-tight flex-1 truncate">leash · agents</span>
+          <span className="flex items-center gap-2 font-semibold tracking-tight flex-1 truncate">
+            <Image
+              src="/leash-logo.png"
+              alt="Leash"
+              width={22}
+              height={22}
+              className="shrink-0 select-none"
+              priority
+            />
+            leash · agents
+          </span>
           <div className="flex items-center gap-1.5 sm:gap-2">
             {walletShort ? (
               <span className="hidden sm:inline text-xs text-fg-muted font-mono">

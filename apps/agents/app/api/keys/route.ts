@@ -43,20 +43,51 @@ export async function GET(req: NextRequest) {
   });
   const platformKeys = await listPlatformKeys(db, session.privyId);
   let apiKeys: Awaited<ReturnType<ReturnType<typeof getLeash>['listApiKeys']>> = [];
+  let apiOffline = false;
   try {
     apiKeys = await getLeash().listApiKeys({ ownerWallet: session.wallet, includeDisabled: true });
   } catch {
-    // When apps/api is offline in local dev, still return platform-linked keys.
+    apiOffline = true;
     apiKeys = [];
   }
+
   const platformIndex = new Map(platformKeys.map((p) => [p.keyId, p]));
-  const items = apiKeys.map((k) => ({
-    ...k,
-    name: platformIndex.get(k.id)?.name ?? k.label,
-    scopes: platformIndex.get(k.id)?.scopes ?? k.scopes ?? [],
-    source: inferSource(platformIndex.get(k.id)?.scopes ?? k.scopes ?? []),
-  }));
-  return NextResponse.json({ items });
+
+  let items: object[];
+
+  if (apiOffline) {
+    // apps/api unreachable — surface platform-tracked keys with limited metadata
+    // so users can at least see keys created from either surface.
+    items = platformKeys.map((p) => ({
+      id: p.keyId,
+      label: p.name,
+      name: p.name,
+      prefix: 'lsh_',
+      last4: '••••',
+      network: 'solana-devnet' as const,
+      scopes: p.scopes,
+      source: inferSource(p.scopes),
+      created_at: new Date().toISOString(),
+      disabled_at: null,
+      _offline: true,
+    }));
+  } else {
+    // Merge canonical API data with platform name/scope enrichment.
+    // Keys are keyed by `ownerWallet` so all keys — regardless of which app
+    // created them — appear here as long as apps/api is reachable.
+    items = apiKeys.map((k) => ({
+      ...k,
+      name: platformIndex.get(k.id)?.name ?? k.label,
+      scopes: platformIndex.get(k.id)?.scopes ?? k.scopes ?? [],
+      source: inferSource(platformIndex.get(k.id)?.scopes ?? k.scopes ?? []),
+    }));
+  }
+
+  const warning = apiOffline
+    ? 'apps/api is unreachable — showing locally-tracked keys only. Start apps/api to see full key details.'
+    : undefined;
+
+  return NextResponse.json({ items, ...(warning ? { warning } : {}) });
 }
 
 const ALLOWED_SCOPES: ApiScope[] = ['agents', 'marketplace'];
