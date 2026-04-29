@@ -122,7 +122,7 @@ export function ChatSidebar({
   return (
     <aside className="w-[260px] shrink-0 border-r border-border bg-bg-elev/95 flex flex-col h-full overflow-hidden">
       {/* New chat — primary action at the very top */}
-      <div className="shrink-0 px-3 pt-3 pb-2">
+      <div className="shrink-0 px-3 pt-3 pb-3">
         <Button
           type="button"
           onClick={onNewChat}
@@ -135,24 +135,34 @@ export function ChatSidebar({
         </Button>
       </div>
 
+      {/* Divider between New chat and previous threads */}
+      <div className="shrink-0 px-3">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-fg-subtle whitespace-nowrap">
+            Recent
+          </span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+      </div>
+
       {/* Threads list */}
-      <nav className="flex-1 overflow-y-auto scrollbar-thin px-2 py-2">
+      <nav className="flex-1 overflow-y-auto scrollbar-thin px-2 py-2.5">
         {threads.length === 0 ? (
           <p className="px-3 py-6 text-center text-xs text-fg-subtle">
             No chats yet. Click <span className="text-fg-muted">New chat</span> to start.
           </p>
         ) : (
-          <ul className="space-y-0.5">
+          <ul className="space-y-1.5">
             {threads.map((t) => {
               const active = activeThreadId === t.id;
               const isRenaming = renaming?.id === t.id;
               return (
                 <li key={t.id} className="group/row">
                   <div
-                    className={`flex items-center gap-1 rounded-md px-1.5 ${
+                    className={`flex items-center gap-1 rounded-md border px-1.5 transition-colors ${
                       active
-                        ? 'bg-brand/15 shadow-[inset_0_0_0_1px_oklch(0.66_0.19_268/0.4)]'
-                        : 'hover:bg-bg-elev'
+                        ? 'border-brand/40 bg-brand/15 shadow-[inset_0_0_0_1px_oklch(0.66_0.19_268/0.25)]'
+                        : 'border-border/60 bg-bg/50 hover:border-border-strong hover:bg-bg-elev-2'
                     }`}
                   >
                     {isRenaming ? (
