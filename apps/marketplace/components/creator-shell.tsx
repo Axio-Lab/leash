@@ -172,7 +172,7 @@ function SidebarBody({
   return (
     <>
       <div className="flex items-center gap-2 border-b border-border px-5 py-4">
-        <span className="grid size-7 place-items-center rounded-md bg-gradient-to-br from-brand to-brand-strong text-white shadow-[0_4px_18px_-6px_oklch(0.7_0.22_290_/_0.6)]">
+        <span className="grid size-7 place-items-center rounded-md bg-gradient-to-br from-brand to-brand-strong text-white shadow-[0_4px_18px_-6px_oklch(0.66_0.19_268/0.6)]">
           <span className="text-[11px] font-bold tracking-tight">L</span>
         </span>
         <Link href="/" className="text-sm font-semibold tracking-tight">
@@ -228,7 +228,7 @@ function NavGroup({
                 className={cn(
                   'group flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors',
                   active
-                    ? 'bg-brand/15 text-fg shadow-[inset_0_0_0_1px_oklch(0.7_0.22_290_/_0.4)]'
+                    ? 'bg-brand/15 text-fg shadow-[inset_0_0_0_1px_oklch(0.66_0.19_268/0.4)]'
                     : 'text-fg-muted hover:bg-bg-elev hover:text-fg',
                 )}
               >

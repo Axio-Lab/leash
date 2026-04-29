@@ -56,7 +56,7 @@ export function ChatSidebar({
                 onClick={onNavigate}
                 className={`group flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors ${
                   chatActive
-                    ? 'bg-brand/15 text-fg shadow-[inset_0_0_0_1px_oklch(0.7_0.22_290/0.4)]'
+                    ? 'bg-brand/15 text-fg shadow-[inset_0_0_0_1px_oklch(0.66_0.19_268/0.4)]'
                     : 'text-fg-muted hover:bg-bg-elev hover:text-fg'
                 }`}
               >
@@ -91,7 +91,7 @@ export function ChatSidebar({
                   <div
                     className={`flex items-center gap-1 rounded-md ${
                       activeThreadId === t.id
-                        ? 'bg-brand/15 shadow-[inset_0_0_0_1px_oklch(0.7_0.22_290/0.4)]'
+                        ? 'bg-brand/15 shadow-[inset_0_0_0_1px_oklch(0.66_0.19_268/0.4)]'
                         : 'hover:bg-bg-elev'
                     }`}
                   >
@@ -131,7 +131,7 @@ export function ChatSidebar({
           onClick={onNavigate}
           className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors ${
             pathname?.startsWith('/settings')
-              ? 'bg-brand/15 text-fg shadow-[inset_0_0_0_1px_oklch(0.7_0.22_290/0.4)]'
+              ? 'bg-brand/15 text-fg shadow-[inset_0_0_0_1px_oklch(0.66_0.19_268/0.4)]'
               : 'text-fg-muted hover:bg-bg-elev hover:text-fg'
           }`}
         >

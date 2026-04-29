@@ -13,9 +13,12 @@
   --color-fg: oklch(0.97 0.005 280);
   --color-fg-muted: oklch(0.7 0.018 280);
   --color-fg-subtle: oklch(0.55 0.018 280);
-  --color-brand: oklch(0.7 0.22 290);
-  --color-brand-strong: oklch(0.78 0.22 290);
-  --color-brand-soft: oklch(0.32 0.12 290);
+  /* Leash brand: #5e78f5 — indigo/blue. Kept in oklch for opacity-aware
+     Tailwind variants like `bg-brand/15`, `ring-brand/40`, etc. */
+  --color-brand: oklch(0.66 0.19 268);
+  --color-brand-strong: oklch(0.74 0.18 268);
+  --color-brand-soft: oklch(0.32 0.12 268);
+  --color-brand-hex: #5e78f5;
   --color-success: oklch(0.78 0.16 150);
   --color-warning: oklch(0.82 0.16 80);
   --color-danger: oklch(0.7 0.22 25);
@@ -74,9 +77,9 @@
   }
   body {
     background:
-      radial-gradient(60% 40% at 12% -10%, oklch(0.32 0.18 290 / 0.18), transparent 60%),
+      radial-gradient(60% 40% at 12% -10%, oklch(0.32 0.18 268 / 0.18), transparent 60%),
       radial-gradient(50% 30% at 100% 0%, oklch(0.45 0.18 240 / 0.12), transparent 60%),
-      radial-gradient(ellipse 80% 50% at 50% -20%, oklch(0.35 0.12 290 / 0.35), transparent),
+      radial-gradient(ellipse 80% 50% at 50% -20%, oklch(0.35 0.12 268 / 0.35), transparent),
       var(--color-bg);
     color: var(--color-fg);
     font-family: var(--font-sans);
@@ -98,7 +101,7 @@
 @layer utilities {
   .bg-aurora {
     background:
-      radial-gradient(circle at 20% 0%, oklch(0.5 0.22 290 / 0.35), transparent 55%),
+      radial-gradient(circle at 20% 0%, oklch(0.5 0.22 268 / 0.35), transparent 55%),
       radial-gradient(circle at 80% 100%, oklch(0.5 0.22 220 / 0.25), transparent 55%),
       var(--color-bg-elev);
   }
@@ -110,8 +113,8 @@
   }
   .glow {
     box-shadow:
-      0 0 0 1px oklch(0.7 0.22 290 / 0.35),
-      0 12px 40px -12px oklch(0.7 0.22 290 / 0.4);
+      0 0 0 1px oklch(0.66 0.19 268 / 0.35),
+      0 12px 40px -12px oklch(0.66 0.19 268 / 0.4);
   }
   .scrollbar-thin {
     scrollbar-width: thin;
@@ -124,9 +127,9 @@
   position: relative;
   isolation: isolate;
   background:
-    radial-gradient(ellipse 80% 50% at 50% -20%, oklch(0.35 0.12 290 / 35%), transparent),
-    radial-gradient(ellipse 60% 40% at 100% 50%, oklch(0.28 0.08 280 / 25%), transparent),
-    radial-gradient(ellipse 60% 40% at 0% 80%, oklch(0.26 0.1 300 / 22%), transparent),
+    radial-gradient(ellipse 80% 50% at 50% -20%, oklch(0.35 0.12 268 / 35%), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 50%, oklch(0.28 0.08 268 / 25%), transparent),
+    radial-gradient(ellipse 60% 40% at 0% 80%, oklch(0.26 0.1 280 / 22%), transparent),
     var(--color-bg);
 }
 

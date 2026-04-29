@@ -58,7 +58,7 @@ export function SiteHeader() {
 
 function LeashMark() {
   return (
-    <span className="relative grid size-7 place-items-center rounded-md bg-gradient-to-br from-brand to-brand-strong text-white shadow-[0_4px_18px_-6px_oklch(0.7_0.22_290_/_0.6)]">
+    <span className="relative grid size-7 place-items-center rounded-md bg-gradient-to-br from-brand to-brand-strong text-white shadow-[0_4px_18px_-6px_oklch(0.66_0.19_268/0.6)]">
       <span className="text-[11px] font-bold tracking-tight">L</span>
     </span>
   );

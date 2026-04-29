@@ -75,7 +75,7 @@ export function McpSimulation() {
                     i < step
                       ? 'border-brand/60 bg-brand/15 text-brand-strong'
                       : i === step
-                        ? 'border-brand bg-brand text-white shadow-[0_0_0_4px_oklch(0.7_0.22_290_/_0.18)]'
+                        ? 'border-brand bg-brand text-white shadow-[0_0_0_4px_oklch(0.66_0.19_268/0.18)]'
                         : 'border-border text-fg-subtle',
                   )}
                 >

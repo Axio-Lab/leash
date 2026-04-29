@@ -19,7 +19,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'bg-brand text-white shadow-sm hover:bg-brand-strong hover:shadow-[0_8px_28px_-12px_oklch(0.7_0.22_290_/_0.6)]',
+          'bg-brand text-white shadow-sm hover:bg-brand-strong hover:shadow-[0_8px_28px_-12px_oklch(0.66_0.19_268/0.6)]',
         secondary: 'bg-bg-elev-2 text-fg hover:bg-bg-elev-2/80',
         outline: 'border border-border bg-transparent hover:border-border-strong hover:bg-bg-elev',
         ghost: 'hover:bg-bg-elev hover:text-fg text-fg-muted',
