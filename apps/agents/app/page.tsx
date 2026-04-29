@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 
 import { HeroShowcase } from '@/components/hero-showcase';
+import { Spinner } from '@/components/ui/spinner';
 // import { LiveStats } from '@/components/live-stats';
 
 /**
@@ -47,8 +48,14 @@ export default function LandingPage() {
                 disabled={!ready}
                 className="group inline-flex items-center gap-2 rounded-md bg-brand px-6 py-3 text-sm font-medium text-white transition-all hover:bg-brand-strong hover:shadow-[0_0_60px_-10px_var(--color-brand)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {ready ? 'Get started' : 'Loading…'}
-                <span className="transition-transform group-hover:translate-x-0.5">→</span>
+                {ready ? (
+                  <>
+                    Get started
+                    <span className="transition-transform group-hover:translate-x-0.5">→</span>
+                  </>
+                ) : (
+                  <Spinner size="sm" />
+                )}
               </button>
               {/* <a
                 href="#how-it-works"

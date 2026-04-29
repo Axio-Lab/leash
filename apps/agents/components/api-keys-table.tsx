@@ -2,8 +2,10 @@
 
 import * as React from 'react';
 import useSWR from 'swr';
+import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
+import { Spinner } from '@/components/ui/spinner';
 
 export type ApiKeyItem = {
   id: string;
@@ -37,6 +39,11 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await mutate();
+      toast.success('Key revoked');
+    } catch (e) {
+      toast.error('Could not revoke key', {
+        description: e instanceof Error ? e.message : 'unknown error',
+      });
     } finally {
       setRevokingId(null);
     }
@@ -60,7 +67,9 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
         </button>
       </div>
       {isLoading ? (
-        <div className="px-4 py-8 text-fg-muted text-sm">Loading…</div>
+        <div className="px-4 py-8 flex items-center gap-2 text-fg-muted text-sm">
+          <Spinner size="sm" /> Loading keys
+        </div>
       ) : error ? (
         <div className="px-4 py-8 text-danger text-sm">{(error as Error).message}</div>
       ) : !data || data.items.length === 0 ? (
@@ -129,9 +138,15 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
                       type="button"
                       onClick={() => revoke(k.id)}
                       disabled={revokingId === k.id}
-                      className="text-xs text-danger hover:underline disabled:opacity-60"
+                      className="inline-flex items-center gap-1.5 text-xs text-danger hover:underline disabled:opacity-60"
                     >
-                      {revokingId === k.id ? 'Revoking…' : 'Revoke'}
+                      {revokingId === k.id ? (
+                        <>
+                          <Spinner size="xs" /> Revoking
+                        </>
+                      ) : (
+                        'Revoke'
+                      )}
                     </button>
                   )}
                 </td>

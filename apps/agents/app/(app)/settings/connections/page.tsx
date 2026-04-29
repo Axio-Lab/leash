@@ -2,7 +2,10 @@
 
 import * as React from 'react';
 import useSWR from 'swr';
-import { Loader2, SearchIcon, X } from 'lucide-react';
+import { toast } from 'sonner';
+import { SearchIcon, X } from 'lucide-react';
+
+import { Spinner } from '@/components/ui/spinner';
 
 const fetcher = async (url: string) => {
   const res = await fetch(url, { credentials: 'include' });
@@ -72,29 +75,62 @@ export default function ConnectionsSettingsPage() {
   const { data: cx, mutate } = useSWR('/api/composio/connections', connFetcher);
 
   async function connect(slug: string) {
-    const res = await fetch('/api/composio/connect', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ toolkit_slug: slug }),
-    });
-    const j = (await res.json().catch(() => ({}))) as { redirect_url?: string; error?: string };
-    if (!res.ok) {
-      alert(j.error ?? 'connect failed');
-      return;
+    try {
+      const res = await fetch('/api/composio/connect', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ toolkit_slug: slug }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        redirect_url?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        toast.error('Could not start connection', {
+          description: j.error ?? `HTTP ${res.status}`,
+        });
+        return;
+      }
+      if (j.redirect_url) {
+        toast.message('Opening provider…', {
+          description: 'Complete the OAuth flow in the next tab.',
+        });
+        window.location.href = j.redirect_url;
+      }
+    } catch (e) {
+      toast.error('Network error', {
+        description: e instanceof Error ? e.message : 'unknown',
+      });
     }
-    if (j.redirect_url) window.location.href = j.redirect_url;
   }
 
-  async function disconnect(id: string) {
-    if (!confirm('Disconnect this toolkit for your agent?')) return;
-    await fetch('/api/composio/connections', {
-      method: 'DELETE',
-      credentials: 'include',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id }),
+  async function disconnect(id: string, slug: string) {
+    toast(`Disconnect ${slug}?`, {
+      description: 'Your agent will lose access to this toolkit immediately.',
+      action: {
+        label: 'Disconnect',
+        onClick: async () => {
+          try {
+            const res = await fetch('/api/composio/connections', {
+              method: 'DELETE',
+              credentials: 'include',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ id }),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            void mutate();
+            toast.success('Disconnected', { description: slug });
+          } catch (e) {
+            toast.error('Could not disconnect', {
+              description: e instanceof Error ? e.message : 'unknown error',
+            });
+          }
+        },
+      },
+      cancel: { label: 'Cancel', onClick: () => undefined },
+      duration: 8000,
     });
-    void mutate();
   }
 
   const items = tk?.items ?? [];
@@ -264,7 +300,7 @@ export default function ConnectionsSettingsPage() {
           }
           onClose={() => setOpenToolkit(null)}
           onConnect={() => void connect(openToolkit.slug)}
-          onDisconnect={(id) => void disconnect(id)}
+          onDisconnect={(id) => disconnect(id, openToolkit.slug)}
         />
       ) : null}
     </div>
@@ -390,8 +426,8 @@ function ToolkitModal({
               <div className="text-sm text-danger">Could not load tools for this toolkit.</div>
             ) : isLoading ? (
               <div className="flex items-center gap-2 text-sm text-fg-muted py-4">
-                <Loader2 className="size-4 animate-spin" />
-                Loading tools…
+                <Spinner size="sm" />
+                Loading tools
               </div>
             ) : tools.length === 0 ? (
               <p className="text-sm text-fg-muted">No tools listed.</p>

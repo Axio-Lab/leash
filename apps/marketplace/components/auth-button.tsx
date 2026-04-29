@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { NEXT_PUBLIC_PRIVY_APP_ID } from '@/lib/env';
 
 /**
@@ -21,9 +21,12 @@ function Inner(): React.ReactElement {
   const { ready, authenticated, user, login, logout } = usePrivy();
   if (!ready) {
     return (
-      <Badge variant="outline" className="text-xs">
-        Loading…
-      </Badge>
+      <span
+        className="inline-flex items-center justify-center size-8 rounded-md border border-border text-fg-muted"
+        aria-label="Loading"
+      >
+        <Spinner size="sm" />
+      </span>
     );
   }
   if (!authenticated) {

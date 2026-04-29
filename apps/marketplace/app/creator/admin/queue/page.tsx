@@ -8,6 +8,7 @@ import { usePrivy } from '@privy-io/react-auth';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Spinner } from '@/components/ui/spinner';
 import { privyAuthedFetch } from '@/lib/privy-fetch';
 
 /**
@@ -102,7 +103,10 @@ export default function AdminQueuePage() {
       </header>
 
       {isLoading ? (
-        <div className="text-fg-muted text-sm">Loading…</div>
+        <div className="flex items-center gap-2 text-fg-muted text-sm">
+          <Spinner size="sm" />
+          Loading queue
+        </div>
       ) : !data || data.items.length === 0 ? (
         <Card className="border-dashed bg-transparent p-10 text-center text-sm text-fg-muted">
           Empty queue.

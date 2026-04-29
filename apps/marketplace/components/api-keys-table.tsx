@@ -4,6 +4,7 @@ import * as React from 'react';
 import useSWR from 'swr';
 import { usePrivy } from '@privy-io/react-auth';
 
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/cn';
 import { privyAuthedFetch } from '@/lib/privy-fetch';
 
@@ -97,7 +98,9 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
         </button>
       </div>
       {isLoading ? (
-        <div className="px-4 py-8 text-fg-muted text-sm">Loading…</div>
+        <div className="px-4 py-8 flex items-center gap-2 text-fg-muted text-sm">
+          <Spinner size="sm" /> Loading keys
+        </div>
       ) : error ? (
         <ApiKeyError error={error as Error} onRetry={() => mutate()} />
       ) : !data || data.items.length === 0 ? (

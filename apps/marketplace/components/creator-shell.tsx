@@ -21,6 +21,7 @@ import {
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { WalletGate } from '@/components/wallet-gate';
 import { cn } from '@/lib/cn';
 import { NEXT_PUBLIC_AGENTS_URL, NEXT_PUBLIC_PRIVY_APP_ID } from '@/lib/env';
@@ -76,7 +77,11 @@ function Inner({ children }: { children: React.ReactNode }) {
   React.useEffect(() => setDrawerOpen(false), [pathname]);
 
   if (!ready) {
-    return <div className="min-h-dvh grid place-items-center text-fg-muted text-sm">Loading…</div>;
+    return (
+      <div className="min-h-dvh grid place-items-center">
+        <Spinner size="lg" brand />
+      </div>
+    );
   }
   if (!authenticated) {
     return <SignInGate onLogin={login} />;

@@ -5,6 +5,7 @@ import { useEffect, useMemo } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 
 import { ChatShell } from '@/components/chat/chat-shell';
+import { Spinner } from '@/components/ui/spinner';
 import { NEXT_PUBLIC_PRIVY_APP_ID } from '@/lib/env';
 
 export default function AuthedLayout({ children }: { children: React.ReactNode }) {
@@ -56,6 +57,8 @@ function Inner({ children }: { children: React.ReactNode }) {
 
 function FullPageSpinner() {
   return (
-    <div className="min-h-dvh flex items-center justify-center text-fg-muted text-sm">Loading…</div>
+    <div className="min-h-dvh flex items-center justify-center">
+      <Spinner size="lg" brand />
+    </div>
   );
 }
