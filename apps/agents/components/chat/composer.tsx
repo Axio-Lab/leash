@@ -1,10 +1,8 @@
 'use client';
 
-import { LoaderIcon, SendIcon } from 'lucide-react';
-import { motion } from 'motion/react';
 import * as React from 'react';
 
-import { cn } from '@/lib/cn';
+import { ChatInput, ChatInputSubmit, ChatInputTextArea } from '@/components/ui/chat-input';
 
 export function Composer({
   disabled,
@@ -15,7 +13,6 @@ export function Composer({
 }) {
   const [value, setValue] = React.useState('');
   const [pending, setPending] = React.useState(false);
-  const ta = React.useRef<HTMLTextAreaElement>(null);
 
   async function send() {
     const t = value.trim();
@@ -26,51 +23,33 @@ export function Composer({
       await onSend(t);
     } finally {
       setPending(false);
-      ta.current?.focus();
     }
   }
 
   return (
-    <div className="shrink-0 border-t border-border p-3 sm:p-4 chat-glass w-full max-w-3xl mx-auto">
-      <div className="flex gap-2 sm:gap-3 items-end">
-        <textarea
-          ref={ta}
+    <div className="shrink-0 border-t border-border bg-bg/70 backdrop-blur-md">
+      <div className="mx-auto w-full max-w-3xl px-3 sm:px-4 py-3 sm:py-4">
+        <ChatInput
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              void send();
-            }
-          }}
-          rows={2}
-          disabled={disabled || pending}
-          placeholder="Message your agent…"
-          className={cn(
-            'flex-1 resize-none rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-fg',
-            'placeholder:text-fg-subtle focus:outline-none focus:ring-1 focus:ring-brand/40',
-            'min-h-[44px] max-h-40',
-          )}
-        />
-        <motion.button
-          type="button"
-          whileTap={{ scale: 0.98 }}
-          onClick={() => void send()}
-          disabled={!value.trim() || pending || disabled}
-          className={cn(
-            'shrink-0 inline-flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2.5 text-sm font-medium',
-            value.trim() && !pending
-              ? 'bg-brand text-white hover:bg-brand-strong'
-              : 'bg-bg-elev text-fg-subtle cursor-not-allowed',
-          )}
+          onSubmit={() => void send()}
+          loading={pending}
+          rows={1}
         >
-          {pending ? (
-            <LoaderIcon className="size-4 animate-spin" />
-          ) : (
-            <SendIcon className="size-4" />
-          )}
-          <span className="hidden sm:inline">Send</span>
-        </motion.button>
+          <ChatInputTextArea placeholder="Message your agent…" disabled={disabled || pending} />
+          <ChatInputSubmit />
+        </ChatInput>
+        <p className="mt-2 px-1 text-[11px] text-fg-subtle">
+          Press{' '}
+          <kbd className="rounded border border-border bg-bg-elev px-1 font-mono text-[10px]">
+            Enter
+          </kbd>{' '}
+          to send,{' '}
+          <kbd className="rounded border border-border bg-bg-elev px-1 font-mono text-[10px]">
+            Shift+Enter
+          </kbd>{' '}
+          for newline
+        </p>
       </div>
     </div>
   );

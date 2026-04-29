@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { use, useCallback, useEffect, useState } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
+import { toast } from 'sonner';
 
 import { Composer } from '@/components/chat/composer';
 import { MessageList } from '@/components/chat/message-list';
@@ -81,8 +82,12 @@ export default function AgentsThreadPage({ params }: { params: Promise<{ id: str
 
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
+        const summary = errText.slice(0, 200);
+        toast.error('Chat request failed', {
+          description: `HTTP ${res.status}${summary ? ` — ${summary}` : ''}`,
+        });
         updateLastAssistantMessage(pid, id, {
-          content: `Sorry — chat request failed (${res.status}). ${errText.slice(0, 200)}`,
+          content: `Sorry — chat request failed (${res.status}).${summary ? ` ${summary}` : ''}`,
         });
         setMessages(loadThread(pid, id)?.messages ?? []);
         return;
@@ -122,6 +127,7 @@ export default function AgentsThreadPage({ params }: { params: Promise<{ id: str
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
+        toast.error('Stream interrupted', { description: msg });
         applyAssistantPatch({
           content: acc ? `${acc}\n\n(Stream error: ${msg})` : `Stream error: ${msg}`,
           artifacts: [...artifacts],
