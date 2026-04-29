@@ -1,6 +1,9 @@
 'use client';
 
 import * as React from 'react';
+import { Check, Copy, ShieldAlert } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
 
 export function ShowKeyOnceModal({
   plaintext,
@@ -12,40 +15,46 @@ export function ShowKeyOnceModal({
   const [copied, setCopied] = React.useState(false);
   if (!plaintext) return null;
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center px-4">
-      <div className="w-full max-w-lg rounded-lg border bg-bg-elev p-5 space-y-3">
-        <div>
-          <h2 className="text-base font-medium">Save this key now</h2>
-          <p className="text-xs text-fg-muted mt-1">
-            We'll never show the plaintext again. Store it somewhere safe.
-          </p>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4">
+      <div className="w-full max-w-lg rounded-xl border bg-bg-elev p-6 space-y-4 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <span className="grid size-8 place-items-center rounded-md bg-amber-500/15 text-amber-300">
+            <ShieldAlert className="size-4" />
+          </span>
+          <div>
+            <h2 className="text-base font-semibold">Save this key now</h2>
+            <p className="mt-0.5 text-xs text-fg-muted">
+              We'll never show the plaintext again. Store it in a password manager or secret store.
+            </p>
+          </div>
         </div>
-        <pre className="rounded-md border bg-bg px-3 py-2 font-mono text-sm overflow-x-auto select-all">
+        <pre className="rounded-md border bg-bg p-3 font-mono text-sm overflow-x-auto select-all break-all">
           {plaintext}
         </pre>
-        <div className="flex gap-2 justify-end">
-          <button
-            type="button"
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
             onClick={async () => {
               try {
                 await navigator.clipboard.writeText(plaintext);
                 setCopied(true);
                 setTimeout(() => setCopied(false), 1500);
               } catch {
-                // Clipboard might be unavailable; user can still copy by hand.
+                /* clipboard might be unavailable */
               }
             }}
-            className="rounded-md border px-3 py-1.5 text-sm hover:border-border-strong"
           >
+            {copied ? (
+              <Check className="size-3.5 text-emerald-300" />
+            ) : (
+              <Copy className="size-3.5" />
+            )}
             {copied ? 'Copied' : 'Copy'}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-strong"
-          >
+          </Button>
+          <Button size="sm" onClick={onClose}>
             I've saved it
-          </button>
+          </Button>
         </div>
       </div>
     </div>

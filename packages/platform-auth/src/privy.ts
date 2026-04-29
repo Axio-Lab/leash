@@ -66,46 +66,168 @@ function getClient(opts: PrivyVerifierOptions): PrivyClient {
 }
 
 /**
- * Verify a token and return the user's session, or `null` if the token
- * is missing/invalid/expired. Never throws on auth failure — surfaces
- * call this from middleware that wants a clean 401 path.
+ * Structured verification result. Surfaces use this to distinguish
+ * "JWT invalid" (401) from "JWT valid but the Privy user has no Solana
+ * wallet" (recoverable: ask the user to connect or create one).
+ */
+export type PrivyVerifyStatus =
+  | 'ok'
+  | 'missing_token'
+  | 'invalid_token'
+  | 'lookup_failed'
+  | 'no_solana_wallet';
+
+/** Best-effort claims pulled out of the JWT *without* verification. */
+export type DecodedJwtPeek = {
+  /** Privy app id the token was issued for (`aud` claim). */
+  audience?: string;
+  /** Privy user id (`sub` claim). */
+  subject?: string;
+  /** Issuer (`iss` claim) — usually `privy.io`. */
+  issuer?: string;
+  expired?: boolean;
+};
+
+export type PrivyVerifyResult =
+  | { status: 'ok'; session: PrivySession; jwt?: DecodedJwtPeek }
+  | {
+      status: Exclude<PrivyVerifyStatus, 'ok'>;
+      session: null;
+      privyId?: string;
+      reason?: string;
+      jwt?: DecodedJwtPeek;
+    };
+
+function base64UrlDecode(input: string): string {
+  const pad = input.length % 4 === 0 ? '' : '='.repeat(4 - (input.length % 4));
+  const b64 = input.replace(/-/g, '+').replace(/_/g, '/') + pad;
+  return Buffer.from(b64, 'base64').toString('utf8');
+}
+
+/**
+ * Decode the JWT without verifying it — purely for diagnostics. We use
+ * this to surface "this token is for app A, but you configured app B"
+ * which is by far the most common cause of `lookup_failed`.
+ */
+export function peekPrivyJwt(token: string | null | undefined): DecodedJwtPeek {
+  if (!token || token.length < 8) return {};
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2 || !parts[1]) return {};
+    const payload = JSON.parse(base64UrlDecode(parts[1])) as Record<string, unknown>;
+    const aud = payload.aud;
+    const sub = payload.sub;
+    const iss = payload.iss;
+    const exp = typeof payload.exp === 'number' ? payload.exp : undefined;
+    return {
+      audience: typeof aud === 'string' ? aud : undefined,
+      subject: typeof sub === 'string' ? sub : undefined,
+      issuer: typeof iss === 'string' ? iss : undefined,
+      expired: typeof exp === 'number' ? exp * 1000 < Date.now() : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Verify a token and return a structured result. Never throws — surfaces
+ * decide which status maps to which HTTP code.
+ */
+export async function verifyPrivyJwtDetailed(
+  token: string | null | undefined,
+  opts: PrivyVerifierOptions,
+): Promise<PrivyVerifyResult> {
+  if (!token || token.length < 8) {
+    return { status: 'missing_token', session: null };
+  }
+  const jwt = peekPrivyJwt(token);
+  // Catch the "JWT is for a different Privy app" case before we even
+  // call the SDK — `verifyAuthToken` will throw with a generic JWS
+  // error otherwise, which obscures the real cause.
+  if (jwt.audience && opts.appId && jwt.audience !== opts.appId) {
+    return {
+      status: 'invalid_token',
+      session: null,
+      jwt,
+      reason: `JWT audience (${jwt.audience}) does not match configured PRIVY_APP_ID (${opts.appId}). The browser is signed in to a different Privy app than the server is configured for.`,
+    };
+  }
+  const client = getClient(opts);
+  let claims: { userId: string };
+  try {
+    claims = await client.verifyAuthToken(token);
+  } catch (e) {
+    return {
+      status: 'invalid_token',
+      session: null,
+      jwt,
+      reason: e instanceof Error ? e.message : 'verifyAuthToken failed',
+    };
+  }
+  let user;
+  try {
+    user = await client.getUserById(claims.userId);
+  } catch (e) {
+    return {
+      status: 'lookup_failed',
+      session: null,
+      privyId: claims.userId,
+      jwt,
+      reason: e instanceof Error ? e.message : 'getUserById failed',
+    };
+  }
+  const accounts = user.linkedAccounts ?? [];
+  const solanaAccount = accounts.find((a) => {
+    if (pickType(a) !== 'wallet') return false;
+    return chainIsSolana(pickChainType(a));
+  });
+  let wallet = pickAddress(solanaAccount);
+  if (!wallet && user.wallet) {
+    const ct = pickChainType(user.wallet);
+    if (chainIsSolana(ct) || (!ct && looksLikeSolanaAddress(pickAddress(user.wallet)))) {
+      wallet = pickAddress(user.wallet);
+    }
+  }
+  if (!wallet) {
+    const guess = accounts.find(
+      (a) => pickType(a) === 'wallet' && looksLikeSolanaAddress(pickAddress(a)),
+    );
+    wallet = pickAddress(guess);
+  }
+  if (!wallet) {
+    return {
+      status: 'no_solana_wallet',
+      session: null,
+      privyId: claims.userId,
+      jwt,
+      reason:
+        'Privy user has no Solana wallet (linked or embedded). Ask the user to connect one or create an embedded Solana wallet.',
+    };
+  }
+  const emailAccount = accounts.find((a) => pickType(a) === 'email');
+  const emailAddr = pickAddress(emailAccount);
+  return {
+    status: 'ok',
+    session: {
+      privyId: claims.userId,
+      wallet,
+      email: emailAddr ?? null,
+    },
+    jwt,
+  };
+}
+
+/**
+ * Backwards-compatible wrapper: returns `null` on any failure.
+ *
+ * New code should prefer {@link verifyPrivyJwtDetailed} so it can show
+ * recovery UI for the `no_solana_wallet` case instead of a flat 401.
  */
 export async function verifyPrivyJwt(
   token: string | null | undefined,
   opts: PrivyVerifierOptions,
 ): Promise<PrivySession | null> {
-  if (!token || token.length < 8) return null;
-  try {
-    const client = getClient(opts);
-    const claims = await client.verifyAuthToken(token);
-    const user = await client.getUserById(claims.userId);
-    const accounts = user.linkedAccounts ?? [];
-    const solanaAccount = accounts.find((a) => {
-      if (pickType(a) !== 'wallet') return false;
-      return chainIsSolana(pickChainType(a));
-    });
-    let wallet = pickAddress(solanaAccount);
-    if (!wallet && user.wallet) {
-      const ct = pickChainType(user.wallet);
-      if (chainIsSolana(ct) || (!ct && looksLikeSolanaAddress(pickAddress(user.wallet)))) {
-        wallet = pickAddress(user.wallet);
-      }
-    }
-    if (!wallet) {
-      const guess = accounts.find(
-        (a) => pickType(a) === 'wallet' && looksLikeSolanaAddress(pickAddress(a)),
-      );
-      wallet = pickAddress(guess);
-    }
-    if (!wallet) return null;
-    const emailAccount = accounts.find((a) => pickType(a) === 'email');
-    const emailAddr = pickAddress(emailAccount);
-    return {
-      privyId: claims.userId,
-      wallet,
-      email: emailAddr ?? null,
-    };
-  } catch {
-    return null;
-  }
+  const r = await verifyPrivyJwtDetailed(token, opts);
+  return r.status === 'ok' ? r.session : null;
 }

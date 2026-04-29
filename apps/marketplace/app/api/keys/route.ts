@@ -8,36 +8,61 @@ import {
 
 import { getDb } from '@/lib/db';
 import { getLeash } from '@/lib/leash';
-import { requirePrivySession } from '@/lib/privy-server';
+import { resolvePrivySession } from '@/lib/privy-server';
 
 const ALLOWED_SCOPES: ApiScope[] = ['agents', 'marketplace'];
 
+const STATUS_TO_HTTP: Record<string, number> = {
+  missing_token: 401,
+  invalid_token: 401,
+  lookup_failed: 502,
+  no_solana_wallet: 409,
+};
+
+const STATUS_HINTS: Record<string, string> = {
+  missing_token:
+    'No Privy JWT on this request — sign in, or have the client send Authorization: Bearer <token>.',
+  invalid_token:
+    'JWT did not verify against this Privy app. Confirm PRIVY_APP_ID matches NEXT_PUBLIC_PRIVY_APP_ID and that PRIVY_APP_SECRET belongs to the same app.',
+  lookup_failed:
+    'Privy verified the JWT but lookup of the user record failed. Check the API server can reach api.privy.io and the app secret is current.',
+  no_solana_wallet:
+    'Your Privy account has no Solana wallet yet. Connect one (or wait for the embedded Solana wallet to be created) and retry.',
+};
+
+function authError(
+  status: string,
+  reason?: string,
+  jwt?: { audience?: string; subject?: string; expired?: boolean },
+) {
+  const httpStatus = STATUS_TO_HTTP[status] ?? 401;
+  const errorCode =
+    status === 'no_solana_wallet'
+      ? 'no_solana_wallet'
+      : status === 'lookup_failed'
+        ? 'privy_lookup_failed'
+        : 'unauthenticated';
+  return NextResponse.json(
+    {
+      error: errorCode,
+      status,
+      hint: STATUS_HINTS[status] ?? 'Authentication failed.',
+      ...(process.env.NODE_ENV !== 'production'
+        ? {
+            ...(reason ? { reason } : {}),
+            ...(jwt ? { jwt } : {}),
+            debugUrl: '/api/debug/privy',
+          }
+        : {}),
+    },
+    { status: httpStatus, headers: { 'Cache-Control': 'no-store' } },
+  );
+}
+
 export async function GET(req: NextRequest) {
-  const session = await requirePrivySession(req);
-  if (!session) {
-    if (process.env.NODE_ENV === 'development') {
-      const auth = req.headers.get('authorization');
-      const hasBearer = typeof auth === 'string' && /^Bearer\s+\S+/i.test(auth);
-      const hasXPrivy = !!req.headers.get('x-privy-access-token')?.trim();
-      const hasPrivyCookie = !!req.cookies.get('privy-token')?.value;
-      return NextResponse.json(
-        {
-          error: 'unauthenticated',
-          debug: {
-            hasAuthorizationBearer: hasBearer,
-            hasXPrivyAccessToken: hasXPrivy,
-            hasPrivyTokenCookie: hasPrivyCookie,
-            hint:
-              !hasBearer && !hasXPrivy && !hasPrivyCookie
-                ? 'No Privy JWT on this request — client should send Bearer or x-privy-access-token after sign-in.'
-                : 'JWT arrived but verify failed or user has no Solana wallet for this app. Confirm PRIVY_APP_ID === NEXT_PUBLIC_PRIVY_APP_ID, PRIVY_APP_SECRET matches that app, and the user has a Solana wallet.',
-          },
-        },
-        { status: 401 },
-      );
-    }
-    return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
-  }
+  const result = await resolvePrivySession(req);
+  if (result.status !== 'ok') return authError(result.status, result.reason, result.jwt);
+  const session = result.session;
   const db = getDb();
   await getOrCreateUser(db, {
     privyId: session.privyId,
@@ -71,8 +96,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await requirePrivySession(req);
-  if (!session) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
+  const result = await resolvePrivySession(req);
+  if (result.status !== 'ok') return authError(result.status, result.reason, result.jwt);
+  const session = result.session;
   const body = (await req.json().catch(() => null)) as {
     name?: string;
     network?: 'solana-devnet' | 'solana-mainnet';

@@ -18,7 +18,16 @@
  * server-to-server calls.
  */
 
-export { verifyPrivyJwt, type PrivySession, type PrivyVerifierOptions } from './privy.js';
+export {
+  verifyPrivyJwt,
+  verifyPrivyJwtDetailed,
+  peekPrivyJwt,
+  type PrivySession,
+  type PrivyVerifierOptions,
+  type PrivyVerifyResult,
+  type PrivyVerifyStatus,
+  type DecodedJwtPeek,
+} from './privy.js';
 export { getOrCreateUser, getUser, type PlatformUser, type PlatformDbClient } from './users.js';
 export {
   recordPlatformKey,

@@ -3,6 +3,10 @@
 import * as React from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/cn';
 import { privyAuthedFetch } from '@/lib/privy-fetch';
 
 export type CreatedKey = {
@@ -71,81 +75,86 @@ export function CreateKeyDialog({
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center px-4">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4">
       <form
         onSubmit={submit}
-        className="w-full max-w-md rounded-lg border bg-bg-elev p-5 space-y-4"
+        className="w-full max-w-md rounded-xl border bg-bg-elev p-6 space-y-5 shadow-2xl"
       >
         <div>
-          <h2 className="text-base font-medium">Create API key</h2>
-          <p className="text-xs text-fg-muted mt-1">
-            The plaintext value is shown once after creation. Copy it then.
+          <h2 className="text-lg font-semibold tracking-tight">Create API key</h2>
+          <p className="mt-1 text-xs text-fg-muted">
+            The plaintext value is shown once after creation. Store it in your secret manager.
           </p>
         </div>
-        <label className="block text-sm">
-          <span className="text-fg-muted text-xs">Name</span>
-          <input
-            type="text"
+
+        <div className="space-y-1.5">
+          <Label htmlFor="key-name">Name</Label>
+          <Input
+            id="key-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. ci"
+            placeholder="ci, prod, my-laptop…"
             required
             maxLength={120}
-            className="mt-1 w-full rounded-md border bg-bg px-3 py-2"
           />
-        </label>
-        <fieldset className="text-sm">
-          <legend className="text-fg-muted text-xs mb-1">Network</legend>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Network</Label>
           <div className="flex gap-2">
             {(['solana-devnet', 'solana-mainnet'] as const).map((n) => (
-              <label key={n} className="flex items-center gap-2 text-xs">
-                <input
-                  type="radio"
-                  name="network"
-                  value={n}
-                  checked={network === n}
-                  onChange={() => setNetwork(n)}
-                />
+              <button
+                key={n}
+                type="button"
+                onClick={() => setNetwork(n)}
+                className={cn(
+                  'flex-1 rounded-md border px-3 py-2 text-xs uppercase tracking-wide transition-colors',
+                  network === n
+                    ? 'border-brand bg-brand/15 text-brand-strong'
+                    : 'border-border text-fg-muted hover:border-border-strong',
+                )}
+              >
                 {n === 'solana-devnet' ? 'Devnet' : 'Mainnet'}
-              </label>
+              </button>
             ))}
           </div>
-        </fieldset>
-        <fieldset className="text-sm">
-          <legend className="text-fg-muted text-xs mb-1">Scopes</legend>
-          <div className="flex flex-wrap gap-3">
-            {(['agents', 'marketplace'] as const).map((s) => (
-              <label key={s} className="flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={scopes.includes(s)}
-                  onChange={(e) => {
-                    setScopes((prev) =>
-                      e.target.checked ? [...prev, s] : prev.filter((x) => x !== s),
-                    );
-                  }}
-                />
-                {s}
-              </label>
-            ))}
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Scopes</Label>
+          <div className="flex flex-wrap gap-2">
+            {(['agents', 'marketplace'] as const).map((s) => {
+              const checked = scopes.includes(s);
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() =>
+                    setScopes((prev) => (checked ? prev.filter((x) => x !== s) : [...prev, s]))
+                  }
+                  className={cn(
+                    'rounded-md border px-3 py-1.5 text-xs uppercase tracking-wide transition-colors',
+                    checked
+                      ? 'border-brand bg-brand/15 text-brand-strong'
+                      : 'border-border text-fg-muted hover:border-border-strong',
+                  )}
+                >
+                  {s}
+                </button>
+              );
+            })}
           </div>
-        </fieldset>
-        {error ? <div className="text-danger text-xs">{error}</div> : null}
-        <div className="flex gap-2 justify-end pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border px-3 py-1.5 text-sm hover:border-border-strong"
-          >
+        </div>
+
+        {error ? <div className="text-xs text-danger">{error}</div> : null}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={submitting || name.trim().length === 0}
-            className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-strong disabled:opacity-60"
-          >
+          </Button>
+          <Button type="submit" size="sm" disabled={submitting || name.trim().length === 0}>
             {submitting ? 'Creating…' : 'Create key'}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

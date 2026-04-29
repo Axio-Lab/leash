@@ -19,6 +19,17 @@ export type ApiKeyItem = {
   disabled_at: string | null;
 };
 
+class ApiKeysFetchError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code?: string,
+  ) {
+    super(message);
+    this.name = 'ApiKeysFetchError';
+  }
+}
+
 export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
   const { getAccessToken } = usePrivy();
   const fetcher = React.useCallback(
@@ -28,19 +39,27 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
         const res = await privyAuthedFetch(getAccessToken, url);
         const text = await res.text();
         if (res.ok) return JSON.parse(text) as { items: ApiKeyItem[] };
-        if (res.status !== 401 || attempt === 2) {
-          let extra = '';
+        // Don't keep retrying on a 409 (recoverable, see WalletGate) — surface immediately.
+        const isRetryable = res.status === 401 && attempt < 2;
+        if (!isRetryable) {
+          let hint = '';
+          let code: string | undefined;
           try {
-            const j = JSON.parse(text) as { debug?: { hint?: string } };
-            if (j.debug?.hint) extra = ` — ${j.debug.hint}`;
+            const j = JSON.parse(text) as { error?: string; hint?: string };
+            if (j.hint) hint = j.hint;
+            if (j.error) code = j.error;
           } catch {
             /* ignore */
           }
-          throw new Error(`HTTP ${res.status}${extra}`);
+          throw new ApiKeysFetchError(
+            hint ? `HTTP ${res.status} — ${hint}` : `HTTP ${res.status}`,
+            res.status,
+            code,
+          );
         }
         await new Promise((r) => setTimeout(r, 120 * (attempt + 1)));
       }
-      throw new Error('HTTP 401');
+      throw new ApiKeysFetchError('HTTP 401', 401);
     },
     [getAccessToken],
   );
@@ -80,7 +99,7 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
       {isLoading ? (
         <div className="px-4 py-8 text-fg-muted text-sm">Loading…</div>
       ) : error ? (
-        <div className="px-4 py-8 text-danger text-sm">{(error as Error).message}</div>
+        <ApiKeyError error={error as Error} onRetry={() => mutate()} />
       ) : !data || data.items.length === 0 ? (
         <div className="px-4 py-10 text-fg-muted text-sm text-center">
           No keys yet. Click <span className="text-fg">Create key</span> to issue one.
@@ -141,6 +160,40 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
           </tbody>
         </table>
       )}
+    </div>
+  );
+}
+
+function ApiKeyError({ error, onRetry }: { error: Error; onRetry: () => void }) {
+  const code = error instanceof ApiKeysFetchError ? error.code : undefined;
+  if (code === 'no_solana_wallet') {
+    return (
+      <div className="px-4 py-6 text-sm space-y-3">
+        <div className="font-medium text-fg">Connect a Solana wallet first.</div>
+        <p className="text-fg-muted">
+          API keys belong to a wallet so we can route fees and per-call earnings to you. Use the
+          prompt at the top of the dashboard to connect a Solana wallet, then come back here.
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded-md border px-3 py-1.5 text-xs text-fg-muted hover:text-fg"
+        >
+          I&apos;ve connected — retry
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="px-4 py-8 text-sm space-y-3">
+      <div className="text-danger">{error.message}</div>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="rounded-md border px-3 py-1.5 text-xs text-fg-muted hover:text-fg"
+      >
+        Retry
+      </button>
     </div>
   );
 }
