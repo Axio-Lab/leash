@@ -111,7 +111,7 @@ export function OnboardingGate({
       }
       setStep('done');
       onDone?.();
-      setTimeout(() => router.push('/agents'), fullPage ? 1200 : 800);
+      setTimeout(() => router.push('/profile/agent'), fullPage ? 1200 : 800);
     } catch (e) {
       setError((e as Error).message);
       setStep('form');

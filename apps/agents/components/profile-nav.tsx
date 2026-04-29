@@ -12,32 +12,29 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 const links = [
-  { href: '/settings', label: 'Overview' },
-  { href: '/settings/connections', label: 'Connections' },
-  { href: '/settings/favorites', label: 'Favorites' },
-  { href: '/settings/api-keys', label: 'API keys' },
+  { href: '/profile', label: 'Overview' },
+  { href: '/profile/agent', label: 'Agent' },
+  { href: '/profile/skills', label: 'Skills' },
+  { href: '/profile/spend', label: 'Spend' },
+  { href: '/profile/llm', label: 'LLM keys' },
 ] as const;
 
 function navActive(href: string, pathname: string): boolean {
-  if (href === '/settings') return pathname === '/settings';
+  if (href === '/profile') return pathname === '/profile';
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 /**
- * Settings navigation:
- * - On phones we render a single picker (dropdown) so the whole row never
- *   overflows the viewport. The trigger shows the current section.
- * - On larger screens we render a wrapping pill row — `flex-wrap` so labels
- *   shuffle to a second line on tight widths instead of producing the
- *   sideways scroll we used to have.
+ * Profile navigation. Mirrors the settings-nav UX:
+ *   • mobile → single dropdown picker (no horizontal scroll)
+ *   • tablet/desktop → wrapping pill row
  */
-export function SettingsNav() {
+export function ProfileNav() {
   const pathname = usePathname();
   const current = links.find((l) => navActive(l.href, pathname)) ?? links[0]!;
 
   return (
     <>
-      {/* Mobile: section picker */}
       <div className="sm:hidden">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -73,7 +70,6 @@ export function SettingsNav() {
         <div className="mt-3 border-b border-border" />
       </div>
 
-      {/* Desktop / tablet: wrapping pill row, no sideways scroll. */}
       <nav className="hidden sm:flex flex-wrap gap-1.5 border-b border-border pb-3">
         {links.map((l) => {
           const active = navActive(l.href, pathname);

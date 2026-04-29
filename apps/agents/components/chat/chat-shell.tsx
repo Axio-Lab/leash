@@ -69,12 +69,13 @@ export function ChatShell({
 
   const { data: agentsData } = useSWR('/api/agents', agentsFetcher);
   const primaryMint = agentsData?.items?.[0]?.mint ?? null;
+  // Banner shows whenever no agent has been minted — even after the user
+  // tapped "Skip for now" — so the missing-setup state is always visible.
+  // We still call `readOnboardingSkipped` to avoid breaking the import; the
+  // value is kept for future "Don't show again" semantics.
+  void readOnboardingSkipped;
   const showOnboardingReminder =
-    chatRoute &&
-    agentsData &&
-    Array.isArray(agentsData.items) &&
-    agentsData.items.length === 0 &&
-    !readOnboardingSkipped(privyId);
+    chatRoute && agentsData && Array.isArray(agentsData.items) && agentsData.items.length === 0;
 
   type Account = { type?: string; chainType?: string; address?: string };
   const accounts = (user?.linkedAccounts ?? []) as Account[];
@@ -133,15 +134,16 @@ export function ChatShell({
 
         {/* ── Onboarding banner ── */}
         {showOnboardingReminder ? (
-          <div className="shrink-0 px-3 sm:px-4 py-2 border-b border-border bg-brand/10 text-xs text-fg flex flex-wrap items-center justify-between gap-2 relative z-40">
+          <div className="shrink-0 px-3 sm:px-4 py-2 border-b border-warning/30 bg-warning/8 text-xs text-fg flex flex-wrap items-center justify-between gap-2 relative z-40">
             <span>
-              No on-chain agent yet — mint one to unlock treasury spend and marketplace tools.
+              <span className="text-warning font-medium">Agent not set up.</span> Mint your on-chain
+              agent to unlock treasury spend and marketplace tools.
             </span>
             <Link
-              href="/agents/onboarding"
+              href="/profile/agent"
               className="font-medium text-brand hover:underline whitespace-nowrap"
             >
-              Start onboarding →
+              Set up agent →
             </Link>
           </div>
         ) : null}

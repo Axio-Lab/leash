@@ -3,15 +3,17 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
+import useSWR from 'swr';
 import { toast } from 'sonner';
 import {
   LogOutIcon,
   MoreHorizontalIcon,
   PencilIcon,
-  PlusIcon,
   SettingsIcon,
   Share2Icon,
+  SquarePen,
   Trash2Icon,
+  UserRoundIcon,
 } from 'lucide-react';
 
 import {
@@ -21,6 +23,12 @@ import {
   renameThread,
   type ChatThread,
 } from '@/lib/chat-storage';
+
+const agentsCheckFetcher = async (url: string) => {
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok) return { items: [] as Array<{ mint?: string }> };
+  return res.json() as Promise<{ items: Array<{ mint?: string }> }>;
+};
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,6 +54,15 @@ export function ChatSidebar({
   const pathname = usePathname();
   const [threads, setThreads] = React.useState<ChatThread[]>([]);
   const [renaming, setRenaming] = React.useState<{ id: string; value: string } | null>(null);
+
+  // Cheap probe so the sidebar can show a 'set up your agent' dot until the
+  // user has minted at least one. SWR shares this cache with chat-shell so
+  // it's effectively free.
+  const { data: agentsData } = useSWR('/api/agents', agentsCheckFetcher, {
+    revalidateOnFocus: false,
+  });
+  const hasAgent = (agentsData?.items?.length ?? 0) > 0;
+  const profileIncomplete = !hasAgent;
 
   React.useEffect(() => {
     setThreads(listThreads(privyId));
@@ -130,7 +147,7 @@ export function ChatSidebar({
           size="default"
           className="w-full justify-center gap-2"
         >
-          <PlusIcon className="size-4" />
+          <SquarePen className="size-4" />
           New chat
         </Button>
       </div>
@@ -234,6 +251,31 @@ export function ChatSidebar({
 
       {/* Footer */}
       <div className="shrink-0 border-t border-border p-2 space-y-0.5">
+        <Link
+          href="/profile"
+          onClick={onNavigate}
+          className={`relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors ${
+            pathname?.startsWith('/profile')
+              ? 'bg-brand/15 text-fg shadow-[inset_0_0_0_1px_oklch(0.66_0.19_268/0.4)]'
+              : 'text-fg-muted hover:bg-bg-elev hover:text-fg'
+          }`}
+        >
+          <span className="relative">
+            <UserRoundIcon className="size-4 text-fg-subtle" />
+            {profileIncomplete ? (
+              <span
+                className="absolute -top-0.5 -right-0.5 size-1.5 rounded-full bg-warning ring-2 ring-bg-elev"
+                aria-hidden
+              />
+            ) : null}
+          </span>
+          <span className="flex-1">Profile</span>
+          {profileIncomplete ? (
+            <span className="text-[10px] uppercase tracking-widest text-warning font-medium">
+              Set up
+            </span>
+          ) : null}
+        </Link>
         <Link
           href="/settings"
           onClick={onNavigate}

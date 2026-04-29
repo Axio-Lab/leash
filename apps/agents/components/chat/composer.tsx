@@ -36,20 +36,12 @@ export function Composer({
           loading={pending}
           rows={1}
         >
-          <ChatInputTextArea placeholder="Message your agent…" disabled={disabled || pending} />
+          <ChatInputTextArea
+            placeholder="Type a command or ask a question"
+            disabled={disabled || pending}
+          />
           <ChatInputSubmit />
         </ChatInput>
-        <p className="mt-2 px-1 text-[11px] text-fg-subtle">
-          Press{' '}
-          <kbd className="rounded border border-border bg-bg-elev px-1 font-mono text-[10px]">
-            Enter
-          </kbd>{' '}
-          to send,{' '}
-          <kbd className="rounded border border-border bg-bg-elev px-1 font-mono text-[10px]">
-            Shift+Enter
-          </kbd>{' '}
-          for newline
-        </p>
       </div>
     </div>
   );
