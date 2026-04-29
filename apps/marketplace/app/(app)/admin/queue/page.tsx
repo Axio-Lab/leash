@@ -2,30 +2,36 @@
 
 import * as React from 'react';
 import useSWR from 'swr';
+import { usePrivy } from '@privy-io/react-auth';
 
-const fetcher = async (url: string) => {
-  const r = await fetch(url, { credentials: 'include' });
-  if (r.status === 403) throw new Error('forbidden');
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json() as Promise<{
-    items: Array<{
-      id: string;
-      slug: string;
-      name: string;
-      description: string;
-      category: string;
-      endpoint: string;
-      pricing: { type: string; amount?: string; currency?: string };
-      tools: Array<{ name: string }>;
-      status: string;
-      owner_wallet: string;
-      created_at: string;
-    }>;
-  }>;
-};
+import { privyAuthedFetch } from '@/lib/privy-fetch';
 
 export default function AdminQueuePage() {
+  const { getAccessToken } = usePrivy();
   const [status, setStatus] = React.useState<'pending' | 'approved' | 'rejected'>('pending');
+  const fetcher = React.useCallback(
+    async (url: string) => {
+      const r = await privyAuthedFetch(getAccessToken, url);
+      if (r.status === 403) throw new Error('forbidden');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json() as Promise<{
+        items: Array<{
+          id: string;
+          slug: string;
+          name: string;
+          description: string;
+          category: string;
+          endpoint: string;
+          pricing: { type: string; amount?: string; currency?: string };
+          tools: Array<{ name: string }>;
+          status: string;
+          owner_wallet: string;
+          created_at: string;
+        }>;
+      }>;
+    },
+    [getAccessToken],
+  );
   const { data, error, isLoading, mutate } = useSWR(
     `/api/admin/listings?status=${status}`,
     fetcher,
@@ -35,10 +41,9 @@ export default function AdminQueuePage() {
   async function decide(id: string, next: 'approved' | 'rejected' | 'disabled') {
     setBusy(id);
     try {
-      const res = await fetch(`/api/admin/listings/${id}/status`, {
+      const res = await privyAuthedFetch(getAccessToken, `/api/admin/listings/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ status: next }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

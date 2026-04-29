@@ -31,7 +31,7 @@ const json = async (url: string) => {
 
 export default function ManageListingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
-  const { data, error, isLoading } = useSWR<Detail>(`/api/listings/${slug}`, json);
+  const { data, error, isLoading } = useSWR<Detail>(`/api/listings/by-slug/${slug}`, json);
   return (
     <div className="space-y-6">
       <Link href="/dev/listings" className="text-sm text-fg-muted hover:text-fg">

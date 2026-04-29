@@ -35,7 +35,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ slug: 
   const { data, error, isLoading } = useSWR<{
     listing: Listing;
     rating: { avg: number; count: number };
-  }>(`/api/listings/${slug}`, json);
+  }>(`/api/listings/by-slug/${slug}`, json);
 
   return (
     <div className="space-y-6">

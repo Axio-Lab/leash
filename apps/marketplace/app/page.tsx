@@ -34,7 +34,7 @@ export default function MarketplaceLandingPage() {
             Browse tools
           </Link>
           <Link
-            href="/dev"
+            href="/dev/list"
             className="rounded-md border px-5 py-2.5 text-sm hover:border-border-strong"
           >
             List your tool →
@@ -69,15 +69,22 @@ export default function MarketplaceLandingPage() {
         </p>
         <div className="flex items-center justify-center gap-3 mt-6">
           <Link
-            href="/dev"
+            href="/dev/list"
             className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-strong"
           >
-            Get a developer key
+            Drop in your manifest
           </Link>
-          <a href={NEXT_PUBLIC_AGENTS_URL} className="text-sm text-fg-muted hover:text-fg">
-            Or build an agent →
-          </a>
+          <Link href="/settings/api-keys" className="text-sm text-fg-muted hover:text-fg">
+            Get a developer key →
+          </Link>
         </div>
+        <p className="mt-4 text-xs text-fg-subtle">
+          Or{' '}
+          <a href={NEXT_PUBLIC_AGENTS_URL} className="hover:text-fg-muted">
+            build an agent
+          </a>{' '}
+          on agent.leash.market.
+        </p>
       </section>
     </div>
   );

@@ -32,6 +32,7 @@ import {
   setListingRating,
   setListingStatus,
   type ListingPricing,
+  type ListingStatus,
   type ListingTool,
 } from '../storage/listings.js';
 import type { CacheClient } from '../storage/redis.js';
@@ -58,6 +59,25 @@ const ToolSchema = z
   .openapi('ListingTool');
 
 const ListingStatusSchema = z.enum(['pending', 'approved', 'rejected', 'disabled']);
+
+/** `pending` or `pending,approved,rejected` (comma / spaces). Invalid tokens dropped. */
+const statusQuerySchema = z
+  .string()
+  .optional()
+  .transform((raw): ListingStatus | ListingStatus[] | undefined => {
+    if (raw == null || raw.trim() === '') return undefined;
+    const parts = raw
+      .split(/[\s,]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    const valid: ListingStatus[] = [];
+    for (const p of parts) {
+      const r = ListingStatusSchema.safeParse(p);
+      if (r.success) valid.push(r.data);
+    }
+    if (valid.length === 0) return undefined;
+    return valid.length === 1 ? valid[0]! : valid;
+  });
 
 const ListingSchema = z
   .object({
@@ -142,7 +162,7 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
       summary: 'Browse listings (defaults to status=approved)',
       request: {
         query: z.object({
-          status: ListingStatusSchema.optional(),
+          status: statusQuerySchema,
           category: z.string().optional(),
           owner_privy_id: z.string().optional(),
           q: z.string().optional(),

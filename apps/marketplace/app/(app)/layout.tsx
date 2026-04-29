@@ -1,8 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 
 import { NEXT_PUBLIC_PRIVY_APP_ID } from '@/lib/env';
@@ -19,11 +17,7 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
 }
 
 function Inner({ children }: { children: React.ReactNode }) {
-  const { ready, authenticated, user, logout } = usePrivy();
-  const router = useRouter();
-  useEffect(() => {
-    if (ready && !authenticated) router.replace('/');
-  }, [ready, authenticated, router]);
+  const { ready, authenticated, user, login, logout } = usePrivy();
   if (!ready) {
     return (
       <div className="min-h-[60dvh] flex items-center justify-center text-fg-muted text-sm">
@@ -31,7 +25,29 @@ function Inner({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  if (!authenticated) return null;
+  if (!authenticated) {
+    // Don't bounce off the page — render an in-place sign-in prompt so
+    // users keep their intent (e.g. /dev/list) and land back on the
+    // exact route after Privy closes its modal.
+    return (
+      <div className="min-h-[60dvh] flex items-center justify-center px-6">
+        <div className="max-w-md w-full rounded-xl border bg-bg-elev p-8 text-center space-y-4">
+          <h2 className="text-xl font-semibold tracking-tight">Sign in to continue</h2>
+          <p className="text-sm text-fg-muted">
+            You need a leash account to manage listings, reviews, and API keys. Email or Solana
+            wallet — your call.
+          </p>
+          <button
+            type="button"
+            onClick={login}
+            className="w-full rounded-md bg-brand px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-strong"
+          >
+            Sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
   type Account = { type?: string; chainType?: string; address?: string };
   const accounts = (user?.linkedAccounts ?? []) as Account[];
   const solanaWallet = accounts.find((a) => a.type === 'wallet' && a.chainType === 'solana');

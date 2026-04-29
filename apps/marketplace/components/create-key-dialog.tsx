@@ -1,6 +1,9 @@
 'use client';
 
 import * as React from 'react';
+import { usePrivy } from '@privy-io/react-auth';
+
+import { privyAuthedFetch } from '@/lib/privy-fetch';
 
 export type CreatedKey = {
   id: string;
@@ -20,6 +23,7 @@ export function CreateKeyDialog({
   onCreated: (k: CreatedKey) => void;
   defaultScopes?: string[];
 }) {
+  const { getAccessToken } = usePrivy();
   const [name, setName] = React.useState('');
   const [network, setNetwork] = React.useState<'solana-devnet' | 'solana-mainnet'>('solana-devnet');
   const [scopes, setScopes] = React.useState<string[]>(defaultScopes);
@@ -40,10 +44,9 @@ export function CreateKeyDialog({
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch('/api/keys', {
+      const res = await privyAuthedFetch(getAccessToken, '/api/keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ name: name.trim(), network, scopes }),
       });
       const body = (await res.json()) as

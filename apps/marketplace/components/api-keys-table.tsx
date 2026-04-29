@@ -2,8 +2,10 @@
 
 import * as React from 'react';
 import useSWR from 'swr';
+import { usePrivy } from '@privy-io/react-auth';
 
 import { cn } from '@/lib/cn';
+import { privyAuthedFetch } from '@/lib/privy-fetch';
 
 export type ApiKeyItem = {
   id: string;
@@ -17,22 +19,39 @@ export type ApiKeyItem = {
   disabled_at: string | null;
 };
 
-const fetcher = async (url: string) => {
-  const res = await fetch(url, { credentials: 'include' });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return (await res.json()) as { items: ApiKeyItem[] };
-};
-
 export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
+  const { getAccessToken } = usePrivy();
+  const fetcher = React.useCallback(
+    async (url: string): Promise<{ items: ApiKeyItem[] }> => {
+      // Privy sometimes resolves `getAccessToken` a tick after `authenticated`; retry 401 once.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await privyAuthedFetch(getAccessToken, url);
+        const text = await res.text();
+        if (res.ok) return JSON.parse(text) as { items: ApiKeyItem[] };
+        if (res.status !== 401 || attempt === 2) {
+          let extra = '';
+          try {
+            const j = JSON.parse(text) as { debug?: { hint?: string } };
+            if (j.debug?.hint) extra = ` — ${j.debug.hint}`;
+          } catch {
+            /* ignore */
+          }
+          throw new Error(`HTTP ${res.status}${extra}`);
+        }
+        await new Promise((r) => setTimeout(r, 120 * (attempt + 1)));
+      }
+      throw new Error('HTTP 401');
+    },
+    [getAccessToken],
+  );
   const { data, error, isLoading, mutate } = useSWR<{ items: ApiKeyItem[] }>('/api/keys', fetcher);
   const [revokingId, setRevokingId] = React.useState<string | null>(null);
 
   async function revoke(id: string) {
     setRevokingId(id);
     try {
-      const res = await fetch(`/api/keys/${encodeURIComponent(id)}`, {
+      const res = await privyAuthedFetch(getAccessToken, `/api/keys/${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        credentials: 'include',
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await mutate();

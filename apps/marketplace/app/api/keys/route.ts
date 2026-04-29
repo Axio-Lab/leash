@@ -14,24 +14,60 @@ const ALLOWED_SCOPES: ApiScope[] = ['agents', 'marketplace'];
 
 export async function GET(req: NextRequest) {
   const session = await requirePrivySession(req);
-  if (!session) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
+  if (!session) {
+    if (process.env.NODE_ENV === 'development') {
+      const auth = req.headers.get('authorization');
+      const hasBearer = typeof auth === 'string' && /^Bearer\s+\S+/i.test(auth);
+      const hasXPrivy = !!req.headers.get('x-privy-access-token')?.trim();
+      const hasPrivyCookie = !!req.cookies.get('privy-token')?.value;
+      return NextResponse.json(
+        {
+          error: 'unauthenticated',
+          debug: {
+            hasAuthorizationBearer: hasBearer,
+            hasXPrivyAccessToken: hasXPrivy,
+            hasPrivyTokenCookie: hasPrivyCookie,
+            hint:
+              !hasBearer && !hasXPrivy && !hasPrivyCookie
+                ? 'No Privy JWT on this request — client should send Bearer or x-privy-access-token after sign-in.'
+                : 'JWT arrived but verify failed or user has no Solana wallet for this app. Confirm PRIVY_APP_ID === NEXT_PUBLIC_PRIVY_APP_ID, PRIVY_APP_SECRET matches that app, and the user has a Solana wallet.',
+          },
+        },
+        { status: 401 },
+      );
+    }
+    return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
+  }
   const db = getDb();
   await getOrCreateUser(db, {
     privyId: session.privyId,
     wallet: session.wallet,
     email: session.email,
   });
-  const [platformKeys, apiKeys] = await Promise.all([
-    listPlatformKeys(db, session.privyId),
-    getLeash().listApiKeys({ ownerWallet: session.wallet, includeDisabled: true }),
-  ]);
+  let platformKeys;
+  let apiKeys;
+  try {
+    [platformKeys, apiKeys] = await Promise.all([
+      listPlatformKeys(db, session.privyId),
+      getLeash().listApiKeys({ ownerWallet: session.wallet, includeDisabled: true }),
+    ]);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'upstream_error';
+    return NextResponse.json(
+      { error: 'keys_upstream', message },
+      { status: 502, headers: { 'Cache-Control': 'no-store' } },
+    );
+  }
   const platformIndex = new Map(platformKeys.map((p) => [p.keyId, p]));
   const items = apiKeys.map((k) => ({
     ...k,
     name: platformIndex.get(k.id)?.name ?? k.label,
     scopes: platformIndex.get(k.id)?.scopes ?? k.scopes ?? [],
   }));
-  return NextResponse.json({ items });
+  return NextResponse.json(
+    { items },
+    { headers: { 'Cache-Control': 'private, no-store, max-age=0' } },
+  );
 }
 
 export async function POST(req: NextRequest) {

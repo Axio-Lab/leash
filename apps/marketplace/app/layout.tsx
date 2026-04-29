@@ -2,13 +2,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Inter } from 'next/font/google';
 
+import { AuthButton } from '@/components/auth-button';
 import { MarketplacePrivyProvider } from '@/lib/privy-provider';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
 
 export const metadata: Metadata = {
-  title: 'leash.market · MCP registry for autonomous agents',
+  title: 'leash.market · Leash registry for autonomous agents',
   description:
     'An open registry of MCP tools agents can discover, rate, and pay per call. Stablecoin rails for autonomous agents.',
 };
@@ -31,13 +32,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   For developers
                 </Link>
               </nav>
-              <div className="ml-auto text-xs">
+              <div className="ml-auto flex items-center gap-3">
                 <Link
                   href={process.env.NEXT_PUBLIC_AGENTS_URL ?? 'http://localhost:4100'}
-                  className="rounded-md border px-3 py-1.5 hover:border-border-strong"
+                  className="rounded-md border px-3 py-1.5 text-xs hover:border-border-strong"
                 >
                   Open agent dashboard →
                 </Link>
+                <AuthButton />
               </div>
             </header>
             <main className="flex-1 px-5 py-8 mx-auto w-full max-w-[1200px]">{children}</main>

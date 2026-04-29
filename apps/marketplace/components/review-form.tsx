@@ -4,13 +4,7 @@ import * as React from 'react';
 import useSWR from 'swr';
 import { usePrivy } from '@privy-io/react-auth';
 
-const fetcher = async (url: string) => {
-  const r = await fetch(url, { credentials: 'include' });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json() as Promise<{
-    items: Array<{ id: string; privy_id: string; body: string; created_at: string }>;
-  }>;
-};
+import { privyAuthedFetch } from '@/lib/privy-fetch';
 
 /**
  * Listing detail review block. Anyone signed in can post a review
@@ -18,11 +12,21 @@ const fetcher = async (url: string) => {
  * rating per (listing, user); subsequent ratings overwrite the previous.
  */
 export function ReviewBlock({ listingId }: { listingId: string }) {
-  const { authenticated, login } = usePrivy();
+  const { authenticated, login, getAccessToken } = usePrivy();
   const [stars, setStars] = React.useState<number>(5);
   const [body, setBody] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const fetcher = React.useCallback(
+    async (url: string) => {
+      const r = await privyAuthedFetch(getAccessToken, url);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json() as Promise<{
+        items: Array<{ id: string; privy_id: string; body: string; created_at: string }>;
+      }>;
+    },
+    [getAccessToken],
+  );
   const reviews = useSWR(`/api/listings/${listingId}/reviews`, fetcher);
 
   async function submit(e: React.FormEvent) {
@@ -30,18 +34,16 @@ export function ReviewBlock({ listingId }: { listingId: string }) {
     setSubmitting(true);
     setError(null);
     try {
-      const r = await fetch(`/api/listings/${listingId}/rating`, {
+      const r = await privyAuthedFetch(getAccessToken, `/api/listings/${listingId}/rating`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ stars }),
       });
       if (!r.ok) throw new Error('failed to save rating');
       if (body.trim().length > 0) {
-        const r2 = await fetch(`/api/listings/${listingId}/reviews`, {
+        const r2 = await privyAuthedFetch(getAccessToken, `/api/listings/${listingId}/reviews`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
           body: JSON.stringify({ body }),
         });
         if (!r2.ok) throw new Error('failed to save review');

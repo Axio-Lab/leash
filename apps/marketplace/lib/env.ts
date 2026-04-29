@@ -3,6 +3,23 @@ export const NEXT_PUBLIC_PRIVY_APP_ID: string = process.env.NEXT_PUBLIC_PRIVY_AP
 export const NEXT_PUBLIC_AGENTS_URL: string =
   process.env.NEXT_PUBLIC_AGENTS_URL ?? 'http://localhost:4100';
 
+export const SOLANA_RPC: string =
+  process.env.NEXT_PUBLIC_SOLANA_RPC ?? 'https://api.devnet.solana.com';
+
+export type SolanaNetwork = 'solana-mainnet' | 'solana-devnet';
+
+export function resolveNetwork(): SolanaNetwork {
+  const explicit = process.env.NEXT_PUBLIC_SOLANA_NETWORK?.trim();
+  if (explicit === 'solana-mainnet' || explicit === 'solana-devnet') return explicit;
+  return SOLANA_RPC.includes('devnet') ||
+    SOLANA_RPC.includes('localhost') ||
+    SOLANA_RPC.includes('127.0.0.1')
+    ? 'solana-devnet'
+    : 'solana-mainnet';
+}
+
+export const SOLANA_NETWORK: SolanaNetwork = resolveNetwork();
+
 export type ServerEnv = {
   privyAppId: string;
   privyAppSecret: string;
@@ -23,8 +40,15 @@ export function getServerEnv(): ServerEnv {
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+  const privyAppId = get('PRIVY_APP_ID');
+  const nextPublicPrivy = process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim();
+  if (nextPublicPrivy && nextPublicPrivy !== privyAppId) {
+    throw new Error(
+      'PRIVY_APP_ID must equal NEXT_PUBLIC_PRIVY_APP_ID (same Privy app). A mismatch makes every /api/* BFF call return 401.',
+    );
+  }
   return {
-    privyAppId: get('PRIVY_APP_ID'),
+    privyAppId,
     privyAppSecret: get('PRIVY_APP_SECRET'),
     leashApiUrl: get('LEASH_API_URL').replace(/\/+$/, ''),
     leashApiAdminSecret: get('LEASH_API_ADMIN_SECRET'),

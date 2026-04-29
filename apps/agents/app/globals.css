@@ -26,6 +26,43 @@
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
+
+  --animate-row-in: row-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-orb-1: orb-1 22s ease-in-out infinite;
+  --animate-orb-2: orb-2 28s ease-in-out infinite;
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes orb-1 {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(40px, -30px, 0) scale(1.1);
+  }
+}
+
+@keyframes orb-2 {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.05);
+  }
+  50% {
+    transform: translate3d(-50px, 30px, 0) scale(0.95);
+  }
 }
 
 @layer base {

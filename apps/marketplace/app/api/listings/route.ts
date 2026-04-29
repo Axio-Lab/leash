@@ -10,6 +10,10 @@ import { requirePrivySession } from '@/lib/privy-server';
  * `POST /api/listings` — authenticated; binds the listing to the
  *                       signed-in user's wallet + privy id and submits
  *                       it as `pending`.
+ *
+ * Single listing by human slug: `GET /api/listings/by-slug/{slug}` (see
+ * `by-slug/[slug]/route.ts`). ULID-scoped rating/reviews stay under
+ * `/api/listings/{id}/…` so Next never sees two sibling `[slug]` vs `[id]`.
  */
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);

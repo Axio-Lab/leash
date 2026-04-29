@@ -151,7 +151,8 @@ export async function getListingById(db: DbClient, id: string): Promise<Listing 
 }
 
 export type ListListingsArgs = {
-  status?: ListingStatus;
+  /** One status, or several (seller "my listings" uses `IN`). */
+  status?: ListingStatus | ListingStatus[];
   category?: string;
   ownerPrivyId?: string;
   q?: string;
@@ -161,9 +162,15 @@ export type ListListingsArgs = {
 export async function listListings(db: DbClient, args: ListListingsArgs = {}): Promise<Listing[]> {
   const where: string[] = [];
   const params: unknown[] = [];
-  if (args.status) {
-    where.push('status = ?');
-    params.push(args.status);
+  if (args.status !== undefined) {
+    const sts = Array.isArray(args.status) ? args.status : [args.status];
+    if (sts.length === 1) {
+      where.push('status = ?');
+      params.push(sts[0]);
+    } else {
+      where.push(`status IN (${sts.map(() => '?').join(',')})`);
+      params.push(...sts);
+    }
   }
   if (args.category) {
     where.push('category = ?');

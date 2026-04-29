@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
+import { usePrivy } from '@privy-io/react-auth';
 
 import {
   EMPTY_DRAFT,
@@ -11,11 +12,13 @@ import {
   type ListingDraft,
   type ManifestImport,
 } from '@/lib/listing-helper';
+import { privyAuthedFetch } from '@/lib/privy-fetch';
 
 type ImportResp = { manifest: ManifestImport } | { error: string; message?: string };
 
 export default function ListNewListingPage() {
   const router = useRouter();
+  const { getAccessToken } = usePrivy();
   const [stage, setStage] = React.useState<'paste' | 'review'>('paste');
   const [url, setUrl] = React.useState('');
   const [importing, setImporting] = React.useState(false);
@@ -28,10 +31,9 @@ export default function ListNewListingPage() {
     setError(null);
     setImporting(true);
     try {
-      const res = await fetch('/api/listings/from-url', {
+      const res = await privyAuthedFetch(getAccessToken, '/api/listings/from-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ url }),
       });
       const body = (await res.json()) as ImportResp;
@@ -51,10 +53,9 @@ export default function ListNewListingPage() {
     setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch('/api/listings', {
+      const res = await privyAuthedFetch(getAccessToken, '/api/listings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           slug: draft.slug,
           name: draft.name,
