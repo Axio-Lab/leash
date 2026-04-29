@@ -129,18 +129,23 @@ export function OnboardingGate({
   const lowSol = solBalance !== null && solBalance < 0.05 && SOLANA_NETWORK === 'solana-devnet';
 
   const wrapCls = fullPage ? 'min-h-dvh flex items-center justify-center p-6' : '';
+  const cardCls = fullPage
+    ? 'w-full max-w-2xl rounded-xl border border-border bg-bg-elev p-6 sm:p-8 space-y-5'
+    : 'w-full rounded-xl border border-border bg-bg-elev/60 p-5 sm:p-6 space-y-5';
 
   return (
     <div className={wrapCls}>
-      <div className="w-full max-w-lg rounded-xl border border-border bg-bg-elev p-6 space-y-4">
+      <div className={cardCls}>
         <div>
-          <h2 className="text-lg font-semibold">Create your on-chain agent</h2>
+          <h2 className="text-lg sm:text-xl font-semibold tracking-tight">
+            Create your on-chain agent
+          </h2>
           <p className="text-sm text-fg-muted mt-1">
-            Network: <span className="font-mono">{SOLANA_NETWORK}</span>
+            Network: <span className="font-mono text-fg">{SOLANA_NETWORK}</span>
           </p>
         </div>
         {lowSol ? (
-          <div className="rounded-lg border border-amber-900/40 bg-amber-950/25 px-3 py-2 text-xs text-amber-200">
+          <div className="rounded-lg border border-warning/40 bg-warning/8 px-3 py-2 text-xs text-warning">
             Low SOL ({solBalance?.toFixed(4)}). Fund devnet from a faucet so mint + ATA txs succeed.
             <a
               href="https://faucet.solana.com/"
@@ -154,19 +159,27 @@ export function OnboardingGate({
         ) : null}
         {step === 'form' ? (
           <>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm">
+                <span className="text-fg-muted text-xs uppercase tracking-widest">Name</span>
+                <input
+                  className="mt-1.5 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-[3px] focus:ring-brand/20"
+                  value={draft.name}
+                  onChange={(e) => setField('name', e.target.value)}
+                  placeholder="e.g. Ops Copilot"
+                />
+              </label>
+              <label className="block text-sm sm:col-span-1">
+                <span className="text-fg-muted text-xs uppercase tracking-widest">Network</span>
+                <div className="mt-1.5 w-full rounded-lg border border-border bg-bg/40 px-3 py-2 text-sm font-mono text-fg-muted">
+                  {SOLANA_NETWORK}
+                </div>
+              </label>
+            </div>
             <label className="block text-sm">
-              <span className="text-fg-muted">Name</span>
-              <input
-                className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm"
-                value={draft.name}
-                onChange={(e) => setField('name', e.target.value)}
-                placeholder="e.g. Ops Copilot"
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="text-fg-muted">Description</span>
+              <span className="text-fg-muted text-xs uppercase tracking-widest">Description</span>
               <textarea
-                className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm"
+                className="mt-1.5 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-[3px] focus:ring-brand/20 resize-y"
                 rows={3}
                 value={draft.description}
                 onChange={(e) => setField('description', e.target.value)}
@@ -174,19 +187,19 @@ export function OnboardingGate({
               />
             </label>
             {error ? <div className="text-danger text-xs">{error}</div> : null}
-            <div className="flex flex-wrap gap-2 pt-2">
+            <div className="flex flex-wrap gap-2 pt-1">
               <button
                 type="button"
                 disabled={!ready || !isDraftComplete(draft)}
                 onClick={() => void onMint()}
-                className="rounded-md bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-strong disabled:opacity-50"
+                className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-strong disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Mint &amp; save
               </button>
               <button
                 type="button"
                 onClick={onSkip}
-                className="rounded-md border border-border px-4 py-2 text-sm hover:border-border-strong"
+                className="rounded-lg border border-border bg-transparent px-4 py-2 text-sm text-fg hover:border-border-strong hover:bg-bg-elev"
               >
                 Skip for now
               </button>
@@ -198,8 +211,8 @@ export function OnboardingGate({
           <div className="py-8 text-center text-sm text-success">Saved. Redirecting…</div>
         )}
         <p className="text-xs text-fg-subtle">
-          Signs ~3 transactions: mint, provision USDC ATA, spend delegation. Chat uses the platform
-          Claude key — add your own later under Settings → LLM.
+          Signs ~3 transactions: mint, agent treasury setup, spend delegation. Chat uses the
+          platform Claude key — add your own later under Profile → LLM keys.
         </p>
       </div>
     </div>

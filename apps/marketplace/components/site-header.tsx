@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -22,7 +23,14 @@ export function SiteHeader() {
     <header className="sticky top-0 z-40 w-full border-b border-border bg-bg/70 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-[1240px] items-center gap-6 px-5">
         <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          <LeashMark />
+          <Image
+            src="/leash-logo.png"
+            alt="Leash"
+            width={22}
+            height={22}
+            className="[filter:brightness(0)_invert(1)] shrink-0"
+            priority
+          />
           <span className="hidden sm:inline">
             leash<span className="text-fg-muted">.market</span>
           </span>
@@ -53,13 +61,5 @@ export function SiteHeader() {
         </div>
       </div>
     </header>
-  );
-}
-
-function LeashMark() {
-  return (
-    <span className="relative grid size-7 place-items-center rounded-md bg-gradient-to-br from-brand to-brand-strong text-white shadow-[0_4px_18px_-6px_oklch(0.66_0.19_268/0.6)]">
-      <span className="text-[11px] font-bold tracking-tight">L</span>
-    </span>
   );
 }

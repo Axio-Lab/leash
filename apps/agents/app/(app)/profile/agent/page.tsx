@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { OnboardingGate } from '@/components/chat/onboarding-gate';
+import { TreasuryPanel } from '@/components/profile/treasury-panel';
 import { NEXT_PUBLIC_EXPLORER_URL, SOLANA_NETWORK } from '@/lib/env';
 
 type AgentItem = {
@@ -124,7 +125,7 @@ export default function ProfileAgentPage() {
         <div>
           <h3 className="text-sm font-semibold tracking-tight">On-chain identity</h3>
           <p className="text-xs text-fg-muted mt-0.5">
-            The MPL-Core asset and the USDC treasury PDA for this agent.
+            The MPL-Core asset and the stablecoin treasury for this agent.
           </p>
         </div>
         <dl className="grid gap-3 sm:grid-cols-2">
@@ -141,6 +142,9 @@ export default function ProfileAgentPage() {
           <FieldRow label="Owner" value={wallet} />
         </dl>
       </section>
+
+      {/* Treasury balance + withdraw */}
+      <TreasuryPanel agentMint={primary.mint!} ownerWallet={wallet} />
 
       {/* Treasury & spend caps */}
       <section className="rounded-xl border border-border bg-bg-elev/60 p-4 sm:p-5 space-y-3">
@@ -250,10 +254,10 @@ function SetupPanel({ onCreated }: { onCreated: () => void }) {
         <AlertTriangleIcon className="size-5 shrink-0 text-warning mt-0.5" />
         <div className="text-sm">
           <p className="font-medium text-fg">You haven&apos;t set up your agent yet.</p>
-          <p className="text-fg-muted text-xs mt-1 max-w-prose">
+          <p className="text-fg-muted text-xs mt-1">
             Until you mint an agent, chats run without a treasury — payments and marketplace tools
-            are disabled. Setup signs ~3 transactions: mint, USDC treasury ATA, and spend
-            delegation.
+            are disabled. Setup signs ~3 transactions: mint, provision USDC/USDT/USDG ATAs, and
+            spend delegation.
           </p>
         </div>
       </div>

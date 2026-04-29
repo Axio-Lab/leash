@@ -5,6 +5,7 @@ import { useEffect, useMemo } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 
 import { ChatShell } from '@/components/chat/chat-shell';
+import { EnsureDefaultKey } from '@/components/ensure-default-key';
 import { Spinner } from '@/components/ui/spinner';
 import { NEXT_PUBLIC_PRIVY_APP_ID } from '@/lib/env';
 
@@ -50,6 +51,7 @@ function Inner({ children }: { children: React.ReactNode }) {
     : null;
   return (
     <ChatShell privyId={uid} activeThreadId={threadId} chatRoute={chatRoute}>
+      <EnsureDefaultKey />
       {children}
     </ChatShell>
   );

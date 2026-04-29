@@ -2,7 +2,9 @@
 
 import * as React from 'react';
 import useSWR from 'swr';
+import { toast } from 'sonner';
 import { usePrivy } from '@privy-io/react-auth';
+import { CopyIcon, EyeIcon } from 'lucide-react';
 
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/cn';
@@ -66,6 +68,8 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
   );
   const { data, error, isLoading, mutate } = useSWR<{ items: ApiKeyItem[] }>('/api/keys', fetcher);
   const [revokingId, setRevokingId] = React.useState<string | null>(null);
+  const [revealedKeys, setRevealedKeys] = React.useState<Record<string, string>>({});
+  const [revealingId, setRevealingId] = React.useState<string | null>(null);
 
   async function revoke(id: string) {
     setRevokingId(id);
@@ -78,6 +82,47 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
     } finally {
       setRevokingId(null);
     }
+  }
+
+  async function reveal(id: string) {
+    if (revealedKeys[id]) {
+      setRevealedKeys((m) => {
+        const { [id]: _drop, ...rest } = m;
+        return rest;
+      });
+      return;
+    }
+    setRevealingId(id);
+    try {
+      const res = await privyAuthedFetch(
+        getAccessToken,
+        `/api/keys/${encodeURIComponent(id)}/reveal`,
+      );
+      const j = (await res.json().catch(() => ({}))) as {
+        plaintext?: string;
+        message?: string;
+      };
+      if (!res.ok || !j.plaintext) {
+        toast.error('Could not reveal key', {
+          description:
+            j.message ??
+            (res.status === 400 ? 'Issued before reveal was supported.' : `HTTP ${res.status}`),
+        });
+        return;
+      }
+      setRevealedKeys((m) => ({ ...m, [id]: j.plaintext! }));
+    } catch (e) {
+      toast.error('Could not reveal key', {
+        description: e instanceof Error ? e.message : 'unknown',
+      });
+    } finally {
+      setRevealingId(null);
+    }
+  }
+
+  function copyKey(value: string) {
+    void navigator.clipboard?.writeText(value);
+    toast.success('Key copied');
   }
 
   return (
@@ -123,7 +168,39 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
             {data.items.map((k) => (
               <tr key={k.id} className="border-t">
                 <td className="px-4 py-3 font-mono">
-                  {k.prefix}…{k.last4}
+                  {revealedKeys[k.id] ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="break-all max-w-[260px] text-xs">{revealedKeys[k.id]}</span>
+                      <button
+                        type="button"
+                        onClick={() => copyKey(revealedKeys[k.id]!)}
+                        className="shrink-0 rounded-md p-1 text-fg-subtle hover:bg-bg-elev hover:text-fg"
+                        aria-label="Copy key"
+                      >
+                        <CopyIcon className="size-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span>
+                        {k.prefix}…{k.last4}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void reveal(k.id)}
+                        disabled={revealingId === k.id || !!k.disabled_at}
+                        className="shrink-0 rounded-md p-1 text-fg-subtle hover:bg-bg-elev hover:text-fg disabled:opacity-40"
+                        title="Reveal full key"
+                        aria-label="Reveal full key"
+                      >
+                        {revealingId === k.id ? (
+                          <Spinner size="xs" />
+                        ) : (
+                          <EyeIcon className="size-3" />
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3">{k.name}</td>
                 <td className="px-4 py-3">

@@ -137,7 +137,7 @@ export function ChatSidebar({
   }
 
   return (
-    <aside className="w-[260px] shrink-0 border-r border-border bg-bg-elev/95 flex flex-col h-full overflow-hidden">
+    <aside className="w-[224px] shrink-0 border-r border-border bg-bg-elev/95 flex flex-col h-full overflow-hidden">
       {/* New chat — primary action at the very top */}
       <div className="shrink-0 px-3 pt-3 pb-3">
         <Button

@@ -3,7 +3,7 @@
 import * as React from 'react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
-import { AlertTriangleIcon } from 'lucide-react';
+import { AlertTriangleIcon, CopyIcon, EyeIcon } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
 import { Spinner } from '@/components/ui/spinner';
@@ -36,7 +36,51 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
   }>('/api/keys', fetcher);
 
   const [revokingId, setRevokingId] = React.useState<string | null>(null);
+  const [revealedKeys, setRevealedKeys] = React.useState<Record<string, string>>({});
+  const [revealingId, setRevealingId] = React.useState<string | null>(null);
   const offline = data?.items.some((k) => k._offline);
+
+  async function reveal(id: string) {
+    if (revealedKeys[id]) {
+      setRevealedKeys((m) => {
+        const { [id]: _drop, ...rest } = m;
+        return rest;
+      });
+      return;
+    }
+    setRevealingId(id);
+    try {
+      const res = await fetch(`/api/keys/${encodeURIComponent(id)}/reveal`, {
+        credentials: 'include',
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        plaintext?: string;
+        message?: string;
+      };
+      if (!res.ok || !j.plaintext) {
+        toast.error('Could not reveal key', {
+          description:
+            j.message ??
+            (res.status === 400
+              ? 'This key was issued before reveal was supported.'
+              : `HTTP ${res.status}`),
+        });
+        return;
+      }
+      setRevealedKeys((m) => ({ ...m, [id]: j.plaintext! }));
+    } catch (e) {
+      toast.error('Could not reveal key', {
+        description: e instanceof Error ? e.message : 'unknown',
+      });
+    } finally {
+      setRevealingId(null);
+    }
+  }
+
+  function copyKey(value: string) {
+    void navigator.clipboard?.writeText(value);
+    toast.success('Key copied');
+  }
 
   async function revoke(id: string) {
     setRevokingId(id);
@@ -137,10 +181,38 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
                   <td className="px-4 py-3 font-mono text-xs text-fg-muted">
                     {k._offline ? (
                       <span className="text-fg-subtle italic">limited info</span>
+                    ) : revealedKeys[k.id] ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="break-all max-w-[260px]">{revealedKeys[k.id]}</span>
+                        <button
+                          type="button"
+                          onClick={() => copyKey(revealedKeys[k.id]!)}
+                          className="shrink-0 rounded-md p-1 text-fg-subtle hover:bg-bg-elev hover:text-fg"
+                          aria-label="Copy key"
+                        >
+                          <CopyIcon className="size-3" />
+                        </button>
+                      </div>
                     ) : (
-                      <>
-                        {k.prefix}…{k.last4}
-                      </>
+                      <div className="flex items-center gap-1.5">
+                        <span>
+                          {k.prefix}…{k.last4}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void reveal(k.id)}
+                          disabled={revealingId === k.id || !!k.disabled_at}
+                          className="shrink-0 rounded-md p-1 text-fg-subtle hover:bg-bg-elev hover:text-fg disabled:opacity-40"
+                          title="Reveal full key"
+                          aria-label="Reveal full key"
+                        >
+                          {revealingId === k.id ? (
+                            <Spinner size="xs" />
+                          ) : (
+                            <EyeIcon className="size-3" />
+                          )}
+                        </button>
+                      </div>
                     )}
                   </td>
                   <td className="px-4 py-3">{k.name}</td>

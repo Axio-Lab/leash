@@ -22,6 +22,17 @@ export const metadata: Metadata = {
   title: 'leash.market · The app store for AI agents',
   description:
     'An open registry of agent tools your agent can discover, rate, and pay per call. Stablecoin rails for autonomous agents.',
+  icons: {
+    icon: '/leash-logo.png',
+    shortcut: '/leash-logo.png',
+    apple: '/leash-logo.png',
+  },
+  openGraph: {
+    title: 'leash.market · The app store for AI agents',
+    description:
+      'An open registry of agent tools your agent can discover, rate, and pay per call. Stablecoin rails for autonomous agents.',
+    siteName: 'leash.market',
+  },
 };
 
 /**

@@ -52,6 +52,12 @@ export type LeashAdminClient = {
     includeDisabled?: boolean;
   }): Promise<LeashApiKeyRecord[]>;
   disableApiKey(id: string): Promise<LeashApiKeyRecord>;
+  /**
+   * Decrypt and return the plaintext for an issued key. Only works for
+   * keys minted on schema v10+ (the encrypted_plaintext column was
+   * added then). Throws `LeashAdminError` 400 for legacy hash-only rows.
+   */
+  revealApiKey(id: string): Promise<string>;
 };
 
 type ClientOptions = {
@@ -132,6 +138,14 @@ export function createLeashAdminClient(opts: ClientOptions): LeashAdminClient {
         { method: 'POST' },
       );
       return body.key;
+    },
+    async revealApiKey(id) {
+      const body = await adminFetch<{ plaintext: string }>(
+        opts,
+        `/v1/admin/api-keys/${encodeURIComponent(id)}/reveal`,
+        { method: 'GET' },
+      );
+      return body.plaintext;
     },
   };
 }

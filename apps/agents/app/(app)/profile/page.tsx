@@ -115,7 +115,7 @@ export default function ProfileOverviewPage() {
           <div className="min-w-0">
             <h2 className="text-sm font-semibold tracking-tight">On-chain agent</h2>
             <p className="text-xs text-fg-muted mt-0.5">
-              The MPL-Core asset, USDC treasury, and spend delegation that power your chats.
+              The MPL-Core asset, stablecoin treasury, and spend delegation that power your chats.
             </p>
           </div>
           {isLoading ? (

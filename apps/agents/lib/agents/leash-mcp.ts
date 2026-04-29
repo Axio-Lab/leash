@@ -1,6 +1,9 @@
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import type { McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
+import { deriveAgentTreasuryAddress, listSplBalances } from '@leash/core';
 import { z } from 'zod';
+
+import { SOLANA_NETWORK, SOLANA_RPC } from '@/lib/env';
 
 export type LeashMcpContext = {
   privyId: string;
@@ -64,6 +67,83 @@ export function createLeashMcpServer(ctx: LeashMcpContext): McpSdkServerConfigWi
             },
           ],
         }),
+      ),
+      tool(
+        'leash_check_treasury_balance',
+        'Read the agent treasury balance — SOL plus every SPL token held (USDC, USDG, USDT pinned even when zero).',
+        {
+          symbol: z
+            .string()
+            .optional()
+            .describe('Optional ticker filter — e.g. "USDC". When omitted, returns all balances.'),
+        },
+        async (args) => {
+          if (!ctx.agentMint) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    kind: 'treasury_balance',
+                    status: 'no_agent',
+                    message:
+                      'No on-chain agent yet — ask the user to mint an agent under Profile → Agent.',
+                  }),
+                },
+              ],
+            };
+          }
+          try {
+            const treasury = await deriveAgentTreasuryAddress(ctx.agentMint);
+            const result = await listSplBalances({
+              owner: String(treasury),
+              rpcUrl: SOLANA_RPC,
+              network: SOLANA_NETWORK === 'solana-mainnet' ? 'mainnet' : 'devnet',
+              pinKnownStables: true,
+            });
+            const filtered = args.symbol
+              ? result.tokens.filter(
+                  (t) => (t.symbol ?? '').toLowerCase() === args.symbol!.toLowerCase(),
+                )
+              : result.tokens;
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    kind: 'treasury_balance',
+                    status: 'ok',
+                    treasury: String(treasury),
+                    network: SOLANA_NETWORK,
+                    sol: result.sol,
+                    tokens: filtered.map((t) => ({
+                      symbol: t.symbol,
+                      name: t.name,
+                      ui: t.ui,
+                      amount: t.amount,
+                      decimals: t.decimals,
+                      mint: t.mint,
+                      program: t.program,
+                    })),
+                  }),
+                },
+              ],
+            };
+          } catch (e) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    kind: 'treasury_balance',
+                    status: 'error',
+                    message: e instanceof Error ? e.message : 'unknown',
+                  }),
+                },
+              ],
+            };
+          }
+        },
       ),
       tool(
         'leash_call_marketplace_tool',

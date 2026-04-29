@@ -84,7 +84,7 @@ export default function ProfileLlmPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-xl">
+    <div className="space-y-6">
       <section className="rounded-xl border border-border bg-bg-elev/60 p-4 sm:p-5 space-y-4">
         <div>
           <h2 className="text-sm font-semibold tracking-tight">Anthropic key</h2>

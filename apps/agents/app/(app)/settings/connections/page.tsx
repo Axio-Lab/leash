@@ -192,14 +192,16 @@ export default function ConnectionsSettingsPage() {
         ) : null}
       </div>
 
+      {isLoading && visible.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-fg-muted">
+          <Spinner size="lg" brand />
+          <span>Loading toolkits…</span>
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3">
         {isLoading && visible.length === 0
-          ? Array.from({ length: 8 }).map((_, i) => (
-              <div
-                key={`skeleton-${i}`}
-                className="rounded-xl border border-border bg-bg-elev/40 h-[160px] animate-pulse"
-              />
-            ))
+          ? null
           : visible.map((t) => {
               const conn = connections.find(
                 (c) => c.toolkit_slug === t.slug && c.status === 'ACTIVE',

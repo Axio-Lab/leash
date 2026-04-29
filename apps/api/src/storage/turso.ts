@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -51,6 +51,11 @@ const SCHEMA_SQL: readonly string[] = [
     hash TEXT NOT NULL UNIQUE,
     owner_wallet TEXT,
     scopes TEXT,
+    -- AES-GCM envelope (same format as user_llm_keys.envelope) of the
+    -- plaintext key. Lets the BFF reveal the key on demand so users can
+    -- copy it later instead of only at creation time. NULL for legacy
+    -- rows minted before the v10 migration; new keys always have a value.
+    encrypted_plaintext TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     disabled_at TEXT
   )`,
@@ -91,10 +96,7 @@ const SCHEMA_SQL: readonly string[] = [
   `CREATE INDEX IF NOT EXISTS idx_events_network_ts ON events(network, ts DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_events_agent_ts ON events(agent_asset, ts DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_events_kind_ts ON events(kind, ts DESC)`,
-  // Lookup index for `(network, signature)`. NOT unique — one signature
-  // can produce multiple event rows when an `Execute` withdraws several
-  // SPL mints in a single tx (one row per mint). Cross-network
-  // isolation is preserved by including `network` in every query.
+
   `CREATE INDEX IF NOT EXISTS idx_events_network_signature ON events(network, signature) WHERE signature IS NOT NULL`,
 
   `CREATE TABLE IF NOT EXISTS receipts (
@@ -459,6 +461,13 @@ export async function runMigrations(db: Client): Promise<void> {
     await migrateApiKeysScopes(db);
   }
 
+  // v10: encrypted_plaintext column on api_keys so the BFF can reveal
+  // keys after creation. Existing rows stay NULL — old keys remain
+  // hash-only and aren't recoverable; new keys mint with a value.
+  if (currentVersion < 10) {
+    await migrateApiKeysEncryptedPlaintext(db);
+  }
+
   if (currentVersion < SCHEMA_VERSION) {
     await db.execute({
       sql: 'INSERT OR REPLACE INTO schema_version(version) VALUES(?)',
@@ -491,6 +500,14 @@ async function migrateApiKeysScopes(db: Client): Promise<void> {
   const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
   if (!names.has('scopes')) {
     await db.execute('ALTER TABLE api_keys ADD COLUMN scopes TEXT');
+  }
+}
+
+async function migrateApiKeysEncryptedPlaintext(db: Client): Promise<void> {
+  const info = await db.execute('PRAGMA table_info(api_keys)');
+  const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
+  if (!names.has('encrypted_plaintext')) {
+    await db.execute('ALTER TABLE api_keys ADD COLUMN encrypted_plaintext TEXT');
   }
 }
 

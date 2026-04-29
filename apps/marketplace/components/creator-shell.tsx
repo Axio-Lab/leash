@@ -4,6 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
+import Image from 'next/image';
 import {
   ArrowUpRight,
   BookOpen,
@@ -177,9 +178,14 @@ function SidebarBody({
   return (
     <>
       <div className="flex items-center gap-2 border-b border-border px-5 py-4">
-        <span className="grid size-7 place-items-center rounded-md bg-gradient-to-br from-brand to-brand-strong text-white shadow-[0_4px_18px_-6px_oklch(0.66_0.19_268/0.6)]">
-          <span className="text-[11px] font-bold tracking-tight">L</span>
-        </span>
+        <Image
+          src="/leash-logo.png"
+          alt="Leash"
+          width={20}
+          height={20}
+          className="[filter:brightness(0)_invert(1)] shrink-0"
+          priority
+        />
         <Link href="/" className="text-sm font-semibold tracking-tight">
           leash<span className="text-fg-muted">.market</span>
         </Link>

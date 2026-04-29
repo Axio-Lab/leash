@@ -72,6 +72,7 @@ function fakeLeash(): LeashAdminClient {
     })),
     listApiKeys: vi.fn(async () => [makeApiKey()]),
     disableApiKey: vi.fn(async (id) => makeApiKey({ id, disabled_at: '2026-02-01T00:00:00.000Z' })),
+    revealApiKey: vi.fn(async () => 'lsh_test_PLAINTEXT'),
   };
 }
 
