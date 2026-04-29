@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Roboto, Roboto_Mono } from 'next/font/google';
+import { Toaster } from 'sonner';
 
 import { MarketplacePrivyProvider } from '@/lib/privy-provider';
 import './globals.css';
@@ -39,6 +40,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body suppressHydrationWarning className="font-sans antialiased min-h-dvh">
         <MarketplacePrivyProvider>{children}</MarketplacePrivyProvider>
+        <Toaster
+          theme="dark"
+          position="bottom-right"
+          closeButton
+          richColors
+          toastOptions={{
+            classNames: {
+              toast:
+                'bg-bg-elev/95 border border-border text-fg backdrop-blur-md shadow-[0_12px_40px_-12px_oklch(0_0_0/0.5)]',
+              description: 'text-fg-muted',
+              actionButton: 'bg-brand text-white',
+              cancelButton: 'bg-bg-elev-2 text-fg-muted',
+            },
+          }}
+        />
       </body>
     </html>
   );
