@@ -108,7 +108,7 @@ export function ChatShell({
               alt="Leash"
               width={22}
               height={22}
-              className="shrink-0 select-none"
+              className="shrink-0 select-none [filter:brightness(0)_invert(1)]"
               priority
             />
             leash · agents
