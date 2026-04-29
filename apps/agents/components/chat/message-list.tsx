@@ -10,11 +10,22 @@ import { ArtifactCard } from './artifact-card';
 export function MessageList({ messages }: { messages: ChatMessage[] }) {
   if (messages.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center px-6 py-16 text-center text-sm text-fg-muted">
-        <p className="max-w-md">
-          Ask anything — your agent can use connected toolkits, marketplace tools, and on-chain
-          payments. Start with a request below.
-        </p>
+      <div className="flex flex-1 items-center justify-center px-6 py-12">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: 'easeOut' }}
+          className="text-center"
+        >
+          <motion.h1
+            initial={{ backgroundPosition: '0% 50%' }}
+            animate={{ backgroundPosition: '200% 50%' }}
+            transition={{ duration: 6, repeat: Infinity, repeatType: 'reverse', ease: 'linear' }}
+            className="text-3xl sm:text-4xl font-medium tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white/95 via-white/55 to-white/40 [background-size:200%_auto] pb-1"
+          >
+            How can I help today?
+          </motion.h1>
+        </motion.div>
       </div>
     );
   }

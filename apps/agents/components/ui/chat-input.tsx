@@ -99,7 +99,10 @@ export function ChatInputTextArea({
       onKeyDown={onKeyDown}
       rows={rows}
       className={cn(
-        'max-h-[400px] min-h-0 resize-none overflow-x-hidden bg-transparent',
+        // Cap composer at ~4 lines and scroll internally so long messages
+        // never push the page taller. Tuned against text-sm (line-height ~20px)
+        // + py-2 (16px padding) → ≈ 96–112px for 4 visible lines.
+        'max-h-[112px] min-h-0 resize-none overflow-x-hidden overflow-y-auto bg-transparent scrollbar-thin',
         variant === 'unstyled' &&
           'border-none shadow-none focus-visible:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-2.5 py-2',
         className,
