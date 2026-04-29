@@ -7,14 +7,12 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/cn';
 
 /**
- * shadcn-style button. Variants follow the canonical
- * default/outline/ghost/secondary/destructive naming so the rest of
- * the marketplace components and any future shadcn-cli additions read
- * consistently. Uses the marketplace's `--color-*` tokens defined in
- * `globals.css`.
+ * Origin-ui-flavoured shadcn Button. The `outline` variant intentionally
+ * uses the brand color as a tinted border so it reads as a "secondary"
+ * action paired with the solid `default` brand fill.
  */
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-bg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-bg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand/70 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
@@ -22,16 +20,17 @@ const buttonVariants = cva(
           'bg-brand text-white shadow-sm hover:bg-brand-strong hover:shadow-[0_8px_28px_-12px_oklch(0.66_0.19_268/0.6)]',
         secondary:
           'border border-brand/40 bg-transparent text-fg hover:bg-brand/10 hover:border-brand',
-        outline: 'border border-border bg-transparent hover:border-border-strong hover:bg-bg-elev',
-        ghost: 'hover:bg-bg-elev hover:text-fg text-fg-muted',
-        destructive: 'bg-danger text-white hover:opacity-90',
+        outline:
+          'border border-border bg-transparent text-fg hover:border-border-strong hover:bg-bg-elev',
+        ghost: 'text-fg-muted hover:bg-bg-elev hover:text-fg',
+        destructive: 'bg-danger text-white shadow-sm hover:opacity-90',
         link: 'text-brand underline-offset-4 hover:underline',
       },
       size: {
         default: 'h-9 px-4 py-2',
         sm: 'h-8 rounded-md px-3 text-xs',
-        lg: 'h-11 rounded-md px-6 text-base',
-        icon: 'size-9',
+        lg: 'h-10 rounded-lg px-6',
+        icon: 'h-9 w-9',
       },
     },
     defaultVariants: {
