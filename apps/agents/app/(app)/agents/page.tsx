@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 
 import { createThread, listThreads, setActiveUser } from '@/lib/chat-storage';
+import { Spinner } from '@/components/ui/spinner';
 
 /** Redirects to newest thread or creates one — chat shell comes from layout. */
 export default function AgentsChatIndexPage() {
@@ -25,8 +26,9 @@ export default function AgentsChatIndexPage() {
   }, [ready, user, router]);
 
   return (
-    <div className="flex flex-1 items-center justify-center text-sm text-fg-muted">
-      Opening chat…
+    <div className="flex flex-1 items-center justify-center gap-2 text-sm text-fg-muted">
+      <Spinner size="sm" />
+      Opening chat
     </div>
   );
 }
