@@ -70,11 +70,20 @@ const CreatePlatformAgentBody = z
     system_prompt: z.string().min(1),
     capabilities: z.array(CapabilitySchema).default([]),
     budget: BudgetSchema,
-    llm_provider: z.enum(['anthropic', 'openai']),
-    llm_api_key: z.string().min(8).openapi({
+    llm_provider: z.enum(['anthropic', 'openai', 'platform']),
+    llm_api_key: z.string().min(8).optional().openapi({
       description:
-        'User-supplied LLM provider key. Encrypted at rest via ENCRYPTION_KEY before storage; never logged.',
+        'User-supplied LLM provider key (not used when llm_provider is platform). Encrypted at rest.',
     }),
+  })
+  .superRefine((data, ctx) => {
+    if (data.llm_provider !== 'platform' && (!data.llm_api_key || data.llm_api_key.length < 8)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'llm_api_key is required when llm_provider is anthropic or openai',
+        path: ['llm_api_key'],
+      });
+    }
   })
   .openapi('CreatePlatformAgentBody');
 
@@ -91,7 +100,7 @@ const PlatformAgentSchema = z
     budget: BudgetSchema,
     treasury: PubkeySchema,
     service_key_id: z.string(),
-    llm_provider: z.enum(['anthropic', 'openai']),
+    llm_provider: z.enum(['anthropic', 'openai', 'platform']),
     status: z.enum(['active', 'disabled']),
     created_at: z.string(),
   })
@@ -172,7 +181,11 @@ export function buildPlatformAgentRoutes(deps: PlatformAgentDeps): OpenAPIHono {
     async (c) => {
       const body = c.req.valid('json');
       const encKey = getEncryptionKey();
-      const sealed = encryptSecret(body.llm_api_key, encKey);
+      const keyMaterial =
+        body.llm_provider === 'platform'
+          ? 'platform-managed-by-leash-chat-not-user-supplied-key-v1'
+          : body.llm_api_key!;
+      const sealed = encryptSecret(keyMaterial, encKey);
       const service = await createApiKey(deps.db, {
         label: `agent:${body.mint.slice(0, 8)}`,
         network: body.network,

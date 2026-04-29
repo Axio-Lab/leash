@@ -10,6 +10,17 @@ import { getDb } from '@/lib/db';
 import { getLeash } from '@/lib/leash';
 import { requirePrivySession } from '@/lib/privy-server';
 
+type KeySource = 'agents' | 'marketplace' | 'shared' | 'unknown';
+
+function inferSource(scopes: string[]): KeySource {
+  const hasAgents = scopes.includes('agents');
+  const hasMarketplace = scopes.includes('marketplace');
+  if (hasAgents && hasMarketplace) return 'shared';
+  if (hasAgents) return 'agents';
+  if (hasMarketplace) return 'marketplace';
+  return 'unknown';
+}
+
 /**
  * `GET /api/keys` — return every API key issued to the signed-in user.
  *
@@ -30,15 +41,20 @@ export async function GET(req: NextRequest) {
     wallet: session.wallet,
     email: session.email,
   });
-  const [platformKeys, apiKeys] = await Promise.all([
-    listPlatformKeys(db, session.privyId),
-    getLeash().listApiKeys({ ownerWallet: session.wallet, includeDisabled: true }),
-  ]);
+  const platformKeys = await listPlatformKeys(db, session.privyId);
+  let apiKeys: Awaited<ReturnType<ReturnType<typeof getLeash>['listApiKeys']>> = [];
+  try {
+    apiKeys = await getLeash().listApiKeys({ ownerWallet: session.wallet, includeDisabled: true });
+  } catch {
+    // When apps/api is offline in local dev, still return platform-linked keys.
+    apiKeys = [];
+  }
   const platformIndex = new Map(platformKeys.map((p) => [p.keyId, p]));
   const items = apiKeys.map((k) => ({
     ...k,
     name: platformIndex.get(k.id)?.name ?? k.label,
     scopes: platformIndex.get(k.id)?.scopes ?? k.scopes ?? [],
+    source: inferSource(platformIndex.get(k.id)?.scopes ?? k.scopes ?? []),
   }));
   return NextResponse.json({ items });
 }

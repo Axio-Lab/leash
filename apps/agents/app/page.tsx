@@ -10,13 +10,13 @@ import { HeroShowcase } from '@/components/hero-showcase';
 /**
  * Public landing page. Always renders the same hero (no static fallback)
  * so the "Get started" CTA is always present; logged-in users are
- * redirected to `/dashboard`.
+ * redirected to `/agents`.
  */
 export default function LandingPage() {
   const { ready, authenticated, login } = usePrivy();
   const router = useRouter();
   useEffect(() => {
-    if (ready && authenticated) router.replace('/dashboard');
+    if (ready && authenticated) router.replace('/agents');
   }, [ready, authenticated, router]);
 
   return (

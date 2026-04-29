@@ -9,6 +9,7 @@ export type ApiKeyItem = {
   id: string;
   label: string;
   name: string;
+  source?: 'agents' | 'marketplace' | 'shared' | 'unknown';
   network: 'solana-devnet' | 'solana-mainnet';
   prefix: string;
   last4: string;
@@ -72,6 +73,7 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
             <tr>
               <th className="text-left px-4 py-2">Key</th>
               <th className="text-left px-4 py-2">Name</th>
+              <th className="text-left px-4 py-2">Source</th>
               <th className="text-left px-4 py-2">Network</th>
               <th className="text-left px-4 py-2">Scopes</th>
               <th className="text-left px-4 py-2">Created</th>
@@ -85,6 +87,22 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
                   {k.prefix}…{k.last4}
                 </td>
                 <td className="px-4 py-3">{k.name}</td>
+                <td className="px-4 py-3">
+                  <span
+                    className={cn(
+                      'rounded-full px-2 py-0.5 text-xs',
+                      k.source === 'agents'
+                        ? 'bg-brand/20 text-brand'
+                        : k.source === 'marketplace'
+                          ? 'bg-indigo-950/40 text-indigo-300'
+                          : k.source === 'shared'
+                            ? 'bg-sky-950/40 text-sky-300'
+                            : 'bg-bg text-fg-subtle',
+                    )}
+                  >
+                    {k.source ?? 'unknown'}
+                  </span>
+                </td>
                 <td className="px-4 py-3">
                   <span
                     className={cn(

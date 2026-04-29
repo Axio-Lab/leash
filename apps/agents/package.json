@@ -10,6 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.123",
+    "@composio/core": "^0.8.0",
     "@leash/buyer-kit": "workspace:*",
     "@leash/core": "workspace:*",
     "@leash/platform-auth": "workspace:*",
@@ -28,8 +30,8 @@
     "@solana/spl-token": "^0.4.9",
     "@solana/web3.js": "^1.98.0",
     "clsx": "^2.1.1",
-    "ioredis": "^5.4.1",
     "lucide-react": "^0.469.0",
+    "motion": "^12.38.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

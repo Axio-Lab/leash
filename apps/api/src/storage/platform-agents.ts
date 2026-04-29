@@ -11,7 +11,7 @@ import type { DbClient } from './turso.js';
 import { execute } from './turso.js';
 import type { SvmNetwork } from '../util/network.js';
 
-export type LlmProvider = 'anthropic' | 'openai';
+export type LlmProvider = 'anthropic' | 'openai' | 'platform';
 
 export type Capability = {
   /** Marketplace listing slug, or `null` for ad-hoc / direct URL entries. */
@@ -60,7 +60,7 @@ function rowToAgent(row: Record<string, unknown>): PlatformAgentRow {
     throw new Error(`unexpected network in agents: ${network}`);
   }
   const provider = String(row.llm_provider);
-  if (provider !== 'anthropic' && provider !== 'openai') {
+  if (provider !== 'anthropic' && provider !== 'openai' && provider !== 'platform') {
     throw new Error(`unexpected llm_provider in agents: ${provider}`);
   }
   const status = String(row.status);

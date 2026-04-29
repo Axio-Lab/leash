@@ -25,6 +25,14 @@ export function resolveNetwork(): SolanaNetwork {
 
 export const SOLANA_NETWORK: SolanaNetwork = resolveNetwork();
 
+/** Default Claude model for agent turns (override via LEASH_AGENT_MODEL). */
+export const LEASH_AGENT_MODEL: string =
+  process.env.LEASH_AGENT_MODEL?.trim() || 'claude-sonnet-4-20250514';
+
+/** Explorer base URL (public). */
+export const NEXT_PUBLIC_EXPLORER_URL: string =
+  process.env.NEXT_PUBLIC_EXPLORER_URL?.replace(/\/+$/, '') ?? 'https://explorer.leash.market';
+
 /**
  * Server-only env. These fields are read inside route handlers; the
  * accessor throws to fail loudly in deployment when a secret is missing
@@ -37,8 +45,11 @@ export type ServerEnv = {
   leashApiAdminSecret: string;
   leashDbUrl: string;
   leashDbAuthToken: string | undefined;
-  leashRedisUrl: string | undefined;
   encryptionKey: string;
+  /** Platform Anthropic key — optional until chat brain is used. */
+  anthropicApiKey: string | undefined;
+  composioApiKey: string | undefined;
+  leashAgentModel: string;
 };
 
 export function getServerEnv(): ServerEnv {
@@ -49,6 +60,10 @@ export function getServerEnv(): ServerEnv {
     }
     return v;
   };
+  const optional = (name: string): string | undefined => {
+    const v = process.env[name];
+    return v && v.length > 0 ? v : undefined;
+  };
   return {
     privyAppId: get('PRIVY_APP_ID'),
     privyAppSecret: get('PRIVY_APP_SECRET'),
@@ -56,7 +71,9 @@ export function getServerEnv(): ServerEnv {
     leashApiAdminSecret: get('LEASH_API_ADMIN_SECRET'),
     leashDbUrl: get('LEASH_DB_URL'),
     leashDbAuthToken: process.env.LEASH_DB_AUTH_TOKEN,
-    leashRedisUrl: process.env.LEASH_REDIS_URL,
     encryptionKey: get('ENCRYPTION_KEY'),
+    anthropicApiKey: optional('ANTHROPIC_API_KEY'),
+    composioApiKey: optional('COMPOSIO_API_KEY'),
+    leashAgentModel: optional('LEASH_AGENT_MODEL') ?? LEASH_AGENT_MODEL,
   };
 }

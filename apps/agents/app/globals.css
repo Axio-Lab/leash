@@ -2,34 +2,50 @@
 
 @theme {
   --font-sans:
-    'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    'Roboto', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Roboto Mono', ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
 
-  --color-bg: oklch(0.16 0.02 280);
-  --color-bg-elev: oklch(0.2 0.02 280);
-  --color-bg-elev-2: oklch(0.24 0.02 280);
-  --color-border: oklch(0.32 0.02 280);
-  --color-border-strong: oklch(0.4 0.02 280);
-  --color-fg: oklch(0.95 0.01 280);
-  --color-fg-muted: oklch(0.7 0.02 280);
-  --color-fg-subtle: oklch(0.55 0.02 280);
-
-  --color-brand: oklch(0.7 0.18 290);
-  --color-brand-strong: oklch(0.78 0.18 290);
-  --color-brand-soft: oklch(0.32 0.1 290);
-
+  --color-bg: oklch(0.13 0.012 280);
+  --color-bg-elev: oklch(0.18 0.012 280);
+  --color-bg-elev-2: oklch(0.22 0.014 280);
+  --color-border: oklch(0.27 0.012 280);
+  --color-border-strong: oklch(0.36 0.014 280);
+  --color-fg: oklch(0.97 0.005 280);
+  --color-fg-muted: oklch(0.7 0.018 280);
+  --color-fg-subtle: oklch(0.55 0.018 280);
+  --color-brand: oklch(0.7 0.22 290);
+  --color-brand-strong: oklch(0.78 0.22 290);
+  --color-brand-soft: oklch(0.32 0.12 290);
   --color-success: oklch(0.78 0.16 150);
   --color-warning: oklch(0.82 0.16 80);
-  --color-danger: oklch(0.7 0.2 25);
+  --color-danger: oklch(0.7 0.22 25);
 
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
 
+  /* shadcn semantic surface tokens */
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-fg);
+  --color-card: var(--color-bg-elev);
+  --color-card-foreground: var(--color-fg);
+  --color-popover: var(--color-bg-elev-2);
+  --color-popover-foreground: var(--color-fg);
+  --color-primary: var(--color-brand);
+  --color-primary-foreground: oklch(1 0 0);
+  --color-secondary: var(--color-bg-elev-2);
+  --color-secondary-foreground: var(--color-fg);
+  --color-muted: var(--color-bg-elev);
+  --color-muted-foreground: var(--color-fg-muted);
+  --color-accent: var(--color-brand-soft);
+  --color-accent-foreground: var(--color-fg);
+  --color-destructive: var(--color-danger);
+  --color-destructive-foreground: oklch(1 0 0);
+  --color-input: var(--color-border);
+  --color-ring: var(--color-brand);
+
   --animate-row-in: row-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  --animate-orb-1: orb-1 22s ease-in-out infinite;
-  --animate-orb-2: orb-2 28s ease-in-out infinite;
 }
 
 @keyframes row-in {
@@ -45,26 +61,6 @@
   }
 }
 
-@keyframes orb-1 {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(40px, -30px, 0) scale(1.1);
-  }
-}
-
-@keyframes orb-2 {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1.05);
-  }
-  50% {
-    transform: translate3d(-50px, 30px, 0) scale(0.95);
-  }
-}
-
 @layer base {
   * {
     border-color: var(--color-border);
@@ -77,7 +73,11 @@
     height: 100%;
   }
   body {
-    background: var(--color-bg);
+    background:
+      radial-gradient(60% 40% at 12% -10%, oklch(0.32 0.18 290 / 0.18), transparent 60%),
+      radial-gradient(50% 30% at 100% 0%, oklch(0.45 0.18 240 / 0.12), transparent 60%),
+      radial-gradient(ellipse 80% 50% at 50% -20%, oklch(0.35 0.12 290 / 0.35), transparent),
+      var(--color-bg);
     color: var(--color-fg);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -87,4 +87,69 @@
     background: var(--color-brand-soft);
     color: var(--color-fg);
   }
+  code,
+  pre,
+  .font-mono {
+    font-family: var(--font-mono);
+    font-feature-settings: 'liga' 0;
+  }
+}
+
+@layer utilities {
+  .bg-aurora {
+    background:
+      radial-gradient(circle at 20% 0%, oklch(0.5 0.22 290 / 0.35), transparent 55%),
+      radial-gradient(circle at 80% 100%, oklch(0.5 0.22 220 / 0.25), transparent 55%),
+      var(--color-bg-elev);
+  }
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, oklch(1 0 0 / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(1 0 0 / 0.04) 1px, transparent 1px);
+    background-size: 36px 36px;
+  }
+  .glow {
+    box-shadow:
+      0 0 0 1px oklch(0.7 0.22 290 / 0.35),
+      0 12px 40px -12px oklch(0.7 0.22 290 / 0.4);
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+}
+
+/* Chat-specific aurora gradient overlay */
+@utility chat-aurora {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, oklch(0.35 0.12 290 / 35%), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 50%, oklch(0.28 0.08 280 / 25%), transparent),
+    radial-gradient(ellipse 60% 40% at 0% 80%, oklch(0.26 0.1 300 / 22%), transparent),
+    var(--color-bg);
+}
+
+@utility chat-glass {
+  backdrop-filter: blur(16px);
+  background: oklch(0.2 0.012 280 / 65%);
+  border: 1px solid oklch(0.38 0.012 280 / 45%);
+  box-shadow:
+    0 0 0 1px oklch(1 0 0 / 4%) inset,
+    0 24px 48px -12px oklch(0 0 0 / 35%);
+}
+
+@keyframes leash-pulse {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+.animate-leash-pulse {
+  animation: leash-pulse 2.4s ease-in-out infinite;
 }

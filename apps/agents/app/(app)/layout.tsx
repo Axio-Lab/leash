@@ -1,10 +1,10 @@
 'use client';
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useMemo } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 
+import { ChatShell } from '@/components/chat/chat-shell';
 import { NEXT_PUBLIC_PRIVY_APP_ID } from '@/lib/env';
 
 export default function AuthedLayout({ children }: { children: React.ReactNode }) {
@@ -19,50 +19,38 @@ export default function AuthedLayout({ children }: { children: React.ReactNode }
 }
 
 function Inner({ children }: { children: React.ReactNode }) {
-  const { ready, authenticated, user, logout } = usePrivy();
+  const { ready, authenticated, user } = usePrivy();
   const router = useRouter();
+  const pathname = usePathname();
+
   useEffect(() => {
     if (ready && !authenticated) router.replace('/');
   }, [ready, authenticated, router]);
+
+  const chatRoute = useMemo(() => {
+    if (pathname === '/agents') return true;
+    const parts = pathname.split('/').filter(Boolean);
+    if (parts[0] !== 'agents' || parts.length !== 2) return false;
+    const seg = parts[1]!;
+    const reserved = new Set(['onboarding']);
+    return !reserved.has(seg);
+  }, [pathname]);
+
   if (!ready) return <FullPageSpinner />;
   if (!authenticated) return null;
-  // Privy's `LinkedAccountWithMetadata` is a union of every account
-  // type. We only care about the Solana wallet entry; runtime narrowing
-  // without TS asserts keeps the compiler happy across SDK upgrades.
-  type Account = { type?: string; chainType?: string; address?: string };
-  const accounts = (user?.linkedAccounts ?? []) as Account[];
-  const solanaWallet = accounts.find((a) => a.type === 'wallet' && a.chainType === 'solana');
-  const wallet = user?.wallet?.address ?? solanaWallet?.address ?? '';
+
+  const uid = user?.id;
+  if (!uid) return <FullPageSpinner />;
+
+  const threadId = chatRoute
+    ? pathname === '/agents'
+      ? null
+      : (pathname.split('/')[2] ?? null)
+    : null;
   return (
-    <div className="min-h-dvh flex flex-col">
-      <header className="border-b px-5 py-3 flex items-center gap-6">
-        <Link href="/dashboard" className="font-semibold tracking-tight text-base">
-          leash · agents
-        </Link>
-        <nav className="flex items-center gap-4 text-sm text-fg-muted">
-          <Link href="/dashboard" className="hover:text-fg">
-            Dashboard
-          </Link>
-          <Link href="/agents" className="hover:text-fg">
-            Agents
-          </Link>
-          <Link href="/settings/api-keys" className="hover:text-fg">
-            API keys
-          </Link>
-        </nav>
-        <div className="ml-auto flex items-center gap-3 text-xs text-fg-muted">
-          <span className="font-mono truncate max-w-[20ch]">{wallet}</span>
-          <button
-            type="button"
-            onClick={logout}
-            className="rounded-md border px-2 py-1 hover:border-border-strong"
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
-      <main className="flex-1 px-5 py-6 mx-auto w-full max-w-[1200px]">{children}</main>
-    </div>
+    <ChatShell privyId={uid} activeThreadId={threadId} chatRoute={chatRoute}>
+      {children}
+    </ChatShell>
   );
 }
 

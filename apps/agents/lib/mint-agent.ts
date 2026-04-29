@@ -5,7 +5,7 @@ import { publicKey } from '@metaplex-foundation/umi';
 import type { Umi } from '@metaplex-foundation/umi';
 import { createAgent } from '@leash/registry-utils';
 
-import { SOLANA_NETWORK } from './env';
+import { SOLANA_NETWORK, type SolanaNetwork } from './env';
 
 /**
  * Mints a new MPL Core asset registered as an agent (via Metaplex's
@@ -23,6 +23,8 @@ export async function mintAgentBrowserSide(args: {
   description: string;
   /** NFT metadata URI (off-chain JSON). For MVP we point to a hosted blob. */
   uri?: string;
+  /** Defaults to app `NEXT_PUBLIC_SOLANA_NETWORK` / RPC-derived network. */
+  network?: SolanaNetwork;
 }): Promise<{ mint: string; treasury: string; signature: string }> {
   const uri =
     args.uri ??
@@ -32,12 +34,13 @@ export async function mintAgentBrowserSide(args: {
         description: args.description,
       }),
     )}`;
+  const network = args.network ?? SOLANA_NETWORK;
   const result = await createAgent(args.umi, {
     wallet: args.wallet,
     name: args.name,
     uri,
     description: args.description,
-    network: SOLANA_NETWORK,
+    network,
   });
   const [treasury] = findAssetSignerPda(args.umi, { asset: publicKey(result.assetAddress) });
   return {

@@ -10,11 +10,11 @@ const nextConfig: NextConfig = {
   ],
   output: 'standalone',
   serverExternalPackages: [
+    '@anthropic-ai/claude-agent-sdk',
     '@metaplex-foundation/umi-bundle-defaults',
     '@metaplex-foundation/mpl-core',
     '@privy-io/server-auth',
     '@libsql/client',
-    'ioredis',
   ],
 };
 
