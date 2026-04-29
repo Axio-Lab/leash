@@ -30,6 +30,9 @@ import {
   getPlatformAgent,
   listPlatformAgentsForOwner,
   updatePlatformAgentCapabilities,
+  updatePlatformAgentImage,
+  updatePlatformAgentServices,
+  type AgentService,
   type Capability,
 } from '../storage/platform-agents.js';
 import { createApiKey, disableApiKey } from '../storage/api-keys.js';
@@ -58,6 +61,13 @@ const BudgetSchema = z
   })
   .openapi('AgentBudget');
 
+const ServiceWireSchema = z
+  .object({
+    name: z.string().min(1).max(64),
+    endpoint: z.string().url().max(500),
+  })
+  .openapi('PlatformAgentService');
+
 const CreatePlatformAgentBody = z
   .object({
     mint: PubkeySchema.openapi({ description: 'Asset pubkey returned by mintAndSubmitAgent.' }),
@@ -65,6 +75,15 @@ const CreatePlatformAgentBody = z
     owner_privy_id: z.string().min(1),
     owner_wallet: PubkeySchema,
     name: z.string().min(1).max(120),
+    description: z.string().max(2048).optional().nullable(),
+    image_url: z.string().url().max(500).optional().nullable().openapi({
+      description:
+        "Public URL of the agent's profile image. Embedded as `image` in the on-chain RegistrationV1 metadata.",
+    }),
+    services: z.array(ServiceWireSchema).default([]).openapi({
+      description:
+        'Free-form services discovered by the agent (EIP-8004 RegistrationV1 `services[]`). The Leash receipts service is auto-injected at mint time.',
+    }),
     network: NetworkSchema,
     model: z.string().min(1).max(120),
     system_prompt: z.string().min(1),
@@ -93,6 +112,9 @@ const PlatformAgentSchema = z
     owner_privy_id: z.string(),
     owner_wallet: PubkeySchema,
     name: z.string(),
+    description: z.string().nullable(),
+    image_url: z.string().nullable(),
+    services: z.array(ServiceWireSchema),
     network: NetworkSchema,
     model: z.string(),
     system_prompt: z.string(),
@@ -113,6 +135,9 @@ function rowToWire(r: Awaited<ReturnType<typeof getPlatformAgent>>) {
     owner_privy_id: r.ownerPrivyId,
     owner_wallet: r.ownerWallet,
     name: r.name,
+    description: r.description,
+    image_url: r.imageUrl,
+    services: r.services,
     network: r.network,
     model: r.model,
     system_prompt: r.systemPrompt,
@@ -198,11 +223,18 @@ export function buildPlatformAgentRoutes(deps: PlatformAgentDeps): OpenAPIHono {
         tools: cap.tools,
         ...(cap.paid !== undefined ? { paid: cap.paid } : {}),
       }));
+      const services: AgentService[] = body.services.map((s) => ({
+        name: s.name,
+        endpoint: s.endpoint,
+      }));
       const created = await createPlatformAgent(deps.db, {
         mint: body.mint,
         ownerPrivyId: body.owner_privy_id,
         ownerWallet: body.owner_wallet,
         name: body.name,
+        description: body.description ?? null,
+        imageUrl: body.image_url ?? null,
+        services,
         network: body.network,
         model: body.model,
         systemPrompt: body.system_prompt,
@@ -283,7 +315,7 @@ export function buildPlatformAgentRoutes(deps: PlatformAgentDeps): OpenAPIHono {
       method: 'patch',
       path: '/v1/platform/agents/{mint}',
       tags: ['platform'],
-      summary: 'Update agent capabilities',
+      summary: 'Update agent capabilities, image, or services',
       security: [{ AdminSecret: [] }],
       request: {
         params: z.object({ mint: PubkeySchema }),
@@ -291,7 +323,19 @@ export function buildPlatformAgentRoutes(deps: PlatformAgentDeps): OpenAPIHono {
           required: true,
           content: {
             'application/json': {
-              schema: z.object({ capabilities: z.array(CapabilitySchema) }),
+              schema: z
+                .object({
+                  capabilities: z.array(CapabilitySchema).optional(),
+                  image_url: z.string().url().max(500).optional().nullable(),
+                  services: z.array(ServiceWireSchema).optional(),
+                })
+                .refine(
+                  (v) =>
+                    v.capabilities !== undefined ||
+                    v.image_url !== undefined ||
+                    v.services !== undefined,
+                  'must include at least one of: capabilities, image_url, services',
+                ),
             },
           },
         },
@@ -306,19 +350,31 @@ export function buildPlatformAgentRoutes(deps: PlatformAgentDeps): OpenAPIHono {
     }),
     async (c) => {
       const { mint } = c.req.valid('param');
-      const { capabilities } = c.req.valid('json');
+      const body = c.req.valid('json');
       const existing = await getPlatformAgent(deps.db, mint);
       if (!existing) throw notFound('agent not found');
-      await updatePlatformAgentCapabilities(
-        deps.db,
-        mint,
-        capabilities.map((cap) => ({
-          slug: cap.slug,
-          endpoint: cap.endpoint,
-          tools: cap.tools,
-          ...(cap.paid !== undefined ? { paid: cap.paid } : {}),
-        })),
-      );
+      if (body.capabilities !== undefined) {
+        await updatePlatformAgentCapabilities(
+          deps.db,
+          mint,
+          body.capabilities.map((cap) => ({
+            slug: cap.slug,
+            endpoint: cap.endpoint,
+            tools: cap.tools,
+            ...(cap.paid !== undefined ? { paid: cap.paid } : {}),
+          })),
+        );
+      }
+      if (body.image_url !== undefined) {
+        await updatePlatformAgentImage(deps.db, mint, body.image_url ?? null);
+      }
+      if (body.services !== undefined) {
+        await updatePlatformAgentServices(
+          deps.db,
+          mint,
+          body.services.map((s) => ({ name: s.name, endpoint: s.endpoint })),
+        );
+      }
       const after = await getPlatformAgent(deps.db, mint);
       return c.json(rowToWire(after)!, 200);
     },

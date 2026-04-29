@@ -43,8 +43,9 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
   async function reveal(id: string) {
     if (revealedKeys[id]) {
       setRevealedKeys((m) => {
-        const { [id]: _drop, ...rest } = m;
-        return rest;
+        const next = { ...m };
+        delete next[id];
+        return next;
       });
       return;
     }

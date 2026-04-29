@@ -96,6 +96,9 @@ if (agent) {
     ownerPrivyId: DEMO_PRIVY_ID,
     ownerWallet: DEMO_WALLET,
     name: 'Solana Researcher',
+    description: 'Demo research agent that uses marketplace tools to answer questions.',
+    imageUrl: null,
+    services: [],
     network: 'solana-devnet',
     model: 'claude-3-5-sonnet',
     systemPrompt:

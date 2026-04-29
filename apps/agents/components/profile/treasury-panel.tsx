@@ -11,6 +11,7 @@ import { TOKEN_2022_PROGRAM_ID, lookupToken } from '@leash/core';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { SOLANA_NETWORK } from '@/lib/env';
+import { formatChainError } from '@/lib/format-chain-error';
 import { usePrivyUmi } from '@/lib/use-privy-umi';
 
 type Balance = {
@@ -292,9 +293,7 @@ function WithdrawModal({
       }
       onDone();
     } catch (e) {
-      toast.error('Withdraw failed', {
-        description: e instanceof Error ? e.message : 'unknown',
-      });
+      toast.error('Withdraw failed', { description: formatChainError(e) });
     } finally {
       setBusy(false);
     }

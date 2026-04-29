@@ -29,11 +29,24 @@ export type AgentBudget = {
   perDay: string;
 };
 
+/**
+ * One entry in the agent's EIP-8004 RegistrationV1 `services[]` array.
+ * `name` is a free-form label ("web", "marketplace", "rss"); `endpoint`
+ * is the URL the service lives at.
+ */
+export type AgentService = {
+  name: string;
+  endpoint: string;
+};
+
 export type PlatformAgentRow = {
   mint: string;
   ownerPrivyId: string;
   ownerWallet: string;
   name: string;
+  description: string | null;
+  imageUrl: string | null;
+  services: AgentService[];
   network: SvmNetwork;
   model: string;
   systemPrompt: string;
@@ -55,6 +68,13 @@ function rowToAgent(row: Record<string, unknown>): PlatformAgentRow {
   } catch {
     capabilities = [];
   }
+  let services: AgentService[] = [];
+  try {
+    const parsed = JSON.parse(String(row.services ?? '[]'));
+    if (Array.isArray(parsed)) services = parsed as AgentService[];
+  } catch {
+    services = [];
+  }
   const network = String(row.network);
   if (network !== 'solana-devnet' && network !== 'solana-mainnet') {
     throw new Error(`unexpected network in agents: ${network}`);
@@ -72,6 +92,9 @@ function rowToAgent(row: Record<string, unknown>): PlatformAgentRow {
     ownerPrivyId: String(row.owner_privy_id),
     ownerWallet: String(row.owner_wallet),
     name: String(row.name),
+    description: row.description == null ? null : String(row.description),
+    imageUrl: row.image_url == null ? null : String(row.image_url),
+    services,
     network,
     model: String(row.model),
     systemPrompt: String(row.system_prompt),
@@ -97,20 +120,23 @@ export async function createPlatformAgent(
   await execute(
     db,
     `INSERT INTO agents (
-      mint, owner_privy_id, owner_wallet, name, network, model,
-      system_prompt, capabilities,
+      mint, owner_privy_id, owner_wallet, name, description, image_url,
+      network, model, system_prompt, capabilities, services,
       budget_per_action, budget_per_task, budget_per_day,
       treasury, service_key_id, encrypted_llm_key, llm_provider, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.mint,
       row.ownerPrivyId,
       row.ownerWallet,
       row.name,
+      row.description ?? null,
+      row.imageUrl ?? null,
       row.network,
       row.model,
       row.systemPrompt,
       JSON.stringify(row.capabilities ?? []),
+      JSON.stringify(row.services ?? []),
       row.budget.perAction,
       row.budget.perTask,
       row.budget.perDay,
@@ -124,6 +150,31 @@ export async function createPlatformAgent(
   const created = await getPlatformAgent(db, row.mint);
   if (!created) throw new Error('agents insert succeeded but lookup failed');
   return created;
+}
+
+/**
+ * Patch the agent's image URL. Used after a deferred image upload so
+ * the row's `image_url` always reflects what's referenced from the
+ * RegistrationV1 metadata document.
+ */
+export async function updatePlatformAgentImage(
+  db: DbClient,
+  mint: string,
+  imageUrl: string | null,
+): Promise<void> {
+  await execute(db, `UPDATE agents SET image_url = ? WHERE mint = ?`, [imageUrl, mint]);
+}
+
+/** Replace the agent's services list. */
+export async function updatePlatformAgentServices(
+  db: DbClient,
+  mint: string,
+  services: AgentService[],
+): Promise<void> {
+  await execute(db, `UPDATE agents SET services = ? WHERE mint = ?`, [
+    JSON.stringify(services),
+    mint,
+  ]);
 }
 
 export async function getPlatformAgent(

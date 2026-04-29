@@ -40,6 +40,7 @@ import { buildPaymentLinkRoutes } from './routes/payment-links.js';
 import { buildPaywallRoutes } from './routes/paywall.js';
 import { buildSellerUtilsRoutes } from './routes/seller-utils.js';
 import { buildBuyerRoutes } from './routes/buyer.js';
+import { buildPublicUploadRoutes, buildUploadRoutes } from './routes/uploads.js';
 
 export type CreateLeashApiArgs = AuthDeps;
 
@@ -70,6 +71,8 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   app.route('/', buildPlatformAgentRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   app.route('/', buildPlatformTaskRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   app.route('/', buildMarketplaceRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
+  app.route('/', buildUploadRoutes({ config: deps.config, db: deps.db }));
+  app.route('/', buildPublicUploadRoutes({ config: deps.config, db: deps.db }));
 
   // Public x402 paywall (`GET/POST /x/{id}`). Anonymous buyers must
   // be able to reach this without an API key, so it's mounted BEFORE

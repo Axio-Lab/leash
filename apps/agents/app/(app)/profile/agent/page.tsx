@@ -28,6 +28,8 @@ type AgentItem = {
   network?: string;
   system_prompt?: string;
   description?: string;
+  image_url?: string | null;
+  services?: Array<{ name: string; endpoint: string }>;
   budget?: { per_action?: string; per_task?: string; per_day?: string };
 };
 
@@ -96,20 +98,29 @@ export default function ProfileAgentPage() {
       {/* Header card */}
       <section className="rounded-xl border border-border bg-bg-elev/60 p-4 sm:p-5">
         <div className="flex flex-wrap items-start gap-3 justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-semibold tracking-tight truncate">
-                {primary.name ?? 'Untitled agent'}
-              </h2>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-success">
-                <CheckCircle2Icon className="size-3" />
-                Active
-              </span>
-            </div>
-            {primary.description ? (
-              <p className="text-xs text-fg-muted mt-1.5 max-w-prose">{primary.description}</p>
+          <div className="flex items-start gap-3 min-w-0 flex-1">
+            {primary.image_url ? (
+              <img
+                src={primary.image_url}
+                alt=""
+                className="size-12 sm:size-14 rounded-xl border border-border object-cover shrink-0"
+              />
             ) : null}
-            <p className="text-[11px] text-fg-subtle mt-1 font-mono">network · {network}</p>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-semibold tracking-tight truncate">
+                  {primary.name ?? 'Untitled agent'}
+                </h2>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-success">
+                  <CheckCircle2Icon className="size-3" />
+                  Active
+                </span>
+              </div>
+              {primary.description ? (
+                <p className="text-xs text-fg-muted mt-1.5">{primary.description}</p>
+              ) : null}
+              <p className="text-[11px] text-fg-subtle mt-1 font-mono">network · {network}</p>
+            </div>
           </div>
           <Button asChild variant="secondary" size="sm">
             <Link href="/agents">

@@ -23,6 +23,8 @@ export async function POST(req: NextRequest) {
     treasury: string;
     name: string;
     description: string;
+    image_url?: string | null;
+    services?: Array<{ name: string; endpoint: string }>;
     network: 'solana-devnet' | 'solana-mainnet';
     model?: string;
     system_prompt?: string;
@@ -45,6 +47,9 @@ export async function POST(req: NextRequest) {
     owner_privy_id: session.privyId,
     owner_wallet: session.wallet,
     name: body.name,
+    description: body.description ?? null,
+    image_url: body.image_url ?? null,
+    services: body.services ?? [],
     network: body.network,
     model: body.model ?? env.leashAgentModel ?? LEASH_AGENT_MODEL,
     system_prompt: body.system_prompt ?? `${body.name}. ${body.description}`,

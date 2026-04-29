@@ -19,8 +19,18 @@ const robotoMono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Leash · Agents',
+  title: 'leash.agent · Interface design for autonomous agents',
   description: 'Your agent. A wallet, an identity, and every tool it needs.',
+  icons: {
+    icon: '/leash-logo.png',
+    shortcut: '/leash-logo.png',
+    apple: '/leash-logo.png',
+  },
+  openGraph: {
+    title: 'leash.agent · Your agent. A wallet, an identity, and every tool it needs',
+    description: 'Your agent. A wallet, an identity, and every tool it needs.',
+    siteName: 'leash.agents',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

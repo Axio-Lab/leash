@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 11;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -300,17 +300,20 @@ const SCHEMA_SQL: readonly string[] = [
     owner_privy_id    TEXT NOT NULL,
     owner_wallet      TEXT NOT NULL,
     name              TEXT NOT NULL,
+    description       TEXT,
+    image_url         TEXT,
     network           TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
     model             TEXT NOT NULL,
     system_prompt     TEXT NOT NULL,
     capabilities      TEXT NOT NULL DEFAULT '[]',
+    services          TEXT NOT NULL DEFAULT '[]',
     budget_per_action TEXT NOT NULL DEFAULT '0.10',
     budget_per_task   TEXT NOT NULL DEFAULT '1.00',
     budget_per_day    TEXT NOT NULL DEFAULT '10.00',
     treasury          TEXT NOT NULL,
     service_key_id    TEXT NOT NULL,
     encrypted_llm_key TEXT NOT NULL,
-    llm_provider      TEXT NOT NULL CHECK (llm_provider IN ('anthropic','openai')),
+    llm_provider      TEXT NOT NULL CHECK (llm_provider IN ('anthropic','openai','platform')),
     status            TEXT NOT NULL DEFAULT 'active',
     created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
   )`,
@@ -401,6 +404,25 @@ const SCHEMA_SQL: readonly string[] = [
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
   )`,
   `CREATE INDEX IF NOT EXISTS idx_listing_reviews_listing ON listing_reviews(listing_id, created_at DESC)`,
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Image blobs (v11) — content-addressable image store. Used by agent
+  // creation: the user uploads a profile image, the bytes land here keyed
+  // by sha256, and the resulting `/v1/uploads/{hash}` URL is embedded in
+  // the EIP-8004 RegistrationV1 metadata document the agent mints with.
+  //
+  // We keep this table small and generic on purpose — it isn't bound to
+  // any agent row. A future cron can reap unreferenced blobs by scanning
+  // every `agents.image_url` and deleting any hash that's no longer
+  // mentioned. Bytes are stored as `data` BLOB; libsql exposes them as
+  // base64 over JSON.
+  `CREATE TABLE IF NOT EXISTS image_blobs (
+    hash       TEXT PRIMARY KEY,
+    mime       TEXT NOT NULL,
+    bytes      BLOB NOT NULL,
+    size       INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  )`,
 ];
 
 let cached: Client | null = null;
@@ -468,6 +490,18 @@ export async function runMigrations(db: Client): Promise<void> {
     await migrateApiKeysEncryptedPlaintext(db);
   }
 
+  // v11: agent identity expansion + content-addressable image store.
+  //   - Adds `description`, `image_url`, `services` columns to `agents`.
+  //   - Widens the `llm_provider` CHECK to include `'platform'` (the
+  //     existing schema rejected the value the platform-managed flow
+  //     has been writing for months — table rebuild required because
+  //     SQLite can't ALTER a CHECK constraint).
+  //   - Creates `image_blobs` (already covered by IF NOT EXISTS in
+  //     SCHEMA_SQL above; no work needed for new DBs).
+  if (currentVersion < 11) {
+    await migrateAgentsExpansion(db);
+  }
+
   if (currentVersion < SCHEMA_VERSION) {
     await db.execute({
       sql: 'INSERT OR REPLACE INTO schema_version(version) VALUES(?)',
@@ -508,6 +542,80 @@ async function migrateApiKeysEncryptedPlaintext(db: Client): Promise<void> {
   const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
   if (!names.has('encrypted_plaintext')) {
     await db.execute('ALTER TABLE api_keys ADD COLUMN encrypted_plaintext TEXT');
+  }
+}
+
+/**
+ * v11: expand the agents row + widen the llm_provider CHECK.
+ *
+ * Adds `description`, `image_url`, and `services` (JSON array) columns
+ * via `ALTER TABLE` (cheap), then rebuilds the table to widen the
+ * `llm_provider` CHECK from `('anthropic','openai')` to also accept
+ * `'platform'` — the value the platform-managed flow has been writing.
+ * SQLite cannot alter CHECK constraints in place, so we copy through
+ * a temp table and atomically swap names.
+ */
+async function migrateAgentsExpansion(db: Client): Promise<void> {
+  const info = await db.execute('PRAGMA table_info(agents)');
+  const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
+  if (!names.has('description')) {
+    await db.execute('ALTER TABLE agents ADD COLUMN description TEXT');
+  }
+  if (!names.has('image_url')) {
+    await db.execute('ALTER TABLE agents ADD COLUMN image_url TEXT');
+  }
+  if (!names.has('services')) {
+    await db.execute(`ALTER TABLE agents ADD COLUMN services TEXT NOT NULL DEFAULT '[]'`);
+  }
+
+  // Rebuild the CHECK on llm_provider only if the current table still
+  // has the legacy 2-value constraint. We probe by trying to insert a
+  // dummy 'platform' row in a savepoint; if the existing constraint
+  // already allows it, we're done. (Cheaper than parsing sqlite_master.)
+  const probe = await db.execute(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='agents'",
+  );
+  const sql = String((probe.rows[0] as Record<string, unknown> | undefined)?.sql ?? '');
+  if (!sql.includes("'platform'") && sql.includes('llm_provider')) {
+    await db.execute('DROP TABLE IF EXISTS agents_v11_tmp');
+    await db.execute(`CREATE TABLE agents_v11_tmp (
+      mint              TEXT PRIMARY KEY,
+      owner_privy_id    TEXT NOT NULL,
+      owner_wallet      TEXT NOT NULL,
+      name              TEXT NOT NULL,
+      description       TEXT,
+      image_url         TEXT,
+      network           TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+      model             TEXT NOT NULL,
+      system_prompt     TEXT NOT NULL,
+      capabilities      TEXT NOT NULL DEFAULT '[]',
+      services          TEXT NOT NULL DEFAULT '[]',
+      budget_per_action TEXT NOT NULL DEFAULT '0.10',
+      budget_per_task   TEXT NOT NULL DEFAULT '1.00',
+      budget_per_day    TEXT NOT NULL DEFAULT '10.00',
+      treasury          TEXT NOT NULL,
+      service_key_id    TEXT NOT NULL,
+      encrypted_llm_key TEXT NOT NULL,
+      llm_provider      TEXT NOT NULL CHECK (llm_provider IN ('anthropic','openai','platform')),
+      status            TEXT NOT NULL DEFAULT 'active',
+      created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    )`);
+    await db.execute(`INSERT INTO agents_v11_tmp (
+      mint, owner_privy_id, owner_wallet, name, description, image_url,
+      network, model, system_prompt, capabilities, services,
+      budget_per_action, budget_per_task, budget_per_day,
+      treasury, service_key_id, encrypted_llm_key, llm_provider,
+      status, created_at
+    ) SELECT
+      mint, owner_privy_id, owner_wallet, name, description, image_url,
+      network, model, system_prompt, capabilities, services,
+      budget_per_action, budget_per_task, budget_per_day,
+      treasury, service_key_id, encrypted_llm_key, llm_provider,
+      status, created_at
+    FROM agents`);
+    await db.execute('DROP TABLE agents');
+    await db.execute('ALTER TABLE agents_v11_tmp RENAME TO agents');
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_agents_owner ON agents(owner_privy_id)`);
   }
 }
 
