@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Check, Copy, ExternalLink } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
 
 import type { ChatArtifact } from '@/lib/chat-storage';
 import { agentUrl, receiptUrl, shortHash, txUrl } from '@/lib/explorer';
