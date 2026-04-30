@@ -36,6 +36,7 @@ import { buildAdminRoutes } from './routes/admin.js';
 import { buildMarketplaceRoutes } from './routes/marketplace.js';
 import { buildPlatformAgentRoutes } from './routes/platform-agents.js';
 import { buildPlatformTaskRoutes } from './routes/platform-tasks.js';
+import { buildAgentSelfRegisterRoutes } from './routes/agent-self-register.js';
 import { buildPaymentLinkRoutes } from './routes/payment-links.js';
 import { buildPaywallRoutes } from './routes/paywall.js';
 import { buildSellerUtilsRoutes } from './routes/seller-utils.js';
@@ -70,6 +71,13 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   app.route('/', buildAdminRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   app.route('/', buildPlatformAgentRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   app.route('/', buildPlatformTaskRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
+  // Public agent-onboarding routes — `/v1/agents/self-register`,
+  // `/v1/sandbox/agent`, `/v1/agents/self-register/info`. Mounted before
+  // the authed sub-app so the faucet doesn't sit behind an API key.
+  app.route(
+    '/',
+    buildAgentSelfRegisterRoutes({ config: deps.config, db: deps.db, cache: deps.cache }),
+  );
   app.route('/', buildMarketplaceRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   app.route('/', buildUploadRoutes({ config: deps.config, db: deps.db }));
   app.route('/', buildPublicUploadRoutes({ config: deps.config, db: deps.db }));
