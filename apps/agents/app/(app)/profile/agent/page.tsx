@@ -52,6 +52,8 @@ function copyToClipboard(value: string | undefined, label = 'Copied') {
 
 function formatUsdc(value?: string): string {
   if (!value) return '—';
+  const t = value.trim().toLowerCase();
+  if (t === 'unlimited' || t === 'inf' || t === 'infinity') return 'Unlimited';
   const n = Number.parseFloat(value);
   if (!Number.isFinite(n)) return value;
   return new Intl.NumberFormat('en-US', {
