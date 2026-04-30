@@ -11,9 +11,6 @@ import {
   CheckCircle2Icon,
   CopyIcon,
   MailIcon,
-  Settings2,
-  Sparkles,
-  Wallet,
   WalletIcon,
 } from 'lucide-react';
 
@@ -35,7 +32,7 @@ const agentsFetcher = async (url: string) => {
 
 function shortAddr(s?: string | null): string {
   if (!s) return '—';
-  return s.length > 10 ? `${s.slice(0, 4)}…${s.slice(-4)}` : s;
+  return s.length > 18 ? `${s.slice(0, 8)}…${s.slice(-8)}` : s;
 }
 
 function copy(value: string | undefined, label = 'Copied') {
@@ -85,7 +82,7 @@ export default function ProfileOverviewPage() {
               <WalletIcon className="size-3.5" /> Owner wallet
             </dt>
             <dd className="mt-1.5 flex items-center justify-between gap-2 text-sm font-mono">
-              <span className="truncate">{wallet || 'Not linked'}</span>
+              <span className="break-all text-[11px] sm:text-xs">{wallet || 'Not linked'}</span>
               {wallet ? (
                 <button
                   type="button"
@@ -161,28 +158,6 @@ export default function ProfileOverviewPage() {
           ) : null}
         </div>
       </section>
-
-      {/* Profile sections grid */}
-      <section className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        <SectionCard
-          href="/profile/skills"
-          title="Skills"
-          desc="System-prompt fragments your agent applies on every turn."
-          Icon={Sparkles}
-        />
-        <SectionCard
-          href="/profile/spend"
-          title="Spend"
-          desc="Treasury caps and delegation controls."
-          Icon={Wallet}
-        />
-        <SectionCard
-          href="/profile/llm"
-          title="LLM keys"
-          desc="Optional BYOK Anthropic key — defaults to platform Claude."
-          Icon={Settings2}
-        />
-      </section>
     </div>
   );
 }
@@ -202,7 +177,9 @@ function Field({
     <div className="rounded-lg border border-border/60 bg-bg/40 p-3">
       <dt className="text-[11px] uppercase tracking-widest text-fg-subtle">{label}</dt>
       <dd className="mt-1 flex items-center justify-between gap-2 text-sm">
-        <span className={`truncate ${mono ? 'font-mono' : ''}`}>{value}</span>
+        <span className={`${mono ? 'font-mono text-[11px] sm:text-xs break-all' : ''}`}>
+          {value}
+        </span>
         {fullValue ? (
           <button
             type="button"
@@ -215,34 +192,5 @@ function Field({
         ) : null}
       </dd>
     </div>
-  );
-}
-
-function SectionCard({
-  href,
-  title,
-  desc,
-  Icon,
-}: {
-  href: string;
-  title: string;
-  desc: string;
-  Icon: React.ComponentType<{ className?: string }>;
-}) {
-  return (
-    <Link
-      href={href}
-      className="group rounded-xl border border-border bg-bg-elev/60 p-4 sm:p-5 hover:border-brand/40 hover:bg-bg-elev transition-colors"
-    >
-      <div className="flex items-start gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand-strong group-hover:bg-brand/25 transition-colors">
-          <Icon className="size-4.5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="font-medium">{title}</div>
-          <p className="text-xs sm:text-sm text-fg-muted mt-1 leading-snug">{desc}</p>
-        </div>
-      </div>
-    </Link>
   );
 }

@@ -360,6 +360,8 @@ export function OnboardingGate({
           description: `${friendly} Open Profile → Agent to retry.`,
         });
         setStage({ kind: 'done', mint, treasury });
+        onDone?.();
+        setTimeout(() => router.push('/profile/agent'), fullPage ? 1200 : 800);
       } else {
         toast.error('Could not create agent', { description: friendly });
         setStage({ kind: 'form' });
@@ -480,8 +482,7 @@ export function OnboardingGate({
         <p className="text-[11px] text-fg-subtle leading-snug">
           Three signed transactions: <span className="font-mono">mint</span>,{' '}
           <span className="font-mono">treasury ATAs</span> (USDC + USDT + USDG), and{' '}
-          <span className="font-mono">spend delegation</span> (one Approve per stablecoin). Chat
-          uses the platform Claude key — add your own under Profile → LLM keys.
+          <span className="font-mono">spend delegation</span> (one Approve per stablecoin).
         </p>
       </div>
     </div>
@@ -597,8 +598,7 @@ function IdentityStep({
             ) : null}
           </div>
           <p className="text-[11px] text-fg-subtle leading-snug">
-            Optional. PNG / JPEG / WebP / GIF / SVG, ≤ 1.5 MB. Stored content-addressable on Leash
-            and embedded as <span className="font-mono">image</span> in the EIP-8004 metadata.
+            Optional. PNG / JPEG / WebP / GIF / SVG, ≤ 1.5 MB.
           </p>
           <input
             ref={fileRef}

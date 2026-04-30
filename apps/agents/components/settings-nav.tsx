@@ -12,7 +12,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 const links = [
-  { href: '/settings', label: 'Overview' },
   { href: '/settings/connections', label: 'Connections' },
   { href: '/settings/favorites', label: 'Favorites' },
   { href: '/settings/api-keys', label: 'API keys' },

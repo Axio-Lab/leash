@@ -210,6 +210,21 @@ export async function updatePlatformAgentCapabilities(
   ]);
 }
 
+/** Replace the per-action / per-task / per-day spend caps. */
+export async function updatePlatformAgentBudget(
+  db: DbClient,
+  mint: string,
+  budget: AgentBudget,
+): Promise<void> {
+  await execute(
+    db,
+    `UPDATE agents
+     SET budget_per_action = ?, budget_per_task = ?, budget_per_day = ?
+     WHERE mint = ?`,
+    [budget.perAction, budget.perTask, budget.perDay, mint],
+  );
+}
+
 export async function disablePlatformAgent(db: DbClient, mint: string): Promise<void> {
   await execute(db, `UPDATE agents SET status = 'disabled' WHERE mint = ?`, [mint]);
 }

@@ -40,6 +40,35 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
   const [revealingId, setRevealingId] = React.useState<string | null>(null);
   const offline = data?.items.some((k) => k._offline);
 
+  async function reissueLegacyKey(item: ApiKeyItem) {
+    try {
+      const create = await fetch('/api/keys', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: item.name || item.label,
+          network: item.network,
+          scopes: item.scopes.length ? item.scopes : ['agents'],
+        }),
+      });
+      if (!create.ok) throw new Error(`create failed (${create.status})`);
+      const revoke = await fetch(`/api/keys/${encodeURIComponent(item.id)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!revoke.ok) throw new Error(`revoke failed (${revoke.status})`);
+      toast.success('Legacy key re-issued', {
+        description: 'A fresh key was created and the old unrevealable key was revoked.',
+      });
+      await mutate();
+    } catch (e) {
+      toast.error('Could not re-issue key', {
+        description: e instanceof Error ? e.message : 'unknown error',
+      });
+    }
+  }
+
   async function reveal(id: string) {
     if (revealedKeys[id]) {
       setRevealedKeys((m) => {
@@ -59,12 +88,24 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
         message?: string;
       };
       if (!res.ok || !j.plaintext) {
+        const key = data?.items.find((k) => k.id === id);
+        const isLegacy = (j.message ?? '').toLowerCase().includes('issued before encrypted');
         toast.error('Could not reveal key', {
           description:
             j.message ??
             (res.status === 400
               ? 'This key was issued before reveal was supported.'
               : `HTTP ${res.status}`),
+          ...(isLegacy && key
+            ? {
+                action: {
+                  label: 'Re-issue key',
+                  onClick: () => {
+                    void reissueLegacyKey(key);
+                  },
+                },
+              }
+            : {}),
         });
         return;
       }

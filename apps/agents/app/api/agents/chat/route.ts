@@ -29,6 +29,43 @@ function buildTranscript(messages: z.infer<typeof ChatBodySchema>['messages']): 
   return lines.join('\n\n');
 }
 
+type UploadedAttachment = {
+  name: string;
+  mime: string;
+  size: number;
+  dataBase64: string;
+};
+
+async function parseRequestPayload(req: NextRequest): Promise<{
+  parsed: z.SafeParseReturnType<unknown, z.infer<typeof ChatBodySchema>>;
+  attachments: UploadedAttachment[];
+}> {
+  const contentType = req.headers.get('content-type') || '';
+  if (contentType.includes('multipart/form-data')) {
+    const form = await req.formData();
+    const rawPayload = form.get('payload');
+    let payload: unknown = null;
+    if (typeof rawPayload === 'string') {
+      payload = JSON.parse(rawPayload);
+    }
+    const attachments: UploadedAttachment[] = [];
+    for (const entry of form.getAll('attachments')) {
+      if (!(entry instanceof File)) continue;
+      if (entry.size <= 0) continue;
+      const bytes = new Uint8Array(await entry.arrayBuffer());
+      attachments.push({
+        name: entry.name,
+        mime: entry.type || 'application/octet-stream',
+        size: entry.size,
+        dataBase64: Buffer.from(bytes).toString('base64'),
+      });
+    }
+    return { parsed: ChatBodySchema.safeParse(payload), attachments };
+  }
+  const raw = await req.json().catch(() => null);
+  return { parsed: ChatBodySchema.safeParse(raw), attachments: [] };
+}
+
 async function fetchAgentSystemPrompt(agentMint: string): Promise<string | undefined> {
   try {
     const env = getServerEnv();
@@ -53,8 +90,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const raw = await req.json().catch(() => null);
-  const parsed = ChatBodySchema.safeParse(raw);
+  const { parsed, attachments } = await parseRequestPayload(req);
   if (!parsed.success) {
     return new Response(
       JSON.stringify({ error: 'invalid_request', details: parsed.error.flatten() }),
@@ -101,6 +137,7 @@ export async function POST(req: NextRequest) {
           threadId,
           agentMint: agentMint ?? null,
           userPrompt: transcript,
+          attachments,
           model: effectiveModel,
           systemPrompt,
           mcpServers,

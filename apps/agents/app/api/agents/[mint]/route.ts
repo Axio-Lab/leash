@@ -16,6 +16,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ mi
   const body = (await req.json().catch(() => null)) as null | {
     image_url?: string | null;
     services?: Array<{ name: string; endpoint: string }>;
+    budget?: { per_action: string; per_task: string; per_day: string };
     capabilities?: Array<{
       slug: string | null;
       endpoint: string;

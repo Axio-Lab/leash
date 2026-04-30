@@ -50,8 +50,18 @@ function explorerAddr(addr: string, network: string): string {
 function fmtAmount(n: number): string {
   if (n === 0) return '0';
   if (n < 0.0001) return n.toExponential(2);
-  if (n >= 10_000) return n.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  if (n >= 1) {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 4,
+      useGrouping: true,
+    }).format(n);
+  }
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 6,
+    useGrouping: true,
+  }).format(n);
 }
 
 export function TreasuryPanel({
@@ -67,6 +77,7 @@ export function TreasuryPanel({
     { refreshInterval: 30_000, revalidateOnFocus: false },
   );
   const [withdrawing, setWithdrawing] = React.useState<Balance | 'sol' | null>(null);
+  const [openWithdraw, setOpenWithdraw] = React.useState(false);
 
   // Sort: pinned stables first (USDC/USDG/USDT), then everything else by ui desc
   const sortedTokens = React.useMemo(() => {
@@ -92,15 +103,29 @@ export function TreasuryPanel({
             Live from Solana RPC. Refreshes every 30 s.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void mutate()}
-          disabled={isValidating}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-fg-muted hover:border-border-strong hover:text-fg disabled:opacity-50"
-        >
-          <RefreshCwIcon className={`size-3.5 ${isValidating ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void mutate()}
+            disabled={isValidating}
+            className="inline-flex items-center justify-center rounded-md border border-border p-1.5 text-fg-muted hover:border-border-strong hover:text-fg disabled:opacity-50"
+            title="Refresh balances"
+            aria-label="Refresh balances"
+          >
+            <RefreshCwIcon className={`size-3.5 ${isValidating ? 'animate-spin' : ''}`} />
+          </button>
+          {data ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setOpenWithdraw(true)}
+            >
+              <ArrowDownToLineIcon className="size-3.5" />
+              Withdraw funds
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {error ? (
@@ -159,6 +184,19 @@ export function TreasuryPanel({
           onDone={() => {
             setWithdrawing(null);
             void mutate();
+          }}
+        />
+      ) : null}
+
+      {openWithdraw && data ? (
+        <WithdrawPickerModal
+          ownerWallet={ownerWallet}
+          tokens={sortedTokens}
+          sol={data.sol}
+          onClose={() => setOpenWithdraw(false)}
+          onSelect={(t) => {
+            setOpenWithdraw(false);
+            setWithdrawing(t);
           }}
         />
       ) : null}
@@ -316,7 +354,7 @@ function WithdrawModal({
           <div>
             <h2 className="text-base font-semibold tracking-tight">Withdraw {meta.symbol}</h2>
             <p className="text-xs text-fg-muted mt-0.5">
-              Funds leave the treasury and arrive in the destination wallet&apos;s ATA.
+              Funds leave the treasury and arrive in the destination wallet.
             </p>
           </div>
           <button
@@ -411,5 +449,100 @@ function DestTab({
     >
       {children}
     </button>
+  );
+}
+
+function WithdrawPickerModal({
+  ownerWallet,
+  tokens,
+  sol,
+  onClose,
+  onSelect,
+}: {
+  ownerWallet: string;
+  tokens: Balance[];
+  sol: number;
+  onClose: () => void;
+  onSelect: (target: Balance | 'sol') => void;
+}) {
+  React.useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6">
+      <button
+        type="button"
+        aria-label="Close"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="relative w-full max-w-lg rounded-t-2xl sm:rounded-2xl border border-border bg-bg-elev shadow-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-border p-4 sm:p-5">
+          <div>
+            <h2 className="text-base font-semibold tracking-tight">Withdraw from treasury</h2>
+            <p className="text-xs text-fg-muted mt-0.5">
+              Pick token, amount, and destination address. Owner wallet is selected by default.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="shrink-0 rounded-md border border-border p-1.5 text-fg-muted hover:border-border-strong hover:text-fg"
+            aria-label="Close"
+          >
+            <XIcon className="size-4" />
+          </button>
+        </div>
+        <div className="p-4 sm:p-5 space-y-3">
+          <div className="rounded-lg border border-border/60 bg-bg/40 p-3">
+            <div className="text-[11px] uppercase tracking-widest text-fg-subtle mb-1">
+              Default destination (owner)
+            </div>
+            <div className="font-mono text-[11px] sm:text-xs break-all">{ownerWallet || '—'}</div>
+          </div>
+          <ul className="grid gap-2.5 max-h-72 overflow-auto scrollbar-thin">
+            <li>
+              <button
+                type="button"
+                onClick={() => onSelect('sol')}
+                disabled={sol <= 0}
+                className="w-full rounded-lg border border-border/60 bg-bg/40 p-3 flex items-center justify-between gap-3 text-left hover:border-brand/40 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <div>
+                  <div className="font-semibold text-sm">SOL</div>
+                  <div className="text-[11px] text-fg-subtle">Solana</div>
+                </div>
+                <div className="font-mono text-sm">{fmtAmount(sol)}</div>
+              </button>
+            </li>
+            {tokens.map((t) => (
+              <li key={t.mint}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(t)}
+                  disabled={t.ui <= 0}
+                  className="w-full rounded-lg border border-border/60 bg-bg/40 p-3 flex items-center justify-between gap-3 text-left hover:border-brand/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm">{t.symbol ?? 'TOKEN'}</div>
+                    <div className="text-[11px] text-fg-subtle truncate">{t.name ?? t.mint}</div>
+                  </div>
+                  <div className="font-mono text-sm">{fmtAmount(t.ui)}</div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
   );
 }

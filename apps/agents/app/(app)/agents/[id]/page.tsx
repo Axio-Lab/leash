@@ -5,7 +5,7 @@ import { use, useCallback, useEffect, useState } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { toast } from 'sonner';
 
-import { Composer } from '@/components/chat/composer';
+import { Composer, type ComposerPayload } from '@/components/chat/composer';
 import { MessageList } from '@/components/chat/message-list';
 import type { AgentEvent } from '@/lib/agents/types';
 import { favoritesJsonForHeader } from '@/lib/favorites';
@@ -45,8 +45,9 @@ export default function AgentsThreadPage({ params }: { params: Promise<{ id: str
   }, [pid, id, router]);
 
   const onSend = useCallback(
-    async (text: string) => {
-      if (!pid) return;
+    async (payload: ComposerPayload) => {
+      if (!pid) return false;
+      const { text, attachments } = payload;
 
       appendMessage(pid, id, { role: 'user', content: text });
       const threadAfterUser = loadThread(pid, id);
@@ -54,7 +55,7 @@ export default function AgentsThreadPage({ params }: { params: Promise<{ id: str
       appendMessage(pid, id, { role: 'assistant', content: '' });
       setMessages(loadThread(pid, id)?.messages ?? []);
 
-      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      const headers: Record<string, string> = {};
       try {
         const token = await getAccessToken?.();
         if (token) headers.authorization = `Bearer ${token}`;
@@ -69,15 +70,24 @@ export default function AgentsThreadPage({ params }: { params: Promise<{ id: str
 
       const threadMeta = loadThread(pid, id);
 
-      const res = await fetch('/api/agents/chat', {
-        method: 'POST',
-        credentials: 'include',
-        headers,
-        body: JSON.stringify({
+      const body = new FormData();
+      body.set(
+        'payload',
+        JSON.stringify({
           threadId: id,
           agentMint: threadMeta?.agentMint,
           messages: apiMessages,
         }),
+      );
+      attachments.forEach((a) => {
+        body.append('attachments', a.file, a.name);
+      });
+
+      const res = await fetch('/api/agents/chat', {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body,
       });
 
       if (!res.ok) {
@@ -90,7 +100,7 @@ export default function AgentsThreadPage({ params }: { params: Promise<{ id: str
           content: `Sorry — chat request failed (${res.status}).${summary ? ` ${summary}` : ''}`,
         });
         setMessages(loadThread(pid, id)?.messages ?? []);
-        return;
+        return false;
       }
 
       let acc = '';
@@ -132,7 +142,9 @@ export default function AgentsThreadPage({ params }: { params: Promise<{ id: str
           content: acc ? `${acc}\n\n(Stream error: ${msg})` : `Stream error: ${msg}`,
           artifacts: [...artifacts],
         });
+        return false;
       }
+      return true;
     },
     [getAccessToken, id, pid],
   );

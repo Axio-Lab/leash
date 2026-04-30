@@ -30,6 +30,7 @@ import {
   getPlatformAgent,
   listPlatformAgentsForOwner,
   updatePlatformAgentCapabilities,
+  updatePlatformAgentBudget,
   updatePlatformAgentImage,
   updatePlatformAgentServices,
   type AgentService,
@@ -326,15 +327,17 @@ export function buildPlatformAgentRoutes(deps: PlatformAgentDeps): OpenAPIHono {
               schema: z
                 .object({
                   capabilities: z.array(CapabilitySchema).optional(),
+                  budget: BudgetSchema.optional(),
                   image_url: z.string().url().max(500).optional().nullable(),
                   services: z.array(ServiceWireSchema).optional(),
                 })
                 .refine(
                   (v) =>
                     v.capabilities !== undefined ||
+                    v.budget !== undefined ||
                     v.image_url !== undefined ||
                     v.services !== undefined,
-                  'must include at least one of: capabilities, image_url, services',
+                  'must include at least one of: capabilities, budget, image_url, services',
                 ),
             },
           },
@@ -364,6 +367,13 @@ export function buildPlatformAgentRoutes(deps: PlatformAgentDeps): OpenAPIHono {
             ...(cap.paid !== undefined ? { paid: cap.paid } : {}),
           })),
         );
+      }
+      if (body.budget !== undefined) {
+        await updatePlatformAgentBudget(deps.db, mint, {
+          perAction: body.budget.per_action,
+          perTask: body.budget.per_task,
+          perDay: body.budget.per_day,
+        });
       }
       if (body.image_url !== undefined) {
         await updatePlatformAgentImage(deps.db, mint, body.image_url ?? null);

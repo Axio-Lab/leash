@@ -39,20 +39,26 @@ const agentsFetcher = async (url: string) => {
   return res.json() as Promise<{ items: AgentItem[]; warning?: string }>;
 };
 
-function shortAddr(s?: string | null): string {
-  if (!s) return '—';
-  return s.length > 14 ? `${s.slice(0, 6)}…${s.slice(-6)}` : s;
-}
-
 function explorerUrl(mintOrAddr: string, network: string): string {
   const cluster = network === 'solana-mainnet' ? '' : '?cluster=devnet';
-  return `https://solscan.io/token/${mintOrAddr}${cluster}`;
+  return `https://solscan.io/account/${mintOrAddr}${cluster}`;
 }
 
 function copyToClipboard(value: string | undefined, label = 'Copied') {
   if (!value) return;
   void navigator.clipboard?.writeText(value);
   toast.success(label, { description: value });
+}
+
+function formatUsdc(value?: string): string {
+  if (!value) return '—';
+  const n = Number.parseFloat(value);
+  if (!Number.isFinite(n)) return value;
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
+    useGrouping: true,
+  }).format(n);
 }
 
 export default function ProfileAgentPage() {
@@ -174,9 +180,9 @@ export default function ProfileAgentPage() {
           </Button>
         </div>
         <dl className="grid gap-3 sm:grid-cols-3">
-          <BudgetRow label="Per action" value={budget.per_action ?? '—'} />
-          <BudgetRow label="Per task" value={budget.per_task ?? '—'} />
-          <BudgetRow label="Per day" value={budget.per_day ?? '—'} />
+          <BudgetRow label="Per action" value={formatUsdc(budget.per_action)} />
+          <BudgetRow label="Per task" value={formatUsdc(budget.per_task)} />
+          <BudgetRow label="Per day" value={formatUsdc(budget.per_day)} />
         </dl>
       </section>
 
@@ -214,33 +220,38 @@ function FieldRow({
 }) {
   return (
     <div className={`rounded-lg border border-border/60 bg-bg/40 ${compact ? 'p-2.5' : 'p-3'}`}>
-      <div className="text-[11px] uppercase tracking-widest text-fg-subtle">{label}</div>
-      <div className="mt-1 flex items-center gap-2 text-sm font-mono">
-        <span className="truncate flex-1" title={value}>
-          {shortAddr(value)}
-        </span>
-        {value ? (
+      <div className="text-[11px] uppercase tracking-widest text-fg-subtle mb-1">{label}</div>
+      <div
+        className="font-mono text-[11px] sm:text-xs text-fg leading-snug select-all break-all"
+        title={value}
+      >
+        {value || '—'}
+      </div>
+      {value ? (
+        <div className="mt-1.5 flex items-center gap-1">
           <button
             type="button"
             onClick={() => copyToClipboard(value, `${label} copied`)}
-            className="shrink-0 rounded-md p-1.5 text-fg-subtle hover:bg-bg-elev-2 hover:text-fg"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-fg-subtle hover:bg-bg-elev-2 hover:text-fg border border-transparent hover:border-border transition-colors"
             aria-label={`Copy ${label}`}
           >
-            <CopyIcon className="size-3.5" />
+            <CopyIcon className="size-3" />
+            Copy
           </button>
-        ) : null}
-        {href ? (
-          <a
-            href={href}
-            target="_blank"
-            rel="noreferrer"
-            className="shrink-0 rounded-md p-1.5 text-fg-subtle hover:bg-bg-elev-2 hover:text-fg"
-            aria-label="Open in explorer"
-          >
-            <ExternalLinkIcon className="size-3.5" />
-          </a>
-        ) : null}
-      </div>
+          {href ? (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-fg-subtle hover:bg-bg-elev-2 hover:text-fg border border-transparent hover:border-border transition-colors"
+              aria-label="Open in explorer"
+            >
+              <ExternalLinkIcon className="size-3" />
+              Explorer
+            </a>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

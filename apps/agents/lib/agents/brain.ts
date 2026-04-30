@@ -12,6 +12,12 @@ export type BrainRunContext = {
   agentMint?: string | null;
   /** Full transcript (ROLE: content lines) or a single user message. */
   userPrompt: string;
+  attachments?: Array<{
+    name: string;
+    mime: string;
+    size: number;
+    dataBase64: string;
+  }>;
   model: string;
   systemPrompt?: string;
   mcpServers?: Record<string, McpServerConfig>;
@@ -50,6 +56,8 @@ export async function* runAgentTurn(ctx: BrainRunContext): AsyncGenerator<AgentE
   const prompt = ctx.systemPrompt
     ? `${ctx.systemPrompt}\n\nConversation:\n${ctx.userPrompt}`
     : ctx.userPrompt;
+  const attachmentContext = buildAttachmentContext(ctx.attachments ?? []);
+  const finalPrompt = attachmentContext.length > 0 ? `${prompt}\n\n${attachmentContext}` : prompt;
 
   const started = Date.now();
   let inputTokens = 0;
@@ -57,7 +65,7 @@ export async function* runAgentTurn(ctx: BrainRunContext): AsyncGenerator<AgentE
   const mcpCalls = Object.keys(ctx.mcpServers ?? {}).length;
 
   const q = query({
-    prompt,
+    prompt: finalPrompt,
     options: {
       cwd: '/tmp',
       settingSources: [],
@@ -116,4 +124,27 @@ export async function* runAgentTurn(ctx: BrainRunContext): AsyncGenerator<AgentE
     mcpCalls,
     paidBy: resolution.paidBy,
   });
+}
+
+function buildAttachmentContext(attachments: BrainRunContext['attachments']): string {
+  if (!attachments || attachments.length === 0) return '';
+  const lines: string[] = ['User attached files to this turn:'];
+  for (const a of attachments) {
+    if (a.mime.startsWith('image/')) {
+      lines.push(
+        `- Image "${a.name}" (${a.mime}, ${a.size} bytes), base64 payload:\n${a.dataBase64}`,
+      );
+    } else if (
+      a.mime.startsWith('text/') ||
+      /\.(md|txt|json|csv|ts|tsx|js|jsx|py|rs|sol)$/i.test(a.name)
+    ) {
+      const text = Buffer.from(a.dataBase64, 'base64').toString('utf8').slice(0, 16_000);
+      lines.push(`- Text file "${a.name}" (${a.mime}, ${a.size} bytes):\n\`\`\`\n${text}\n\`\`\``);
+    } else {
+      lines.push(
+        `- Binary file "${a.name}" (${a.mime || 'application/octet-stream'}, ${a.size} bytes).`,
+      );
+    }
+  }
+  return lines.join('\n');
 }
