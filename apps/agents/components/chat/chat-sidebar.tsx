@@ -71,6 +71,17 @@ export function ChatSidebar({
     setThreads(listThreads(privyId));
   }, [privyId, activeThreadId]);
 
+  // Refresh when the navbar's "Clear chat history" wipes localStorage
+  // so the sidebar empties out instantly, even if we're already on the
+  // root chat route (where `activeThreadId` doesn't change).
+  React.useEffect(() => {
+    function onCleared() {
+      setThreads(listThreads(privyId));
+    }
+    window.addEventListener('leash:chats-cleared', onCleared);
+    return () => window.removeEventListener('leash:chats-cleared', onCleared);
+  }, [privyId]);
+
   function refresh() {
     setThreads(listThreads(privyId));
   }

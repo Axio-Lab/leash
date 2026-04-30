@@ -2,14 +2,28 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import * as React from 'react';
 import useSWR from 'swr';
 import { usePrivy } from '@privy-io/react-auth';
-import { LogOutIcon, PanelLeftCloseIcon, PanelLeftOpenIcon } from 'lucide-react';
+import { toast } from 'sonner';
+import {
+  LogOutIcon,
+  MoreHorizontalIcon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
+  Trash2Icon,
+} from 'lucide-react';
 
 import { WalletGate } from '@/components/wallet-gate';
 import { readOnboardingSkipped } from '@/components/chat/onboarding-gate';
-import { setActiveUser } from '@/lib/chat-storage';
+import { clearAllThreads, setActiveUser } from '@/lib/chat-storage';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { ChatSidebar } from './chat-sidebar';
 
 const agentsFetcher = async (url: string) => {
@@ -29,9 +43,34 @@ export function ChatShell({
   privyId: string;
   chatRoute: boolean;
 }) {
+  const router = useRouter();
   const { user, logout } = usePrivy();
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(true);
   const [isMobile, setIsMobile] = React.useState(false);
+
+  function onClearChats() {
+    if (typeof window !== 'undefined') {
+      const ok = window.confirm(
+        'Delete every chat in this browser? This cannot be undone. On-chain receipts and payment links are not affected.',
+      );
+      if (!ok) return;
+    }
+    const removed = clearAllThreads(privyId);
+    if (removed === 0) {
+      toast('Nothing to clear', { description: 'You have no chats yet.' });
+      return;
+    }
+    toast.success(`Cleared ${removed} chat${removed === 1 ? '' : 's'}`);
+    // Notify the sidebar so it refreshes its thread list immediately
+    // (it reads from localStorage on mount + activeThreadId change).
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('leash:chats-cleared'));
+    }
+    // If we were viewing a now-deleted thread, kick back to the root.
+    if (chatRoute && activeThreadId) {
+      router.push('/agents');
+    }
+  }
 
   React.useEffect(() => {
     setActiveUser(privyId);
@@ -119,6 +158,30 @@ export function ChatShell({
                 {walletShort}
               </span>
             ) : null}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded-md border border-border p-1.5 text-fg-muted hover:border-border-strong hover:text-fg focus:outline-none focus-visible:ring-1 focus-visible:ring-brand"
+                  aria-label="Chat menu"
+                  title="Chat menu"
+                >
+                  <MoreHorizontalIcon className="size-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    onClearChats();
+                  }}
+                  className="text-danger focus:text-danger"
+                >
+                  <Trash2Icon className="size-4" />
+                  Clear chat history
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <button
               type="button"
               onClick={logout}

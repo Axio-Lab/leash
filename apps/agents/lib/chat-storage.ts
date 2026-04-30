@@ -228,3 +228,22 @@ export function deleteThread(privyId: string, threadId: string): void {
   const next = ids.filter((x) => x !== threadId);
   localStorage.setItem(threadsIndexKey(privyId), JSON.stringify(next));
 }
+
+/**
+ * Wipe every chat thread for `privyId`. Returns the number of threads
+ * removed so the caller can surface a precise toast.
+ *
+ * Persisted artifacts (Pay card receipts, payment-link cards) live
+ * inside the threads themselves, so this is a clean reset — the on-
+ * chain receipts on the explorer are untouched.
+ */
+export function clearAllThreads(privyId: string): number {
+  if (typeof window === 'undefined') return 0;
+  const idsRaw = localStorage.getItem(threadsIndexKey(privyId));
+  const ids: string[] = idsRaw ? (JSON.parse(idsRaw) as string[]) : [];
+  for (const id of ids) {
+    localStorage.removeItem(threadKey(privyId, id));
+  }
+  localStorage.setItem(threadsIndexKey(privyId), JSON.stringify([]));
+  return ids.length;
+}
