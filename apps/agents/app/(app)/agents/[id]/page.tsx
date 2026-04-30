@@ -168,7 +168,7 @@ export default function AgentsThreadPage({ params }: { params: Promise<{ id: str
 
   return (
     <>
-      <MessageList messages={messages} />
+      <MessageList messages={messages} threadId={id} />
       <Composer onSend={onSend} disabled={!pid} />
     </>
   );

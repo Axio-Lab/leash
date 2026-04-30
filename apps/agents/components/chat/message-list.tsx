@@ -8,7 +8,13 @@ import { Spinner } from '@/components/ui/spinner';
 import { ArtifactCard } from './artifact-card';
 import { MarkdownMessage } from './markdown-message';
 
-export function MessageList({ messages }: { messages: ChatMessage[] }) {
+export function MessageList({
+  messages,
+  threadId,
+}: {
+  messages: ChatMessage[];
+  threadId?: string;
+}) {
   if (messages.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center px-6 py-12">
@@ -68,7 +74,7 @@ export function MessageList({ messages }: { messages: ChatMessage[] }) {
                 {m.artifacts && m.artifacts.length > 0 ? (
                   <div className="mt-3 space-y-2">
                     {m.artifacts.map((a, i) => (
-                      <ArtifactCard key={i} artifact={a} />
+                      <ArtifactCard key={i} artifact={a} threadId={threadId} />
                     ))}
                   </div>
                 ) : null}

@@ -10,12 +10,20 @@ import { agentUrl, receiptUrl, shortHash, txUrl } from '@/lib/explorer';
 import { Button } from '@/components/ui/button';
 import { PayRequestArtifact, type PayRequestPayload } from '@/components/chat/pay-request-artifact';
 
-export function ArtifactCard({ artifact }: { artifact: ChatArtifact }) {
+export function ArtifactCard({
+  artifact,
+  threadId,
+}: {
+  artifact: ChatArtifact;
+  threadId?: string;
+}) {
   if (artifact.kind === 'payment_link') {
     return <PaymentLinkArtifact payload={artifact.payload as PaymentLinkPayload} />;
   }
   if (artifact.kind === 'payment_request') {
-    return <PayRequestArtifact payload={artifact.payload as PayRequestPayload} />;
+    return (
+      <PayRequestArtifact payload={artifact.payload as PayRequestPayload} threadId={threadId} />
+    );
   }
   if (artifact.kind === 'receipt') {
     const p = artifact.payload as { hash?: string; tx?: string; mint?: string };

@@ -176,6 +176,43 @@ export function updateLastAssistantMessage(
   }
 }
 
+/**
+ * Persist the settled `tx_sig` + `receipt_hash` onto every
+ * `payment_request` artifact in the thread that targets `url`. We
+ * stamp the artifact payload itself (rather than a side-store) so the
+ * Pay card can hydrate to its "Payment confirmed" state on full page
+ * refresh — no lookup needed, the artifact is the source of truth.
+ *
+ * Matching by `url` is intentional: the same payment-link URL paid
+ * twice in the same thread is conceptually the same intent, and we'd
+ * rather show "paid" on both than re-prompt the user.
+ */
+export function markPayRequestPaid(
+  privyId: string,
+  threadId: string,
+  url: string,
+  paid: { tx_sig: string; receipt_hash: string },
+): void {
+  const thread = loadThread(privyId, threadId);
+  if (!thread) return;
+  let dirty = false;
+  for (const m of thread.messages) {
+    if (!m.artifacts) continue;
+    for (const a of m.artifacts) {
+      if (a.kind !== 'payment_request') continue;
+      const payload = a.payload as Record<string, unknown> & { url?: string };
+      if (payload.url !== url) continue;
+      payload.paid_tx_sig = paid.tx_sig;
+      payload.paid_receipt_hash = paid.receipt_hash;
+      dirty = true;
+    }
+  }
+  if (dirty) {
+    thread.updatedAt = new Date().toISOString();
+    persistThread(privyId, thread);
+  }
+}
+
 export function renameThread(privyId: string, threadId: string, title: string): void {
   const thread = loadThread(privyId, threadId);
   if (!thread) return;

@@ -21,6 +21,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import useSWR from 'swr';
+import { usePrivy } from '@privy-io/react-auth';
 import { Check, Loader2 } from 'lucide-react';
 import { createBuyer } from '@leash/buyer-kit';
 import {
@@ -36,6 +37,7 @@ import { Button } from '@/components/ui/button';
 import { txUrl, receiptUrl, shortHash } from '@/lib/explorer';
 import { usePrivySvmSigner } from '@/lib/privy-svm-signer';
 import { SOLANA_RPC } from '@/lib/env';
+import { markPayRequestPaid } from '@/lib/chat-storage';
 
 export type PayRequestPayload = {
   url?: string;
@@ -48,6 +50,14 @@ export type PayRequestPayload = {
     currency?: string;
     description?: string;
   };
+  /**
+   * Stamped onto the payload by `markPayRequestPaid` after a successful
+   * settlement so the Pay card hydrates to its "Payment confirmed"
+   * state on full page refresh — no side-store, the artifact itself
+   * is the source of truth.
+   */
+  paid_tx_sig?: string;
+  paid_receipt_hash?: string;
 };
 
 type AgentRecord = {
@@ -72,12 +82,19 @@ const agentsFetcher = async (url: string) => {
   return res.json() as Promise<{ items: AgentRecord[] }>;
 };
 
-export function PayRequestArtifact({ payload }: { payload: PayRequestPayload }) {
+export function PayRequestArtifact({
+  payload,
+  threadId,
+}: {
+  payload: PayRequestPayload;
+  threadId?: string;
+}) {
   const url = payload.url ?? '';
   const agentMint = payload.agent_mint ?? '';
   const preview = payload.preview;
 
   const { signer } = usePrivySvmSigner();
+  const { user } = usePrivy();
   const { data } = useSWR<{ items: AgentRecord[] }>('/api/agents', agentsFetcher, {
     revalidateOnFocus: false,
     dedupingInterval: 30_000,
@@ -86,7 +103,19 @@ export function PayRequestArtifact({ payload }: { payload: PayRequestPayload }) 
     () => data?.items.find((a) => a.mint === agentMint) ?? data?.items[0] ?? null,
     [data, agentMint],
   );
-  const [state, setState] = useState<FlowState>({ kind: 'idle' });
+  // Hydrate from persisted artifact state — `markPayRequestPaid` stamps
+  // the payload after a successful pay, so refreshing the page lands us
+  // straight in the "Payment confirmed" view instead of re-prompting.
+  const [state, setState] = useState<FlowState>(() => {
+    if (payload.paid_receipt_hash) {
+      return {
+        kind: 'paid',
+        txSig: payload.paid_tx_sig ?? null,
+        receiptHash: payload.paid_receipt_hash,
+      };
+    }
+    return { kind: 'idle' };
+  });
 
   const niceCurrency = preview?.currency ?? 'USDC';
   const niceAmount = preview?.amount_atomic
@@ -182,6 +211,23 @@ export function PayRequestArtifact({ payload }: { payload: PayRequestPayload }) 
         txSig,
         receiptHash,
       });
+      // Persist the settled state into the artifact payload so the Pay
+      // card hydrates to "Payment confirmed" on full page refresh.
+      // Mutating `payload` in place also keeps the in-memory artifact
+      // consistent with what's now in localStorage.
+      try {
+        if (user?.id && threadId && url) {
+          markPayRequestPaid(user.id, threadId, url, {
+            tx_sig: txSig ?? '',
+            receipt_hash: receiptHash,
+          });
+          payload.paid_tx_sig = txSig ?? undefined;
+          payload.paid_receipt_hash = receiptHash;
+        }
+      } catch {
+        // Storage failures shouldn't break the success toast — the
+        // user already paid, this is just persistence polish.
+      }
       toast.success('Paid', { description: `Tx ${shortHash(txSig)}` });
     } catch (err) {
       const reason = err instanceof Error ? err.message : 'unknown error';
