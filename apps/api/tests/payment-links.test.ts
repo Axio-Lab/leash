@@ -97,7 +97,7 @@ describe('POST /v1/payment-links', () => {
     expect(link.network).toBe('solana-devnet');
     expect(link.owner_agent).toBe(AGENT);
     expect(link.path).toBe(`/x/${link.id}`);
-    expect(link.share_url).toBe(`http://test.local/x/${link.id}`);
+    expect(link.share_url).toBe(`http://test.local/x/${link.id}?network=solana-devnet`);
     expect(link.facilitator).toBe('https://facilitator.test.invalid');
     expect(link.pay_to).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
     expect(link.accepts.length).toBe(1);

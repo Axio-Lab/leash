@@ -121,6 +121,14 @@ export async function* runAgentTurn(ctx: BrainRunContext): AsyncGenerator<AgentE
         const errs = 'errors' in msg && Array.isArray(msg.errors) ? msg.errors.join('; ') : 'error';
         yield { type: 'error', message: errs };
       }
+      // Mirror tool results into UI artifacts. The Claude SDK yields
+      // `user`-typed messages whose content blocks include `tool_result`
+      // entries when an MCP tool finished. We pluck out our well-known
+      // shapes (payment_link, treasury_balance, marketplace_tool, …)
+      // and emit `artifact` events so the chat UI always renders the
+      // correct card regardless of what the assistant text says.
+      const artifact = extractArtifact(msg);
+      if (artifact) yield { type: 'artifact', artifact };
     }
   } finally {
     q.close();
@@ -143,6 +151,67 @@ export async function* runAgentTurn(ctx: BrainRunContext): AsyncGenerator<AgentE
     mcpCalls,
     paidBy: resolution.paidBy,
   });
+}
+
+/**
+ * Pluck a UI artifact out of a Claude SDK message. We currently surface:
+ *
+ *   - `payment_link`  — emitted by `leash_create_payment_link` so the UI
+ *     can render a clickable link + QR code even if the assistant text
+ *     forgets to quote the URL back to the user.
+ *
+ * Returns `null` for anything we don't visualise.
+ */
+function extractArtifact(msg: unknown): {
+  kind: 'payment_link';
+  payload: Record<string, unknown>;
+} | null {
+  if (!msg || typeof msg !== 'object') return null;
+  const m = msg as Record<string, unknown>;
+  if (m.type !== 'user') return null;
+  const message = m.message as { content?: unknown } | undefined;
+  const content = message?.content;
+  if (!Array.isArray(content)) return null;
+  for (const block of content) {
+    if (!block || typeof block !== 'object') continue;
+    const b = block as Record<string, unknown>;
+    if (b.type !== 'tool_result') continue;
+    const inner = b.content;
+    const text = Array.isArray(inner)
+      ? inner
+          .map((entry) =>
+            entry && typeof entry === 'object' && (entry as { text?: unknown }).text
+              ? String((entry as { text?: unknown }).text)
+              : '',
+          )
+          .join('')
+      : typeof inner === 'string'
+        ? inner
+        : '';
+    if (!text) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      continue;
+    }
+    if (!parsed || typeof parsed !== 'object') continue;
+    const payload = parsed as Record<string, unknown>;
+    if (payload.kind === 'payment_link' && payload.status === 'ok') {
+      return {
+        kind: 'payment_link',
+        payload: {
+          url: payload.url,
+          id: payload.id,
+          amount: payload.price,
+          currency: payload.currency,
+          label: payload.label,
+          network: payload.network,
+        },
+      };
+    }
+  }
+  return null;
 }
 
 function buildAttachmentContext(attachments: BrainRunContext['attachments']): string {

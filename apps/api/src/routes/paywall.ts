@@ -73,23 +73,41 @@ export function buildPaywallRoutes(deps: PaywallRoutesDeps): Hono {
 
   app.all('/x/:id', async (c) => {
     const id = c.req.param('id');
-    const network = resolveNetwork(c.req.query('network'));
-
-    const link = await getPaymentLink(deps.db, network, id);
+    const queryNetwork = c.req.query('network');
+    // Resolution order:
+    //   1. `?network=` is honoured verbatim when present.
+    //   2. Otherwise we look the slug up on BOTH networks and serve
+    //      whichever one exists. Slugs are unique enough in practice
+    //      that this is unambiguous; if a slug somehow exists on both
+    //      we prefer mainnet.
+    let link = null as Awaited<ReturnType<typeof getPaymentLink>> | null;
+    let network: SvmNetwork;
+    if (queryNetwork) {
+      network = resolveNetwork(queryNetwork);
+      link = await getPaymentLink(deps.db, network, id);
+    } else {
+      const [mainnet, devnet] = await Promise.all([
+        getPaymentLink(deps.db, 'solana-mainnet', id),
+        getPaymentLink(deps.db, 'solana-devnet', id),
+      ]);
+      link = mainnet ?? devnet;
+      network = mainnet ? 'solana-mainnet' : 'solana-devnet';
+    }
     if (!link) {
-      // Try the sibling network so a buyer who shared a devnet link
-      // without `?network=devnet` still gets a useful 404 explaining
-      // where to find it.
-      const sibling = network === 'solana-mainnet' ? 'solana-devnet' : 'solana-mainnet';
-      const onSibling = await getPaymentLink(deps.db, sibling, id);
-      if (onSibling) {
-        return c.json(
-          {
-            error: 'wrong_network',
-            message: `payment link "${id}" exists on ${sibling}, not ${network}. Append ?network=${sibling} to the URL.`,
-          },
-          404,
-        );
+      // If the user asked for an explicit network and it didn't match,
+      // surface the sibling so they can fix the URL.
+      if (queryNetwork) {
+        const sibling = network === 'solana-mainnet' ? 'solana-devnet' : 'solana-mainnet';
+        const onSibling = await getPaymentLink(deps.db, sibling, id);
+        if (onSibling) {
+          return c.json(
+            {
+              error: 'wrong_network',
+              message: `payment link "${id}" exists on ${sibling}, not ${network}. Append ?network=${sibling} to the URL.`,
+            },
+            404,
+          );
+        }
       }
       return c.json({ error: 'not_found', message: `payment link "${id}" not found` }, 404);
     }

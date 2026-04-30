@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.123",
-    "@composio/core": "^0.8.0",
+    "@composio/core": "^0.8.1",
     "@leash/buyer-kit": "workspace:*",
     "@leash/core": "workspace:*",
     "@leash/platform-auth": "workspace:*",
