@@ -1,0 +1,335 @@
+'use client';
+
+/**
+ * Pay request card.
+ *
+ * Server-side `leash_pay_payment_link` cannot settle on its own — the
+ * operator key lives in the user's Privy wallet, never on the server.
+ * Instead it returns a `payment_request` artifact (this component) that
+ * surfaces the demanded price + a one-click Pay button. Clicking the
+ * button does the real x402 dance entirely in the browser:
+ *
+ *   1. Resolve the agent record for caps + treasury network.
+ *   2. Build a `@solana/kit` signer from the Privy embedded wallet.
+ *   3. Derive the agent treasury ATA for the demanded asset.
+ *   4. `createBuyer({...}).fetch(url)` → 402 → seller settles via the
+ *      facilitator → 200 + PAYMENT-RESPONSE header.
+ *   5. Show the receipt (txSig + receipt hash + explorer link) inline.
+ */
+
+import { useMemo, useState } from 'react';
+import Link from 'next/link';
+import { toast } from 'sonner';
+import useSWR from 'swr';
+import { Check, Loader2 } from 'lucide-react';
+import { createBuyer } from '@leash/buyer-kit';
+import {
+  deriveAgentTreasuryAta,
+  KNOWN_STABLE_SYMBOLS,
+  parseLeashHeaders,
+  type LeashX402Network,
+  type KnownStableSymbol,
+} from '@leash/core';
+import type { RulesV1 } from '@leash/schemas';
+
+import { Button } from '@/components/ui/button';
+import { txUrl, receiptUrl, shortHash } from '@/lib/explorer';
+import { usePrivySvmSigner } from '@/lib/privy-svm-signer';
+import { SOLANA_RPC } from '@/lib/env';
+
+export type PayRequestPayload = {
+  url?: string;
+  agent_mint?: string;
+  preview?: {
+    network?: string;
+    pay_to?: string;
+    asset?: string;
+    amount_atomic?: string;
+    currency?: string;
+    description?: string;
+  };
+};
+
+type AgentRecord = {
+  mint: string;
+  network: 'solana-devnet' | 'solana-mainnet';
+  budget?: { per_action?: string; per_task?: string; per_day?: string };
+};
+
+type FlowState =
+  | { kind: 'idle' }
+  | { kind: 'paying' }
+  | {
+      kind: 'paid';
+      txSig: string | null;
+      receiptHash: string;
+    }
+  | { kind: 'failed'; reason: string };
+
+const agentsFetcher = async (url: string) => {
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok) return { items: [] as AgentRecord[] };
+  return res.json() as Promise<{ items: AgentRecord[] }>;
+};
+
+export function PayRequestArtifact({ payload }: { payload: PayRequestPayload }) {
+  const url = payload.url ?? '';
+  const agentMint = payload.agent_mint ?? '';
+  const preview = payload.preview;
+
+  const { signer } = usePrivySvmSigner();
+  const { data } = useSWR<{ items: AgentRecord[] }>('/api/agents', agentsFetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 30_000,
+  });
+  const agent = useMemo(
+    () => data?.items.find((a) => a.mint === agentMint) ?? data?.items[0] ?? null,
+    [data, agentMint],
+  );
+  const [state, setState] = useState<FlowState>({ kind: 'idle' });
+
+  const niceCurrency = preview?.currency ?? 'USDC';
+  const niceAmount = preview?.amount_atomic
+    ? formatAmount(preview.amount_atomic, decimalsForCurrency(niceCurrency))
+    : null;
+  const niceNetwork = prettyNet(preview?.network ?? agent?.network ?? '');
+
+  async function approveAndPay() {
+    if (!url) {
+      toast.error('Pay request is missing a URL.');
+      return;
+    }
+    if (!agent) {
+      toast.error('No on-chain agent on file', {
+        description: 'Mint one under Profile → Agent first.',
+      });
+      return;
+    }
+    if (!signer) {
+      toast.error('Wallet not ready', {
+        description: 'Connect your Privy wallet so the operator can sign.',
+      });
+      return;
+    }
+    if (!preview?.asset) {
+      toast.error('Cannot pay — seller did not advertise an asset.');
+      return;
+    }
+    setState({ kind: 'paying' });
+    try {
+      // Derive the treasury ATA for the asset the seller demanded so we
+      // pay from the right token bucket (USDC vs USDG vs USDT).
+      const { ata } = await deriveAgentTreasuryAta({
+        asset: agent.mint,
+        mint: preview.asset,
+      });
+      const sourceTokenAccount = String(ata);
+
+      // Build a permissive RulesV1 from the agent's caps. The actual
+      // hard ceiling lives on-chain (the SPL delegate allowance);
+      // this is just the buyer-kit's pre-flight policy gate so we
+      // never *attempt* to spend over the cap.
+      const rules: RulesV1 = {
+        v: '0.1',
+        budget: {
+          perCall: agent.budget?.per_action ?? '10',
+          daily: agent.budget?.per_day ?? '100',
+          currency: 'USDC',
+        },
+        hosts: {},
+        triggers: [],
+      };
+      const network: LeashX402Network = agent.network;
+      const buyer = createBuyer({
+        agent: agent.mint,
+        rules,
+        signer,
+        networks: [network],
+        rpcUrl: SOLANA_RPC,
+        sourceTokenAccount,
+        preferredCurrency: matchKnownStable(niceCurrency),
+        // Opt out of receipt fan-out from the browser. The seller's
+        // facilitator already records receipts server-side; doing it
+        // again would just double-write to the explorer.
+        onReceipt: false,
+      });
+      // Prefer the same-origin BFF proxy at `/x/<id>` (mirrors the
+      // playground). It avoids cross-origin CORS preflights against
+      // `apps/api` from the browser, which is the most common reason a
+      // buyer.fetch() fails with a generic "Failed to fetch". The
+      // proxy is a transparent passthrough so the seller-kit on the
+      // upstream side still verifies + settles exactly the same way.
+      const target = sameOriginPaywallUrl(url) ?? url;
+      const result = await buyer.fetch(target);
+      if (result.failureReason || !result.receipt.tx_sig) {
+        const reason = result.failureReason ?? `seller returned HTTP ${result.response.status}`;
+        setState({ kind: 'failed', reason });
+        toast.error('Payment failed', { description: reason });
+        return;
+      }
+      // Prefer the seller-side receipt hash stamped by `apps/api`'s
+      // paywall via `X-Leash-Receipt-Hash`. The buyer-kit's local
+      // `result.receipt.receipt_hash` is computed independently from
+      // the buyer's view of the request (different `nonce`/`ts`), so
+      // the two hashes diverge and the explorer only knows about the
+      // seller-side one. Falling back to the local hash is fine when
+      // the seller doesn't stamp headers (legacy paywalls).
+      const stamped = parseLeashHeaders(result.response);
+      const txSig = stamped.txSig ?? result.receipt.tx_sig;
+      const receiptHash = stamped.receiptHash ?? result.receipt.receipt_hash;
+      setState({
+        kind: 'paid',
+        txSig,
+        receiptHash,
+      });
+      toast.success('Paid', { description: `Tx ${shortHash(txSig)}` });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : 'unknown error';
+      setState({ kind: 'failed', reason });
+      toast.error('Payment failed', { description: reason });
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-bg-elev p-3 text-sm space-y-3">
+      <div className="space-y-0.5">
+        <div className="text-xs font-medium text-fg-muted">Pay request</div>
+        <div className="text-fg font-medium truncate">
+          {preview?.description || 'Approve this payment'}
+        </div>
+        {niceAmount ? (
+          <div className="text-xs text-fg-muted">
+            {niceAmount} {niceCurrency}
+            {niceNetwork ? <span className="ml-2 opacity-70">· {niceNetwork}</span> : null}
+          </div>
+        ) : null}
+      </div>
+
+      {url ? (
+        <Link
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block font-mono text-[11px] text-brand break-all hover:underline"
+        >
+          {url}
+        </Link>
+      ) : null}
+
+      {state.kind === 'paid' ? (
+        <PaidReceipt txSig={state.txSig} receiptHash={state.receiptHash} />
+      ) : (
+        <div className="flex items-center gap-1.5 pt-0.5">
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={approveAndPay}
+            disabled={state.kind === 'paying' || !signer || !agent}
+            className="h-7 px-2 text-xs"
+          >
+            {state.kind === 'paying' ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                Paying…
+              </>
+            ) : (
+              <>Approve &amp; pay</>
+            )}
+          </Button>
+        </div>
+      )}
+
+      {state.kind === 'failed' ? (
+        <div className="text-xs text-danger break-words">Failed: {state.reason}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function PaidReceipt({ txSig, receiptHash }: { txSig: string | null; receiptHash: string }) {
+  return (
+    <div className="space-y-1.5 rounded-md border border-border bg-bg p-2 text-xs">
+      <div className="flex items-center gap-1.5 text-fg">
+        <Check className="h-3.5 w-3.5 text-brand" />
+        <span className="font-medium">Payment confirmed</span>
+      </div>
+      {txSig ? (
+        <Link
+          href={txUrl(txSig)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block font-mono text-[11px] text-brand hover:underline"
+        >
+          Tx {shortHash(txSig)}
+        </Link>
+      ) : null}
+      {receiptHash ? (
+        <Link
+          href={receiptUrl(receiptHash)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block font-mono text-[11px] text-brand hover:underline"
+        >
+          Receipt {shortHash(receiptHash)}
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
+function decimalsForCurrency(c: string): number {
+  // All the stables we support are 6 decimals on Solana.
+  if (c === 'SOL') return 9;
+  return 6;
+}
+
+function formatAmount(atomic: string, decimals: number): string {
+  let n: bigint;
+  try {
+    n = BigInt(atomic);
+  } catch {
+    return atomic;
+  }
+  const base = 10n ** BigInt(decimals);
+  const whole = n / base;
+  const frac = n % base;
+  if (frac === 0n) return new Intl.NumberFormat('en-US').format(whole);
+  const fracStr = frac.toString().padStart(decimals, '0').replace(/0+$/, '');
+  return `${new Intl.NumberFormat('en-US').format(whole)}.${fracStr}`;
+}
+
+function matchKnownStable(symbol: string): KnownStableSymbol | undefined {
+  const upper = symbol.toUpperCase();
+  return KNOWN_STABLE_SYMBOLS.find((s) => s === upper);
+}
+
+function prettyNet(n: string): string {
+  if (n === 'solana-devnet' || n.toLowerCase().includes('devnet')) return 'devnet';
+  if (n === 'solana-mainnet' || n.toLowerCase().includes('mainnet')) return 'mainnet';
+  return n;
+}
+
+/**
+ * Rewrite `https://api.leash.market/x/<id>?…` (or any cross-origin
+ * paywall URL) to `<window.origin>/x/<id>?…` so buyer-kit hits our
+ * same-origin BFF proxy at `app/x/[id]/route.ts`. Returns `null`
+ * when the URL is already same-origin (or can't be parsed) so the
+ * caller can fall back to the original.
+ */
+function sameOriginPaywallUrl(url: string): string | null {
+  if (typeof window === 'undefined') return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.origin === window.location.origin) return null;
+  const match = parsed.pathname.match(/^\/x\/([^/]+)\/?$/);
+  if (!match) return null;
+  const id = match[1];
+  const local = new URL(`/x/${id}`, window.location.origin);
+  parsed.searchParams.forEach((v, k) => local.searchParams.set(k, v));
+  return local.toString();
+}

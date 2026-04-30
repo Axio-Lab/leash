@@ -44,7 +44,7 @@ export default function LandingPage() {
         <div className="grid w-full max-w-6xl items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
           <div className="space-y-6 text-center lg:text-left">
             <span className="inline-block text-[10px] font-mono uppercase tracking-[0.25em] text-fg-subtle">
-              The operating layer for autonomous agents
+              The operation layer for autonomous agents
             </span>
             <h1 className="text-5xl font-semibold leading-[1.02] tracking-tight md:text-6xl">
               Where agents

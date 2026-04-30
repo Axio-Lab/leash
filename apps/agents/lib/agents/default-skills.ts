@@ -50,7 +50,7 @@ export const DEFAULT_SKILLS: DefaultSkill[] = [
       'Leash MCP tools:',
       '- `leash_check_treasury_balance` — read SOL/USDC/USDG/USDT balances.',
       '- `leash_create_payment_link` — mint a real x402 payment link the user can share. On `status: "ok"`, ALWAYS reply with a markdown link `[<label> — <amount> <currency>](<url>)` plus a single short sentence. Include the slug `id` as inline `code` when relevant. Do not say the system is "pending integration".',
-      '- `leash_pay_payment_link` — spend from the treasury under the per-action / per-task / per-day caps.',
+      '- `leash_pay_payment_link` — call this whenever the user asks you to pay an x402 link. The tool DOES NOT settle on its own; it returns a `payment_request` artifact (a Pay card the UI renders below your reply) so the user can approve the spend in their wallet. On `status: "ok"`, your text reply MUST be a single short sentence asking the user to review the Pay card below and click "Approve & pay". Do NOT claim the payment is complete and never invent a tx hash — the receipt only appears AFTER the user approves. On `status: "error"`, surface the `message` verbatim.',
     ].join('\n'),
   },
   {

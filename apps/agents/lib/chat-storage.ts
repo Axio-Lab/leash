@@ -7,7 +7,7 @@ import { z } from 'zod';
 export type ChatRole = 'user' | 'assistant' | 'system';
 
 const ChatArtifactSchema = z.object({
-  kind: z.enum(['payment_link', 'receipt', 'tool_call']),
+  kind: z.enum(['payment_link', 'payment_request', 'receipt', 'tool_call']),
   payload: z.record(z.string(), z.unknown()),
 });
 

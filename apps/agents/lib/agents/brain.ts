@@ -156,14 +156,17 @@ export async function* runAgentTurn(ctx: BrainRunContext): AsyncGenerator<AgentE
 /**
  * Pluck a UI artifact out of a Claude SDK message. We currently surface:
  *
- *   - `payment_link`  — emitted by `leash_create_payment_link` so the UI
- *     can render a clickable link + QR code even if the assistant text
- *     forgets to quote the URL back to the user.
+ *   - `payment_link`     — emitted by `leash_create_payment_link` so the
+ *     UI renders a clickable URL + QR code even if the assistant text
+ *     forgets to quote it back.
+ *   - `payment_request`  — emitted by `leash_pay_payment_link` so the UI
+ *     renders a "Pay" card. The actual settlement happens in the browser
+ *     using the Privy operator wallet (see `artifact-card.tsx`).
  *
  * Returns `null` for anything we don't visualise.
  */
 function extractArtifact(msg: unknown): {
-  kind: 'payment_link';
+  kind: 'payment_link' | 'payment_request';
   payload: Record<string, unknown>;
 } | null {
   if (!msg || typeof msg !== 'object') return null;
@@ -207,6 +210,16 @@ function extractArtifact(msg: unknown): {
           currency: payload.currency,
           label: payload.label,
           network: payload.network,
+        },
+      };
+    }
+    if (payload.kind === 'payment_request' && payload.status === 'ok') {
+      return {
+        kind: 'payment_request',
+        payload: {
+          url: payload.url,
+          agent_mint: payload.agent_mint,
+          preview: payload.preview,
         },
       };
     }

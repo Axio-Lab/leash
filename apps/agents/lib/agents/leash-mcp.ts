@@ -89,20 +89,45 @@ export function createLeashMcpServer(ctx: LeashMcpContext): McpSdkServerConfigWi
       ),
       tool(
         'leash_pay_payment_link',
-        'Pay an x402 payment link from the agent treasury (spend delegation).',
+        [
+          'Pay an x402 payment link from the agent treasury under the per-action / per-task / per-day caps.',
+          'This tool DOES NOT settle on its own — the operator key lives in the user’s Privy wallet, not the server.',
+          'Instead it probes the URL for a 402 quote and returns a `payment_request` artifact the chat UI renders as a "Pay" card.',
+          'The user clicks "Approve & pay" once and the buyer-kit signs the SPL transfer in their browser using the spend delegation.',
+          'Reply with one short sentence telling the user to confirm in the Pay card below.',
+        ].join(' '),
         {
-          url: z.string().url(),
+          url: z.string().url().describe('The full https://…/x/<id>?network=… payment link.'),
         },
-        async (args) =>
-          jsonResult({
-            kind: 'pay',
-            url: args.url,
-            privy_id: ctx.privyId,
-            agent_mint: ctx.agentMint ?? null,
-            status: 'stub',
-            message:
-              'Buyer-kit + treasury resolution pending — surface delegation caps on /settings/spend when wired.',
-          }),
+        async (args) => {
+          if (!ctx.agentMint) {
+            return jsonResult({
+              kind: 'payment_request',
+              status: 'no_agent',
+              message:
+                'No on-chain agent yet — ask the user to mint one under Profile → Agent first.',
+            });
+          }
+          try {
+            const preview = await probePaymentLink(args.url);
+            return jsonResult({
+              kind: 'payment_request',
+              status: 'ok',
+              url: args.url,
+              agent_mint: ctx.agentMint,
+              preview,
+              note: 'Reply with a single short sentence telling the user to review the Pay card below and click Approve & pay. Do NOT attempt to settle the payment yourself.',
+            });
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'unknown error';
+            return jsonResult({
+              kind: 'payment_request',
+              status: 'error',
+              url: args.url,
+              message: `Could not probe payment link: ${message}`,
+            });
+          }
+        },
       ),
       tool(
         'leash_check_treasury_balance',
@@ -184,6 +209,90 @@ function jsonResult(payload: unknown) {
   return {
     content: [{ type: 'text' as const, text: JSON.stringify(payload) }],
   };
+}
+
+type PaymentRequirementPreview = {
+  network: string;
+  pay_to: string;
+  asset: string;
+  amount_atomic: string;
+  currency: string;
+  description?: string;
+};
+
+/**
+ * GET the x402 paywall and decode its `payment-required` header into a
+ * preview the UI can render before the user is asked to approve the
+ * payment. We pick the first `accepts[]` entry on the URL's network so
+ * the preview matches what the buyer-kit will actually attempt.
+ *
+ * Throws on unreachable URLs, non-402 responses, or malformed headers
+ * so the caller can surface the message to the user.
+ */
+async function probePaymentLink(url: string): Promise<PaymentRequirementPreview> {
+  const res = await fetch(url, { method: 'GET' });
+  if (res.status !== 402) {
+    throw new Error(`expected 402 from paywall, got HTTP ${res.status}`);
+  }
+  const header = res.headers.get('payment-required') ?? res.headers.get('PAYMENT-REQUIRED');
+  if (!header) {
+    throw new Error('seller did not send a `payment-required` header');
+  }
+  const decoded = decodeBase64Json(header) as {
+    error?: string;
+    accepts?: Array<{
+      network?: string;
+      payTo?: string;
+      asset?: string;
+      amount?: string;
+      currency?: string;
+      description?: string;
+    }>;
+  } | null;
+  if (!decoded || !Array.isArray(decoded.accepts) || decoded.accepts.length === 0) {
+    throw new Error(decoded?.error ?? 'malformed payment-required header');
+  }
+  // Prefer the first accepts entry that matches the URL's `?network=`
+  // query (the paywall always picks one network per link, so this is
+  // unambiguous). Fall back to accepts[0] if no match.
+  const wantNetwork = (() => {
+    try {
+      const u = new URL(url);
+      return u.searchParams.get('network') ?? null;
+    } catch {
+      return null;
+    }
+  })();
+  const chosen =
+    (wantNetwork
+      ? decoded.accepts.find((a) =>
+          (a.network ?? '')
+            .toLowerCase()
+            .includes(wantNetwork.replace('solana-', '').toLowerCase()),
+        )
+      : null) ?? decoded.accepts[0]!;
+  if (!chosen.network || !chosen.payTo || !chosen.asset || !chosen.amount) {
+    throw new Error('payment-required entry missing required fields');
+  }
+  const out: PaymentRequirementPreview = {
+    network: chosen.network,
+    pay_to: chosen.payTo,
+    asset: chosen.asset,
+    amount_atomic: chosen.amount,
+    currency: chosen.currency ?? 'USDC',
+  };
+  if (chosen.description) out.description = chosen.description;
+  return out;
+}
+
+function decodeBase64Json(input: string): unknown {
+  const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+  const raw =
+    typeof globalThis.atob === 'function'
+      ? globalThis.atob(padded)
+      : Buffer.from(padded, 'base64').toString('utf8');
+  return JSON.parse(raw);
 }
 
 type CreatePaymentLinkArgs = {

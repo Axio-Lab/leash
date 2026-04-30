@@ -36,10 +36,14 @@
  * direct callback.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { findAssetSignerPda } from '@metaplex-foundation/mpl-core';
 import { publicKey } from '@metaplex-foundation/umi';
 import { createSeller } from '@leash/seller-kit';
+import { buildLeashEnvelope, buildLeashHeaders } from '@leash/core';
 import type { ReceiptV1 } from '@leash/schemas';
 
 import { type LeashApiConfig, facilitatorForNetwork } from '../config.js';
@@ -70,6 +74,38 @@ export type PaywallRoutesDeps = {
  */
 export function buildPaywallRoutes(deps: PaywallRoutesDeps): Hono {
   const app = new Hono();
+
+  // Enable CORS for the public paywall surface. The paywall is meant to
+  // be reachable from any origin (anyone with the share URL can pay it),
+  // and the buyer-kit attaches an `X-PAYMENT` header that the browser
+  // treats as non-simple — which forces a CORS preflight (OPTIONS). We
+  // need to:
+  //   - reflect `Origin: *` so cross-origin browser buyers can reach us
+  //   - whitelist `X-PAYMENT` + the standard request headers
+  //   - expose every Leash-specific response header the buyer-kit reads
+  //     to extract the settlement (`PAYMENT-RESPONSE`, `X-PAYMENT-RESPONSE`,
+  //     `payment-required`, and the `X-Leash-*` settlement breadcrumbs)
+  // Without this the browser silently blocks the preflight and the
+  // buyer-kit surfaces the request as a generic "Failed to fetch".
+  app.use(
+    '/x/*',
+    cors({
+      origin: '*',
+      allowMethods: ['GET', 'POST', 'OPTIONS'],
+      allowHeaders: ['Content-Type', 'Accept', 'Authorization', 'X-PAYMENT', 'X-Leash-Callback'],
+      exposeHeaders: [
+        'PAYMENT-RESPONSE',
+        'X-PAYMENT-RESPONSE',
+        'payment-required',
+        'X-Leash-Tx-Sig',
+        'X-Leash-Receipt-Hash',
+        'X-Leash-Agent',
+        'X-Leash-Tx-Explorer',
+        'X-Leash-Agent-Explorer',
+      ],
+      maxAge: 600,
+    }),
+  );
 
   app.all('/x/:id', async (c) => {
     const id = c.req.param('id');
@@ -131,10 +167,48 @@ export function buildPaywallRoutes(deps: PaywallRoutesDeps): Hono {
     await recordCall(deps.db, { network, id });
 
     const sellerApp = buildSellerSubApp(deps, link);
-    return sellerApp.fetch(c.req.raw);
+    // AsyncLocalStorage scope so the seller's `onReceipt` callback can
+    // stash the canonical receipt where this outer handler can read it
+    // and stamp `X-Leash-*` headers on the settled response. Without
+    // this the buyer-kit can only see its own locally-computed receipt
+    // hash (which differs from the seller's by `nonce`/`ts`), so the
+    // chat UI ends up linking to a hash the explorer doesn't have.
+    const holder: ReceiptHolder = { receipt: null };
+    const res = await receiptStore.run(holder, () => sellerApp.fetch(c.req.raw));
+    return finalizeResponse(res, holder.receipt, link, deps.config.publicOrigin);
   });
 
   return app;
+}
+
+type ReceiptHolder = { receipt: ReceiptV1 | null };
+const receiptStore = new AsyncLocalStorage<ReceiptHolder>();
+
+/**
+ * Stamp `X-Leash-*` headers on a settled response so cross-origin
+ * browser buyers can read the canonical seller-side receipt hash + tx
+ * sig + agent without parsing the response body. Falls through
+ * untouched on 4xx/5xx (the seller never settled — there's no envelope
+ * to surface).
+ */
+function finalizeResponse(
+  res: Response,
+  receipt: ReceiptV1 | null,
+  link: PaymentLinkRow,
+  publicOrigin: string,
+): Response {
+  if (!receipt || res.status >= 400) return res;
+  const envelope = buildLeashEnvelope(receipt, {
+    origin: publicOrigin.replace(/\/+$/, ''),
+    network: link.network === 'solana-mainnet' ? 'mainnet' : 'devnet',
+  });
+  const headers = new Headers(res.headers);
+  buildLeashHeaders(envelope, headers);
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers,
+  });
 }
 
 /**
@@ -163,6 +237,12 @@ function buildSellerSubApp(deps: PaywallRoutesDeps, link: PaymentLinkRow): Hono 
     network: link.network,
     facilitator: facilitatorForNetwork(deps.config, link.network),
     onReceipt: async (receipt) => {
+      // Stash the canonical receipt for the outer handler to stamp
+      // onto the response as `X-Leash-Receipt-Hash` (etc) before
+      // continuing to persist it server-side. The store is set up
+      // by the outer `app.all('/x/:id', …)` via AsyncLocalStorage.
+      const holder = receiptStore.getStore();
+      if (holder) holder.receipt = receipt;
       await ingestPaywallReceipt(deps, link, receipt);
     },
   });
