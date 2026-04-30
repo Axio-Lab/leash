@@ -5,7 +5,7 @@ export type AgentEvent =
   | {
       type: 'artifact';
       artifact: {
-        kind: 'payment_link' | 'payment_request' | 'receipt' | 'tool_call';
+        kind: 'payment_link' | 'payment_request' | 'withdraw_request' | 'receipt' | 'tool_call';
         payload: Record<string, unknown>;
       };
     }

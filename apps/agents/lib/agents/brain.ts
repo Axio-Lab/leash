@@ -162,11 +162,15 @@ export async function* runAgentTurn(ctx: BrainRunContext): AsyncGenerator<AgentE
  *   - `payment_request`  — emitted by `leash_pay_payment_link` so the UI
  *     renders a "Pay" card. The actual settlement happens in the browser
  *     using the Privy operator wallet (see `artifact-card.tsx`).
+ *   - `withdraw_request`  — emitted by `leash_withdraw_treasury` so the UI
+ *     renders a "Withdraw" card. The owner-driven `mpl-core::Execute`
+ *     gets signed in the browser via Privy + `usePrivyUmi`; the server
+ *     never holds the operator key.
  *
  * Returns `null` for anything we don't visualise.
  */
 function extractArtifact(msg: unknown): {
-  kind: 'payment_link' | 'payment_request';
+  kind: 'payment_link' | 'payment_request' | 'withdraw_request';
   payload: Record<string, unknown>;
 } | null {
   if (!msg || typeof msg !== 'object') return null;
@@ -220,6 +224,22 @@ function extractArtifact(msg: unknown): {
           url: payload.url,
           agent_mint: payload.agent_mint,
           preview: payload.preview,
+        },
+      };
+    }
+    if (payload.kind === 'withdraw_request' && payload.status === 'ok') {
+      return {
+        kind: 'withdraw_request',
+        payload: {
+          agent_mint: payload.agent_mint,
+          token: payload.token,
+          mint: payload.mint,
+          token_program: payload.token_program,
+          decimals: payload.decimals,
+          amount: payload.amount,
+          amount_atomic: payload.amount_atomic,
+          destination: payload.destination,
+          network: payload.network,
         },
       };
     }

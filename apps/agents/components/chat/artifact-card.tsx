@@ -9,6 +9,10 @@ import type { ChatArtifact } from '@/lib/chat-storage';
 import { agentUrl, receiptUrl, shortHash, txUrl } from '@/lib/explorer';
 import { Button } from '@/components/ui/button';
 import { PayRequestArtifact, type PayRequestPayload } from '@/components/chat/pay-request-artifact';
+import {
+  WithdrawRequestArtifact,
+  type WithdrawRequestPayload,
+} from '@/components/chat/withdraw-request-artifact';
 
 export function ArtifactCard({
   artifact,
@@ -23,6 +27,14 @@ export function ArtifactCard({
   if (artifact.kind === 'payment_request') {
     return (
       <PayRequestArtifact payload={artifact.payload as PayRequestPayload} threadId={threadId} />
+    );
+  }
+  if (artifact.kind === 'withdraw_request') {
+    return (
+      <WithdrawRequestArtifact
+        payload={artifact.payload as WithdrawRequestPayload}
+        threadId={threadId}
+      />
     );
   }
   if (artifact.kind === 'receipt') {
@@ -135,14 +147,6 @@ function PaymentLinkArtifact({ payload }: { payload: PaymentLinkPayload }) {
               )}
               {copied ? 'Copied' : 'Copy link'}
             </Button>
-            {url ? (
-              <Button asChild type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs">
-                <Link href={url} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                  Open
-                </Link>
-              </Button>
-            ) : null}
           </div>
         </div>
 

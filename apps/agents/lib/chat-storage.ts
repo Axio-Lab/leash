@@ -7,7 +7,7 @@ import { z } from 'zod';
 export type ChatRole = 'user' | 'assistant' | 'system';
 
 const ChatArtifactSchema = z.object({
-  kind: z.enum(['payment_link', 'payment_request', 'receipt', 'tool_call']),
+  kind: z.enum(['payment_link', 'payment_request', 'withdraw_request', 'receipt', 'tool_call']),
   payload: z.record(z.string(), z.unknown()),
 });
 
@@ -204,6 +204,51 @@ export function markPayRequestPaid(
       if (payload.url !== url) continue;
       payload.paid_tx_sig = paid.tx_sig;
       payload.paid_receipt_hash = paid.receipt_hash;
+      dirty = true;
+    }
+  }
+  if (dirty) {
+    thread.updatedAt = new Date().toISOString();
+    persistThread(privyId, thread);
+  }
+}
+
+/**
+ * Stamp the settled `tx_sig` onto a `withdraw_request` artifact.
+ * Mirrors {@link markPayRequestPaid}: the artifact lives in localStorage
+ * thread state, so on reload the Withdraw card hydrates straight to the
+ * "Withdraw confirmed" view instead of re-prompting.
+ *
+ * Matched by `(token, amount, destination)` because the same withdraw
+ * could in theory be triggered twice for the same destination — we still
+ * mark every matching artifact paid rather than re-prompt the user.
+ */
+export function markWithdrawCompleted(
+  privyId: string,
+  threadId: string,
+  match: { token: string; amount: string; destination: string },
+  done: { tx_sig: string },
+): void {
+  const thread = loadThread(privyId, threadId);
+  if (!thread) return;
+  let dirty = false;
+  for (const m of thread.messages) {
+    if (!m.artifacts) continue;
+    for (const a of m.artifacts) {
+      if (a.kind !== 'withdraw_request') continue;
+      const payload = a.payload as Record<string, unknown> & {
+        token?: string;
+        amount?: string;
+        destination?: string;
+      };
+      if (
+        payload.token !== match.token ||
+        payload.amount !== match.amount ||
+        payload.destination !== match.destination
+      ) {
+        continue;
+      }
+      payload.completed_tx_sig = done.tx_sig;
       dirty = true;
     }
   }
