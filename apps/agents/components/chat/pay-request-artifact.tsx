@@ -123,6 +123,30 @@ export function PayRequestArtifact({
     : null;
   const niceNetwork = prettyNet(preview?.network ?? agent?.network ?? '');
 
+  // Pre-flight check: refuse to call buyer.fetch() if this single
+  // payment would exceed the agent's configured per-action cap. This
+  // is the soft policy gate — the on-chain SPL delegate is a separate
+  // hard ceiling the operator approved at onboarding. Caps marked
+  // 'unlimited' (Phase 3 toggle) skip enforcement entirely; the
+  // operator approves each payment manually anyway.
+  const capCheck = useMemo<{ ok: true } | { ok: false; reason: string }>(() => {
+    const cap = agent?.budget?.per_action;
+    const atomic = preview?.amount_atomic;
+    if (!cap || !atomic) return { ok: true };
+    if (isUnlimited(cap)) return { ok: true };
+    const capNum = Number.parseFloat(cap);
+    if (!Number.isFinite(capNum) || capNum <= 0) return { ok: true };
+    const amountDecimal = atomicToDecimal(atomic, decimalsForCurrency(niceCurrency));
+    if (amountDecimal === null) return { ok: true };
+    if (amountDecimal > capNum) {
+      return {
+        ok: false,
+        reason: `Exceeds per-action cap (${capNum} ${niceCurrency}). Raise it on /profile/spend or set unlimited.`,
+      };
+    }
+    return { ok: true };
+  }, [agent?.budget?.per_action, preview?.amount_atomic, niceCurrency]);
+
   async function approveAndPay() {
     if (!url) {
       toast.error('Pay request is missing a URL.');
@@ -144,6 +168,10 @@ export function PayRequestArtifact({
       toast.error('Cannot pay — seller did not advertise an asset.');
       return;
     }
+    if (!capCheck.ok) {
+      toast.error('Blocked by spend cap', { description: capCheck.reason });
+      return;
+    }
     setState({ kind: 'paying' });
     try {
       // Derive the treasury ATA for the asset the seller demanded so we
@@ -157,12 +185,17 @@ export function PayRequestArtifact({
       // Build a permissive RulesV1 from the agent's caps. The actual
       // hard ceiling lives on-chain (the SPL delegate allowance);
       // this is just the buyer-kit's pre-flight policy gate so we
-      // never *attempt* to spend over the cap.
+      // never *attempt* to spend over the cap. "Unlimited" caps map
+      // to a very large number — we already gated on `capCheck`
+      // above, so buyer-kit doesn't need to redo the check.
+      const HUGE = '1000000';
+      const perCallStr = agent.budget?.per_action;
+      const perDayStr = agent.budget?.per_day;
       const rules: RulesV1 = {
         v: '0.1',
         budget: {
-          perCall: agent.budget?.per_action ?? '10',
-          daily: agent.budget?.per_day ?? '100',
+          perCall: !perCallStr || isUnlimited(perCallStr) ? HUGE : perCallStr,
+          daily: !perDayStr || isUnlimited(perDayStr) ? HUGE : perDayStr,
           currency: 'USDC',
         },
         hosts: {},
@@ -265,24 +298,31 @@ export function PayRequestArtifact({
       {state.kind === 'paid' ? (
         <PaidReceipt txSig={state.txSig} receiptHash={state.receiptHash} />
       ) : (
-        <div className="flex items-center gap-1.5 pt-0.5">
-          <Button
-            type="button"
-            variant="default"
-            size="sm"
-            onClick={approveAndPay}
-            disabled={state.kind === 'paying' || !signer || !agent}
-            className="h-7 px-2 text-xs"
-          >
-            {state.kind === 'paying' ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                Paying…
-              </>
-            ) : (
-              <>Approve &amp; pay</>
-            )}
-          </Button>
+        <div className="space-y-1.5 pt-0.5">
+          {!capCheck.ok ? (
+            <div className="rounded-md border border-warning/40 bg-warning/8 px-2 py-1.5 text-[11px] text-warning leading-snug">
+              {capCheck.reason}
+            </div>
+          ) : null}
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              onClick={approveAndPay}
+              disabled={state.kind === 'paying' || !signer || !agent || !capCheck.ok}
+              className="h-7 px-2 text-xs"
+            >
+              {state.kind === 'paying' ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                  Paying…
+                </>
+              ) : (
+                <>Approve &amp; pay</>
+              )}
+            </Button>
+          </div>
         </div>
       )}
 
@@ -328,6 +368,35 @@ function decimalsForCurrency(c: string): number {
   // All the stables we support are 6 decimals on Solana.
   if (c === 'SOL') return 9;
   return 6;
+}
+
+/**
+ * Sentinel "no soft cap" — written by the /profile/spend "Unlimited"
+ * toggle. The Pay card's per-action gate skips enforcement when the
+ * cap is unlimited; the operator approves each payment manually.
+ */
+function isUnlimited(cap: string): boolean {
+  const v = cap.trim().toLowerCase();
+  return v === 'unlimited' || v === 'inf' || v === 'infinity' || v === '';
+}
+
+/**
+ * Convert atomic-units integer string (e.g. "15000000" for 15 USDC at
+ * 6 decimals) to a regular decimal number for cap comparison.
+ * Returns null on parse failure so the caller can soft-fail instead
+ * of blocking the user with a confusing error.
+ */
+function atomicToDecimal(atomic: string, decimals: number): number | null {
+  let big: bigint;
+  try {
+    big = BigInt(atomic);
+  } catch {
+    return null;
+  }
+  const base = 10n ** BigInt(decimals);
+  const whole = Number(big / base);
+  const frac = Number(big % base) / Number(base);
+  return whole + frac;
 }
 
 function formatAmount(atomic: string, decimals: number): string {
