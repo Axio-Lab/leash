@@ -10,7 +10,6 @@ import { LogOutIcon, PanelLeftCloseIcon, PanelLeftOpenIcon } from 'lucide-react'
 import { WalletGate } from '@/components/wallet-gate';
 import { readOnboardingSkipped } from '@/components/chat/onboarding-gate';
 import { setActiveUser } from '@/lib/chat-storage';
-import { InboundReceipts } from '@/components/chat/inbound-receipts';
 import { ChatSidebar } from './chat-sidebar';
 
 const agentsFetcher = async (url: string) => {
@@ -148,8 +147,6 @@ export function ChatShell({
           </div>
         ) : null}
 
-        {chatRoute ? <InboundReceipts agentMint={primaryMint} /> : null}
-
         {/* ── Body: drawer overlays only this region on mobile ── */}
         <div className="flex flex-1 min-h-0 items-stretch relative">
           {/* Mobile drawer backdrop — covers body only, header stays visible */}
@@ -168,6 +165,7 @@ export function ChatShell({
               <ChatSidebar
                 privyId={privyId}
                 activeThreadId={activeThreadId}
+                primaryMint={primaryMint}
                 onLogout={logout}
                 onNavigate={toggleSidebar}
               />
@@ -176,7 +174,12 @@ export function ChatShell({
 
           {/* Desktop sidebar — normal flow */}
           {sidebarOpen && !isMobile ? (
-            <ChatSidebar privyId={privyId} activeThreadId={activeThreadId} onLogout={logout} />
+            <ChatSidebar
+              privyId={privyId}
+              activeThreadId={activeThreadId}
+              primaryMint={primaryMint}
+              onLogout={logout}
+            />
           ) : null}
 
           <div className="flex-1 flex flex-col min-w-0 min-h-0">{children}</div>

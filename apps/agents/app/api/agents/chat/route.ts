@@ -81,6 +81,31 @@ async function fetchAgentSystemPrompt(agentMint: string): Promise<string | undef
   }
 }
 
+/**
+ * Resolve the user's primary agent mint when the chat thread didn't carry
+ * one. Old threads (created from the sidebar before we started attaching
+ * the mint) and new ones the user starts before any agent existed both
+ * land here without an `agentMint`. Without this fallback every leash
+ * MCP tool call returns `no_agent` even though the user has minted an
+ * agent — which is exactly the "Ask the user to mint one…" reply they
+ * were seeing.
+ */
+async function resolvePrimaryAgentMint(privyId: string): Promise<string | null> {
+  try {
+    const env = getServerEnv();
+    const res = await fetch(
+      `${env.leashApiUrl}/v1/platform/agents?owner_privy_id=${encodeURIComponent(privyId)}`,
+      { headers: { authorization: `Bearer ${env.leashApiAdminSecret}` } },
+    );
+    if (!res.ok) return null;
+    const json = (await res.json()) as { items?: Array<{ mint?: string }> };
+    const first = json.items?.find((a) => typeof a.mint === 'string' && a.mint.length > 0);
+    return first?.mint ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   const session = await requirePrivySession(req);
   if (!session) {
@@ -101,8 +126,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { threadId, agentMint, messages, model } = parsed.data;
+  const { threadId, messages, model } = parsed.data;
+  let { agentMint } = parsed.data;
   const transcript = buildTranscript(messages);
+
+  if (!agentMint) {
+    const primary = await resolvePrimaryAgentMint(session.privyId);
+    if (primary) agentMint = primary;
+  }
 
   let systemPrompt: string | undefined;
   if (agentMint) {

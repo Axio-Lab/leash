@@ -747,26 +747,34 @@ function OperatorStep({
           The operator signs payments and tool calls on behalf of the agent. You can change this
           later from Profile → Agent.
         </p>
+        <p className="text-[11px] text-fg-subtle">
+          Today the agent app routes every payment through your Privy wallet (you tap{' '}
+          <span className="text-fg">Authorize</span> in chat). Provide / Generate options are parked
+          for headless executor support and won't sign for you yet.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         <ExecutorOption
           active={executorMode === 'connected'}
           onClick={() => onExecutorMode('connected')}
-          title="Connected wallet"
-          subtitle="Use your Privy wallet as both owner and operator"
+          title="Privy wallet"
+          subtitle="Your embedded Privy wallet — also the agent owner"
+          badge="Recommended"
         />
         <ExecutorOption
           active={executorMode === 'provided'}
           onClick={() => onExecutorMode('provided')}
           title="Provide an address"
-          subtitle="Delegate to an existing wallet you control"
+          subtitle="Delegate to a wallet you'll plug in later"
+          badge="Advanced"
         />
         <ExecutorOption
           active={executorMode === 'generated'}
           onClick={() => onExecutorMode('generated')}
           title="Generate keypair"
           subtitle="Create a fresh operator keypair (in-browser)"
+          badge="Advanced"
         />
       </div>
 
@@ -868,23 +876,38 @@ function ExecutorOption({
   onClick,
   title,
   subtitle,
+  badge,
 }: {
   active: boolean;
   onClick: () => void;
   title: string;
   subtitle: string;
+  badge?: 'Recommended' | 'Advanced';
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
+      className={`relative rounded-lg border px-3 py-2.5 text-left transition-colors ${
         active
           ? 'border-brand bg-brand/10 shadow-[inset_0_0_0_1px_oklch(0.66_0.19_268/0.4)]'
           : 'border-border bg-bg-elev/40 hover:border-border-strong'
       }`}
     >
-      <div className="text-xs font-medium">{title}</div>
+      <div className="flex items-center justify-between gap-1">
+        <div className="text-xs font-medium">{title}</div>
+        {badge ? (
+          <span
+            className={`text-[9px] uppercase tracking-widest font-semibold rounded px-1.5 py-0.5 ${
+              badge === 'Recommended'
+                ? 'bg-brand/20 text-brand'
+                : 'bg-bg/60 text-fg-subtle border border-border'
+            }`}
+          >
+            {badge}
+          </span>
+        ) : null}
+      </div>
       <div className="text-[10px] text-fg-muted leading-snug mt-0.5">{subtitle}</div>
     </button>
   );

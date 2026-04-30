@@ -89,7 +89,11 @@ export function loadThread(privyId: string, threadId: string): ChatThread | null
   return safeParseThread(raw);
 }
 
-export function createThread(privyId: string, title?: string): ChatThread {
+export function createThread(
+  privyId: string,
+  options: { title?: string; agentMint?: string } | string = {},
+): ChatThread {
+  const opts = typeof options === 'string' ? { title: options } : options;
   const id =
     typeof crypto !== 'undefined' && crypto.randomUUID
       ? crypto.randomUUID()
@@ -97,7 +101,8 @@ export function createThread(privyId: string, title?: string): ChatThread {
   const now = new Date().toISOString();
   const thread: ChatThread = {
     id,
-    title: title?.trim() || 'New chat',
+    title: opts.title?.trim() || 'New chat',
+    ...(opts.agentMint ? { agentMint: opts.agentMint } : {}),
     messages: [],
     createdAt: now,
     updatedAt: now,
@@ -110,6 +115,19 @@ export function createThread(privyId: string, title?: string): ChatThread {
     localStorage.setItem(threadsIndexKey(privyId), JSON.stringify(ids));
   }
   return thread;
+}
+
+/**
+ * Stamp `agentMint` onto a thread that didn't have one (e.g. created from
+ * the sidebar before primary-mint attachment was wired). No-op if the
+ * thread is missing or already linked.
+ */
+export function setThreadAgentMint(privyId: string, threadId: string, agentMint: string): void {
+  const thread = loadThread(privyId, threadId);
+  if (!thread) return;
+  if (thread.agentMint === agentMint) return;
+  thread.agentMint = agentMint;
+  persistThread(privyId, thread);
 }
 
 function persistThread(privyId: string, thread: ChatThread): void {

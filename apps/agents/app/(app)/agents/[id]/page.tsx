@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { use, useCallback, useEffect, useState } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { toast } from 'sonner';
+import useSWR from 'swr';
 
 import { Composer, type ComposerPayload } from '@/components/chat/composer';
 import { MessageList } from '@/components/chat/message-list';
@@ -12,12 +13,19 @@ import { favoritesJsonForHeader } from '@/lib/favorites';
 import {
   appendMessage,
   loadThread,
+  setThreadAgentMint,
   updateLastAssistantMessage,
   type ChatArtifact,
   type ChatMessage,
 } from '@/lib/chat-storage';
 import { skillsJsonForHeader } from '@/lib/skills';
 import { streamAgentEvents } from '@/lib/chat-stream';
+
+const agentsFetcher = async (url: string) => {
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok) return { items: [] as Array<{ mint?: string }> };
+  return res.json() as Promise<{ items: Array<{ mint?: string }> }>;
+};
 
 function messagesForApi(
   messages: ChatMessage[],
@@ -34,6 +42,12 @@ export default function AgentsThreadPage({ params }: { params: Promise<{ id: str
     pid ? (loadThread(pid, id)?.messages ?? []) : [],
   );
 
+  const { data: agentsData } = useSWR('/api/agents', agentsFetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 30_000,
+  });
+  const primaryMint = agentsData?.items?.[0]?.mint ?? null;
+
   useEffect(() => {
     if (!pid) return;
     const t = loadThread(pid, id);
@@ -41,8 +55,11 @@ export default function AgentsThreadPage({ params }: { params: Promise<{ id: str
       router.replace('/agents');
       return;
     }
+    if (primaryMint && !t.agentMint) {
+      setThreadAgentMint(pid, id, primaryMint);
+    }
     setMessages(t.messages);
-  }, [pid, id, router]);
+  }, [pid, id, router, primaryMint]);
 
   const onSend = useCallback(
     async (payload: ComposerPayload) => {

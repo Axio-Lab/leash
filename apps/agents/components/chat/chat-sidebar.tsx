@@ -41,11 +41,14 @@ import { Button } from '@/components/ui/button';
 export function ChatSidebar({
   privyId,
   activeThreadId,
+  primaryMint,
   onLogout,
   onNavigate,
 }: {
   privyId: string;
   activeThreadId: string | null;
+  /** Owner-resolved primary on-chain agent mint, used when starting a new chat. */
+  primaryMint: string | null;
   onLogout: () => void;
   /** Called after a navigation action on mobile so the drawer closes. */
   onNavigate?: () => void;
@@ -73,7 +76,7 @@ export function ChatSidebar({
   }
 
   function onNewChat() {
-    const t = createThread(privyId);
+    const t = createThread(privyId, primaryMint ? { agentMint: primaryMint } : {});
     refresh();
     router.push(`/agents/${t.id}`);
     onNavigate?.();

@@ -4,14 +4,17 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 
+import { AgentNetworkBackground } from '@/components/agent-network-background';
 import { HeroShowcase } from '@/components/hero-showcase';
 import { Spinner } from '@/components/ui/spinner';
 // import { LiveStats } from '@/components/live-stats';
 
 /**
- * Public landing page. Always renders the same hero (no static fallback)
- * so the "Get started" CTA is always present; logged-in users are
- * redirected to `/agents`.
+ * Public landing page. Renders the hero for guests; once Privy resolves a
+ * signed-in session we swap to the brand spinner immediately and replace
+ * to `/agents` on the same tick. This avoids the half-second flicker
+ * where the hero kept rendering after auth flipped before the redirect
+ * fired.
  */
 export default function LandingPage() {
   const { ready, authenticated, login } = usePrivy();
@@ -20,26 +23,40 @@ export default function LandingPage() {
     if (ready && authenticated) router.replace('/agents');
   }, [ready, authenticated, router]);
 
+  if (ready && authenticated) {
+    return (
+      <main className="relative min-h-dvh overflow-hidden">
+        <BackgroundOrbs />
+        <AgentNetworkBackground />
+        <div className="relative z-10 flex min-h-dvh flex-col items-center justify-center gap-3 px-6">
+          <Spinner size="lg" brand />
+          <p className="text-xs text-fg-muted">Opening your workspace…</p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="relative min-h-dvh overflow-hidden">
       <BackgroundOrbs />
+      <AgentNetworkBackground />
       <div className="relative z-10 flex min-h-dvh items-center justify-center px-6 py-16">
         <div className="grid w-full max-w-6xl items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
           <div className="space-y-6 text-center lg:text-left">
             <span className="inline-block text-[10px] font-mono uppercase tracking-[0.25em] text-fg-subtle">
-              Stablecoin rails for autonomous agents
+              The operating layer for autonomous agents
             </span>
             <h1 className="text-5xl font-semibold leading-[1.02] tracking-tight md:text-6xl">
-              Your agent.
+              Where agents
               <br />
-              A wallet, an identity,
+              execute, interact,
               <br />
-              <span className="text-brand">and every tool it needs.</span>
+              <span className="text-brand"> and transact.</span>
             </h1>
             <p className="mx-auto max-w-xl text-base text-fg-muted md:text-lg lg:mx-0">
-              Mint an autonomous agent on Solana, fund it with stablecoins, and watch it discover
-              and pay for tools on the open MCP marketplace — every action on-chain, every payment a
-              verifiable receipt.
+              Create an agent with a wallet and identity. Give it capital, and let it operate —
+              discovering tools, making payments, and completing tasks across the internet. every
+              payment with a verifiable receipt.
             </p>
             <div className="flex items-center justify-center gap-4 pt-2 lg:justify-start">
               <button
