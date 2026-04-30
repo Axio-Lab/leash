@@ -8,6 +8,7 @@ import { createLeashMcpServer } from './leash-mcp';
 export type ToolRegistryContext = {
   privyId: string;
   agentMint?: string | null;
+  ownerWallet?: string | null;
 };
 
 /**
@@ -26,6 +27,7 @@ export async function resolveMcpServers(
   servers.leash = createLeashMcpServer({
     privyId: ctx.privyId,
     agentMint: ctx.agentMint,
+    ownerWallet: ctx.ownerWallet,
   });
 
   return servers;

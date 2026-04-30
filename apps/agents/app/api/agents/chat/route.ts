@@ -131,6 +131,7 @@ export async function POST(req: NextRequest) {
         const mcpServers = await resolveMcpServers({
           privyId: session.privyId,
           agentMint: agentMint ?? null,
+          ownerWallet: session.wallet ?? null,
         });
         const iter = runAgentTurn({
           privyId: session.privyId,

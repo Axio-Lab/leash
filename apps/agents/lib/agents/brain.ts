@@ -26,6 +26,16 @@ export type BrainRunContext = {
 const STUB_REPLY =
   'Got it — deterministic stub reply (no ANTHROPIC_API_KEY). Same prompt → same text.';
 
+/**
+ * Set `LEASH_AGENT_STUB=1` (only in tests / fully offline dev) to force the
+ * deterministic stub. In normal dev/prod we surface the underlying key error
+ * to the user instead of silently echoing the prompt.
+ */
+function stubModeEnabled(): boolean {
+  const v = process.env.LEASH_AGENT_STUB;
+  return v === '1' || v === 'true';
+}
+
 function chunkText(text: string, size: number): string[] {
   const out: string[] = [];
   for (let i = 0; i < text.length; i += size) {
@@ -46,8 +56,17 @@ export async function* runAgentTurn(ctx: BrainRunContext): AsyncGenerator<AgentE
   let resolution: Awaited<ReturnType<typeof resolveAnthropicKey>>;
   try {
     resolution = await resolveAnthropicKey(ctx.privyId);
-  } catch {
-    yield* runStubTurn(ctx);
+  } catch (err) {
+    if (stubModeEnabled()) {
+      yield* runStubTurn(ctx);
+      return;
+    }
+    const message =
+      err instanceof Error
+        ? err.message
+        : 'Anthropic API key is not configured for this environment.';
+    yield { type: 'error', message };
+    yield { type: 'done' };
     return;
   }
 

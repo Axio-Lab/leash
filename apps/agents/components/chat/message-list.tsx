@@ -6,6 +6,7 @@ import type { ChatMessage } from '@/lib/chat-storage';
 import { Spinner } from '@/components/ui/spinner';
 
 import { ArtifactCard } from './artifact-card';
+import { MarkdownMessage } from './markdown-message';
 
 export function MessageList({ messages }: { messages: ChatMessage[] }) {
   if (messages.length === 0) {
@@ -57,10 +58,12 @@ export function MessageList({ messages }: { messages: ChatMessage[] }) {
                     <Spinner size="sm" brand />
                     <span className="text-xs">Thinking…</span>
                   </div>
-                ) : (
+                ) : isUser ? (
                   <div className="whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere]">
                     {m.content}
                   </div>
+                ) : (
+                  <MarkdownMessage content={m.content} />
                 )}
                 {m.artifacts && m.artifacts.length > 0 ? (
                   <div className="mt-3 space-y-2">
