@@ -23,17 +23,18 @@
  * of x402's buyer-kit fetch).
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import useSWR from 'swr';
 import { usePrivy } from '@privy-io/react-auth';
 import { publicKey } from '@metaplex-foundation/umi';
-import { Check, Loader2 } from 'lucide-react';
+import { AlertTriangleIcon, Check, Loader2 } from 'lucide-react';
 import { TOKEN_2022_PROGRAM_ID } from '@leash/core';
 import { withdrawTreasury, withdrawTreasurySol } from '@leash/registry-utils';
 
 import { Button } from '@/components/ui/button';
-import { txUrl, shortHash } from '@/lib/explorer';
+import { shortHash, solscanAccountUrl, solscanTxUrl } from '@/lib/explorer';
 import { SOLANA_NETWORK } from '@/lib/env';
 import { usePrivyUmi } from '@/lib/use-privy-umi';
 import { formatChainError } from '@/lib/format-chain-error';
@@ -67,6 +68,32 @@ type FlowState =
   | { kind: 'done'; txSig: string }
   | { kind: 'failed'; reason: string };
 
+type BalancesResponse = {
+  sol: number;
+  tokens: Array<{ symbol: string | null; mint: string; ui: number; decimals: number }>;
+};
+
+const balancesFetcher = async (url: string): Promise<BalancesResponse | null> => {
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok) return null;
+  return res.json();
+};
+
+/**
+ * Heuristic check for whether `destination` is a "first-time" wallet
+ * the user should sanity-check before signing. We treat:
+ *   - non-existent System account            → fresh
+ *   - existing System account with 0 lamports → fresh
+ * Both are common for a fat-finger / typo address (the user transposed
+ * a digit and typed a never-funded pubkey).
+ *
+ * This is heuristic — a real "first time you've sent here" feature
+ * would require server-side history, but for a fat-finger guard
+ * checking the destination has any on-chain footprint at all is a
+ * very effective signal at zero infrastructure cost.
+ */
+type DestProbe = { state: 'fresh' | 'known' | 'unknown' };
+
 export function WithdrawRequestArtifact({
   payload,
   threadId,
@@ -83,6 +110,50 @@ export function WithdrawRequestArtifact({
   const destination = payload.destination ?? '';
   const agentMint = payload.agent_mint ?? '';
   const network = payload.network ?? SOLANA_NETWORK;
+
+  // Live treasury balance — surfaces "Available: X TOKEN" above the
+  // Approve button so the user can sanity-check they have enough
+  // before signing. SWR cache is shared with /profile/agent so this
+  // is usually warm.
+  const { data: balances } = useSWR<BalancesResponse | null>(
+    agentMint ? `/api/agents/${encodeURIComponent(agentMint)}/balances` : null,
+    balancesFetcher,
+    { revalidateOnFocus: false, dedupingInterval: 15_000 },
+  );
+
+  const available = useMemo<number | null>(() => {
+    if (!balances) return null;
+    if (token === 'SOL') return balances.sol;
+    const t = balances.tokens.find((b) => (b.symbol ?? '').toUpperCase() === token);
+    return t?.ui ?? 0;
+  }, [balances, token]);
+
+  const numericAmount = useMemo(() => Number.parseFloat(amount), [amount]);
+  const insufficient =
+    available !== null && Number.isFinite(numericAmount) && numericAmount > available + 1e-9;
+
+  // Probe destination on mount — single getAccount RPC; cheap and
+  // deduped by Privy umi's connection. We confirm in two ways:
+  // a "fresh" account warning before signing, plus a Solscan link
+  // so the user can verify the address themselves.
+  const [destProbe, setDestProbe] = useState<DestProbe>({ state: 'unknown' });
+  useEffect(() => {
+    let cancelled = false;
+    if (!umi || !destination) return;
+    void (async () => {
+      try {
+        const acct = await umi.rpc.getAccount(publicKey(destination));
+        if (cancelled) return;
+        const lamports = acct.exists ? Number(acct.lamports.basisPoints) : 0;
+        setDestProbe({ state: !acct.exists || lamports === 0 ? 'fresh' : 'known' });
+      } catch {
+        if (!cancelled) setDestProbe({ state: 'unknown' });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [umi, destination]);
 
   // Hydrate from persisted artifact state — the same pattern Pay uses
   // so refresh lands directly on "Withdraw confirmed".
@@ -194,13 +265,53 @@ export function WithdrawRequestArtifact({
       </div>
 
       {destination ? (
-        <div className="rounded-md border border-border/60 bg-bg/40 p-2 font-mono text-[11px] break-all text-fg-muted">
-          {destination}
+        <div className="rounded-md border border-border/60 bg-bg/40 p-2 space-y-1">
+          <div className="font-mono text-[11px] break-all text-fg-muted">{destination}</div>
+          <div className="flex items-center justify-between gap-2 text-[10px] text-fg-subtle">
+            {available !== null ? (
+              <span>
+                Available:{' '}
+                <span className={`font-mono ${insufficient ? 'text-warning' : 'text-fg-muted'}`}>
+                  {fmtAvailable(available)} {token}
+                </span>
+              </span>
+            ) : (
+              <span className="opacity-60">Available: …</span>
+            )}
+            <Link
+              href={solscanAccountUrl(destination, network)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-brand hover:underline whitespace-nowrap"
+            >
+              Verify on Solscan ↗
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Soft warning for fresh / never-funded destination addresses.
+          Doesn't block the user — typos are common, but legitimate
+          first-payments are also common. The user can still sign. */}
+      {state.kind !== 'done' && destProbe.state === 'fresh' && destination ? (
+        <div className="rounded-md border border-warning/40 bg-warning/8 px-2 py-1.5 flex items-start gap-2 text-[11px] text-warning leading-snug">
+          <AlertTriangleIcon className="size-3.5 shrink-0 mt-0.5" />
+          <span>
+            First-time destination — this address has no on-chain history. Double-check it before
+            signing; typos can't be reversed.
+          </span>
+        </div>
+      ) : null}
+
+      {state.kind !== 'done' && insufficient ? (
+        <div className="rounded-md border border-danger/40 bg-danger/8 px-2 py-1.5 text-[11px] text-danger leading-snug">
+          Insufficient {token} in treasury. Available {fmtAvailable(available ?? 0)} {token}; the
+          card asks for {amount} {token}.
         </div>
       ) : null}
 
       {state.kind === 'done' ? (
-        <DoneReceipt txSig={state.txSig} />
+        <DoneReceipt txSig={state.txSig} network={network} />
       ) : (
         <div className="flex items-center gap-1.5 pt-0.5">
           <Button
@@ -208,7 +319,7 @@ export function WithdrawRequestArtifact({
             variant="default"
             size="sm"
             onClick={approveAndWithdraw}
-            disabled={state.kind === 'signing' || !ready || !umi}
+            disabled={state.kind === 'signing' || !ready || !umi || insufficient}
             className="h-7 px-2 text-xs"
           >
             {state.kind === 'signing' ? (
@@ -230,7 +341,7 @@ export function WithdrawRequestArtifact({
   );
 }
 
-function DoneReceipt({ txSig }: { txSig: string }) {
+function DoneReceipt({ txSig, network }: { txSig: string; network: string }) {
   return (
     <div className="space-y-1.5 rounded-md border border-border bg-bg p-2 text-xs">
       <div className="flex items-center gap-1.5 text-fg">
@@ -238,12 +349,12 @@ function DoneReceipt({ txSig }: { txSig: string }) {
         <span className="font-medium">Withdraw confirmed</span>
       </div>
       <Link
-        href={txUrl(txSig)}
+        href={solscanTxUrl(txSig, network)}
         target="_blank"
         rel="noopener noreferrer"
         className="block font-mono text-[11px] text-brand hover:underline"
       >
-        Tx {shortHash(txSig)}
+        Tx {shortHash(txSig)} on Solscan
       </Link>
     </div>
   );
@@ -259,4 +370,21 @@ function prettyNet(n: string): string {
 function shortAddr(addr: string): string {
   if (addr.length <= 12) return addr;
   return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
+}
+
+function fmtAvailable(n: number): string {
+  if (n === 0) return '0';
+  if (n >= 1) {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 4,
+      useGrouping: true,
+    }).format(n);
+  }
+  if (n < 0.0001) return n.toExponential(2);
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 6,
+    useGrouping: true,
+  }).format(n);
 }
