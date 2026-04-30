@@ -14,6 +14,7 @@
     "@composio/core": "^0.8.1",
     "@leash/buyer-kit": "workspace:*",
     "@leash/core": "workspace:*",
+    "@leash/mcp-core": "workspace:*",
     "@leash/platform-auth": "workspace:*",
     "@leash/registry-utils": "workspace:*",
     "@leash/schemas": "workspace:*",
