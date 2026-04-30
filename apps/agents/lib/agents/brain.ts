@@ -103,24 +103,16 @@ export async function* runAgentTurn(ctx: BrainRunContext): AsyncGenerator<AgentE
   });
 
   let sawSuccess = false;
+  // Track text already streamed via assistant messages so the final
+  // `result` payload doesn't double-emit. Whenever the SDK yields an
+  // assistant message the model has produced a complete turn-segment
+  // of output (between tool calls) — we stream that immediately so
+  // the user sees the first token as soon as the model commits to it,
+  // instead of waiting for the entire turn (incl. tool calls) to
+  // finish before any UI feedback.
+  const streamedTexts = new Set<string>();
   try {
     for await (const msg of q) {
-      if (msg.type === 'result' && msg.subtype === 'success') {
-        sawSuccess = true;
-        const u = msg.usage as Record<string, unknown>;
-        inputTokens = Number(u.input_tokens ?? u.inputTokens ?? 0);
-        outputTokens = Number(u.output_tokens ?? u.outputTokens ?? 0);
-        const text = typeof msg.result === 'string' ? msg.result : '';
-        if (text.length > 0) {
-          for (const chunk of chunkText(text, 48)) {
-            yield { type: 'token', text: chunk };
-          }
-        }
-      }
-      if (msg.type === 'result' && msg.subtype !== 'success') {
-        const errs = 'errors' in msg && Array.isArray(msg.errors) ? msg.errors.join('; ') : 'error';
-        yield { type: 'error', message: errs };
-      }
       // Mirror tool results into UI artifacts. The Claude SDK yields
       // `user`-typed messages whose content blocks include `tool_result`
       // entries when an MCP tool finished. We pluck out our well-known
@@ -129,6 +121,37 @@ export async function* runAgentTurn(ctx: BrainRunContext): AsyncGenerator<AgentE
       // correct card regardless of what the assistant text says.
       const artifact = extractArtifact(msg);
       if (artifact) yield { type: 'artifact', artifact };
+
+      // Stream text content from each assistant message as it arrives
+      // — this is the biggest "first paint" latency win. Without this
+      // the user sees nothing until `result` arrives, which can be
+      // multiple seconds when tool calls are in the loop. The SDK
+      // emits one assistant message per turn-segment; each segment's
+      // text is final, so we can yield it whole.
+      const assistantText = extractAssistantText(msg);
+      if (assistantText && !streamedTexts.has(assistantText)) {
+        streamedTexts.add(assistantText);
+        yield { type: 'token', text: assistantText };
+      }
+
+      if (msg.type === 'result' && msg.subtype === 'success') {
+        sawSuccess = true;
+        const u = msg.usage as Record<string, unknown>;
+        inputTokens = Number(u.input_tokens ?? u.inputTokens ?? 0);
+        outputTokens = Number(u.output_tokens ?? u.outputTokens ?? 0);
+        // Defensive fallback: if the model didn't emit a normal
+        // assistant message but `result.result` carries text, ship
+        // it. Empirically this only happens for legacy stub-mode
+        // SDK paths but it's cheap to keep.
+        const text = typeof msg.result === 'string' ? msg.result : '';
+        if (text.length > 0 && !streamedTexts.has(text)) {
+          yield { type: 'token', text };
+        }
+      }
+      if (msg.type === 'result' && msg.subtype !== 'success') {
+        const errs = 'errors' in msg && Array.isArray(msg.errors) ? msg.errors.join('; ') : 'error';
+        yield { type: 'error', message: errs };
+      }
     }
   } finally {
     q.close();
@@ -245,6 +268,33 @@ function extractArtifact(msg: unknown): {
     }
   }
   return null;
+}
+
+/**
+ * Pull the concatenated text from every `text` block in an `assistant`
+ * SDK message. Returns `null` for any other message type so the caller
+ * can stream the result early without re-emitting on `result`.
+ *
+ * Why this matters for latency: the Claude SDK emits one `assistant`
+ * message per turn-segment (between tool calls). Without this helper
+ * we'd buffer everything until `result` — adding the entire
+ * tool-call round-trip to the perceived first-paint time.
+ */
+function extractAssistantText(msg: unknown): string | null {
+  if (!msg || typeof msg !== 'object') return null;
+  const m = msg as Record<string, unknown>;
+  if (m.type !== 'assistant') return null;
+  const message = m.message as { content?: unknown } | undefined;
+  const content = message?.content;
+  if (!Array.isArray(content)) return null;
+  const parts: string[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== 'object') continue;
+    const b = block as Record<string, unknown>;
+    if (b.type === 'text' && typeof b.text === 'string') parts.push(b.text);
+  }
+  const joined = parts.join('');
+  return joined.length > 0 ? joined : null;
 }
 
 function buildAttachmentContext(attachments: BrainRunContext['attachments']): string {

@@ -26,9 +26,41 @@ function toAnthropicMcp(mcp: {
 }
 
 /**
- * Fresh Tool Router session per turn with enabled toolkits derived from ACTIVE connections.
+ * Per-user cache of the resolved Composio Tool Router MCP config plus
+ * its in-flight resolution promise. Keyed by privyId.
+ *
+ * Why this exists: `composio.create()` does a network round-trip to
+ * spin up a new Tool Router session every turn (often 500–1500 ms).
+ * Repeating it for every chat message pushes the perceived
+ * "first-paint" latency well past 2 s for active users. The Tool
+ * Router URL is a stable handle the SDK can re-fetch tools from, so
+ * reusing it across turns is safe — Composio's own SDK examples
+ * recommend reusing the session.
+ *
+ * TTL is short (60 s) because we want toolkit additions/revocations
+ * to take effect quickly. If a user enables a new connection we'll
+ * pick it up on the next turn after the TTL expires; for snappier
+ * feedback callers can call `invalidateComposioMcpCache(privyId)`.
+ *
+ * The `inflight` field collapses concurrent first-time turns onto a
+ * single network resolution, avoiding a thundering-herd of
+ * `composio.create()` calls when the user spams Enter.
  */
-export async function resolveComposioMcpForPrivy(privyId: string): Promise<McpServerConfig | null> {
+type CacheEntry = {
+  mcp: McpServerConfig | null;
+  expiresAt: number;
+};
+
+const SESSION_TTL_MS = 60_000;
+const sessionCache = new Map<string, CacheEntry>();
+const inflight = new Map<string, Promise<McpServerConfig | null>>();
+
+export function invalidateComposioMcpCache(privyId: string): void {
+  sessionCache.delete(privyId);
+  inflight.delete(privyId);
+}
+
+async function buildComposioMcpForPrivy(privyId: string): Promise<McpServerConfig | null> {
   const composio = getComposio();
   if (!composio) return null;
 
@@ -57,4 +89,30 @@ export async function resolveComposioMcpForPrivy(privyId: string): Promise<McpSe
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve the Composio Tool Router MCP config for the user, served
+ * from a 60s in-process cache. Concurrent callers for the same user
+ * coalesce onto a single resolution.
+ */
+export async function resolveComposioMcpForPrivy(privyId: string): Promise<McpServerConfig | null> {
+  const now = Date.now();
+  const hit = sessionCache.get(privyId);
+  if (hit && hit.expiresAt > now) return hit.mcp;
+
+  const existingInflight = inflight.get(privyId);
+  if (existingInflight) return existingInflight;
+
+  const promise = (async () => {
+    try {
+      const mcp = await buildComposioMcpForPrivy(privyId);
+      sessionCache.set(privyId, { mcp, expiresAt: Date.now() + SESSION_TTL_MS });
+      return mcp;
+    } finally {
+      inflight.delete(privyId);
+    }
+  })();
+  inflight.set(privyId, promise);
+  return promise;
 }

@@ -127,26 +127,46 @@ export async function POST(req: NextRequest) {
   }
 
   const { threadId, messages, model } = parsed.data;
-  let { agentMint } = parsed.data;
+  const passedAgentMint = parsed.data.agentMint;
   const transcript = buildTranscript(messages);
-
-  if (!agentMint) {
-    const primary = await resolvePrimaryAgentMint(session.privyId);
-    if (primary) agentMint = primary;
-  }
-
-  let systemPrompt: string | undefined;
-  if (agentMint) {
-    systemPrompt = await fetchAgentSystemPrompt(agentMint);
-  }
-
-  const skillExtras = mergeSkillFragmentsHeader(req.headers.get('x-leash-skills'));
-  if (skillExtras) {
-    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${skillExtras}` : skillExtras;
-  }
 
   const env = getServerEnv();
   const effectiveModel = model?.trim() || env.leashAgentModel;
+
+  // Pre-flight in parallel:
+  //   1. Resolve primary agent mint (fallback when the thread didn't carry one).
+  //   2. MCP server bundle (Composio Tool Router + in-process Leash MCP).
+  //   3. Skill fragments — synchronous, but evaluated up front so we
+  //      don't hold the request thread later.
+  // Step (1) blocks step (4)'s system-prompt fetch because that
+  // requires the resolved mint, but we still hide its latency under
+  // (2) which runs in parallel. Net effect: longest-running of
+  // {primaryMint resolve → systemPrompt fetch} || {Composio setup}
+  // instead of the previous serial sum.
+  const skillExtras = mergeSkillFragmentsHeader(req.headers.get('x-leash-skills'));
+
+  const agentMintPromise: Promise<string | null> = passedAgentMint
+    ? Promise.resolve(passedAgentMint)
+    : resolvePrimaryAgentMint(session.privyId);
+
+  const mcpServersPromise = (async () => {
+    // Composio session creation can race the mint resolution since
+    // it doesn't depend on the agentMint. We capture an ownerWallet
+    // shortcut here and let `resolveMcpServers` use the resolved
+    // mint when it lands.
+    const mint = await agentMintPromise;
+    return resolveMcpServers({
+      privyId: session.privyId,
+      agentMint: mint ?? null,
+      ownerWallet: session.wallet ?? null,
+    });
+  })();
+
+  const systemPromptPromise = (async () => {
+    const mint = await agentMintPromise;
+    if (!mint) return undefined;
+    return fetchAgentSystemPrompt(mint);
+  })();
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -159,11 +179,16 @@ export async function POST(req: NextRequest) {
       };
 
       try {
-        const mcpServers = await resolveMcpServers({
-          privyId: session.privyId,
-          agentMint: agentMint ?? null,
-          ownerWallet: session.wallet ?? null,
-        });
+        const [agentMint, mcpServers, baseSystemPrompt] = await Promise.all([
+          agentMintPromise,
+          mcpServersPromise,
+          systemPromptPromise,
+        ]);
+        const systemPrompt = baseSystemPrompt
+          ? skillExtras
+            ? `${baseSystemPrompt}\n\n${skillExtras}`
+            : baseSystemPrompt
+          : skillExtras;
         const iter = runAgentTurn({
           privyId: session.privyId,
           threadId,
