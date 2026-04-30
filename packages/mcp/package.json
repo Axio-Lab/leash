@@ -1,0 +1,50 @@
+{
+  "name": "@leash/mcp",
+  "version": "0.1.0",
+  "description": "Standalone Leash MCP server. STDIO transport. Drop into Cursor / Claude Desktop / Cline / Continue / ChatGPT-MCP.",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "leash-mcp": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && chmod +x ./dist/cli.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "echo lint:mcp",
+    "test": "vitest run",
+    "dev": "node --import tsx ./src/cli.ts",
+    "dev:demo-balance": "node --import tsx ./scripts/demo-balance.ts"
+  },
+  "dependencies": {
+    "@leash/buyer-kit": "workspace:*",
+    "@leash/core": "workspace:*",
+    "@leash/mcp-core": "workspace:*",
+    "@leash/registry-utils": "workspace:*",
+    "@leash/schemas": "workspace:*",
+    "@metaplex-foundation/mpl-core": "^1.10.0",
+    "@metaplex-foundation/mpl-toolbox": "^0.10.0",
+    "@metaplex-foundation/umi": "^1.5.1",
+    "@metaplex-foundation/umi-bundle-defaults": "^1.5.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@solana/kit": "^5.5.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.20.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
