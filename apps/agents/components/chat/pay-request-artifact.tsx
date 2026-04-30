@@ -95,9 +95,13 @@ export function PayRequestArtifact({
 
   const { signer } = usePrivySvmSigner();
   const { user } = usePrivy();
+  // Revalidate on focus so a cap edit on /profile/spend takes effect
+  // the moment the user comes back to chat — no refresh needed. Short
+  // dedupe so the per-action cap check above always reflects the
+  // latest persisted budget.
   const { data } = useSWR<{ items: AgentRecord[] }>('/api/agents', agentsFetcher, {
-    revalidateOnFocus: false,
-    dedupingInterval: 30_000,
+    revalidateOnFocus: true,
+    dedupingInterval: 5_000,
   });
   const agent = useMemo(
     () => data?.items.find((a) => a.mint === agentMint) ?? data?.items[0] ?? null,

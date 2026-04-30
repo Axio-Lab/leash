@@ -118,7 +118,7 @@ export function WithdrawRequestArtifact({
   const { data: balances } = useSWR<BalancesResponse | null>(
     agentMint ? `/api/agents/${encodeURIComponent(agentMint)}/balances` : null,
     balancesFetcher,
-    { revalidateOnFocus: false, dedupingInterval: 15_000 },
+    { revalidateOnFocus: true, dedupingInterval: 5_000 },
   );
 
   const available = useMemo<number | null>(() => {
