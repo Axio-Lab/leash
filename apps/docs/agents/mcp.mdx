@@ -29,6 +29,19 @@ mints a sandbox agent on devnet, auto-funds it with $1 USDC + 0.01
 SOL, persists `~/.config/leash/agent.json`, and **hot-swaps** the
 in-memory MCP host so subsequent tool calls work without a restart.
 
+### Other MCP hosts
+
+The same JSON entry works (sometimes under a slightly different
+file path) in:
+
+- **Claude Desktop** — `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Cline** — VS Code extension settings → "Cline: MCP Servers"
+- **Continue** — `~/.continue/config.json` under `mcpServers`
+- **ChatGPT Desktop (MCP)** — Settings → Connectors → Add MCP server
+
+After editing the config, restart the host so it re-spawns the
+STDIO process.
+
 ## Configure (optional)
 
 If you already have an agent (minted from the chat product, the CLI,
@@ -65,6 +78,28 @@ the Claude Agent SDK in the chat product (same names, same shapes —
 | `leash_discover`               | Search the marketplace for paid services by capability + price. Public, no agent needed.                           |
 | `leash_reputation`             | Live reputation snapshot for any on-chain agent — settled-call volume, dispute rate, normalised rating in `[0,1]`. |
 
+## Verify it works
+
+Once the host is running, ask the agent:
+
+> _"List the Leash MCP tools."_
+
+You should see all nine `leash_*` tools. If you don't, check the
+host's MCP logs (in Cursor: `~/Library/Application Support/Cursor/logs/.../MCP Logs.log`) — most failures are wrong path, missing
+network access, or a stale cached `npx` install (clear with
+`npx clear-npx-cache`).
+
+You can also smoke-test outside any host using the in-memory
+transport:
+
+```bash
+leash-mcp doctor
+```
+
+Prints config path, derived executive pubkey, network, RPC + API
+reachability — useful first stop for any "why isn't this working"
+question.
+
 ## Demo flow (60 seconds)
 
 1. Add the MCP entry to your host config and restart.
@@ -74,11 +109,21 @@ the Claude Agent SDK in the chat product (same names, same shapes —
 4. Ask: _"find me an OCR service under 10c"_ → `leash_discover`.
 5. Ask: _"pay this link"_ → `leash_pay_payment_link`. Returns a real
    `tx_signature` + `receipt_hash` on devnet.
-6. Ask: _"withdraw 50c USDC to <wallet>"_ → `leash_withdraw_treasury`.
+6. Ask: _"withdraw 50c USDC to YOUR_WALLET_ADDRESS"_ → `leash_withdraw_treasury`.
    Real on-chain transfer via `mpl-core::Execute`.
 
 The whole demo runs against live devnet infrastructure — no mocks,
 no faucets to hit manually.
+
+## Troubleshooting
+
+| Symptom                                            | Likely cause + fix                                                                                                          |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Tools list is empty / host can't connect           | Wrong path or stale cache. Run `npx clear-npx-cache`, restart the host, check the host's MCP logs.                          |
+| `leash_register_agent` returns `error: rate_limited` | Sandbox is rate-limited per IP. Wait 30s and retry.                                                                       |
+| `leash_pay_payment_link` returns `wrong_network`   | The link is on the other cluster. The MCP does not pay across networks — confirm the link's network and your `LEASH_NETWORK`. |
+| `tx_signature` returned but explorer shows nothing | RPC propagation delay (~2-3s on devnet). Refresh in 5s.                                                                     |
+| `leash_create_payment_link` returns `error`        | Today this tool calls back to the API with a legacy bearer token. Set `LEASH_API_KEY` until X-Leash-Sig auth lands here.   |
 
 ## Source
 

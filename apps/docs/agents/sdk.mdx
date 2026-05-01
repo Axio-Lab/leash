@@ -13,6 +13,18 @@ The SDK is browser/Bun/Deno-friendly: it uses `fetch` and
 `globalThis.crypto.subtle` with a `node:crypto` fallback. Zero
 runtime deps beyond Umi for ed25519 signing.
 
+## Try it without installing anything
+
+The two read endpoints are public — you can verify the API is up
+with a single `curl` before pulling the SDK in:
+
+```bash
+curl 'https://api.leash.market/v1/discover?capability=ocr&limit=3'
+curl 'https://api.leash.market/v1/agents/AGENT_MINT/reputation'
+```
+
+If those return JSON, the SDK calls below will work too.
+
 ## Install
 
 ```bash
@@ -20,6 +32,11 @@ pnpm add @leash/sdk
 # or
 npm install @leash/sdk
 ```
+
+The package is **ESM-only** (`"type": "module"`). In a Node CJS
+project, either switch your `package.json` to `"type": "module"`,
+import dynamically (`const { LeashClient } = await import('@leash/sdk')`),
+or transpile with your bundler.
 
 ## Quickstart
 

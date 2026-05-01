@@ -32,14 +32,14 @@ leash agent show
 leash discover -q ocr --max-price 0.10
 
 # 4. Vet a counterparty before paying.
-leash reputation <agent_mint>
+leash reputation AGENT_MINT_PUBKEY
 
 # 5. Pay something.
 leash pay https://example.com/x/abc123
 
 # 6. Cash out.
 leash treasury balance
-leash treasury withdraw --to <wallet> --amount 0.50 --token USDC
+leash treasury withdraw --to YOUR_WALLET_ADDRESS --amount 0.50 --token USDC
 ```
 
 ## All commands
@@ -57,11 +57,11 @@ treasury commands:
 
 marketplace + reputation:
   discover [-q QUERY] [--max-price N] [--pricing-type T] [--limit N]
-  reputation <agent_mint> [--network solana-devnet|solana-mainnet]
+  reputation AGENT_MINT [--network solana-devnet|solana-mainnet]
 
 activity:
   receipts [--limit N] [--direction outgoing|incoming|both]
-  pay <link-url>
+  pay LINK_URL
 
 misc:
   doctor                             config + RPC + API reachability check
@@ -71,6 +71,15 @@ misc:
 global flags:
   --json                             emit raw LeashToolResult payload
 ```
+
+## Verify it works
+
+```bash
+leash doctor
+```
+
+Prints config path, derived executive pubkey, network, RPC + API
+reachability — first stop for any "why isn't this working" question.
 
 ## Cross-interface portability
 
@@ -89,8 +98,26 @@ leash agent import /tmp/my-agent.json
 leash agent show   # same on-chain identity, same treasury, same reputation
 ```
 
-Same JSON also pastes cleanly into the chat product's _Profile →
-Agent → Import_ page (forthcoming).
+Today the portability flow is **one-way for the chat product**:
+
+- **Chat → CLI / Cursor** — Yes. Open the agent's profile in the
+  chat product, copy its mint + executive secret into
+  `~/.config/leash/agent.json` (or use `leash agent import`), and
+  every CLI / MCP command operates on the same on-chain identity.
+- **CLI / Cursor → Chat** — On the roadmap. The chat product's
+  database currently only knows about agents minted from its own UI;
+  importing a CLI-minted agent requires a server-side ownership-
+  proof endpoint (signs a nonce with the executive key) that hasn't
+  shipped yet.
+
+## Troubleshooting
+
+| Symptom                                          | Likely cause + fix                                                                              |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `leash agent create` fails with `error: rate_limited` | Sandbox is rate-limited per IP. Wait 30s and retry.                                          |
+| Wrong network on every command                   | `leash-mcp` and `leash` both honour `LEASH_NETWORK`. Set it explicitly to override `agent.json`. |
+| `leash treasury withdraw` returns `error`        | Most common: amount > available balance, or wrong `--token` symbol for the network's mint.       |
+| `leash receipts` returns `error: 401`            | Receipts read still uses a bearer key today. Set `LEASH_API_KEY` in your shell.                  |
 
 ## Source
 
