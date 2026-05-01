@@ -104,6 +104,11 @@ export function mountOpenApi(
       { name: 'receipts', description: 'x402 receipt ingestion + reads.' },
       { name: 'indexer', description: 'Indexer status (watchlist + cursor health).' },
       { name: 'webhooks', description: 'Outbound webhook subscriptions and deliveries.' },
+      {
+        name: 'discover',
+        description:
+          'Public marketplace + reputation reads. No auth required — agents query these to find counterparties before paying.',
+      },
       { name: 'metrics', description: 'Per-key usage and event rollups.' },
       {
         name: 'payment-links',
@@ -150,6 +155,20 @@ export function mountOpenApi(
     description:
       'Operator secret for `/v1/admin/*`. Send as `Authorization: Bearer <secret>` ' +
       'or `X-Admin-Secret: <secret>`. Never expose this to end users.',
+  });
+  // Standalone-MCP / CLI agents authenticate with an ed25519 signature
+  // over a canonical request envelope — see /v1/agents/{mint}/webhooks
+  // and apps/api/src/auth/onchain.ts. Three headers go together; we
+  // declare them as a single security scheme via the `apiKey` flavour
+  // because OpenAPI has no first-class "set of cooperating headers".
+  app.openAPIRegistry.registerComponent('securitySchemes', 'OnChainSig', {
+    type: 'apiKey',
+    in: 'header',
+    name: 'X-Leash-Sig',
+    description:
+      'Triple-header on-chain auth: `X-Leash-Agent` (asset mint), `X-Leash-Timestamp` (ISO-8601), ' +
+      '`X-Leash-Sig` (base58 ed25519 signature over `${method}\\n${path}\\n${ts}\\n${sha256(body)}\\n${mint}`). ' +
+      'Used by `@leash/sdk`, `@leash/cli`, and `@leash/mcp` so agents can hit /v1/agents/{mint}/* without an API key.',
   });
 
   if (config.docsEnabled) {

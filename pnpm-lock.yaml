@@ -1012,6 +1012,28 @@ importers:
         specifier: ^3.24.3
         version: 3.25.2(zod@3.25.76)
 
+  packages/sdk:
+    dependencies:
+      '@metaplex-foundation/umi':
+        specifier: ^1.5.1
+        version: 1.5.1
+      '@metaplex-foundation/umi-bundle-defaults':
+        specifier: ^1.5.1
+        version: 1.5.1(@metaplex-foundation/umi@1.5.1)(@solana/web3.js@1.98.4(bufferutil@4.1.0)(encoding@0.1.13)(typescript@5.9.3))(encoding@0.1.13)
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.19.17
+      tsx:
+        specifier: ^4.20.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.17)(lightningcss@1.32.0)
+
   packages/seller-kit:
     dependencies:
       '@leash/core':
@@ -17505,7 +17527,7 @@ snapshots:
 
   isexe@2.0.0: {}
 
-  isomorphic-ws@4.0.1(ws@7.5.10(bufferutil@4.1.0)(utf-8-validate@6.0.6)):
+  isomorphic-ws@4.0.1(ws@7.5.10(bufferutil@4.1.0)):
     dependencies:
       ws: 7.5.10(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
@@ -17530,7 +17552,7 @@ snapshots:
       delay: 5.0.0
       es6-promisify: 5.0.0
       eyes: 0.1.8
-      isomorphic-ws: 4.0.1(ws@7.5.10(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      isomorphic-ws: 4.0.1(ws@7.5.10(bufferutil@4.1.0))
       json-stringify-safe: 5.0.1
       stream-json: 1.9.1
       uuid: 8.3.2

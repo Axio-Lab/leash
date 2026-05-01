@@ -1,0 +1,35 @@
+{
+  "name": "@leash/sdk",
+  "version": "0.1.0",
+  "description": "Typed Leash API client for app developers. Discover services, vet counterparties, manage agent webhooks, and ingest receipts in any TypeScript runtime.",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "echo lint:sdk",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@metaplex-foundation/umi": "^1.5.1",
+    "@metaplex-foundation/umi-bundle-defaults": "^1.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.20.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
