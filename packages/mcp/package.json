@@ -25,7 +25,8 @@
     "lint": "echo lint:mcp",
     "test": "vitest run",
     "dev": "node --import tsx ./src/cli.ts",
-    "dev:demo-balance": "node --import tsx ./scripts/demo-balance.ts"
+    "dev:demo-balance": "node --import tsx ./scripts/demo-balance.ts",
+    "test:yc-demo-devnet": "node --import tsx ./scripts/test-yc-demo-devnet.ts"
   },
   "dependencies": {
     "@leash/buyer-kit": "workspace:*",
