@@ -21,7 +21,7 @@
 #   ENCRYPTION_KEY         64-hex (32 bytes); MUST match the API
 # Optional:
 #   LEASH_DB_AUTH_TOKEN    Turso auth token (hosted libsql only)
-#   LEASH_REDIS_URL        Redis URL for live activity pub/sub (recommended)
+#   LEASH_REDIS_URL        Redis URL for live activity pub/sub (strongly recommended)
 #   LEASH_RUNTIME_POLL_MS  Poll interval when no tasks are queued (default 750)
 
 FROM node:22-bookworm-slim AS base

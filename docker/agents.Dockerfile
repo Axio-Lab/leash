@@ -35,7 +35,11 @@
 #   ANTHROPIC_API_KEY                platform fallback when user has no BYOK
 #   COMPOSIO_API_KEY                 enables /api/composio toolkits
 # Optional:
-#   LEASH_AGENT_MODEL                default 'claude-sonnet-4-20250514'
+#   LEASH_AGENT_MODEL_HAIKU          override haiku tier model id
+#   LEASH_AGENT_MODEL_SONNET         override sonnet tier model id
+#   LEASH_AGENT_MODEL_OPUS           override opus tier model id
+#   LEASH_AGENT_MODEL                hard override — pins ALL users to one model
+#                                    regardless of their tier selection (staging only)
 #   LEASH_AGENT_STUB                 leave UNSET in production
 
 FROM node:22-bookworm-slim AS base
