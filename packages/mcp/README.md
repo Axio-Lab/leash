@@ -66,6 +66,28 @@ blob asking the LLM to onboard the user. (The frictionless
 | `leash_create_payment_link`    | Mint an x402 paywall the user can share. Requires `LEASH_API_KEY` until X-Leash-Sig auth lands.                                                                                       |
 | `leash_withdraw_treasury`      | Owner-driven withdrawal of SOL or an SPL stable to any wallet (mpl-core::Execute).                                                                                                    |
 | `leash_receipts`               | List recent receipts for the active agent. Requires `LEASH_API_KEY` until X-Leash-Sig auth lands.                                                                                     |
+| `leash_discover`               | Search the Leash marketplace for paid services by capability + price. Public read — works without an agent.                                                                           |
+| `leash_reputation`             | Live reputation snapshot for any on-chain agent — settled-call volume, dispute rate, distinct counterparties. Public read.                                                            |
+
+## Subcommands (cross-interface portability)
+
+The CLI is more than the STDIO server — `leash-mcp` has a small set
+of subcommands so an agent can move freely between hosts:
+
+```bash
+leash-mcp                  # default — run the STDIO MCP server
+leash-mcp export           # print active agent.json to stdout
+leash-mcp export --out a.json   # save instead
+leash-mcp import path/to/agent.json  # install into ~/.config/leash/
+leash-mcp doctor           # config + RPC + API reachability check
+leash-mcp help             # full help
+```
+
+Use `export` + `import` to roam: an agent minted from Cursor's MCP
+can be `export`ed, dropped into Claude Desktop, and `import`ed into
+its config — same on-chain identity, same treasury, same reputation.
+Same JSON also pastes cleanly into the chat product's
+_Profile → Agent → Import_ page (forthcoming).
 
 ## Try the read path
 
