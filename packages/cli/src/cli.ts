@@ -137,6 +137,8 @@ async function runAgentCreate(args: string[]): Promise<void> {
   const { hostRef } = buildServerFromEnv();
   const json = wantJson(args);
   const name = optArg(args, '--name');
+  const description = optArg(args, '--description');
+  const imageUrl = optArg(args, '--image');
   const executive = optArg(args, '--executive');
   const mode: 'generate' | 'import' | undefined = executive
     ? 'import'
@@ -154,8 +156,22 @@ async function runAgentCreate(args: string[]): Promise<void> {
     process.exit(2);
   }
 
+  // `--service name=https://endpoint` repeatable. EIP-8004
+  // RegistrationV1 entries the agent advertises (web, api, docs, …).
+  // Persisted in pending_register so Step 2 inherits them.
+  let services: { name: string; endpoint: string }[] | undefined;
+  try {
+    services = parseServiceFlags(args);
+  } catch (err) {
+    process.stderr.write(`${(err as Error).message}\n`);
+    process.exit(2);
+  }
+
   const result = await hostRef.registerAgent({
     ...(name ? { name } : {}),
+    ...(description ? { description } : {}),
+    ...(imageUrl ? { image_url: imageUrl } : {}),
+    ...(services && services.length > 0 ? { services } : {}),
     ...(mode ? { mode } : {}),
     ...(executive ? { executive_secret_base58: executive } : {}),
   });
@@ -405,6 +421,49 @@ function numArg(args: string[], flag: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+/**
+ * Parse repeatable `--service name=endpoint` flags into the
+ * EIP-8004 `services[]` shape. Each occurrence must contain a single
+ * `=` separating the (1-64 char) name from a valid URL endpoint.
+ *
+ * Examples:
+ *   leash agent create --service web=https://my-agent.xyz
+ *                      --service api=https://api.my-agent.xyz
+ */
+function parseServiceFlags(args: string[]): { name: string; endpoint: string }[] {
+  const out: { name: string; endpoint: string }[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] !== '--service') continue;
+    const raw = args[i + 1];
+    if (!raw) {
+      throw new Error('--service requires a value of the form `name=https://endpoint`');
+    }
+    const eq = raw.indexOf('=');
+    if (eq <= 0 || eq === raw.length - 1) {
+      throw new Error(
+        `--service must be of the form \`name=https://endpoint\` (got: ${JSON.stringify(raw)})`,
+      );
+    }
+    const name = raw.slice(0, eq).trim();
+    const endpoint = raw.slice(eq + 1).trim();
+    if (name.length === 0 || name.length > 64) {
+      throw new Error(`--service name must be 1-64 chars (got: ${JSON.stringify(name)})`);
+    }
+    try {
+      new URL(endpoint);
+    } catch {
+      throw new Error(`--service endpoint is not a valid URL: ${endpoint}`);
+    }
+    if (name === 'receipts') {
+      throw new Error(
+        '--service "receipts" is reserved — Leash auto-injects it. Use a different name.',
+      );
+    }
+    out.push({ name, endpoint });
+  }
+  return out;
+}
+
 function formatStatusError(payload: { status?: string; message?: string }): string {
   if (payload.status === 'no_agent') return 'no agent configured (run `leash agent create`)';
   return `${payload.status}: ${payload.message ?? '(no message)'}`;
@@ -453,11 +512,16 @@ function printHelp(): void {
       'usage: leash <command> [options]',
       '',
       'agent commands:',
-      '  agent create [--name N] [--generate | --import --executive <secret>]',
+      '  agent create [--name N] [--description T] [--image URL]',
+      '               [--service name=https://endpoint] (repeatable)',
+      '               [--generate | --import --executive <secret>]',
       '                                     two-step agent provisioning. Network is taken',
       '                                     from LEASH_NETWORK (devnet|mainnet). Run once to',
       '                                     get funding instructions, fund the printed',
       '                                     pubkey with SOL, then run again to mint.',
+      '                                     `--service` advertises EIP-8004 endpoints other',
+      '                                     agents/humans use to find this agent (e.g.',
+      '                                     `--service web=https://my-agent.xyz`).',
       '  agent show                         print active agent identity',
       '  agent export [--out PATH]          export agent.json (alias for `leash-mcp export`)',
       '  agent import <PATH>                install an agent.json',

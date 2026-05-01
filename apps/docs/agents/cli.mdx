@@ -46,16 +46,26 @@ mainnet — the network is taken from `LEASH_NETWORK` (or
 `agent.json:network`).
 
 ```bash
-# 1a. Default (mainnet): generate a fresh executive keypair locally.
-leash agent create
+# 1a. Default (mainnet): generate a fresh executive keypair locally
+#     and capture the agent's public profile (name, services, …).
+leash agent create \
+  --name "Plexpert" \
+  --description "Onchain accountant for indie operators." \
+  --image https://plexpert.xyz/avatar.png \
+  --service web=https://plexpert.xyz \
+  --service api=https://api.plexpert.xyz
 # → prints the executive pubkey + a "send 0.01 SOL to ..." instruction.
+# The metadata is persisted to ~/.config/leash/agent.json under
+# pending_register.meta so the funded re-run picks it up.
 
 # 1a-devnet. Override to devnet for testing:
-LEASH_NETWORK=solana-devnet leash agent create
+LEASH_NETWORK=solana-devnet leash agent create --name "Plexpert"
 # → same, but mints on Solana devnet.
 
-# 1b. Or import an existing one (e.g. a `solana-keygen new` output).
-leash agent create --executive 5Jz...      # base58 secret, implies --import
+# 1b. Or import an existing keypair (e.g. a `solana-keygen new` output).
+leash agent create --executive 5Jz... \
+  --name "Plexpert" \
+  --service web=https://plexpert.xyz   # base58 secret implies --import
 
 # 2. Fund the executive (devnet airdrop is free; mainnet pulls from
 #    any wallet you control).
@@ -91,10 +101,16 @@ your own SOL.
 
 ```text
 agent commands:
-  agent create [--name N] [--generate | --import --executive <secret>]
+  agent create [--name N] [--description T] [--image URL]
+               [--service name=https://endpoint] (repeatable)
+               [--generate | --import --executive <secret>]
                                      two-step provisioning. Network = LEASH_NETWORK.
                                      First run prints funding instructions; second
-                                     run mints + delegates + records.
+                                     run mints + delegates + records. `--service`
+                                     advertises EIP-8004 endpoints other agents
+                                     and humans use to discover this agent
+                                     (e.g. --service web=https://my-agent.xyz).
+                                     Reserved name `receipts` is auto-injected.
   agent show                         print active agent identity
   agent export [--out PATH]          export agent.json
   agent import <PATH>                install an agent.json

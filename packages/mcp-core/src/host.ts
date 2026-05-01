@@ -61,6 +61,31 @@ export type RegisterAgentArgs = {
    */
   name?: string;
   /**
+   * Free-text description recorded in the MPL Core asset and the
+   * EIP-8004 RegistrationV1 metadata doc.
+   */
+  description?: string;
+  /**
+   * Optional public image URL written into the RegistrationV1
+   * metadata's `image` field (e.g. an avatar / logo).
+   */
+  image_url?: string;
+  /**
+   * EIP-8004 RegistrationV1 `services[]` entries the agent
+   * advertises. Threaded into three places at mint time:
+   *   1. On-chain MPL Core `agentMetadata.services[]`.
+   *   2. Off-chain RegistrationV1 doc embedded in the asset `uri`.
+   *   3. Platform `services` column written by `/v1/agents/record`.
+   * The Leash protocol always auto-injects a `receipts` entry, so
+   * callers don't need to supply one. Each entry must be `{ name,
+   * endpoint }` where `endpoint` is a valid URL.
+   *
+   * Persisted alongside the executive in `pending_register` so the
+   * SECOND `leash_register_agent` call (after the user funds the
+   * pubkey) doesn't need to re-collect them.
+   */
+  services?: { name: string; endpoint: string }[];
+  /**
    * Owner-keypair source.
    *   - `'generate'` (default) — host generates a fresh ed25519 keypair
    *     locally, persists it to `~/.config/leash/agent.json` under

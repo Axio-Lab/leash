@@ -42,9 +42,23 @@ export type LeashHostDefaults = {
 };
 
 /**
- * Persisted-but-unfunded executive keypair. Written to `agent.json` on
- * the FIRST `leash_register_agent` call; consumed (and cleared) on the
- * SECOND call after the user has funded the executive with SOL.
+ * Pending-register agent metadata persisted alongside the unfunded
+ * executive. Captured on the FIRST `leash_register_agent` call so the
+ * SECOND call (after funding) doesn't need the LLM to re-collect
+ * `name` / `description` / `image_url` / `services[]`.
+ */
+export type PendingRegisterMeta = {
+  name?: string;
+  description?: string;
+  imageUrl?: string;
+  services?: { name: string; endpoint: string }[];
+};
+
+/**
+ * Persisted-but-unfunded executive keypair + agent draft. Written to
+ * `agent.json` on the FIRST `leash_register_agent` call; consumed
+ * (and cleared) on the SECOND call after the user has funded the
+ * executive with SOL.
  */
 export type PendingRegister = {
   /** 64-byte ed25519 secret, base58. */
@@ -53,6 +67,11 @@ export type PendingRegister = {
   executivePubkey: string;
   network: SvmNetwork;
   createdAt: string;
+  /**
+   * Agent metadata captured on Step 1 so the LLM doesn't need to
+   * repeat `name` / `services` / etc. on Step 2.
+   */
+  meta?: PendingRegisterMeta;
 };
 
 export type LeashAgentConfig = {
@@ -112,11 +131,23 @@ export function defaultConfigPath(): string {
   return join(homedir(), '.config', 'leash', 'agent.json');
 }
 
+type FilePendingService = {
+  name?: string;
+  endpoint?: string;
+};
+
 type FilePending = {
   executive_keypair?: string;
   executive_pubkey?: string;
   network?: string;
   created_at?: string;
+  /** Agent metadata draft (captured on Step 1, applied on Step 2). */
+  meta?: {
+    name?: string;
+    description?: string;
+    image_url?: string;
+    services?: FilePendingService[];
+  };
 };
 
 type FileShape = {
@@ -177,12 +208,27 @@ function readPending(file: FileShape | null, defaults: LeashHostDefaults): Pendi
   const secret = block.executive_keypair?.trim();
   const pub = block.executive_pubkey?.trim();
   if (!secret || !pub) return null;
+  const meta = readPendingMeta(block.meta);
   return {
     executiveSecretBase58: secret,
     executivePubkey: pub,
     network: normalizeNetwork(block.network ?? defaults.network),
     createdAt: block.created_at ?? new Date(0).toISOString(),
+    ...(meta ? { meta } : {}),
   };
+}
+
+function readPendingMeta(raw: FilePending['meta']): PendingRegisterMeta | undefined {
+  if (!raw) return undefined;
+  const services = (raw.services ?? [])
+    .map((s) => ({ name: (s.name ?? '').trim(), endpoint: (s.endpoint ?? '').trim() }))
+    .filter((s) => s.name.length > 0 && s.endpoint.length > 0);
+  const meta: PendingRegisterMeta = {};
+  if (raw.name?.trim()) meta.name = raw.name.trim();
+  if (raw.description?.trim()) meta.description = raw.description.trim();
+  if (raw.image_url?.trim()) meta.imageUrl = raw.image_url.trim();
+  if (services.length > 0) meta.services = services;
+  return Object.keys(meta).length > 0 ? meta : undefined;
 }
 
 /**

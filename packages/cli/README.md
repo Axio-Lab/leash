@@ -39,14 +39,29 @@ environment variable overrides:
 > QuickNode / Alchemy / self-hosted endpoint and settlement drops
 > under one second.
 
-## Quickstart (devnet, auto-funded)
+## Quickstart
+
+`leash agent create` is a two-step flow on both devnet and mainnet —
+fund the printed executive pubkey with SOL between the two calls.
 
 ```bash
-# 1. Mint a sandbox agent (auto-funds 0.01 SOL + $1 USDC, persists
-#    agent.json, and you're ready to go in one command).
+# 1. Generate an executive keypair locally + capture the agent's
+#    public profile (name, description, services). Returns
+#    `funding_required` with the pubkey + amount.
+leash agent create \
+  --name "Plexpert" \
+  --description "Onchain accountant for indie operators." \
+  --service web=https://plexpert.xyz \
+  --service api=https://api.plexpert.xyz
+
+# 2. Fund it (devnet airdrop is free; mainnet uses any wallet).
+solana airdrop 1 <executive_pubkey> --url https://api.devnet.solana.com
+
+# 3. Re-run — same command resumes from the persisted draft +
+#    keypair, mints + delegates + records, lands agent.json.
 leash agent create
 
-# 2. Confirm identity.
+# 4. Confirm identity.
 leash agent show
 
 # 3. Look at the marketplace.
@@ -67,7 +82,10 @@ leash treasury withdraw --to <wallet> --amount 0.50 --token USDC
 
 ```text
 agent commands:
-  agent create [--name N]            mint a sandbox agent
+  agent create [--name N] [--description T] [--image URL]
+               [--service name=https://endpoint] (repeatable)
+               [--generate | --import --executive <secret>]
+                                     two-step agent provisioning
   agent show                         print active agent identity
   agent export [--out PATH]          export agent.json
   agent import <PATH>                install an agent.json

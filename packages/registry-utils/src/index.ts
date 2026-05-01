@@ -4,6 +4,8 @@ export * from './leash-block.js';
 export * from './read.js';
 export * from './register-identity.js';
 export * from './create-agent.js';
+export * from './registration-v1.js';
+export * from './registration-v1.js';
 export * from './agent-identity.js';
 export * from './executive.js';
 export * from './operator.js';

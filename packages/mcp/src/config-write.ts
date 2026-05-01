@@ -57,6 +57,17 @@ export async function writePendingRegister(args: {
   pretty?: boolean;
 }): Promise<string> {
   const path = args.path ?? defaultConfigPath();
+  const meta = args.pending.meta;
+  const metaJson =
+    meta &&
+    (meta.name || meta.description || meta.imageUrl || (meta.services && meta.services.length > 0))
+      ? {
+          ...(meta.name ? { name: meta.name } : {}),
+          ...(meta.description ? { description: meta.description } : {}),
+          ...(meta.imageUrl ? { image_url: meta.imageUrl } : {}),
+          ...(meta.services && meta.services.length > 0 ? { services: meta.services } : {}),
+        }
+      : null;
   const file = {
     version: 1 as const,
     network: args.defaults.network,
@@ -69,6 +80,7 @@ export async function writePendingRegister(args: {
       executive_pubkey: args.pending.executivePubkey,
       network: args.pending.network,
       created_at: args.pending.createdAt,
+      ...(metaJson ? { meta: metaJson } : {}),
     },
     created_at: new Date().toISOString(),
   };

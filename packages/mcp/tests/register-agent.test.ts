@@ -97,6 +97,10 @@ describe('leash_register_agent — two-step flow', () => {
   beforeEach(() => {
     envSnap = snapshotEnv();
     for (const k of CONFIG_ENV_KEYS) delete process.env[k];
+    // Tests assert devnet behaviour explicitly. Set the env-var
+    // override here so the suite is independent of whatever default
+    // `normalizeNetwork()` lands on (currently mainnet, was devnet).
+    process.env.LEASH_NETWORK = 'solana-devnet';
     tempDir = mkdtempSync(join(tmpdir(), 'leash-mcp-test-'));
     configPath = join(tempDir, 'agent.json');
     originalFetch = globalThis.fetch;
@@ -234,6 +238,63 @@ describe('leash_register_agent — two-step flow', () => {
     expect(parsed.status).toBe('funding_required');
     expect(parsed.executive_pubkey).toBe(exec.pubkey);
     expect(parsed.keypair_source).toBe('generated');
+
+    await client.close();
+    await server.close();
+  });
+
+  it('services + name persist on pending_register and survive across calls', async () => {
+    globalThis.fetch = mockRpcBalance(0n);
+
+    const { server } = buildServerFromEnv({ configPath });
+    const [serverT, clientT] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 't', version: '0.0.1' }, { capabilities: {} });
+    await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+    // First call carries name + services. Funding fails; metadata
+    // must be saved into agent.json:pending_register.meta.
+    const first = await callRegisterAgent(client, {
+      name: 'Test Agent',
+      description: 'a description',
+      services: [
+        { name: 'web', endpoint: 'https://my-agent.xyz' },
+        { name: 'api', endpoint: 'https://api.my-agent.xyz' },
+      ],
+    });
+    expect(first.status).toBe('funding_required');
+
+    const onDisk = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      pending_register?: {
+        meta?: {
+          name?: string;
+          description?: string;
+          services?: { name: string; endpoint: string }[];
+        };
+      };
+    };
+    expect(onDisk.pending_register!.meta).toBeDefined();
+    expect(onDisk.pending_register!.meta!.name).toBe('Test Agent');
+    expect(onDisk.pending_register!.meta!.description).toBe('a description');
+    expect(onDisk.pending_register!.meta!.services).toEqual([
+      { name: 'web', endpoint: 'https://my-agent.xyz' },
+      { name: 'api', endpoint: 'https://api.my-agent.xyz' },
+    ]);
+
+    // Second call (no args, still unfunded) must return funding_required
+    // without dropping the persisted meta.
+    const second = await callRegisterAgent(client);
+    expect(second.status).toBe('funding_required');
+
+    const onDisk2 = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      pending_register?: {
+        meta?: {
+          name?: string;
+          services?: { name: string; endpoint: string }[];
+        };
+      };
+    };
+    expect(onDisk2.pending_register!.meta!.name).toBe('Test Agent');
+    expect(onDisk2.pending_register!.meta!.services!.length).toBe(2);
 
     await client.close();
     await server.close();

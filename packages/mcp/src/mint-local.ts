@@ -38,8 +38,11 @@ import type { SvmNetwork } from '@leash/mcp-core';
 import {
   KNOWN_STABLES,
   SPL_TOKEN_PROGRAM_ID,
+  buildRegistrationV1,
   createAgent,
+  registrationToDataUrl,
   setSpendDelegation,
+  type RegistrationService,
 } from '@leash/registry-utils';
 
 /**
@@ -148,6 +151,19 @@ export type MintLocallyArgs = {
   name?: string;
   description?: string;
   imageUrl?: string;
+  /**
+   * EIP-8004 RegistrationV1 `services[]` — caller-controlled endpoints
+   * the agent advertises (e.g. `{ name: 'web', endpoint: 'https://…' }`,
+   * `{ name: 'api', endpoint: 'https://…' }`). Threaded through three
+   * places in lockstep:
+   *   1. On-chain MPL Core `agentMetadata.services[]` (via `createAgent`).
+   *   2. Off-chain RegistrationV1 doc embedded in the asset `uri`
+   *      (`buildRegistrationV1(...).services`).
+   *   3. Platform DB row written by `POST /v1/agents/record`.
+   * Leash always auto-injects a `receipts` service entry — callers
+   * don't need to supply one.
+   */
+  services?: RegistrationService[];
   fetchImpl?: typeof globalThis.fetch;
 };
 
@@ -178,18 +194,37 @@ export async function mintAgentLocally(args: MintLocallyArgs): Promise<MintLocal
   const name = (args.name ?? '').trim() || `Agent ${executive.pubkey.slice(0, 8)}`;
   const description = args.description ?? 'Provisioned via @leash/mcp';
   const imageUrl = args.imageUrl ?? '';
+  const callerServices = args.services ?? [];
 
   const umi = buildExecutiveUmi(rpcUrl, executive);
 
+  // Build the EIP-8004 RegistrationV1 doc once and reuse it for both
+  // the on-chain `uri` and (after the mint lands) the platform DB
+  // row. `createAgent` writes its own `receipts` service entry into
+  // the on-chain `agentMetadata.services[]` block, so we keep the
+  // off-chain doc symmetrical: caller services + receipts injection
+  // happen via the same `@leash/registry-utils` paths the chat
+  // product uses.
+  const registration = buildRegistrationV1({
+    name,
+    description,
+    image: imageUrl,
+    services: callerServices,
+    x402Support: true,
+  });
+  const uri = registrationToDataUrl(registration);
+
   // 1. Mint the MPL Core agent. The executive pays rent, owns the
   //    asset, and controls the on-chain identity from this point on.
+  //    `createAgent` from `@leash/registry-utils` auto-injects a
+  //    `receipts` service unless the caller already includes one.
   const minted = await createAgent(umi, {
     wallet: executive.pubkey,
     name,
-    uri: buildRegistrationDataUrl({ name, description, image: imageUrl }),
+    uri,
     description,
     network,
-    services: [],
+    services: callerServices,
   });
 
   // 2. Wait for the asset to be visible on RPC. Devnet routinely takes
@@ -232,7 +267,7 @@ export async function mintAgentLocally(args: MintLocallyArgs): Promise<MintLocal
       name,
       ...(description ? { description } : {}),
       ...(imageUrl ? { image_url: imageUrl } : {}),
-      services: [],
+      services: callerServices,
       network,
     }),
   });
@@ -320,24 +355,8 @@ async function waitForAssetVisible(args: {
   );
 }
 
-/**
- * Inline the EIP-8004 RegistrationV1 metadata as a `data:` URL. Same
- * shape `apps/api`'s old sandbox flow used; staying in lockstep so
- * the explorer / indexer reads consistently across surfaces.
- */
-function buildRegistrationDataUrl(args: {
-  name: string;
-  description: string;
-  image: string;
-}): string {
-  const payload = {
-    type: 'agent',
-    name: args.name,
-    description: args.description,
-    image: args.image,
-    services: [],
-    registrations: [],
-    supportedTrust: [],
-  };
-  return `data:application/json;base64,${Buffer.from(JSON.stringify(payload)).toString('base64')}`;
-}
+// `buildRegistrationDataUrl` was inlined here in v0.2 — it's now
+// shared with the chat product via `@leash/registry-utils`'s
+// `buildRegistrationV1` + `registrationToDataUrl`. Keeping all
+// three surfaces (chat / MCP / CLI) on one EIP-8004 builder means
+// the on-chain `uri` shape stays identical regardless of who minted.

@@ -154,12 +154,40 @@ question.
 both can be initiated by the user (you) or the agent (Cursor /
 Claude Desktop / etc.):
 
-**Step 1 — choose an executive keypair.**
+**Step 1 — choose an executive keypair + fill in agent metadata.**
 Default is `mode: "generate"` — the MCP creates a fresh ed25519
 keypair locally and persists it to `~/.config/leash/agent.json`
 under `pending_register` (chmod 600). To bring your own (e.g. an
 existing `solana-keygen` keypair), pass
 `mode: "import"` + `executive_secret_base58`.
+
+While you're at it, supply the agent's public profile so it lands
+in the on-chain MPL Core metadata + the off-chain EIP-8004
+RegistrationV1 doc on the very first mint:
+
+| Arg            | Notes                                                                                                                                                                      |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`         | Friendly label (recorded on-chain).                                                                                                                                        |
+| `description`  | Free-text description.                                                                                                                                                     |
+| `image_url`    | Public URL of the agent avatar.                                                                                                                                            |
+| `services`     | EIP-8004 service entries other agents and humans use to discover the agent — `[{ name, endpoint }, …]`. **Do not** include `receipts`; the protocol auto-injects one.       |
+
+These fields are persisted alongside the keypair in
+`pending_register.meta` so Step 2 picks them up automatically — you
+do not have to re-supply them after funding.
+
+```jsonc
+// Step 1 example tool call
+{
+  "name": "Plexpert",
+  "description": "Onchain accountant for indie operators.",
+  "image_url": "https://plexpert.xyz/avatar.png",
+  "services": [
+    { "name": "web", "endpoint": "https://plexpert.xyz" },
+    { "name": "api", "endpoint": "https://api.plexpert.xyz" }
+  ]
+}
+```
 
 The tool returns:
 

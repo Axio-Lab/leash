@@ -3,13 +3,13 @@
 import { findAssetSignerPda } from '@metaplex-foundation/mpl-core';
 import { publicKey } from '@metaplex-foundation/umi';
 import type { Umi } from '@metaplex-foundation/umi';
-import { createAgent } from '@leash/registry-utils';
-
 import {
   buildRegistrationV1,
+  createAgent,
   registrationToDataUrl,
   type RegistrationService,
-} from './build-registration';
+} from '@leash/registry-utils';
+
 import { SOLANA_NETWORK, type SolanaNetwork } from './env';
 
 /**

@@ -300,19 +300,43 @@ export class HostRef implements LeashHost {
         pubkey: executive.pubkey,
       });
 
+      // Merge fresh args into persisted meta. Step 1 captures
+      // name/description/image/services; Step 2 keeps them. If the
+      // user re-runs Step 1 with fresh values, the new ones win.
+      const persistedMeta = this.pending?.meta ?? {};
+      const meta = {
+        ...persistedMeta,
+        ...(args.name ? { name: args.name } : {}),
+        ...(args.description ? { description: args.description } : {}),
+        ...(args.image_url ? { imageUrl: args.image_url } : {}),
+        ...(args.services && args.services.length > 0 ? { services: args.services } : {}),
+      };
+
       if (balance < RECOMMENDED_FUND_LAMPORTS) {
         if (!this.pending) {
-          // First call — persist the keypair before returning so the
-          // user can shut down the MCP host while funding and resume
-          // later without losing the secret.
+          // First call — persist the keypair AND the agent draft so
+          // the user can shut down the MCP host while funding and
+          // resume later without losing either.
           const newPending: PendingRegister = {
             executiveSecretBase58: executive.secretBase58,
             executivePubkey: executive.pubkey,
             network,
             createdAt: new Date().toISOString(),
+            ...(Object.keys(meta).length > 0 ? { meta } : {}),
           };
           await this.persistPending(newPending);
           this.pending = newPending;
+        } else if (
+          (args.name || args.description || args.image_url || args.services?.length) &&
+          JSON.stringify(this.pending.meta ?? {}) !== JSON.stringify(meta)
+        ) {
+          // Pending exists, user is updating draft — re-persist.
+          const updated: PendingRegister = {
+            ...this.pending,
+            ...(Object.keys(meta).length > 0 ? { meta } : {}),
+          };
+          await this.persistPending(updated);
+          this.pending = updated;
         }
         return fundingRequiredResult({
           executive: executive.pubkey,
@@ -324,14 +348,19 @@ export class HostRef implements LeashHost {
         });
       }
 
-      // Funded — proceed with mint + delegate + record.
+      // Funded — proceed with mint + delegate + record. Use the
+      // merged meta so Step 2 picks up Step 1's name/services even
+      // when called with no arguments.
       const minted = await mintAgentLocally({
         executive,
         network,
         rpcUrl: this.defaults.rpcUrl,
         apiBaseUrl: this.defaults.apiBaseUrl,
         apiKey: this.defaults.apiKey,
-        ...(args.name ? { name: args.name } : {}),
+        ...(meta.name ? { name: meta.name } : {}),
+        ...(meta.description ? { description: meta.description } : {}),
+        ...(meta.imageUrl ? { imageUrl: meta.imageUrl } : {}),
+        ...(meta.services && meta.services.length > 0 ? { services: meta.services } : {}),
       });
 
       const finalConfig: LeashAgentConfig = {
