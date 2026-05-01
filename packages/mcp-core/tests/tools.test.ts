@@ -28,14 +28,26 @@ const echoHost: LeashHost = {
   async checkTreasuryBalance(args) {
     return jsonResult({ kind: 'echo:balance', args });
   },
+  async registerAgent(args) {
+    return jsonResult({ kind: 'echo:register_agent', args });
+  },
+  async getIdentity(args) {
+    return jsonResult({ kind: 'echo:get_identity', args });
+  },
+  async receipts(args) {
+    return jsonResult({ kind: 'echo:receipts', args });
+  },
 };
 
 describe('LEASH_TOOLS', () => {
-  it('exposes the four canonical tools in stable order', () => {
+  it('exposes the seven canonical tools in stable order', () => {
     expect(LEASH_TOOLS.map((t) => t.name)).toEqual([
       'leash_check_treasury_balance',
       'leash_create_payment_link',
+      'leash_get_identity',
       'leash_pay_payment_link',
+      'leash_receipts',
+      'leash_register_agent',
       'leash_withdraw_treasury',
     ]);
   });

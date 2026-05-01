@@ -32,9 +32,12 @@ import {
   probePaymentLink,
   type CheckTreasuryBalanceArgs,
   type CreatePaymentLinkArgs,
+  type GetIdentityArgs,
   type LeashHost,
   type LeashToolResult,
   type PayArgs,
+  type ReceiptsArgs,
+  type RegisterAgentArgs,
   type SvmNetwork,
   type WithdrawArgs,
 } from '@leash/mcp-core';
@@ -375,6 +378,112 @@ class StdioHost implements LeashHost {
       });
     }
   }
+
+  async registerAgent(_args: RegisterAgentArgs): Promise<LeashToolResult> {
+    return jsonResult({
+      kind: 'register_agent',
+      status: 'already_registered',
+      agent_mint: this.agentMint,
+      executive_pubkey: this.ownerWallet,
+      network: this.network,
+      message: `Agent ${this.agentMint} is already registered on this host. Use \`leash_get_identity\` to inspect it, or rotate to a fresh agent by deleting \`~/.config/leash/agent.json\` and re-running.`,
+    });
+  }
+
+  async getIdentity(_args: GetIdentityArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('identity');
+    try {
+      const treasury = await deriveAgentTreasuryAddress(this.agentMint);
+      return jsonResult({
+        kind: 'identity',
+        status: 'ok',
+        agent_mint: this.agentMint,
+        treasury_address: String(treasury),
+        executive_pubkey: this.ownerWallet,
+        network: this.network,
+        api_base_url: this.apiBaseUrl,
+        rpc_url: this.rpcUrl,
+        explorer_url: explorerAccountUrl(this.agentMint, this.network),
+      });
+    } catch (err) {
+      return jsonResult({
+        kind: 'identity',
+        status: 'error',
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+
+  async receipts(args: ReceiptsArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('receipts');
+    if (!this.config.apiKey) {
+      return jsonResult({
+        kind: 'receipts',
+        status: 'error',
+        message:
+          'Listing receipts from the standalone MCP currently requires LEASH_API_KEY in the environment. (X-Leash-Sig auth ships in the next release alongside discovery + reputation.)',
+      });
+    }
+    try {
+      const url = new URL(`${this.apiBaseUrl}/v1/receipts/${this.agentMint}`);
+      if (args.limit) url.searchParams.set('limit', String(args.limit));
+      if (args.direction === 'outgoing') url.searchParams.set('kind', 'spend');
+      else if (args.direction === 'incoming') url.searchParams.set('kind', 'earn');
+
+      const res = await fetch(url, {
+        headers: { authorization: `Bearer ${this.config.apiKey}` },
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        return jsonResult({
+          kind: 'receipts',
+          status: 'error',
+          message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+        });
+      }
+      const json = JSON.parse(text) as {
+        items: Array<{
+          receipt_hash: string;
+          tx_sig: string | null;
+          decision: string;
+          kind: 'spend' | 'earn';
+          ingested_at: string;
+          raw: { request?: { url?: string }; price?: { amount?: string; currency?: string } };
+        }>;
+        next_cursor: string | null;
+      };
+      return jsonResult({
+        kind: 'receipts',
+        status: 'ok',
+        agent_mint: this.agentMint,
+        network: this.network,
+        count: json.items.length,
+        next_cursor: json.next_cursor,
+        items: json.items.map((r) => ({
+          receipt_hash: r.receipt_hash,
+          direction: r.kind === 'spend' ? 'outgoing' : 'incoming',
+          decision: r.decision,
+          tx_signature: r.tx_sig,
+          url: r.raw?.request?.url ?? null,
+          amount: r.raw?.price?.amount ?? null,
+          currency: r.raw?.price?.currency ?? null,
+          timestamp: r.ingested_at,
+          explorer_url: r.tx_sig ? explorerTxUrl(r.tx_sig, this.network) : null,
+        })),
+      });
+    } catch (err) {
+      return jsonResult({
+        kind: 'receipts',
+        status: 'error',
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+}
+
+function explorerAccountUrl(pubkey: string, network: SvmNetwork): string {
+  const cluster = network === 'solana-mainnet' ? '' : '?cluster=devnet';
+  return `https://solscan.io/account/${pubkey}${cluster}`;
 }
 
 function explorerTxUrl(signature: string, network: SvmNetwork): string {

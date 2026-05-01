@@ -60,7 +60,10 @@ describe('@leash/mcp server', () => {
     expect(names).toEqual([
       'leash_check_treasury_balance',
       'leash_create_payment_link',
+      'leash_get_identity',
       'leash_pay_payment_link',
+      'leash_receipts',
+      'leash_register_agent',
       'leash_withdraw_treasury',
     ]);
 

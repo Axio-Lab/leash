@@ -24,6 +24,9 @@ export type {
   PayArgs,
   WithdrawArgs,
   CheckTreasuryBalanceArgs,
+  RegisterAgentArgs,
+  GetIdentityArgs,
+  ReceiptsArgs,
 } from './host.js';
 
 export {
@@ -38,7 +41,10 @@ export {
   LEASH_TOOLS,
   checkBalancesTool,
   createPaymentLinkTool,
+  getIdentityTool,
   payPaymentLinkTool,
+  receiptsTool,
+  registerAgentTool,
   withdrawTreasuryTool,
 } from './tools/index.js';
 

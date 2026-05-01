@@ -243,7 +243,135 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
         note: 'Reply with a single short sentence telling the user to review the Withdraw card below and click Approve & withdraw.',
       });
     },
+
+    async registerAgent(): Promise<LeashToolResult> {
+      // The chat product mints agents through the Profile → Agent UI
+      // where the user signs with their Privy wallet. This MCP tool
+      // could in theory drive that flow programmatically, but for the
+      // chat surface we instead instruct the user to use the existing
+      // UI — minting on the user's behalf would require a non-trivial
+      // server-side wallet provisioning path the chat product doesn't
+      // need (the standalone MCP gets that path via the sandbox API).
+      return jsonResult({
+        kind: 'register_agent',
+        status: 'manual',
+        message:
+          'In the chat UI, agents are minted under Profile → Agent. Tell the user to open that page and click "Mint agent" — once it confirms on-chain, the new agent appears in the sidebar and this chat will pick it up automatically. (The standalone MCP / CLI handles minting programmatically via `leash_register_agent`; this surface is the "human-in-the-loop" version.)',
+      });
+    },
+
+    async getIdentity(): Promise<LeashToolResult> {
+      if (!ctx.agentMint) return noAgentResult('identity');
+      try {
+        const treasury = await deriveAgentTreasuryAddress(ctx.agentMint);
+        return jsonResult({
+          kind: 'identity',
+          status: 'ok',
+          agent_mint: ctx.agentMint,
+          treasury_address: String(treasury),
+          executive_pubkey: ctx.ownerWallet ?? null,
+          network: SOLANA_NETWORK,
+          api_base_url: env.leashApiUrl,
+          rpc_url: SOLANA_RPC,
+        });
+      } catch (e) {
+        return jsonResult({
+          kind: 'identity',
+          status: 'error',
+          message: e instanceof Error ? e.message : 'unknown',
+        });
+      }
+    },
+
+    async receipts(args): Promise<LeashToolResult> {
+      if (!ctx.agentMint) return noAgentResult('receipts');
+      try {
+        const url = new URL(`${env.leashApiUrl}/v1/receipts/${ctx.agentMint}`);
+        if (args.limit) url.searchParams.set('limit', String(args.limit));
+        if (args.direction === 'outgoing') url.searchParams.set('kind', 'spend');
+        else if (args.direction === 'incoming') url.searchParams.set('kind', 'earn');
+
+        const apiKey = await revealAnyApiKey(ctx.privyId);
+        const res = await fetch(url, {
+          headers: { authorization: `Bearer ${apiKey}` },
+        });
+        const text = await res.text();
+        if (!res.ok) {
+          return jsonResult({
+            kind: 'receipts',
+            status: 'error',
+            message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+          });
+        }
+        const json = JSON.parse(text) as {
+          items: Array<{
+            receipt_hash: string;
+            tx_sig: string | null;
+            decision: string;
+            kind: 'spend' | 'earn';
+            ingested_at: string;
+            raw: { request?: { url?: string }; price?: { amount?: string; currency?: string } };
+          }>;
+          next_cursor: string | null;
+        };
+        return jsonResult({
+          kind: 'receipts',
+          status: 'ok',
+          agent_mint: ctx.agentMint,
+          network: SOLANA_NETWORK,
+          count: json.items.length,
+          next_cursor: json.next_cursor,
+          items: json.items.map((r) => ({
+            receipt_hash: r.receipt_hash,
+            direction: r.kind === 'spend' ? 'outgoing' : 'incoming',
+            decision: r.decision,
+            tx_signature: r.tx_sig,
+            url: r.raw?.request?.url ?? null,
+            amount: r.raw?.price?.amount ?? null,
+            currency: r.raw?.price?.currency ?? null,
+            timestamp: r.ingested_at,
+          })),
+        });
+      } catch (e) {
+        return jsonResult({
+          kind: 'receipts',
+          status: 'error',
+          message: e instanceof Error ? e.message : 'unknown',
+        });
+      }
+    },
   };
+}
+
+/**
+ * Reveal any API key the signed-in user owns. Used by the receipts
+ * fetcher above; same fallback pattern as `createPaymentLinkOnBehalfOfUser`
+ * but factored out because both call sites need it now.
+ */
+async function revealAnyApiKey(privyId: string): Promise<string> {
+  const db = getDb();
+  const platformKeys = await listPlatformKeys(db, privyId);
+  if (platformKeys.length === 0) {
+    throw new Error(
+      'No API key on file for this account. Open Profile → API keys and create one (a default key is normally provisioned on first sign-in).',
+    );
+  }
+  let plaintext: string | null = null;
+  let lastError: string | null = null;
+  for (const k of platformKeys) {
+    try {
+      plaintext = await getLeash().revealApiKey(k.keyId);
+      if (plaintext) break;
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : 'unknown';
+    }
+  }
+  if (!plaintext) {
+    throw new Error(
+      `Could not access an API key plaintext (${lastError ?? 'no revealable keys'}). Re-issue a key from Profile → API keys.`,
+    );
+  }
+  return plaintext;
 }
 
 /**

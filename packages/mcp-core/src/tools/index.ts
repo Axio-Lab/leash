@@ -13,13 +13,27 @@ import { createPaymentLinkTool } from './create-payment-link.js';
 import { payPaymentLinkTool } from './pay-payment-link.js';
 import { checkBalancesTool } from './check-balances.js';
 import { withdrawTreasuryTool } from './withdraw-treasury.js';
+import { registerAgentTool } from './register-agent.js';
+import { getIdentityTool } from './get-identity.js';
+import { receiptsTool } from './receipts.js';
 
-export { createPaymentLinkTool, payPaymentLinkTool, checkBalancesTool, withdrawTreasuryTool };
+export {
+  createPaymentLinkTool,
+  payPaymentLinkTool,
+  checkBalancesTool,
+  withdrawTreasuryTool,
+  registerAgentTool,
+  getIdentityTool,
+  receiptsTool,
+};
 
 /** Stable alphabetical export order so tools/list output is deterministic. */
 export const LEASH_TOOLS: ReadonlyArray<LeashTool> = [
   checkBalancesTool,
   createPaymentLinkTool,
+  getIdentityTool,
   payPaymentLinkTool,
+  receiptsTool,
+  registerAgentTool,
   withdrawTreasuryTool,
 ];

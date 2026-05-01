@@ -54,6 +54,20 @@ export type CheckTreasuryBalanceArgs = {
   symbol?: string;
 };
 
+export type RegisterAgentArgs = {
+  name?: string;
+  network?: SvmNetwork;
+};
+
+export type GetIdentityArgs = Record<string, never>;
+
+export type ReceiptsArgs = {
+  /** Filter by direction. `'both'` returns spend + earn receipts. */
+  direction?: 'both' | 'outgoing' | 'incoming';
+  /** Max items to return. Capped server-side. */
+  limit?: number;
+};
+
 // ────────────────────────────────────────────────────────────────────────────
 // LeashHost
 // ────────────────────────────────────────────────────────────────────────────
@@ -104,4 +118,29 @@ export interface LeashHost {
    * shape (network/RPC reads are host-agnostic).
    */
   checkTreasuryBalance(args: CheckTreasuryBalanceArgs): Promise<LeashToolResult>;
+
+  /**
+   * Provision a new on-chain agent for the caller.
+   *   - standalone MCP impl: hits `POST /v1/sandbox/agent` (devnet),
+   *     writes `~/.config/leash/agent.json` with the returned secret,
+   *     returns the funding details.
+   *   - chat product impl: returns a `kind: 'register_agent', status:
+   *     'manual'` blob telling the model to direct the user to
+   *     "Profile → Agent" (the chat UI handles minting today).
+   */
+  registerAgent(args: RegisterAgentArgs): Promise<LeashToolResult>;
+
+  /**
+   * Self-introspection — what agent am I, what's my network, who's
+   * the executive. Both impls read from local context and never hit
+   * the network. Cheap by design so the LLM can call it freely.
+   */
+  getIdentity(args: GetIdentityArgs): Promise<LeashToolResult>;
+
+  /**
+   * List recent receipts for the active agent. Both impls call the
+   * Leash API; the standalone host uses the legacy API-key bearer
+   * until X-Leash-Sig auth lands in batch 6.
+   */
+  receipts(args: ReceiptsArgs): Promise<LeashToolResult>;
 }

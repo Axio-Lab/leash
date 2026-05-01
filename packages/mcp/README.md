@@ -57,12 +57,15 @@ blob asking the LLM to onboard the user. (The frictionless
 
 ## Tools (v0.1)
 
-| Tool                           | What it does                                                                       |
-| ------------------------------ | ---------------------------------------------------------------------------------- |
-| `leash_check_treasury_balance` | Read SOL + USDC/USDG/USDT balances on the agent treasury PDA.                      |
-| `leash_create_payment_link`    | Mint an x402 paywall the user can share. Requires `LEASH_API_KEY` until batch 4.   |
-| `leash_pay_payment_link`       | Probe an x402 link, sign + settle the SPL transfer locally, return the receipt.    |
-| `leash_withdraw_treasury`      | Owner-driven withdrawal of SOL or an SPL stable to any wallet (mpl-core::Execute). |
+| Tool                           | What it does                                                                                                                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `leash_register_agent`         | First-run onboarding. Mints a devnet agent via the Leash sandbox faucet, persists `agent.json`, and HOT-SWAPS the in-memory MCP host so subsequent tool calls work without a restart. |
+| `leash_get_identity`           | Self-introspection — what agent am I, on which network, what's my treasury PDA.                                                                                                       |
+| `leash_check_treasury_balance` | Read SOL + USDC/USDG/USDT balances on the agent treasury PDA.                                                                                                                         |
+| `leash_pay_payment_link`       | Probe an x402 link, sign + settle the SPL transfer locally, return the receipt.                                                                                                       |
+| `leash_create_payment_link`    | Mint an x402 paywall the user can share. Requires `LEASH_API_KEY` until X-Leash-Sig auth lands.                                                                                       |
+| `leash_withdraw_treasury`      | Owner-driven withdrawal of SOL or an SPL stable to any wallet (mpl-core::Execute).                                                                                                    |
+| `leash_receipts`               | List recent receipts for the active agent. Requires `LEASH_API_KEY` until X-Leash-Sig auth lands.                                                                                     |
 
 ## Try the read path
 

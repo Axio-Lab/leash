@@ -13,10 +13,18 @@
  * `leash-mcp` binary or call `runStdioServer()` directly.
  */
 
-export { buildServerFromEnv, createLeashMcpServer, runStdioServer } from './server.js';
+export { HostRef, buildServerFromEnv, createLeashMcpServer, runStdioServer } from './server.js';
 
 export { loadAgentConfig, defaultConfigPath, type LeashAgentConfig } from './config.js';
+
+export { writeAgentConfig } from './config-write.js';
 
 export { loadSigner, defaultRpcFor, type LeashSigner } from './signer.js';
 
 export { createStdioHost } from './host-stdio.js';
+
+export {
+  postSandboxAgent,
+  type SandboxAgentRequest,
+  type SandboxAgentResponse,
+} from './sandbox-api.js';
