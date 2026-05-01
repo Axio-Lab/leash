@@ -35,7 +35,7 @@
           },
           {
             "group": "Agents",
-            "pages": ["agents/mcp", "agents/cli", "agents/sdk", "agents/demo-script"]
+            "pages": ["agents/mcp", "agents/cli", "agents/sdk"]
           },
           {
             "group": "Concepts",
