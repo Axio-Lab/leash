@@ -25,6 +25,8 @@ import {
   listSplBalances,
 } from '@leash/core';
 import {
+  fetchDiscover,
+  fetchReputation,
   isLikelyBase58Address,
   jsonResult,
   lookupTokenBySymbolSafe,
@@ -32,12 +34,14 @@ import {
   probePaymentLink,
   type CheckTreasuryBalanceArgs,
   type CreatePaymentLinkArgs,
+  type DiscoverArgs,
   type GetIdentityArgs,
   type LeashHost,
   type LeashToolResult,
   type PayArgs,
   type ReceiptsArgs,
   type RegisterAgentArgs,
+  type ReputationArgs,
   type SvmNetwork,
   type WithdrawArgs,
 } from '@leash/mcp-core';
@@ -478,6 +482,22 @@ class StdioHost implements LeashHost {
         message: err instanceof Error ? err.message : 'unknown error',
       });
     }
+  }
+
+  async discover(args: DiscoverArgs): Promise<LeashToolResult> {
+    return fetchDiscover({
+      apiBaseUrl: this.apiBaseUrl,
+      network: this.network,
+      query: args,
+    });
+  }
+
+  async reputation(args: ReputationArgs): Promise<LeashToolResult> {
+    return fetchReputation({
+      apiBaseUrl: this.apiBaseUrl,
+      network: this.network,
+      query: args,
+    });
   }
 }
 

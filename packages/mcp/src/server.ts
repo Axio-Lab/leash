@@ -26,8 +26,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   LEASH_TOOLS,
+  fetchDiscover,
+  fetchReputation,
   type CheckTreasuryBalanceArgs,
   type CreatePaymentLinkArgs,
+  type DiscoverArgs,
   type GetIdentityArgs,
   type LeashHost,
   type LeashTool,
@@ -35,6 +38,7 @@ import {
   type PayArgs,
   type ReceiptsArgs,
   type RegisterAgentArgs,
+  type ReputationArgs,
   type SvmNetwork,
   type WithdrawArgs,
 } from '@leash/mcp-core';
@@ -207,6 +211,12 @@ export class HostRef implements LeashHost {
   receipts(args: ReceiptsArgs): Promise<LeashToolResult> {
     return this.inner.receipts(args);
   }
+  discover(args: DiscoverArgs): Promise<LeashToolResult> {
+    return this.inner.discover(args);
+  }
+  reputation(args: ReputationArgs): Promise<LeashToolResult> {
+    return this.inner.reputation(args);
+  }
 
   // ── registerAgent — the only method that can mutate `this.inner` ──
   async registerAgent(args: RegisterAgentArgs): Promise<LeashToolResult> {
@@ -314,6 +324,13 @@ function defaultRpcFor(network: SvmNetwork): string {
  * `HostRef` so the placeholder never sees that call.
  */
 function makePlaceholderHost(): LeashHost {
+  // Discovery + reputation are public read-only endpoints — they
+  // don't need a configured agent. We still bind them to a sensible
+  // default API base / network so the placeholder is fully useful
+  // for "look around the marketplace before you mint" UX.
+  const apiBaseUrl = process.env.LEASH_API_URL?.trim() || DEFAULT_API_URL;
+  const network: SvmNetwork = 'solana-devnet';
+
   const noAgent = (kind: string): LeashToolResult => ({
     content: [
       {
@@ -330,9 +347,9 @@ function makePlaceholderHost(): LeashHost {
   return {
     agentMint: null,
     ownerWallet: null,
-    network: 'solana-devnet',
+    network,
     rpcUrl: 'https://api.devnet.solana.com',
-    apiBaseUrl: DEFAULT_API_URL,
+    apiBaseUrl,
     async createPaymentLink() {
       return noAgent('payment_link');
     },
@@ -355,6 +372,12 @@ function makePlaceholderHost(): LeashHost {
       // HostRef intercepts this call before it ever reaches us.
       // Implementing it as a no_agent passthrough is purely defensive.
       return noAgent('register_agent');
+    },
+    async discover(args) {
+      return fetchDiscover({ apiBaseUrl, network, query: args });
+    },
+    async reputation(args) {
+      return fetchReputation({ apiBaseUrl, network, query: args });
     },
   };
 }

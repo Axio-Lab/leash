@@ -37,6 +37,7 @@ import { buildMarketplaceRoutes } from './routes/marketplace.js';
 import { buildPlatformAgentRoutes } from './routes/platform-agents.js';
 import { buildPlatformTaskRoutes } from './routes/platform-tasks.js';
 import { buildAgentSelfRegisterRoutes } from './routes/agent-self-register.js';
+import { buildDiscoverReputationRoutes } from './routes/discover-reputation.js';
 import { buildPaymentLinkRoutes } from './routes/payment-links.js';
 import { buildPaywallRoutes } from './routes/paywall.js';
 import { buildSellerUtilsRoutes } from './routes/seller-utils.js';
@@ -79,6 +80,14 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
     buildAgentSelfRegisterRoutes({ config: deps.config, db: deps.db, cache: deps.cache }),
   );
   app.route('/', buildMarketplaceRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
+  // Public discover + reputation. Mounted before the authed sub-app so
+  // `/v1/discover` and `/v1/agents/:mint/reputation` are reachable without
+  // an API key — these are the agent equivalent of "google a service before
+  // paying it" and must work for any caller (MCP host, CLI, indexer).
+  app.route(
+    '/',
+    buildDiscoverReputationRoutes({ config: deps.config, db: deps.db, cache: deps.cache }),
+  );
   app.route('/', buildUploadRoutes({ config: deps.config, db: deps.db }));
   app.route('/', buildPublicUploadRoutes({ config: deps.config, db: deps.db }));
 

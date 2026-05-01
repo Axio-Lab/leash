@@ -16,6 +16,8 @@ import { withdrawTreasuryTool } from './withdraw-treasury.js';
 import { registerAgentTool } from './register-agent.js';
 import { getIdentityTool } from './get-identity.js';
 import { receiptsTool } from './receipts.js';
+import { discoverTool } from './discover.js';
+import { reputationTool } from './reputation.js';
 
 export {
   createPaymentLinkTool,
@@ -25,15 +27,19 @@ export {
   registerAgentTool,
   getIdentityTool,
   receiptsTool,
+  discoverTool,
+  reputationTool,
 };
 
 /** Stable alphabetical export order so tools/list output is deterministic. */
 export const LEASH_TOOLS: ReadonlyArray<LeashTool> = [
   checkBalancesTool,
   createPaymentLinkTool,
+  discoverTool,
   getIdentityTool,
   payPaymentLinkTool,
   receiptsTool,
   registerAgentTool,
+  reputationTool,
   withdrawTreasuryTool,
 ];

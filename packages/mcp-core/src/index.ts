@@ -27,6 +27,8 @@ export type {
   RegisterAgentArgs,
   GetIdentityArgs,
   ReceiptsArgs,
+  DiscoverArgs,
+  ReputationArgs,
 } from './host.js';
 
 export {
@@ -41,10 +43,12 @@ export {
   LEASH_TOOLS,
   checkBalancesTool,
   createPaymentLinkTool,
+  discoverTool,
   getIdentityTool,
   payPaymentLinkTool,
   receiptsTool,
   registerAgentTool,
+  reputationTool,
   withdrawTreasuryTool,
 } from './tools/index.js';
 
@@ -53,7 +57,11 @@ export {
   lookupTokenBySymbolSafe,
   decodeBase64Json,
   probePaymentLink,
+  fetchDiscover,
+  fetchReputation,
   type TokenMeta,
   type TokenProgramId,
   type PaymentRequirementPreview,
+  type DiscoverItem,
+  type ReputationSnapshot,
 } from './helpers/index.js';

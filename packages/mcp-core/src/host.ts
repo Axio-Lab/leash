@@ -68,6 +68,22 @@ export type ReceiptsArgs = {
   limit?: number;
 };
 
+export type DiscoverArgs = {
+  /** Free-text capability label (e.g. "ocr", "weather"). */
+  capability?: string;
+  /** Maximum decimal USDC price per call. */
+  max_price_usdc?: number;
+  /** Pricing-type filter. */
+  pricing_type?: 'free' | 'per_call' | 'variable';
+  /** Max items to return. Server-capped. */
+  limit?: number;
+};
+
+export type ReputationArgs = {
+  agent_mint: string;
+  network?: SvmNetwork;
+};
+
 // ────────────────────────────────────────────────────────────────────────────
 // LeashHost
 // ────────────────────────────────────────────────────────────────────────────
@@ -143,4 +159,16 @@ export interface LeashHost {
    * until X-Leash-Sig auth lands in batch 6.
    */
   receipts(args: ReceiptsArgs): Promise<LeashToolResult>;
+
+  /**
+   * Search the Leash marketplace for paid services by capability +
+   * price. Public — both hosts hit `GET /v1/discover` directly.
+   */
+  discover(args: DiscoverArgs): Promise<LeashToolResult>;
+
+  /**
+   * Pull the live reputation snapshot for any on-chain agent. Public
+   * — both hosts hit `GET /v1/agents/:mint/reputation` directly.
+   */
+  reputation(args: ReputationArgs): Promise<LeashToolResult>;
 }

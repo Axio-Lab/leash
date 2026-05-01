@@ -21,6 +21,8 @@ import { TOKEN_2022_PROGRAM_ID, deriveAgentTreasuryAddress, listSplBalances } fr
 import { z } from 'zod';
 import {
   LEASH_TOOLS,
+  fetchDiscover,
+  fetchReputation,
   isLikelyBase58Address,
   jsonResult,
   lookupTokenBySymbolSafe,
@@ -28,10 +30,12 @@ import {
   probePaymentLink,
   type CheckTreasuryBalanceArgs,
   type CreatePaymentLinkArgs,
+  type DiscoverArgs,
   type LeashHost,
   type LeashTool,
   type LeashToolResult,
   type PayArgs,
+  type ReputationArgs,
   type WithdrawArgs,
 } from '@leash/mcp-core';
 import { listPlatformKeys } from '@leash/platform-auth';
@@ -339,6 +343,25 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
           message: e instanceof Error ? e.message : 'unknown',
         });
       }
+    },
+
+    async discover(args: DiscoverArgs): Promise<LeashToolResult> {
+      // `/v1/discover` is public — no API key needed. The chat host
+      // shares the wire-protocol fetcher with the standalone MCP, so
+      // both surfaces show identical results to the LLM.
+      return fetchDiscover({
+        apiBaseUrl: env.leashApiUrl,
+        network: SOLANA_NETWORK as LeashHost['network'],
+        query: args,
+      });
+    },
+
+    async reputation(args: ReputationArgs): Promise<LeashToolResult> {
+      return fetchReputation({
+        apiBaseUrl: env.leashApiUrl,
+        network: SOLANA_NETWORK as LeashHost['network'],
+        query: args,
+      });
     },
   };
 }
