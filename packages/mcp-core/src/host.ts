@@ -55,8 +55,32 @@ export type CheckTreasuryBalanceArgs = {
 };
 
 export type RegisterAgentArgs = {
+  /**
+   * Friendly agent name recorded in MPL Core metadata. Optional —
+   * defaults to `Agent <executive_pubkey[0..8]>` when omitted.
+   */
   name?: string;
-  network?: SvmNetwork;
+  /**
+   * Owner-keypair source.
+   *   - `'generate'` (default) — host generates a fresh ed25519 keypair
+   *     locally, persists it to `~/.config/leash/agent.json` under
+   *     `pending_register`, and asks the user to fund it.
+   *   - `'import'` — caller supplies an existing keypair via
+   *     `executive_secret_base58`. Same persistence + funding-check
+   *     path; the caller stays in control of the signing key.
+   *
+   * The mode is only consulted on the FIRST call. Subsequent calls
+   * (after the user funds the executive) ignore `mode` and resume
+   * from `pending_register`.
+   */
+  mode?: 'generate' | 'import';
+  /**
+   * Required when `mode === 'import'`. The executive's 64-byte
+   * ed25519 secret key, base58-encoded. The host validates the
+   * length + curve before persisting and never echoes the secret
+   * back in any tool response.
+   */
+  executive_secret_base58?: string;
 };
 
 export type GetIdentityArgs = Record<string, never>;

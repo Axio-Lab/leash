@@ -44,7 +44,10 @@ function makeFetch(respond: (req: RecordedRequest) => { status: number; body: un
   calls: RecordedRequest[];
 } {
   const calls: RecordedRequest[] = [];
-  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const fetchImpl = (async (
+    input: string | URL | { url: string; toString(): string },
+    init?: RequestInit,
+  ): Promise<Response> => {
     const url = typeof input === 'string' ? input : input.toString();
     const headers: Record<string, string> = {};
     if (init?.headers) {

@@ -13,13 +13,28 @@
  *
  * Boot states
  * -----------
- * The server boots even when no agent is configured yet. In that
- * "no_agent" state every settlement/identity tool returns a recoverable
- * `{ status: "no_agent", … }` blob, but `leash_register_agent` is
- * fully functional — it hits `POST /v1/sandbox/agent`, writes
- * `~/.config/leash/agent.json`, AND swaps the in-memory host to a
- * real `StdioHost` so the LLM can immediately retry the failed tool
- * call without restarting the MCP host. That's the YC-demo flow.
+ * The server boots in three states, all of which surface working
+ * tool schemas to the LLM:
+ *
+ *   1. **Registered.** `agent.json` has a mint + executive. The
+ *      placeholder is never installed — the inner host is a real
+ *      `StdioHost` from the start.
+ *
+ *   2. **Awaiting funding.** A previous `leash_register_agent` call
+ *      generated (or imported) an executive keypair but the user
+ *      hasn't sent it SOL yet. `agent.json` carries a
+ *      `pending_register` block. Settlement tools return `no_agent`;
+ *      the next `leash_register_agent` call resumes from the
+ *      persisted pending block, balance-checks, and mints if funded.
+ *
+ *   3. **Fresh.** No agent state on disk. Settlement tools return
+ *      `no_agent`; the first `leash_register_agent` call generates
+ *      (or imports) a keypair, persists it, and returns
+ *      `funding_required`.
+ *
+ * In every state `leash_register_agent` is fully functional, hot-swaps
+ * the in-memory host, and persists state to disk so the LLM can
+ * recover without restarting the MCP host.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -43,14 +58,29 @@ import {
   type WithdrawArgs,
 } from '@leash/mcp-core';
 
-import { defaultConfigPath, loadAgentConfig, type LeashAgentConfig } from './config.js';
-import { writeAgentConfig } from './config-write.js';
+import {
+  defaultConfigPath,
+  loadAgentSession,
+  type AgentSession,
+  type LeashAgentConfig,
+  type LeashHostDefaults,
+  type PendingRegister,
+} from './config.js';
+import { writeAgentConfig, writePendingRegister } from './config-write.js';
 import { createStdioHost } from './host-stdio.js';
-import { postSandboxAgent } from './sandbox-api.js';
+import {
+  RECOMMENDED_FUND_LAMPORTS,
+  RECOMMENDED_FUND_SOL,
+  generateExecutive,
+  getExecutiveBalanceLamports,
+  importExecutive,
+  lamportsToSol,
+  mintAgentLocally,
+  type ExecutiveKeypair,
+} from './mint-local.js';
 
 const SERVER_NAME = 'leash';
-const SERVER_VERSION = '0.1.0';
-const DEFAULT_API_URL = 'https://api.leash.market';
+const SERVER_VERSION = '0.2.0';
 
 /**
  * Build the MCP server bound to the given host. Each `LeashTool`
@@ -105,16 +135,31 @@ function registerLeashTool(server: McpServer, def: LeashTool, host: LeashHost): 
 export function buildServerFromEnv(opts?: { configPath?: string }): {
   server: McpServer;
   config: LeashAgentConfig | null;
+  pending: PendingRegister | null;
+  defaults: LeashHostDefaults;
   /** The mutable host wrapper. Useful for tests asserting state changes. */
   hostRef: HostRef;
 } {
   const configPath = opts?.configPath ?? defaultConfigPath();
-  const config = loadAgentConfig(opts?.configPath ? { path: configPath } : {});
+  const session: AgentSession = loadAgentSession(opts?.configPath ? { path: configPath } : {});
 
-  const initialInner: LeashHost = config ? createStdioHost(config) : makePlaceholderHost();
-  const hostRef = new HostRef(initialInner, configPath);
+  const initialInner: LeashHost = session.config
+    ? createStdioHost(session.config)
+    : makePlaceholderHost(session.defaults);
+  const hostRef = new HostRef({
+    inner: initialInner,
+    configPath,
+    defaults: session.defaults,
+    pending: session.pending,
+  });
 
-  return { server: createLeashMcpServer(hostRef), config, hostRef };
+  return {
+    server: createLeashMcpServer(hostRef),
+    config: session.config,
+    pending: session.pending,
+    defaults: session.defaults,
+    hostRef,
+  };
 }
 
 /**
@@ -123,14 +168,18 @@ export function buildServerFromEnv(opts?: { configPath?: string }): {
  * for the JSON-RPC framed messages.
  */
 export async function runStdioServer(opts?: { configPath?: string }): Promise<void> {
-  const { server, config } = buildServerFromEnv(opts);
+  const { server, config, pending, defaults } = buildServerFromEnv(opts);
   if (config) {
     process.stderr.write(
       `[leash-mcp] ready  agent=${config.agentMint}  network=${config.network}  executive=${maskPubkey(loadExecPubkey(config))}\n`,
     );
+  } else if (pending) {
+    process.stderr.write(
+      `[leash-mcp] ready (awaiting funding) network=${pending.network} executive=${maskPubkey(pending.executivePubkey)} — send ${RECOMMENDED_FUND_SOL} SOL to that address, then call leash_register_agent again\n`,
+    );
   } else {
     process.stderr.write(
-      `[leash-mcp] ready (no agent configured — call leash_register_agent or set ~/.config/leash/agent.json)\n`,
+      `[leash-mcp] ready (no agent configured) network=${defaults.network} — call leash_register_agent to provision one\n`,
     );
   }
   const transport = new StdioServerTransport();
@@ -155,7 +204,7 @@ function maskPubkey(pk: string): string {
  * Wraps a `LeashHost` so `registerAgent` can replace the underlying
  * implementation in place. Forwards every standard method to the
  * current `inner` host; intercepts `registerAgent` to handle the
- * placeholder → real-host upgrade.
+ * placeholder → pending → registered upgrade chain.
  *
  * We use a class with explicit forwarders (rather than a Proxy) so
  * the TypeScript surface stays tight and readers can see exactly
@@ -164,10 +213,19 @@ function maskPubkey(pk: string): string {
 export class HostRef implements LeashHost {
   private inner: LeashHost;
   private readonly configPath: string;
+  private defaults: LeashHostDefaults;
+  private pending: PendingRegister | null;
 
-  constructor(inner: LeashHost, configPath: string) {
-    this.inner = inner;
-    this.configPath = configPath;
+  constructor(args: {
+    inner: LeashHost;
+    configPath: string;
+    defaults: LeashHostDefaults;
+    pending: PendingRegister | null;
+  }) {
+    this.inner = args.inner;
+    this.configPath = args.configPath;
+    this.defaults = args.defaults;
+    this.pending = args.pending;
   }
 
   /** Test/inspection hook. Not part of the `LeashHost` contract. */
@@ -218,44 +276,81 @@ export class HostRef implements LeashHost {
     return this.inner.reputation(args);
   }
 
-  // ── registerAgent — the only method that can mutate `this.inner` ──
-  async registerAgent(args: RegisterAgentArgs): Promise<LeashToolResult> {
-    // If we already have an agent, the inner host's "already_registered"
-    // path is the right answer.
+  /**
+   * Two-step registration:
+   *   - First call: select keypair (generate / import), persist
+   *     `pending_register`, return `funding_required` with the pubkey
+   *     and minimum SOL amount.
+   *   - Second call: resume from `pending_register`, balance-check,
+   *     mint + delegate + record, write final `agent.json`, hot-swap.
+   */
+  async registerAgent(args: RegisterAgentArgs): Promise<RegisterResultLike> {
     if (this.inner.agentMint) {
       return this.inner.registerAgent(args);
     }
 
-    const apiBaseUrl =
-      process.env.LEASH_API_URL?.trim() || this.inner.apiBaseUrl || DEFAULT_API_URL;
-
     try {
-      const sandbox = await postSandboxAgent({
-        apiBaseUrl,
-        body: { ...(args.name ? { name: args.name } : {}) },
+      const executive = this.pending
+        ? this.executiveFromPending(this.pending)
+        : await this.selectExecutive(args);
+
+      const network = this.pending?.network ?? this.defaults.network;
+      const balance = await getExecutiveBalanceLamports({
+        rpcUrl: this.defaults.rpcUrl,
+        pubkey: executive.pubkey,
       });
 
-      const newConfig: LeashAgentConfig = {
-        agentMint: sandbox.mint,
-        executiveSecretBase58: sandbox.executive_secret_base58,
-        network: sandbox.network,
-        apiBaseUrl,
-        rpcUrl: process.env.LEASH_RPC_URL?.trim() || defaultRpcFor(sandbox.network),
-        explorerBaseUrl: process.env.LEASH_EXPLORER_URL?.trim() || 'https://explorer.leash.market',
-        apiKey: process.env.LEASH_API_KEY?.trim() || null,
+      if (balance < RECOMMENDED_FUND_LAMPORTS) {
+        if (!this.pending) {
+          // First call — persist the keypair before returning so the
+          // user can shut down the MCP host while funding and resume
+          // later without losing the secret.
+          const newPending: PendingRegister = {
+            executiveSecretBase58: executive.secretBase58,
+            executivePubkey: executive.pubkey,
+            network,
+            createdAt: new Date().toISOString(),
+          };
+          await this.persistPending(newPending);
+          this.pending = newPending;
+        }
+        return fundingRequiredResult({
+          executive: executive.pubkey,
+          network,
+          balanceLamports: balance,
+          requiredLamports: RECOMMENDED_FUND_LAMPORTS,
+          configPath: this.configPath,
+          imported: !!args.executive_secret_base58,
+        });
+      }
+
+      // Funded — proceed with mint + delegate + record.
+      const minted = await mintAgentLocally({
+        executive,
+        network,
+        rpcUrl: this.defaults.rpcUrl,
+        apiBaseUrl: this.defaults.apiBaseUrl,
+        apiKey: this.defaults.apiKey,
+        ...(args.name ? { name: args.name } : {}),
+      });
+
+      const finalConfig: LeashAgentConfig = {
+        agentMint: minted.mint,
+        executiveSecretBase58: executive.secretBase58,
+        network: minted.network,
+        apiBaseUrl: this.defaults.apiBaseUrl,
+        rpcUrl: this.defaults.rpcUrl,
+        explorerBaseUrl: this.defaults.explorerBaseUrl,
+        apiKey: this.defaults.apiKey,
       };
 
       let configWrittenTo: string | null = null;
       try {
         configWrittenTo = await writeAgentConfig({
-          config: newConfig,
+          config: finalConfig,
           path: this.configPath,
         });
       } catch (err) {
-        // Disk write failures aren't fatal — the in-memory swap below
-        // still upgrades the host for this session. Surface a warning
-        // so the user knows they'll need to repeat `leash_register_agent`
-        // (or save the secret manually) before the next launch.
         process.stderr.write(
           `[leash-mcp] warning: failed to persist ~/.config/leash/agent.json: ${
             err instanceof Error ? err.message : 'unknown'
@@ -263,54 +358,118 @@ export class HostRef implements LeashHost {
         );
       }
 
-      // Hot-swap the inner host. All subsequent tool calls will
-      // hit the real signer + RPC.
-      this.inner = createStdioHost(newConfig);
+      // Hot-swap. Subsequent tool calls hit the real signer + RPC.
+      this.inner = createStdioHost(finalConfig);
+      this.pending = null;
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              kind: 'register_agent',
-              status: 'ok',
-              agent_mint: sandbox.mint,
-              treasury_address: sandbox.treasury,
-              executive_pubkey: sandbox.executive_pubkey,
-              network: sandbox.network,
-              funded_with: {
-                sol_lamports: sandbox.funded.sol_lamports,
-                usdc_atomic: sandbox.funded.usdc_atomic,
-              },
-              tx_signatures: sandbox.tx_signatures,
-              explorer_url: sandbox.explorer_urls.mint,
-              config_written_to: configWrittenTo,
-              note: 'Agent is fully provisioned and the in-memory MCP host is now bound to it. Subsequent tool calls (leash_pay_payment_link, leash_check_treasury_balance, etc.) will use this agent immediately — no MCP restart required. The executive secret was persisted to the config file with chmod 600.',
-            }),
-          },
-        ],
-      };
+      return jsonOk({
+        kind: 'register_agent',
+        status: 'ok',
+        agent_mint: minted.mint,
+        treasury_address: minted.treasury,
+        executive_pubkey: minted.executivePubkey,
+        network: minted.network,
+        tx_signatures: minted.txSignatures,
+        receipts_service_url: minted.receiptsServiceUrl,
+        config_written_to: configWrittenTo,
+        note: 'Agent provisioned and recorded. The in-memory MCP host is now bound to the new agent — settlement tools are ready to use without restarting. Executive secret persisted to the config file with chmod 600.',
+      });
     } catch (err) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              kind: 'register_agent',
-              status: 'error',
-              message: err instanceof Error ? err.message : 'unknown error',
-            }),
-          },
-        ],
-      };
+      return jsonOk({
+        kind: 'register_agent',
+        status: 'error',
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+
+  // ── helpers ──
+
+  private executiveFromPending(p: PendingRegister): ExecutiveKeypair {
+    return {
+      secretBase58: p.executiveSecretBase58,
+      pubkey: p.executivePubkey,
+    };
+  }
+
+  private async selectExecutive(args: RegisterAgentArgs): Promise<ExecutiveKeypair> {
+    if (args.mode === 'import') {
+      if (!args.executive_secret_base58) {
+        throw new Error(
+          'mode: "import" requires `executive_secret_base58` (64-byte ed25519 secret, base58-encoded)',
+        );
+      }
+      return importExecutive(args.executive_secret_base58);
+    }
+    // Default + explicit "generate" — fresh keypair.
+    return generateExecutive();
+  }
+
+  private async persistPending(pending: PendingRegister): Promise<void> {
+    try {
+      await writePendingRegister({
+        pending,
+        defaults: this.defaults,
+        path: this.configPath,
+      });
+    } catch (err) {
+      process.stderr.write(
+        `[leash-mcp] warning: failed to persist pending_register: ${
+          err instanceof Error ? err.message : 'unknown'
+        }\n`,
+      );
     }
   }
 }
 
-function defaultRpcFor(network: SvmNetwork): string {
-  return network === 'solana-mainnet'
-    ? 'https://api.mainnet-beta.solana.com'
-    : 'https://api.devnet.solana.com';
+// ────────────────────────────────────────────────────────────────────────────
+// Result builders
+// ────────────────────────────────────────────────────────────────────────────
+
+type RegisterResultLike = LeashToolResult;
+
+function jsonOk(payload: Record<string, unknown>): LeashToolResult {
+  return {
+    content: [{ type: 'text', text: JSON.stringify(payload) }],
+  };
+}
+
+function fundingRequiredResult(args: {
+  executive: string;
+  network: SvmNetwork;
+  balanceLamports: bigint;
+  requiredLamports: bigint;
+  configPath: string;
+  imported: boolean;
+}): LeashToolResult {
+  const need = args.requiredLamports - args.balanceLamports;
+  const networkLabel = args.network === 'solana-mainnet' ? 'mainnet' : 'devnet';
+  const faucetHint =
+    args.network === 'solana-devnet'
+      ? 'Devnet SOL is free — request it via `solana airdrop 1 ' +
+        args.executive +
+        ' --url https://api.devnet.solana.com` (or any devnet faucet such as faucet.solana.com / quicknode.com/faucet/sol).'
+      : 'Mainnet SOL must be sent from a wallet you control. Any wallet works (Phantom / Backpack / a Solana CLI keypair).';
+  return jsonOk({
+    kind: 'register_agent',
+    status: 'funding_required',
+    network: args.network,
+    executive_pubkey: args.executive,
+    balance_lamports: args.balanceLamports.toString(),
+    balance_sol: lamportsToSol(args.balanceLamports),
+    required_lamports: args.requiredLamports.toString(),
+    required_sol: RECOMMENDED_FUND_SOL,
+    needed_lamports: (need > 0n ? need : 0n).toString(),
+    config_path: args.configPath,
+    keypair_source: args.imported ? 'imported' : 'generated',
+    instructions: [
+      `Send at least ${RECOMMENDED_FUND_SOL} SOL on ${networkLabel} to ${args.executive}.`,
+      `Funds rent (~0.005 SOL) for the agent asset + USDC delegation, plus a small buffer for tx fees.`,
+      faucetHint,
+      `Once funded, call \`leash_register_agent\` again WITH NO ARGUMENTS — the host will resume from the persisted keypair and finish minting.`,
+      `The keypair is already saved to ${args.configPath} (chmod 600). Do NOT delete that file before the second call or you'll lose access to the funded executive.`,
+    ],
+  });
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -324,14 +483,7 @@ function defaultRpcFor(network: SvmNetwork): string {
  * `leash_register_agent`. `registerAgent` itself is intercepted by
  * `HostRef` so the placeholder never sees that call.
  */
-function makePlaceholderHost(): LeashHost {
-  // Discovery + reputation are public read-only endpoints — they
-  // don't need a configured agent. We still bind them to a sensible
-  // default API base / network so the placeholder is fully useful
-  // for "look around the marketplace before you mint" UX.
-  const apiBaseUrl = process.env.LEASH_API_URL?.trim() || DEFAULT_API_URL;
-  const network: SvmNetwork = 'solana-devnet';
-
+function makePlaceholderHost(defaults: LeashHostDefaults): LeashHost {
   const noAgent = (kind: string): LeashToolResult => ({
     content: [
       {
@@ -340,7 +492,7 @@ function makePlaceholderHost(): LeashHost {
           kind,
           status: 'no_agent',
           message:
-            'No Leash agent configured. Call `leash_register_agent` (devnet, auto-funded) or set LEASH_AGENT_MINT + LEASH_EXECUTIVE_KEY in the environment, or write ~/.config/leash/agent.json. See https://leash.market/docs/mcp/install for details.',
+            'No Leash agent configured. Call `leash_register_agent` to provision one (the tool will walk you through generating or importing an executive keypair, funding it with SOL, and minting on-chain). See https://docs.leash.market/agents/mcp for details.',
         }),
       },
     ],
@@ -348,9 +500,9 @@ function makePlaceholderHost(): LeashHost {
   return {
     agentMint: null,
     ownerWallet: null,
-    network,
-    rpcUrl: 'https://api.devnet.solana.com',
-    apiBaseUrl,
+    network: defaults.network,
+    rpcUrl: defaults.rpcUrl,
+    apiBaseUrl: defaults.apiBaseUrl,
     async createPaymentLink() {
       return noAgent('payment_link');
     },
@@ -375,10 +527,18 @@ function makePlaceholderHost(): LeashHost {
       return noAgent('register_agent');
     },
     async discover(args) {
-      return fetchDiscover({ apiBaseUrl, network, query: args });
+      return fetchDiscover({
+        apiBaseUrl: defaults.apiBaseUrl,
+        network: defaults.network,
+        query: args,
+      });
     },
     async reputation(args) {
-      return fetchReputation({ apiBaseUrl, network, query: args });
+      return fetchReputation({
+        apiBaseUrl: defaults.apiBaseUrl,
+        network: defaults.network,
+        query: args,
+      });
     },
   };
 }

@@ -29,9 +29,10 @@ import type {
   PaymentLinkCreateInput,
   PaymentLinkPatchInput,
   PaymentLinksListResponse,
+  RecordAgentInput,
+  RecordAgentResponse,
   ReceiptsResponse,
   ReputationSnapshot,
-  SandboxAgentResponse,
   SvmNetwork,
 } from './types.js';
 
@@ -108,10 +109,15 @@ export class LeashClient {
     );
   }
 
-  // ── sandbox onboarding (public) ──────────────────────────────────
+  // ── agent recording (public) ──────────────────────────────────────
+  //
+  // Agent provisioning is fully client-side now: the caller mints +
+  // delegates locally (see `@leash/mcp::mintAgentLocally`), then
+  // POSTs the resulting asset here for the API to write the platform
+  // row. Idempotent on `mint`. Works on both devnet and mainnet.
 
-  async sandbox(args: { name?: string } = {}): Promise<SandboxAgentResponse> {
-    return this.requestJson<SandboxAgentResponse>('POST', '/v1/sandbox/agent', args);
+  async recordAgent(input: RecordAgentInput): Promise<RecordAgentResponse> {
+    return this.requestJson<RecordAgentResponse>('POST', '/v1/agents/record', input);
   }
 
   // ── receipts (legacy API-key auth for now) ───────────────────────

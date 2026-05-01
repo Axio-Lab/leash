@@ -11,7 +11,15 @@
  *
  * Subcommands
  * -----------
- *   leash agent create [--name N]   Mint a sandbox agent (devnet, auto-funded).
+ *   leash agent create              Provision an agent (two-step). First call
+ *     [--name N]                    generates (or imports with `--executive
+ *     [--generate | --import]       <secret>`) an executive keypair, persists
+ *     [--executive <secret>]        it, and prints funding instructions. After
+ *                                   you send SOL to the printed address, run
+ *                                   the same command again with no args to
+ *                                   finish minting + delegation + recording.
+ *                                   Network comes from `LEASH_NETWORK` (or
+ *                                   `agent.json:network`).
  *   leash agent show                Print active agent identity.
  *   leash agent export [--out P]    Export agent.json (alias for `leash-mcp export`).
  *   leash agent import <path>       Install agent.json (alias for `leash-mcp import`).
@@ -128,23 +136,58 @@ async function runAgent(args: string[]): Promise<void> {
 async function runAgentCreate(args: string[]): Promise<void> {
   const { hostRef } = buildServerFromEnv();
   const json = wantJson(args);
-  const nameIdx = args.indexOf('--name');
-  const name = nameIdx !== -1 ? args[nameIdx + 1] : undefined;
+  const name = optArg(args, '--name');
+  const executive = optArg(args, '--executive');
+  const mode: 'generate' | 'import' | undefined = executive
+    ? 'import'
+    : args.includes('--import')
+      ? 'import'
+      : args.includes('--generate')
+        ? 'generate'
+        : undefined;
 
-  const result = await hostRef.registerAgent({ ...(name ? { name } : {}) });
+  if (mode === 'import' && !executive) {
+    process.stderr.write(
+      'usage: leash agent create --import --executive <base58_secret>\n' +
+        '       (or pass `--executive` alone to imply `--import`)\n',
+    );
+    process.exit(2);
+  }
+
+  const result = await hostRef.registerAgent({
+    ...(name ? { name } : {}),
+    ...(mode ? { mode } : {}),
+    ...(executive ? { executive_secret_base58: executive } : {}),
+  });
   printResult(result, json, (payload) => {
     if (payload.status === 'already_registered') {
       return `agent ${payload.agent_mint} already configured`;
     }
-    if (payload.status === 'ok') {
+    if (payload.status === 'funding_required') {
       return [
-        `agent created: ${payload.agent_mint}`,
-        `  treasury:        ${payload.treasury_address}`,
-        `  executive:       ${payload.executive_pubkey}`,
-        `  network:         ${payload.network}`,
-        `  funded:          ${payload.funded_with?.usdc_atomic ?? 0} USDC atomic + ${payload.funded_with?.sol_lamports ?? 0} lamports`,
-        `  config:          ${payload.config_written_to ?? '(not persisted)'}`,
-        `  explorer:        ${payload.explorer_url}`,
+        `Step 1 of 2 — fund the executive keypair, then re-run \`leash agent create\`:`,
+        ``,
+        `  network:        ${payload.network}`,
+        `  executive:      ${payload.executive_pubkey}  (${payload.keypair_source})`,
+        `  required:       ${payload.required_sol} SOL  (${payload.balance_sol} on-chain)`,
+        `  config saved:   ${payload.config_path}`,
+        ``,
+        ...((payload.instructions as string[] | undefined) ?? []).map((line) => `  • ${line}`),
+      ].join('\n');
+    }
+    if (payload.status === 'ok') {
+      const sigs = (payload.tx_signatures ?? {}) as Record<string, string>;
+      return [
+        `Step 2 of 2 — agent provisioned and recorded.`,
+        ``,
+        `  agent mint:     ${payload.agent_mint}`,
+        `  treasury:       ${payload.treasury_address}`,
+        `  executive:      ${payload.executive_pubkey}`,
+        `  network:        ${payload.network}`,
+        `  config:         ${payload.config_written_to ?? '(not persisted)'}`,
+        `  mint tx:        ${sigs.mint ?? '(unknown)'}`,
+        `  delegate tx:    ${sigs.delegate ?? '(unknown)'}`,
+        `  receipts:       ${payload.receipts_service_url ?? '(unknown)'}`,
       ].join('\n');
     }
     return `error: ${payload.message ?? 'unknown'}`;
@@ -410,7 +453,11 @@ function printHelp(): void {
       'usage: leash <command> [options]',
       '',
       'agent commands:',
-      '  agent create [--name N]            mint a sandbox agent (devnet, auto-funded)',
+      '  agent create [--name N] [--generate | --import --executive <secret>]',
+      '                                     two-step agent provisioning. Network is taken',
+      '                                     from LEASH_NETWORK (devnet|mainnet). Run once to',
+      '                                     get funding instructions, fund the printed',
+      '                                     pubkey with SOL, then run again to mint.',
       '  agent show                         print active agent identity',
       '  agent export [--out PATH]          export agent.json (alias for `leash-mcp export`)',
       '  agent import <PATH>                install an agent.json',

@@ -1,6 +1,6 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -12,10 +12,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildServerFromEnv } from '../src/server.js';
 
 /**
- * Build a real 64-byte ed25519 secret + matching pubkey so the
- * standalone host can actually decode the keypair after the
- * sandbox response. We never sign anything in this test — the
- * fixture is just for the `loadSigner()` round-trip.
+ * Build a real 64-byte ed25519 secret + matching pubkey. Used as
+ * test-input executive material — we never sign anything against
+ * chain in this file.
  */
 function freshExecutive(): { pubkey: string; secretBase58: string } {
   const umi = createUmi('https://invalid');
@@ -49,39 +48,47 @@ function restoreEnv(snap: Record<string, string | undefined>): void {
 }
 
 /**
- * Synthesises a `POST /v1/sandbox/agent` response shape verbatim,
- * with deterministic dummy data. The host's `registerAgent` should
- * unpack this into a working `LeashAgentConfig`, write it to disk,
- * and swap the inner host so subsequent tool calls (e.g.
- * `leash_get_identity`) report the new mint without an MCP restart.
+ * Mock the JSON-RPC `getBalance` call Umi runs against the configured
+ * RPC URL. Always returns the same lamports value regardless of the
+ * pubkey — keeps the test independent of who generated the keypair.
  */
-function makeSandboxResponse(args: {
-  executive: { pubkey: string; secretBase58: string };
-  mintPubkey: string;
-  treasuryPubkey: string;
-}) {
-  return {
-    mint: args.mintPubkey,
-    treasury: args.treasuryPubkey,
-    executive_pubkey: args.executive.pubkey,
-    executive_secret_base58: args.executive.secretBase58,
-    network: 'solana-devnet' as const,
-    tx_signatures: {
-      sol_drip: 'SolDripSig1',
-      mint: 'MintSig1',
-      usdc_drip: 'UsdcDripSig1',
-    },
-    explorer_urls: {
-      mint: `https://solscan.io/account/${args.mintPubkey}?cluster=devnet`,
-      sol_drip: 'https://solscan.io/tx/SolDripSig1?cluster=devnet',
-      usdc_drip: 'https://solscan.io/tx/UsdcDripSig1?cluster=devnet',
-    },
-    funded: { sol_lamports: '10000000', usdc_atomic: '1000000' },
-    receipts_service: 'https://api.leash.market/v1/receipts',
-  };
+function mockRpcBalance(lamports: bigint): typeof globalThis.fetch {
+  return vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
+    let body: unknown = null;
+    try {
+      body = init?.body ? JSON.parse(String(init.body)) : null;
+    } catch {
+      body = null;
+    }
+    const method = (body as { method?: string } | null)?.method;
+    if (method === 'getBalance') {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: (body as { id?: number } | null)?.id ?? 1,
+          result: {
+            context: { slot: 1 },
+            value: Number(lamports),
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+    throw new Error(`unexpected fetch in test: ${method ?? 'unknown'} ${u}`);
+  }) as unknown as typeof globalThis.fetch;
 }
 
-describe('register_agent hot-swap', () => {
+async function callRegisterAgent(
+  client: Client,
+  args: Record<string, unknown> = {},
+): Promise<Record<string, unknown>> {
+  const result = await client.callTool({ name: 'leash_register_agent', arguments: args });
+  const content = result.content as Array<{ type: string; text: string }>;
+  return JSON.parse(content[0]!.text) as Record<string, unknown>;
+}
+
+describe('leash_register_agent — two-step flow', () => {
   let envSnap: Record<string, string | undefined>;
   let tempDir: string;
   let configPath: string;
@@ -101,99 +108,169 @@ describe('register_agent hot-swap', () => {
     restoreEnv(envSnap);
   });
 
-  it('writes the config file and upgrades the host so subsequent calls see the new agent', async () => {
-    // Mock the sandbox endpoint. Real network call is the only one
-    // `registerAgent` makes; we don't touch chain RPCs in this test.
-    const exec = freshExecutive();
-    // Generate two more valid 32-byte pubkeys for the synthetic
-    // mint + treasury addresses.
-    const fakeMint = freshExecutive().pubkey;
-    const fakeTreasury = freshExecutive().pubkey;
-    const sandboxBody = makeSandboxResponse({
-      executive: exec,
-      mintPubkey: fakeMint,
-      treasuryPubkey: fakeTreasury,
-    });
-    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
-      const u = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
-      if (u.endsWith('/v1/sandbox/agent')) {
-        return new Response(JSON.stringify(sandboxBody), {
-          status: 201,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      throw new Error(`unexpected fetch in test: ${u}`);
-    }) as unknown as typeof globalThis.fetch;
+  it('first call (generate) → funding_required + pending_register persisted', async () => {
+    globalThis.fetch = mockRpcBalance(0n);
 
-    const { server, hostRef, config } = buildServerFromEnv({ configPath });
+    const { server, hostRef, config, pending } = buildServerFromEnv({ configPath });
     expect(config).toBeNull();
+    expect(pending).toBeNull();
     expect(hostRef.agentMint).toBeNull();
 
     const [serverT, clientT] = InMemoryTransport.createLinkedPair();
-    const client = new Client(
-      { name: 'leash-test-client', version: '0.0.1' },
-      { capabilities: {} },
-    );
+    const client = new Client({ name: 't', version: '0.0.1' }, { capabilities: {} });
     await Promise.all([server.connect(serverT), client.connect(clientT)]);
 
-    // 1. Call leash_register_agent — should hit our mock fetch,
-    //    write `configPath`, and swap the inner host.
-    const registerResult = await client.callTool({
-      name: 'leash_register_agent',
-      arguments: { name: 'pytest-agent' },
-    });
-    const registerContent = registerResult.content as Array<{ type: string; text: string }>;
-    const parsed = JSON.parse(registerContent[0]!.text) as {
-      kind: string;
-      status: string;
-      agent_mint: string;
-      config_written_to: string;
-    };
+    const parsed = await callRegisterAgent(client);
     expect(parsed.kind).toBe('register_agent');
-    if (parsed.status !== 'ok') {
-      process.stderr.write(`\nregister_agent payload was: ${registerContent[0]!.text}\n`);
-    }
-    expect(parsed.status).toBe('ok');
-    expect(parsed.agent_mint).toBe(sandboxBody.mint);
-    expect(parsed.config_written_to).toBe(configPath);
+    expect(parsed.status).toBe('funding_required');
+    expect(parsed.keypair_source).toBe('generated');
+    expect(parsed.network).toBe('solana-devnet');
+    expect(parsed.balance_lamports).toBe('0');
+    expect(parsed.required_lamports).toBe('10000000');
+    expect(parsed.config_path).toBe(configPath);
+    expect(typeof parsed.executive_pubkey).toBe('string');
+    expect((parsed.executive_pubkey as string).length).toBeGreaterThan(30);
 
-    // 2. The on-disk file is real JSON in the format `loadAgentConfig`
-    //    will read on the next launch.
     const onDisk = JSON.parse(readFileSync(configPath, 'utf8')) as {
-      agent_mint: string;
-      executive_keypair: string;
-      network: string;
-    };
-    expect(onDisk.agent_mint).toBe(sandboxBody.mint);
-    expect(onDisk.executive_keypair).toBe(sandboxBody.executive_secret_base58);
-    expect(onDisk.network).toBe('solana-devnet');
-
-    // 3. The in-memory host swapped — `leash_get_identity` now
-    //    reports the new mint instead of `no_agent`.
-    const identityResult = await client.callTool({
-      name: 'leash_get_identity',
-      arguments: {},
-    });
-    const idContent = identityResult.content as Array<{ type: string; text: string }>;
-    const id = JSON.parse(idContent[0]!.text) as {
-      kind: string;
-      status: string;
       agent_mint?: string;
+      pending_register?: {
+        executive_keypair: string;
+        executive_pubkey: string;
+        network: string;
+      };
     };
-    expect(id.kind).toBe('identity');
-    expect(id.status).toBe('ok');
-    expect(id.agent_mint).toBe(sandboxBody.mint);
+    expect(onDisk.agent_mint).toBeUndefined();
+    expect(onDisk.pending_register).toBeDefined();
+    expect(onDisk.pending_register!.executive_pubkey).toBe(parsed.executive_pubkey);
+    expect(onDisk.pending_register!.network).toBe('solana-devnet');
+    expect(onDisk.pending_register!.executive_keypair.length).toBeGreaterThan(40);
 
-    // 4. Calling register again should yield "already_registered"
-    //    via the StdioHost path (not another sandbox request).
-    const dupResult = await client.callTool({
-      name: 'leash_register_agent',
-      arguments: {},
+    expect(hostRef.agentMint).toBeNull();
+
+    await client.close();
+    await server.close();
+  });
+
+  it('first call (import) → funding_required with the supplied executive', async () => {
+    globalThis.fetch = mockRpcBalance(0n);
+    const exec = freshExecutive();
+
+    const { server } = buildServerFromEnv({ configPath });
+    const [serverT, clientT] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 't', version: '0.0.1' }, { capabilities: {} });
+    await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+    const parsed = await callRegisterAgent(client, {
+      mode: 'import',
+      executive_secret_base58: exec.secretBase58,
     });
-    const dupContent = dupResult.content as Array<{ type: string; text: string }>;
-    const dup = JSON.parse(dupContent[0]!.text) as { kind: string; status: string };
-    expect(dup.kind).toBe('register_agent');
-    expect(dup.status).toBe('already_registered');
+    expect(parsed.status).toBe('funding_required');
+    expect(parsed.keypair_source).toBe('imported');
+    expect(parsed.executive_pubkey).toBe(exec.pubkey);
+
+    const onDisk = JSON.parse(readFileSync(configPath, 'utf8')) as {
+      pending_register?: { executive_keypair: string; executive_pubkey: string };
+    };
+    expect(onDisk.pending_register!.executive_keypair).toBe(exec.secretBase58);
+    expect(onDisk.pending_register!.executive_pubkey).toBe(exec.pubkey);
+
+    await client.close();
+    await server.close();
+  });
+
+  it('mode: "import" without executive_secret_base58 → error', async () => {
+    globalThis.fetch = mockRpcBalance(0n);
+
+    const { server } = buildServerFromEnv({ configPath });
+    const [serverT, clientT] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 't', version: '0.0.1' }, { capabilities: {} });
+    await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+    const parsed = await callRegisterAgent(client, { mode: 'import' });
+    expect(parsed.status).toBe('error');
+    expect(parsed.message).toMatch(/executive_secret_base58/);
+
+    await client.close();
+    await server.close();
+  });
+
+  it('resume from pending_register → reuses the persisted keypair', async () => {
+    const exec = freshExecutive();
+
+    // Pre-populate agent.json with a pending block (simulates a
+    // previous register call that returned funding_required).
+    mkdirSync(dirname(configPath), { recursive: true });
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        version: 1,
+        network: 'solana-devnet',
+        api_url: 'https://api.leash.market',
+        rpc_url: 'https://api.devnet.solana.com',
+        explorer_url: 'https://explorer.leash.market',
+        pending_register: {
+          executive_keypair: exec.secretBase58,
+          executive_pubkey: exec.pubkey,
+          network: 'solana-devnet',
+          created_at: new Date().toISOString(),
+        },
+        created_at: new Date().toISOString(),
+      }),
+    );
+
+    // Still under-funded — the resume path should re-emit
+    // funding_required without rotating the keypair.
+    globalThis.fetch = mockRpcBalance(0n);
+
+    const { server, pending } = buildServerFromEnv({ configPath });
+    expect(pending).not.toBeNull();
+    expect(pending!.executivePubkey).toBe(exec.pubkey);
+
+    const [serverT, clientT] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 't', version: '0.0.1' }, { capabilities: {} });
+    await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+    const parsed = await callRegisterAgent(client);
+    expect(parsed.status).toBe('funding_required');
+    expect(parsed.executive_pubkey).toBe(exec.pubkey);
+    expect(parsed.keypair_source).toBe('generated');
+
+    await client.close();
+    await server.close();
+  });
+
+  it('already_registered short-circuits without touching RPC', async () => {
+    const exec = freshExecutive();
+    const fakeMint = freshExecutive().pubkey;
+    mkdirSync(dirname(configPath), { recursive: true });
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        version: 1,
+        agent_mint: fakeMint,
+        executive_keypair: exec.secretBase58,
+        network: 'solana-devnet',
+        api_url: 'https://api.leash.market',
+        rpc_url: 'https://api.devnet.solana.com',
+        explorer_url: 'https://explorer.leash.market',
+        created_at: new Date().toISOString(),
+      }),
+    );
+
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error('fetch should not be called when already registered');
+    }) as unknown as typeof globalThis.fetch;
+
+    const { server, config } = buildServerFromEnv({ configPath });
+    expect(config!.agentMint).toBe(fakeMint);
+
+    const [serverT, clientT] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 't', version: '0.0.1' }, { capabilities: {} });
+    await Promise.all([server.connect(serverT), client.connect(clientT)]);
+
+    const parsed = await callRegisterAgent(client);
+    expect(parsed.status).toBe('already_registered');
+    expect(parsed.agent_mint).toBe(fakeMint);
 
     await client.close();
     await server.close();

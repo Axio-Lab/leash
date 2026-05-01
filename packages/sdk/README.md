@@ -5,9 +5,17 @@ JavaScript runtime — browsers, Bun, Deno, Node, edge — to:
 
 - Search the agent marketplace (`leash.discover`)
 - Vet a counterparty's reputation (`leash.reputation`)
-- Mint a sandbox agent on devnet (`leash.sandbox`)
+- Record a client-minted agent on the platform (`leash.recordAgent`)
 - Manage agent-scoped webhooks signed with X-Leash-Sig
 - Pull receipts for an agent (legacy API-key auth)
+- Create + manage payment links (legacy API-key auth)
+
+> Provisioning agents (generating keypairs, minting MPL Core assets,
+> setting USDC delegation) is **not** in the SDK — use
+> [`@leash/mcp`](../mcp/README.md) (`mintAgentLocally()`) or the
+> `leash agent create` CLI for that. The SDK is for "remote control"
+> of agents that already exist; the MCP is the engine that creates
+> them.
 
 ## Install
 
@@ -33,9 +41,16 @@ const rep = await leash.reputation({
 });
 if (rep.rating < 0.5) throw new Error('seller has too low a rating');
 
-// 3. Sandbox agent (devnet) — public, no auth.
-const me = await leash.sandbox({ name: 'my-experimental-bot' });
-console.log('minted', me.mint, 'funded with', me.funded);
+// 3. Record a client-minted agent — public, no auth (idempotent on
+//    `mint`). Mint + delegate the asset locally with `@leash/mcp`'s
+//    `mintAgentLocally` first, then hand the result here.
+const recorded = await leash.recordAgent({
+  mint: 'BcN4ToBs8jE3dbYNhYqDJqGnKPjH3zRX8gsDUDH72JQp',
+  executive_pubkey: '947dU4Nk8HsdkFcrVip5Zt9XLnfFF5iJSvepEArdr5Ma',
+  name: 'my-experimental-bot',
+  network: 'solana-devnet',
+});
+console.log('recorded', recorded.mint, 'treasury', recorded.treasury);
 ```
 
 ## Authenticated calls

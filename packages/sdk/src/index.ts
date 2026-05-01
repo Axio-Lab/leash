@@ -30,8 +30,9 @@ export type {
   PaymentLinksListResponse,
   Receipt,
   ReceiptsResponse,
+  RecordAgentInput,
+  RecordAgentResponse,
   ReputationSnapshot,
-  SandboxAgentResponse,
   StableSymbol,
   SvmNetwork,
 } from './types.js';

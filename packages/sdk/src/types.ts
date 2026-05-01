@@ -79,26 +79,33 @@ export type AgentWebhook = {
 
 export type AgentWebhookWithSecret = AgentWebhook & { secret: string };
 
-export type SandboxAgentResponse = {
+/**
+ * Input for {@link LeashClient.recordAgent}. Mirrors `RecordMintBody`
+ * in `apps/api/src/routes/agent-self-register.ts`.
+ *
+ * Agent provisioning is fully client-side — generate (or import) an
+ * executive keypair, fund it with SOL, then mint the MPL Core asset
+ * locally with `@leash/mcp::mintAgentLocally` (or your own Umi setup).
+ * Once the asset is on-chain, call `recordAgent` to write the
+ * platform row + receipts feed metadata.
+ */
+export type RecordAgentInput = {
+  /** MPL Core asset address. Must already exist on `network`. */
+  mint: string;
+  /** Caller-controlled ed25519 pubkey that owns the asset. */
+  executive_pubkey: string;
+  name: string;
+  description?: string;
+  image_url?: string;
+  services?: { name: string; endpoint: string }[];
+  network?: SvmNetwork;
+};
+
+export type RecordAgentResponse = {
   mint: string;
   treasury: string;
   executive_pubkey: string;
-  executive_secret_base58: string;
   network: SvmNetwork;
-  funded: { sol_lamports: string; usdc_atomic: string };
-  tx_signatures: {
-    sol_drip: string;
-    mint: string;
-    usdc_drip: string;
-    /** Present on APIs >= the delegation fix; the executive can spend USDC immediately. */
-    delegate?: string;
-  };
-  explorer_urls: {
-    mint: string;
-    sol_drip: string;
-    usdc_drip: string;
-    delegate?: string;
-  };
   receipts_service: string;
 };
 
