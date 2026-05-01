@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 11;
+const SCHEMA_VERSION = 12;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -172,19 +172,34 @@ const SCHEMA_SQL: readonly string[] = [
   // sender HMAC-signs each delivery with — receivers verify it via
   // the X-Leash-Signature header. `events` is a JSON array of
   // EventKind strings; `null` / empty = subscribe to all kinds.
+  // v12: webhook subscriptions can now be keyed to either an API key
+  // (legacy / web product, every event in `network` matches) or to an
+  // agent_mint (standalone MCP/CLI authenticated via X-Leash-Sig, only
+  // events whose `agent_asset` matches `agent_mint` fan out). Exactly
+  // one of `api_key_id` / `agent_mint` is set; the CHECK constraint
+  // enforces it. The original `(api_key_id, url)` UNIQUE is preserved
+  // for legacy keys; we add a parallel `(agent_mint, url)` UNIQUE for
+  // agent-keyed rows.
   `CREATE TABLE IF NOT EXISTS webhooks (
     id TEXT PRIMARY KEY,
-    api_key_id TEXT NOT NULL,
+    api_key_id TEXT,
+    agent_mint TEXT,
     network TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
     url TEXT NOT NULL,
     secret TEXT NOT NULL,
     events_json TEXT NOT NULL DEFAULT '[]',
     disabled_at TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    CHECK (
+      (api_key_id IS NOT NULL AND agent_mint IS NULL) OR
+      (api_key_id IS NULL AND agent_mint IS NOT NULL)
+    ),
     UNIQUE (api_key_id, url),
+    UNIQUE (agent_mint, url),
     FOREIGN KEY (api_key_id) REFERENCES api_keys(id)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_webhooks_network ON webhooks(network) WHERE disabled_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_webhooks_agent_mint ON webhooks(agent_mint) WHERE disabled_at IS NULL`,
 
   // Per-delivery state with retry book-keeping. Created when an
   // event lands in webhook_deliveries_pending; the worker advances
@@ -502,6 +517,14 @@ export async function runMigrations(db: Client): Promise<void> {
     await migrateAgentsExpansion(db);
   }
 
+  // v12: webhooks can be keyed to an `agent_mint` instead of an
+  // `api_key_id`. Adds the column + relaxes the `api_key_id NOT NULL`
+  // constraint via table rebuild (SQLite cannot drop NOT NULL or
+  // change a CHECK in place). Idempotent.
+  if (currentVersion < 12) {
+    await migrateWebhooksAgentMint(db);
+  }
+
   if (currentVersion < SCHEMA_VERSION) {
     await db.execute({
       sql: 'INSERT OR REPLACE INTO schema_version(version) VALUES(?)',
@@ -617,6 +640,52 @@ async function migrateAgentsExpansion(db: Client): Promise<void> {
     await db.execute('ALTER TABLE agents_v11_tmp RENAME TO agents');
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_agents_owner ON agents(owner_privy_id)`);
   }
+}
+
+/**
+ * v12: relax `webhooks.api_key_id NOT NULL` and add `agent_mint` so
+ * standalone-agent webhooks (X-Leash-Sig auth) can land in the same
+ * table. SQLite can't drop NOT NULL or change a CHECK in place, so
+ * we rebuild and swap. Idempotent — the probe returns early if the
+ * table already has the agent_mint column.
+ */
+async function migrateWebhooksAgentMint(db: Client): Promise<void> {
+  const info = await db.execute('PRAGMA table_info(webhooks)');
+  const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
+  if (names.has('agent_mint')) return;
+
+  await db.execute('DROP TABLE IF EXISTS webhooks_v12_tmp');
+  await db.execute(`CREATE TABLE webhooks_v12_tmp (
+    id TEXT PRIMARY KEY,
+    api_key_id TEXT,
+    agent_mint TEXT,
+    network TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    url TEXT NOT NULL,
+    secret TEXT NOT NULL,
+    events_json TEXT NOT NULL DEFAULT '[]',
+    disabled_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    CHECK (
+      (api_key_id IS NOT NULL AND agent_mint IS NULL) OR
+      (api_key_id IS NULL AND agent_mint IS NOT NULL)
+    ),
+    UNIQUE (api_key_id, url),
+    UNIQUE (agent_mint, url),
+    FOREIGN KEY (api_key_id) REFERENCES api_keys(id)
+  )`);
+  await db.execute(`INSERT INTO webhooks_v12_tmp (
+    id, api_key_id, agent_mint, network, url, secret, events_json, disabled_at, created_at
+  ) SELECT
+    id, api_key_id, NULL, network, url, secret, events_json, disabled_at, created_at
+  FROM webhooks`);
+  await db.execute('DROP TABLE webhooks');
+  await db.execute('ALTER TABLE webhooks_v12_tmp RENAME TO webhooks');
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_webhooks_network ON webhooks(network) WHERE disabled_at IS NULL`,
+  );
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_webhooks_agent_mint ON webhooks(agent_mint) WHERE disabled_at IS NULL`,
+  );
 }
 
 async function migrateWatchlistKindCheck(db: Client): Promise<void> {

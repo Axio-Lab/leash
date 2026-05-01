@@ -38,6 +38,7 @@ import { buildPlatformAgentRoutes } from './routes/platform-agents.js';
 import { buildPlatformTaskRoutes } from './routes/platform-tasks.js';
 import { buildAgentSelfRegisterRoutes } from './routes/agent-self-register.js';
 import { buildDiscoverReputationRoutes } from './routes/discover-reputation.js';
+import { buildAgentWebhookRoutes } from './routes/agent-webhooks.js';
 import { buildPaymentLinkRoutes } from './routes/payment-links.js';
 import { buildPaywallRoutes } from './routes/paywall.js';
 import { buildSellerUtilsRoutes } from './routes/seller-utils.js';
@@ -88,6 +89,11 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
     '/',
     buildDiscoverReputationRoutes({ config: deps.config, db: deps.db, cache: deps.cache }),
   );
+  // Agent-keyed webhooks. Mounted before the authed sub-app because
+  // the auth model is `X-Leash-Sig` (executive-keypair signature),
+  // not the platform API key — standalone-MCP / CLI agents don't have
+  // an API key. The route module installs `onChainAuth` itself.
+  app.route('/', buildAgentWebhookRoutes({ config: deps.config, db: deps.db }));
   app.route('/', buildUploadRoutes({ config: deps.config, db: deps.db }));
   app.route('/', buildPublicUploadRoutes({ config: deps.config, db: deps.db }));
 
