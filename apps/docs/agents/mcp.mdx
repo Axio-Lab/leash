@@ -24,10 +24,22 @@ browser or the chat product in the loop.
 }
 ```
 
-That's the entire setup. The first call to `leash_register_agent`
-mints a sandbox agent on devnet, auto-funds it with $1 USDC + 0.01
-SOL, persists `~/.config/leash/agent.json`, and **hot-swaps** the
-in-memory MCP host so subsequent tool calls work without a restart.
+That's the entire setup. `leash_register_agent` provisions an agent
+in **two steps**:
+
+1. Generate (or import) a Solana keypair, persist it to
+   `~/.config/leash/agent.json`, and tell you to send ~0.01 SOL to
+   the printed address — this is the agent's owner / executive.
+2. After you fund it, call `leash_register_agent` again. The MCP
+   mints the MPL Core agent asset, sets unlimited USDC delegation
+   from the treasury PDA to the executive, records the asset on the
+   Leash API, and **hot-swaps** the in-memory host so subsequent
+   tool calls (`leash_pay_payment_link`, `leash_check_treasury_balance`,
+   etc.) work without a restart.
+
+The cluster (devnet vs mainnet) comes from `LEASH_NETWORK` — same
+flow either way, since rent + gas are paid by the user's executive
+on both.
 
 ### Other MCP hosts
 
@@ -106,7 +118,7 @@ the Claude Agent SDK in the chat product (same names, same shapes —
 
 | Tool                           | What it does                                                                                                       |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `leash_register_agent`         | First-run onboarding. Mints a devnet agent, funds it, persists config, hot-swaps the host.                         |
+| `leash_register_agent`         | Two-step onboarding. First call returns funding instructions; second call mints + delegates + records + hot-swaps. |
 | `leash_get_identity`           | Self-introspection — what agent am I, on which network, what's my treasury PDA.                                    |
 | `leash_check_treasury_balance` | Read SOL + USDC/USDG/USDT balances on the agent treasury PDA.                                                      |
 | `leash_pay_payment_link`       | Probe an x402 link, sign + settle the SPL transfer locally, return the receipt.                                    |
@@ -138,27 +150,92 @@ Prints config path, derived executive pubkey, network, RPC + API
 reachability — useful first stop for any "why isn't this working"
 question.
 
-## Demo flow (60 seconds)
+## Onboarding flow
+
+`leash_register_agent` walks the LLM through two calls. Either or
+both can be initiated by the user (you) or the agent (Cursor /
+Claude Desktop / etc.):
+
+**Step 1 — choose an executive keypair.**
+Default is `mode: "generate"` — the MCP creates a fresh ed25519
+keypair locally and persists it to `~/.config/leash/agent.json`
+under `pending_register` (chmod 600). To bring your own (e.g. an
+existing `solana-keygen` keypair), pass
+`mode: "import"` + `executive_secret_base58`.
+
+The tool returns:
+
+```jsonc
+{
+  "kind": "register_agent",
+  "status": "funding_required",
+  "network": "solana-devnet", // or solana-mainnet, from LEASH_NETWORK
+  "executive_pubkey": "947dU4Nk8HsdkFcrVip5Zt9XLnfFF5iJSvepEArdr5Ma",
+  "required_sol": "0.01",
+  "balance_sol": "0.0",
+  "instructions": [
+    "Send at least 0.01 SOL on devnet to 947dU4Nk8...",
+    "Devnet SOL is free — request it via `solana airdrop 1 947dU4Nk8... --url https://api.devnet.solana.com`",
+    "Once funded, call `leash_register_agent` again WITH NO ARGUMENTS",
+    "...",
+  ],
+}
+```
+
+**Step 2 — fund the executive, then re-run.**
+On devnet, `solana airdrop 1 <executive_pubkey> --url https://api.devnet.solana.com`
+or any free faucet (faucet.solana.com, quicknode.com/faucet/sol)
+works. On mainnet, send SOL from any wallet you control. ~0.01 SOL
+is enough — covers the agent asset rent (~0.0034 SOL), one ATA
+creation rent (~0.00203 SOL), and tx fees with comfortable buffer.
+
+Calling `leash_register_agent` a second time (no arguments) makes
+the MCP:
+
+1. Read the persisted `pending_register` block.
+2. Re-check the executive's SOL balance via RPC.
+3. Mint the MPL Core agent asset (`createAgent`).
+4. Set unlimited USDC spend delegation from the treasury PDA to the
+   executive (`setSpendDelegation` / SPL `Approve` capped at
+   `u64::MAX`).
+5. POST `/v1/agents/record` so the Leash API has a row for receipts
+   + discovery + reputation.
+6. Promote the pending block to a full `agent.json` and hot-swap
+   the in-memory host.
+
+The result blob contains `mint`, `treasury_address`, both tx
+signatures, and the path to the persisted config. From this point
+forward the agent can pay, earn, withdraw, and be discovered just
+like one minted via the chat product.
+
+## Demo flow (90 seconds)
 
 1. Add the MCP entry to your host config and restart.
-2. Ask the agent: _"register me a Leash agent"_ → calls
-   `leash_register_agent`, which mints + funds + hot-swaps.
-3. Ask: _"what's my balance?"_ → `leash_check_treasury_balance`.
-4. Ask: _"find me an OCR service under 10c"_ → `leash_discover`.
-5. Ask: _"pay this link"_ → `leash_pay_payment_link`. Returns a real
+2. Ask the agent: _"register me a Leash agent"_ → first call returns
+   `funding_required` + a printed pubkey.
+3. `solana airdrop 1 <pubkey> --url https://api.devnet.solana.com`
+   (or paste the pubkey into your devnet faucet of choice).
+4. Ask the agent again: _"continue registering my Leash agent"_ →
+   second call mints + delegates + records + hot-swaps.
+5. Ask: _"what's my balance?"_ → `leash_check_treasury_balance`.
+6. Ask: _"find me an OCR service under 10c"_ → `leash_discover`.
+7. Ask: _"pay this link"_ → `leash_pay_payment_link`. Returns a real
    `tx_signature` + `receipt_hash` on devnet.
-6. Ask: _"withdraw 50c USDC to YOUR_WALLET_ADDRESS"_ → `leash_withdraw_treasury`.
-   Real on-chain transfer via `mpl-core::Execute`.
+8. Ask: _"withdraw 50c USDC to YOUR_WALLET_ADDRESS"_ →
+   `leash_withdraw_treasury`. Real on-chain transfer via
+   `mpl-core::Execute`.
 
-The whole demo runs against live devnet infrastructure — no mocks,
-no faucets to hit manually.
+The whole demo runs against live devnet infrastructure — the only
+manual step is funding the executive in step 3.
 
 ## Troubleshooting
 
 | Symptom                                            | Likely cause + fix                                                                                                          |
 | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Tools list is empty / host can't connect           | Wrong path or stale cache. Run `npx clear-npx-cache`, restart the host, check the host's MCP logs.                          |
-| `leash_register_agent` returns `error: rate_limited` | Sandbox is rate-limited per IP. Wait 30s and retry.                                                                       |
+| `leash_register_agent` returns `funding_required`  | Expected — that's step 1. Send the printed SOL amount to the printed pubkey, then call the tool again with no args.         |
+| `leash_register_agent` returns `error: ... not visible on RPC within 20s` | RPC propagation. Try again in 5s — the second call resumes from `pending_register` and will pick up the just-confirmed mint. |
+| `leash_register_agent` returns `mode: "import" requires executive_secret_base58` | You passed `mode: "import"` but no secret. Either drop `mode` (defaults to `generate`) or include the base58-encoded 64-byte secret. |
 | `leash_pay_payment_link` is slow (5–10s) or 429s   | You're on the public RPC. Set `LEASH_RPC_URL` to a paid endpoint — see _Bring your own RPC_ above.                          |
 | `leash_pay_payment_link` returns `wrong_network`   | The link is on the other cluster. The MCP does not pay across networks — confirm the link's network and your `LEASH_NETWORK`. |
 | `tx_signature` returned but explorer shows nothing | RPC propagation delay (~2-3s on devnet). Refresh in 5s.                                                                     |

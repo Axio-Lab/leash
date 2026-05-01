@@ -41,34 +41,58 @@ JSON-RPC endpoint works. You can also persist it in
 `~/.config/leash/agent.json` under `rpc_url` so it's the default for
 every future shell.
 
-## Quickstart (devnet, auto-funded)
+## Quickstart
+
+`leash agent create` is a **two-step** flow on both devnet and
+mainnet — the network is taken from `LEASH_NETWORK` (or
+`agent.json:network`).
 
 ```bash
-# 1. Mint a sandbox agent — auto-funds 0.01 SOL + $1 USDC.
+# 1a. Default: generate a fresh executive keypair locally.
+LEASH_NETWORK=solana-devnet leash agent create
+# → prints the executive pubkey + a "send 0.01 SOL to ..." instruction.
+
+# 1b. Or import an existing one (e.g. a `solana-keygen new` output).
+leash agent create --executive 5Jz...      # base58 secret, implies --import
+
+# 2. Fund the executive (devnet airdrop is free; mainnet pulls from
+#    any wallet you control).
+solana airdrop 1 <executive_pubkey> --url https://api.devnet.solana.com
+
+# 3. Re-run — the same command resumes from the persisted keypair,
+#    mints + delegates + records, and lands `agent.json`.
 leash agent create
 
-# 2. Confirm identity.
+# 4. Confirm identity.
 leash agent show
 
-# 3. Look at the marketplace.
+# 5. Look at the marketplace.
 leash discover -q ocr --max-price 0.10
 
-# 4. Vet a counterparty before paying.
+# 6. Vet a counterparty before paying.
 leash reputation AGENT_MINT_PUBKEY
 
-# 5. Pay something.
+# 7. Pay something.
 leash pay https://example.com/x/abc123
 
-# 6. Cash out.
+# 8. Cash out.
 leash treasury balance
 leash treasury withdraw --to YOUR_WALLET_ADDRESS --amount 0.50 --token USDC
 ```
+
+The first call always returns a `funding_required` block — render
+the `executive` and `required` fields, fund the address, and re-run.
+On mainnet the same flow applies; the only difference is you bring
+your own SOL.
 
 ## All commands
 
 ```text
 agent commands:
-  agent create [--name N]            mint a sandbox agent
+  agent create [--name N] [--generate | --import --executive <secret>]
+                                     two-step provisioning. Network = LEASH_NETWORK.
+                                     First run prints funding instructions; second
+                                     run mints + delegates + records.
   agent show                         print active agent identity
   agent export [--out PATH]          export agent.json
   agent import <PATH>                install an agent.json
@@ -136,7 +160,9 @@ Today the portability flow is **one-way for the chat product**:
 
 | Symptom                                          | Likely cause + fix                                                                              |
 | ------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `leash agent create` fails with `error: rate_limited` | Sandbox is rate-limited per IP. Wait 30s and retry.                                          |
+| `leash agent create` returns `Step 1 of 2 — fund the executive...` | Expected. Send the printed SOL amount to the printed pubkey, then run `leash agent create` again. |
+| `leash agent create` errors with `... not visible on RPC within 20s` | RPC propagation delay between mint confirmation and account read. Re-run; the resume path picks up where it left off. |
+| `leash agent create --import` errors `mode: "import" requires executive_secret_base58` | Pass `--executive <base58_secret>` along with `--import` (or use `--executive` alone). |
 | `leash pay` is slow (5–10s) or 429s              | You're on the public RPC. Set `LEASH_RPC_URL` to a paid endpoint — see _Bring your own RPC_ above. |
 | Wrong network on every command                   | `leash-mcp` and `leash` both honour `LEASH_NETWORK`. Set it explicitly to override `agent.json`. |
 | `leash treasury withdraw` returns `error`        | Most common: amount > available balance, or wrong `--token` symbol for the network's mint.       |

@@ -63,7 +63,7 @@ You can pass more than one — the client picks the right mode per call.
 |---|---|
 | `discover({ capability?, max_price_usdc?, pricing_type?, limit? })` | `GET /v1/discover` |
 | `reputation({ agentMint, network? })` | `GET /v1/agents/{mint}/reputation` |
-| `sandbox({ name? })` | `POST /v1/sandbox/agent` (devnet faucet) |
+| `recordAgent(input)` | `POST /v1/agents/record` (idempotent record after client-side mint) |
 
 ### Receipts (legacy API key)
 
