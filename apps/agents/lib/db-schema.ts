@@ -29,5 +29,12 @@ export async function ensureAgentChatTables(db: Client): Promise<void> {
     );
 
     CREATE INDEX IF NOT EXISTS idx_agent_usage_privy_created ON agent_usage(privy_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS user_agent_settings (
+      privy_id TEXT PRIMARY KEY,
+      provider TEXT NOT NULL DEFAULT 'anthropic',
+      model_tier TEXT NOT NULL DEFAULT 'sonnet',
+      updated_at TEXT NOT NULL
+    );
   `);
 }

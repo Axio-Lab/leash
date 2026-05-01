@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { type NextRequest } from 'next/server';
 
+import { DEFAULT_AGENT_SETTINGS, getAgentSettings } from '@/lib/agents/agent-settings';
 import { runAgentTurn } from '@/lib/agents/brain';
 import { mergeSkillFragmentsHeader, resolveMcpServers } from '@/lib/agents/tool-registry';
 import type { AgentEvent } from '@/lib/agents/types';
 import { sseEncode } from '@/lib/agents/sse';
-import { getServerEnv } from '@/lib/env';
+import { getServerEnv, resolveAgentModel } from '@/lib/env';
 import { requirePrivySession } from '@/lib/privy-server';
 
 export const runtime = 'nodejs';
@@ -130,8 +131,12 @@ export async function POST(req: NextRequest) {
   const passedAgentMint = parsed.data.agentMint;
   const transcript = buildTranscript(messages);
 
-  const env = getServerEnv();
-  const effectiveModel = model?.trim() || env.leashAgentModel;
+  // Tier resolution: explicit `model` in the request body still wins
+  // (used by tests + e2e snapshots), then the user's saved tier, then
+  // the platform default. `resolveAgentModel` maps tier → concrete
+  // Anthropic model id via env-configurable mappings.
+  const settings = await getAgentSettings(session.privyId).catch(() => DEFAULT_AGENT_SETTINGS);
+  const effectiveModel = model?.trim() || resolveAgentModel(settings.tier);
 
   // Pre-flight in parallel:
   //   1. Resolve primary agent mint (fallback when the thread didn't carry one).

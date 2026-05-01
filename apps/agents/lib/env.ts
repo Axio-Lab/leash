@@ -25,9 +25,51 @@ export function resolveNetwork(): SolanaNetwork {
 
 export const SOLANA_NETWORK: SolanaNetwork = resolveNetwork();
 
-/** Default Claude model for agent turns (override via LEASH_AGENT_MODEL). */
-export const LEASH_AGENT_MODEL: string =
-  process.env.LEASH_AGENT_MODEL?.trim() || 'claude-sonnet-4-20250514';
+/**
+ * Per-user model "tier". The platform exposes three Claude tiers in
+ * Profile → LLM; each tier resolves to a concrete Anthropic model id
+ * via the env vars below. Operators can roll/upgrade model ids without
+ * a code change.
+ */
+export type AgentModelTier = 'haiku' | 'sonnet' | 'opus';
+
+export const AGENT_MODEL_TIERS: readonly AgentModelTier[] = ['haiku', 'sonnet', 'opus'] as const;
+
+export const DEFAULT_AGENT_MODEL_TIER: AgentModelTier = 'sonnet';
+
+const HAIKU_MODEL_FALLBACK = 'claude-haiku-4-5';
+const SONNET_MODEL_FALLBACK = 'claude-sonnet-4-5';
+const OPUS_MODEL_FALLBACK = 'claude-opus-4-5';
+
+/**
+ * Resolve a tier (`haiku` | `sonnet` | `opus`) to a concrete Anthropic
+ * model id. Lookup order:
+ *
+ *   1. `LEASH_AGENT_MODEL` — hard override; pins every chat regardless
+ *      of the user's tier. Use for tests / staging snapshots.
+ *   2. `LEASH_AGENT_MODEL_{HAIKU|SONNET|OPUS}` — per-tier id.
+ *   3. Conservative built-in fallback shipped with this build.
+ */
+export function resolveAgentModel(tier: AgentModelTier): string {
+  const override = process.env.LEASH_AGENT_MODEL?.trim();
+  if (override) return override;
+  switch (tier) {
+    case 'haiku':
+      return process.env.LEASH_AGENT_MODEL_HAIKU?.trim() || HAIKU_MODEL_FALLBACK;
+    case 'opus':
+      return process.env.LEASH_AGENT_MODEL_OPUS?.trim() || OPUS_MODEL_FALLBACK;
+    case 'sonnet':
+    default:
+      return process.env.LEASH_AGENT_MODEL_SONNET?.trim() || SONNET_MODEL_FALLBACK;
+  }
+}
+
+/**
+ * Back-compat default. Equivalent to `resolveAgentModel('sonnet')`.
+ * Used by code paths that don't (yet) carry a user/tier — e.g. the
+ * agent-mint payload which stamps a model on the on-chain record.
+ */
+export const LEASH_AGENT_MODEL: string = resolveAgentModel(DEFAULT_AGENT_MODEL_TIER);
 
 /** Explorer base URL (public). */
 export const NEXT_PUBLIC_EXPLORER_URL: string =
