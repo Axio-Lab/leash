@@ -1,0 +1,39 @@
+{
+  "name": "@leash/cli",
+  "version": "0.1.0",
+  "description": "Human-driven Leash CLI. Mint agents, check balances, pay paywalls, discover services, and inspect reputation from your terminal.",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "leash": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && chmod +x ./dist/cli.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "echo lint:cli",
+    "test": "vitest run",
+    "dev": "node --import tsx ./src/cli.ts"
+  },
+  "dependencies": {
+    "@leash/mcp": "workspace:*",
+    "@leash/mcp-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.20.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
