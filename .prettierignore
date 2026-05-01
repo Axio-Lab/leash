@@ -1,3 +1,6 @@
+# docker-compose uses YAML anchors (*shared-build) which prettier cannot parse.
+docker-compose.yml
+
 # Mintlify-served plain-text manifests for AI tools. Plain markdown links
 # wrapped at sentence boundaries — prettier has no parser for `.txt` and
 # would reject them outright.
