@@ -91,6 +91,48 @@ The SDK exports `signRequest()` and `buildEnvelope()` if you need to
 build the same headers manually for other transports (gRPC, fetch
 in a worker, etc).
 
+## Payment links (legacy API-key auth)
+
+Payment links are hosted x402 paywalls — the API serves `/x/{id}` and
+the agent's Asset Signer PDA receives funds. Authentication today is
+the legacy bearer-token API key; the SDK exposes typed CRUD so you
+don't have to touch `fetch` directly.
+
+```ts
+const leash = new LeashClient({
+  baseUrl: 'https://api.leash.market',
+  apiKey: process.env.LEASH_API_KEY!,
+});
+
+const link = await leash.createPaymentLink({
+  label: 'Tag a single image',
+  owner_agent: 'AjfeyP...',          // your agent mint
+  method: 'POST',
+  price: '$0.01',
+  currency: 'USDC',
+  response: {
+    status: 200,
+    mimeType: 'application/json',
+    body: { ok: true },
+  },
+});
+
+console.log('share this:', link.share_url); // -> https://api.leash.market/x/<id>
+
+const all = await leash.listPaymentLinks({ limit: 25 });
+const one = await leash.getPaymentLink(link.id);
+await leash.updatePaymentLink(link.id, { price: '$0.02' });
+await leash.deletePaymentLink(link.id);
+```
+
+<Note>
+**The SDK does not pay payment links** — paying requires Solana
+signing, which `@leash/sdk` deliberately avoids so it stays
+browser-friendly. To pay programmatically, use
+[`@leash/buyer-kit`](/sdk/buyer-kit) (heavyweight, signs locally) or
+the [`@leash/mcp`](/agents/mcp) host's `pay()` tool.
+</Note>
+
 ## Reputation cheat sheet
 
 `reputation.rating` is normalised to `[0, 1]`:

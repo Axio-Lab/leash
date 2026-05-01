@@ -96,6 +96,7 @@
           {
             "group": "SDK reference",
             "pages": [
+              "sdk/sdk",
               "sdk/core",
               "sdk/seller-kit",
               "sdk/buyer-kit",

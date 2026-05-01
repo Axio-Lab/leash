@@ -86,6 +86,123 @@ export type SandboxAgentResponse = {
   executive_secret_base58: string;
   network: SvmNetwork;
   funded: { sol_lamports: string; usdc_atomic: string };
-  tx_signatures: string[];
-  explorer_urls: { mint: string; treasury: string };
+  tx_signatures: {
+    sol_drip: string;
+    mint: string;
+    usdc_drip: string;
+    /** Present on APIs >= the delegation fix; the executive can spend USDC immediately. */
+    delegate?: string;
+  };
+  explorer_urls: {
+    mint: string;
+    sol_drip: string;
+    usdc_drip: string;
+    delegate?: string;
+  };
+  receipts_service: string;
 };
+
+// ── payment links ────────────────────────────────────────────────
+//
+// Mirrors `apps/api/src/routes/payment-links.ts`. A payment link is
+// a hosted x402 paywall — the API serves `/x/{id}` for buyers, and
+// the agent's Asset Signer PDA is the on-chain `pay_to`. The SDK
+// gives you typed CRUD; to *pay* one programmatically you need
+// `@leash/buyer-kit` (Solana signing) or `@leash/mcp`'s host.
+
+export type StableSymbol = 'USDC' | 'USDG';
+export type EndpointMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
+
+export type PaymentLinkResponseTemplate = {
+  status: number;
+  mimeType: string;
+  body: string | Record<string, unknown>;
+};
+
+export type LeashFeeExtra = {
+  v: '1';
+  bps: number;
+  feeAuthority: string;
+};
+
+export type PaymentLinkAcceptsEntry = {
+  scheme: 'exact';
+  network: string;
+  pay_to: string;
+  asset: string;
+  amount: string;
+  currency: StableSymbol;
+  fee_amount: string;
+  gross_amount: string;
+  fee_bps: number;
+  fee_authority: string;
+  leash_fee: LeashFeeExtra;
+};
+
+export type PaymentLink = {
+  id: string;
+  network: SvmNetwork;
+  label: string;
+  description: string | null;
+  owner_agent: string;
+  owner_wallet: string | null;
+  pay_to: string;
+  method: EndpointMethod;
+  path: string;
+  price: string;
+  currency: StableSymbol;
+  accepts_currencies: StableSymbol[];
+  response: PaymentLinkResponseTemplate;
+  webhook_url: string | null;
+  wrap_receipt: boolean;
+  metadata: Record<string, unknown>;
+  facilitator: string;
+  share_url: string;
+  accepts: PaymentLinkAcceptsEntry[];
+  counters: {
+    call_count: number;
+    settled_count: number;
+    last_called_at: string | null;
+    last_settled_at: string | null;
+    last_tx_sig: string | null;
+    last_settled_amount_atomic: string | null;
+    last_settled_currency: string | null;
+  };
+  disabled_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PaymentLinksListResponse = {
+  items: PaymentLink[];
+  next_cursor: string | null;
+};
+
+export type PaymentLinkCreateInput = {
+  id?: string;
+  label: string;
+  description?: string;
+  owner_agent: string;
+  owner_wallet?: string;
+  method?: EndpointMethod;
+  price: string;
+  currency?: StableSymbol;
+  accepts_currencies?: StableSymbol[];
+  response: PaymentLinkResponseTemplate;
+  webhook_url?: string;
+  wrap_receipt?: boolean;
+  metadata?: Record<string, unknown>;
+};
+
+export type PaymentLinkPatchInput = Partial<{
+  label: string;
+  description: string | null;
+  price: string;
+  currency: StableSymbol;
+  accepts_currencies: StableSymbol[];
+  response: PaymentLinkResponseTemplate;
+  webhook_url: string | null;
+  wrap_receipt: boolean;
+  metadata: Record<string, unknown>;
+  disabled: boolean;
+}>;

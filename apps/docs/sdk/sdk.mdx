@@ -1,0 +1,144 @@
+---
+title: '@leash/sdk'
+description: Typed Leash API client. Browser, Bun, Deno, Node, edge — anywhere fetch runs.
+---
+
+`@leash/sdk` is the thin TypeScript HTTP client for the public Leash
+API. It is the **remote control** for a deployed Leash server — not a
+buyer or seller in itself.
+
+```text
+┌────────────────────────┐  HTTP (X-Leash-Sig or API key)
+│ your app, browser,     │ ─────────────────────────────► api.leash.market
+│ edge fn, Bun script    │                                 │
+└────────────────────────┘                                 ▼
+                                                     Solana RPC
+```
+
+If you need to **sign Solana transactions locally** (real x402 paying,
+seller middleware, on-chain mint/withdraw flows), use the engine-room
+kits instead:
+
+| Need | Reach for |
+|---|---|
+| Pay an x402 link | [`@leash/buyer-kit`](/sdk/buyer-kit) or [`@leash/mcp`](/agents/mcp)'s `pay()` |
+| Monetise an HTTP endpoint | [`@leash/seller-kit`](/sdk/seller-kit) |
+| Mint / register / withdraw from agents | [`@leash/registry-utils`](/sdk/registry-utils) |
+| Discover, vet, manage receipts and webhooks | **`@leash/sdk` (this page)** |
+
+## Install
+
+```bash
+pnpm add @leash/sdk
+```
+
+The package is **ESM-only**. Zero runtime deps beyond Umi (only used
+to sign the `X-Leash-Sig` header).
+
+## Three auth modes
+
+```ts
+import { LeashClient } from '@leash/sdk';
+
+// 1. Anonymous — public reads only.
+const pub = new LeashClient({ baseUrl: 'https://api.leash.market' });
+
+// 2. Agent-signed — webhooks and any future X-Leash-Sig endpoints.
+const signed = new LeashClient({
+  agentMint: 'AjfeyP...',
+  executiveSecretBase58: process.env.LEASH_EXECUTIVE_KEY!,
+});
+
+// 3. Legacy API key — payment-link CRUD, receipts.
+const keyed = new LeashClient({ apiKey: process.env.LEASH_API_KEY! });
+```
+
+You can pass more than one — the client picks the right mode per call.
+
+## Methods
+
+### Public reads (no auth)
+
+| Method | Endpoint |
+|---|---|
+| `discover({ capability?, max_price_usdc?, pricing_type?, limit? })` | `GET /v1/discover` |
+| `reputation({ agentMint, network? })` | `GET /v1/agents/{mint}/reputation` |
+| `sandbox({ name? })` | `POST /v1/sandbox/agent` (devnet faucet) |
+
+### Receipts (legacy API key)
+
+| Method | Endpoint |
+|---|---|
+| `receipts({ agentMint, direction?, limit? })` | `GET /v1/receipts/{mint}` |
+
+### Payment links (legacy API key)
+
+| Method | Endpoint |
+|---|---|
+| `createPaymentLink(input)` | `POST /v1/payment-links` |
+| `listPaymentLinks(query?)` | `GET /v1/payment-links` |
+| `getPaymentLink(id)` | `GET /v1/payment-links/{id}` |
+| `updatePaymentLink(id, patch)` | `PATCH /v1/payment-links/{id}` |
+| `deletePaymentLink(id)` | `DELETE /v1/payment-links/{id}` |
+
+### Agent webhooks (X-Leash-Sig)
+
+| Method | Endpoint |
+|---|---|
+| `createWebhook({ url, events? })` | `POST /v1/agents/{mint}/webhooks` |
+| `listWebhooks()` | `GET /v1/agents/{mint}/webhooks` |
+| `deleteWebhook(id)` | `DELETE /v1/agents/{mint}/webhooks/{id}` |
+
+## Examples
+
+```ts
+// Find an OCR provider under a penny, vet, then create a link to expose
+// the result downstream.
+const found = await pub.discover({ capability: 'ocr', max_price_usdc: 0.01 });
+const top = found.items[0];
+const rep = await pub.reputation({ agentMint: top.seller_agent_mint! });
+if (rep.rating < 0.5) throw new Error('seller too cold');
+
+const link = await keyed.createPaymentLink({
+  label: 'Re-tag image',
+  owner_agent: 'AjfeyP...',
+  price: '$0.005',
+  currency: 'USDC',
+  response: { status: 200, mimeType: 'application/json', body: { ok: true } },
+});
+console.log('share', link.share_url);
+```
+
+## Error model
+
+Every non-2xx response throws `LeashError`:
+
+```ts
+import { LeashError } from '@leash/sdk';
+
+try {
+  await keyed.createPaymentLink({ /* … */ });
+} catch (err) {
+  if (err instanceof LeashError) {
+    console.log(err.status, err.message, err.body);
+  }
+}
+```
+
+## Manual signing
+
+The signing helpers are exported for callers who want to build their
+own transport (workers, gRPC bridge, Postman):
+
+```ts
+import { signRequest, buildEnvelope } from '@leash/sdk';
+```
+
+The envelope is `SHA-256(method\npath\ntimestamp\nsha256(body)\nagent)`,
+exactly what the API verifies.
+
+## Source
+
+- Code: [`packages/sdk`](https://github.com/leash-market/leash/tree/main/packages/sdk)
+- OpenAPI spec: [`api.leash.market/openapi.json`](https://api.leash.market/openapi.json)
+- Walkthrough: [TypeScript SDK guide](/agents/sdk)

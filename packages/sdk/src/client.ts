@@ -25,6 +25,10 @@ import type {
   AgentWebhook,
   AgentWebhookWithSecret,
   DiscoverResponse,
+  PaymentLink,
+  PaymentLinkCreateInput,
+  PaymentLinkPatchInput,
+  PaymentLinksListResponse,
   ReceiptsResponse,
   ReputationSnapshot,
   SandboxAgentResponse,
@@ -165,7 +169,72 @@ export class LeashClient {
     );
   }
 
+  // ── payment links (legacy API-key auth) ──────────────────────────
+  //
+  // These wrap `/v1/payment-links/*`. Today the API authenticates
+  // them via the bearer-token API key, so callers must construct
+  // `LeashClient` with `{ apiKey }`. We expose them here because they
+  // are pure HTTP — no Solana signing — so they belong in the thin
+  // client. To *pay* one programmatically, see `@leash/buyer-kit` or
+  // `@leash/mcp`'s `pay()` host method (both sign locally).
+
+  async createPaymentLink(input: PaymentLinkCreateInput): Promise<PaymentLink> {
+    this.requireApiKey('createPaymentLink');
+    return this.requestJson<PaymentLink>('POST', '/v1/payment-links', input);
+  }
+
+  async listPaymentLinks(
+    query: {
+      ownerAgent?: string;
+      includeDisabled?: boolean;
+      cursor?: string;
+      limit?: number;
+    } = {},
+  ): Promise<PaymentLinksListResponse> {
+    this.requireApiKey('listPaymentLinks');
+    const params = new URLSearchParams();
+    if (query.ownerAgent) params.set('owner_agent', query.ownerAgent);
+    if (query.includeDisabled != null) {
+      params.set('include_disabled', query.includeDisabled ? 'true' : 'false');
+    }
+    if (query.cursor) params.set('cursor', query.cursor);
+    if (query.limit) params.set('limit', String(query.limit));
+    return this.requestJson<PaymentLinksListResponse>(
+      'GET',
+      `/v1/payment-links${params.toString() ? `?${params}` : ''}`,
+    );
+  }
+
+  async getPaymentLink(id: string): Promise<PaymentLink> {
+    this.requireApiKey('getPaymentLink');
+    return this.requestJson<PaymentLink>('GET', `/v1/payment-links/${encodeURIComponent(id)}`);
+  }
+
+  async updatePaymentLink(id: string, patch: PaymentLinkPatchInput): Promise<PaymentLink> {
+    this.requireApiKey('updatePaymentLink');
+    return this.requestJson<PaymentLink>(
+      'PATCH',
+      `/v1/payment-links/${encodeURIComponent(id)}`,
+      patch,
+    );
+  }
+
+  async deletePaymentLink(id: string): Promise<{ ok: true }> {
+    this.requireApiKey('deletePaymentLink');
+    return this.requestJson<{ ok: true }>('DELETE', `/v1/payment-links/${encodeURIComponent(id)}`);
+  }
+
   // ── internals ────────────────────────────────────────────────────
+
+  private requireApiKey(method: string): void {
+    if (!this.apiKey) {
+      throw new LeashError(
+        401,
+        `${method}() requires an API key today. Pass \`{ apiKey }\` to LeashClient.`,
+        null,
+      );
+    }
+  }
 
   private requireAgentAuth(): void {
     if (!this.agentMint || !this.executiveSecretBase58) {
