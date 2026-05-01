@@ -21,6 +21,7 @@ import {
   deleteThread,
   listThreads,
   renameThread,
+  restoreThread,
   type ChatThread,
 } from '@/lib/chat-storage';
 
@@ -127,27 +128,44 @@ export function ChatSidebar({
   }
 
   function onDelete(thread: ChatThread) {
+    const wasActive = activeThreadId === thread.id;
+    // Snapshot before delete so Undo can restore the full thread (id,
+    // messages, artifacts, timestamps) — not just the title.
+    const snapshot = thread;
     deleteThread(privyId, thread.id);
+
+    // If we just deleted the chat we're viewing, drop straight into a
+    // fresh blank chat. Going via `/agents` would bounce us into the
+    // newest *existing* thread instead, which is not what the user
+    // expects after a delete.
+    let nextActiveId: string | null = null;
+    if (wasActive) {
+      const fresh = createThread(privyId, primaryMint ? { agentMint: primaryMint } : {});
+      nextActiveId = fresh.id;
+    }
+
     refresh();
+
     toast.success('Chat deleted', {
       description: thread.title,
       action: {
         label: 'Undo',
         onClick: () => {
-          // Best-effort restore: re-create with the same title (id will differ).
-          const restored = createThread(privyId, thread.title);
-          for (const m of thread.messages) {
-            // Direct localStorage write via re-using append would change ids; we
-            // accept that messages are restored as-is with new ids in storage.
-            // (Rare path; full snapshot restore would need a richer storage API.)
-            void m;
-          }
+          // If we landed on a fresh blank chat as a side-effect of the
+          // delete, throw it away on undo so we don't leave behind
+          // empty "New chat" rows.
+          if (nextActiveId) deleteThread(privyId, nextActiveId);
+          restoreThread(privyId, snapshot);
           refresh();
-          router.push(`/agents/${restored.id}`);
+          router.push(`/agents/${snapshot.id}`);
         },
       },
     });
-    if (activeThreadId === thread.id) router.push('/agents');
+
+    if (nextActiveId) {
+      router.push(`/agents/${nextActiveId}`);
+      onNavigate?.();
+    }
   }
 
   return (

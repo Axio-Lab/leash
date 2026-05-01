@@ -275,6 +275,23 @@ export function deleteThread(privyId: string, threadId: string): void {
 }
 
 /**
+ * Re-persist a previously-loaded thread snapshot byte-for-byte. Used by
+ * the sidebar's "Undo delete" so the original id, messages, artifacts,
+ * and timestamps come back exactly as they were — not a fresh, empty
+ * thread carrying just the old title.
+ */
+export function restoreThread(privyId: string, thread: ChatThread): void {
+  if (typeof window === 'undefined') return;
+  persistThread(privyId, thread);
+  const idsRaw = localStorage.getItem(threadsIndexKey(privyId));
+  const ids: string[] = idsRaw ? (JSON.parse(idsRaw) as string[]) : [];
+  if (!ids.includes(thread.id)) {
+    ids.unshift(thread.id);
+    localStorage.setItem(threadsIndexKey(privyId), JSON.stringify(ids));
+  }
+}
+
+/**
  * Wipe every chat thread for `privyId`. Returns the number of threads
  * removed so the caller can surface a precise toast.
  *

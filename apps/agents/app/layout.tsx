@@ -19,7 +19,7 @@ const robotoMono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'leash.agent · The operation layer for autonomous agents',
+  title: 'leash.agent · The operating system for agent-to-agent commerce',
   description: 'Your agent. A wallet, an identity, and every tool it needs.',
   icons: {
     icon: '/leash-logo.png',
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     apple: '/leash-logo.png',
   },
   openGraph: {
-    title: 'leash.agent · The operation layer for autonomous agents',
+    title: 'leash.agent · The operating system for agent-to-agent commerce',
     description: 'Your agent. A wallet, an identity, and every tool it needs.',
     siteName: 'leash.agents',
   },
