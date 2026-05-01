@@ -39,6 +39,7 @@ export async function writeAgentConfig(args: {
     network: args.config.network,
     api_url: args.config.apiBaseUrl,
     rpc_url: args.config.rpcUrl,
+    ...(args.config.explorerBaseUrl ? { explorer_url: args.config.explorerBaseUrl } : {}),
     ...(args.config.apiKey ? { api_key: args.config.apiKey } : {}),
     created_at: new Date().toISOString(),
   };

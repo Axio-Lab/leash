@@ -19,6 +19,28 @@ pnpm add -g @leash/cli
 Pair with `@leash/mcp` to expose the same identity to an AI agent.
 Both binaries read the same `~/.config/leash/agent.json`.
 
+## Bring your own RPC (strongly recommended)
+
+<Warning>
+  The default RPCs (`api.devnet.solana.com`,
+  `api.mainnet-beta.solana.com`) are **public, rate-limited, and
+  slow**. Every `leash pay` makes 3-5 RPC calls; on a public endpoint
+  that's a 4-8s settlement, sometimes a 429. With a private RPC it's
+  typically under one second.
+</Warning>
+
+Set `LEASH_RPC_URL` once and `leash` + `leash-mcp` both pick it up:
+
+```bash
+export LEASH_RPC_URL="https://devnet.helius-rpc.com/?api-key=YOUR_KEY"
+leash doctor    # confirms RPC reachability
+```
+
+Helius, Triton, QuickNode, Alchemy, or self-hosted — any standard
+JSON-RPC endpoint works. You can also persist it in
+`~/.config/leash/agent.json` under `rpc_url` so it's the default for
+every future shell.
+
 ## Quickstart (devnet, auto-funded)
 
 ```bash
@@ -115,6 +137,7 @@ Today the portability flow is **one-way for the chat product**:
 | Symptom                                          | Likely cause + fix                                                                              |
 | ------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
 | `leash agent create` fails with `error: rate_limited` | Sandbox is rate-limited per IP. Wait 30s and retry.                                          |
+| `leash pay` is slow (5–10s) or 429s              | You're on the public RPC. Set `LEASH_RPC_URL` to a paid endpoint — see _Bring your own RPC_ above. |
 | Wrong network on every command                   | `leash-mcp` and `leash` both honour `LEASH_NETWORK`. Set it explicitly to override `agent.json`. |
 | `leash treasury withdraw` returns `error`        | Most common: amount > available balance, or wrong `--token` symbol for the network's mint.       |
 | `leash receipts` returns `error: 401`            | Receipts read still uses a bearer key today. Set `LEASH_API_KEY` in your shell.                  |

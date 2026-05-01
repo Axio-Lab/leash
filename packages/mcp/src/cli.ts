@@ -192,11 +192,23 @@ async function runImport(args: string[]): Promise<void> {
       : network === 'solana-mainnet'
         ? 'https://api.mainnet-beta.solana.com'
         : 'https://api.devnet.solana.com';
+  const explorerBaseUrl =
+    typeof f.explorer_url === 'string' && f.explorer_url.length > 0
+      ? f.explorer_url
+      : 'https://explorer.leash.market';
   const apiKey = typeof f.api_key === 'string' ? f.api_key : null;
 
   const target = defaultConfigPath();
   await writeAgentConfig({
-    config: { agentMint, executiveSecretBase58: executiveKey, network, apiBaseUrl, rpcUrl, apiKey },
+    config: {
+      agentMint,
+      executiveSecretBase58: executiveKey,
+      network,
+      apiBaseUrl,
+      rpcUrl,
+      explorerBaseUrl,
+      apiKey,
+    },
     path: target,
   });
   // Also copy as a backup so the user has the original.
@@ -239,6 +251,7 @@ async function runDoctor(): Promise<void> {
   lines.push(`network: ${config.network}`);
   lines.push(`api_base_url: ${config.apiBaseUrl}`);
   lines.push(`rpc_url: ${config.rpcUrl}`);
+  lines.push(`explorer_url: ${config.explorerBaseUrl}`);
   lines.push(`api_key: ${config.apiKey ? `set (${config.apiKey.slice(0, 8)}…)` : 'unset'}`);
 
   // RPC reachability — best-effort getVersion JSON-RPC ping.
@@ -246,7 +259,32 @@ async function runDoctor(): Promise<void> {
   // API reachability — GET /v1/discover (public, cheap).
   lines.push(`api_check: ${await pingApi(config.apiBaseUrl)}`);
 
+  if (isPublicRpc(config.rpcUrl)) {
+    lines.push('');
+    lines.push('⚠  rpc_url points at the public Solana RPC. Settlement (`leash_pay_payment_link`)');
+    lines.push('   makes 3-5 RPC calls and the public endpoint is rate-limited (429s) and slow');
+    lines.push('   (4-8s per pay). Set LEASH_RPC_URL or `rpc_url` in agent.json to a Helius /');
+    lines.push('   Triton / QuickNode / Alchemy / self-hosted endpoint. See:');
+    lines.push('     https://docs.leash.market/agents/mcp#bring-your-own-rpc');
+  }
+
   process.stdout.write(`${lines.join('\n')}\n`);
+}
+
+/**
+ * Returns true when the configured RPC is one of the public Solana
+ * defaults baked into `config.ts`. Used by `doctor` to surface a
+ * latency warning. Matches host-only — query strings are stripped so
+ * `?api-key=…` overrides are correctly recognised as private.
+ */
+function isPublicRpc(rpcUrl: string): boolean {
+  try {
+    const u = new URL(rpcUrl);
+    const host = u.host.toLowerCase();
+    return host === 'api.devnet.solana.com' || host === 'api.mainnet-beta.solana.com';
+  } catch {
+    return false;
+  }
 }
 
 async function pingRpc(rpcUrl: string): Promise<string> {

@@ -26,6 +26,7 @@
     "test": "vitest run",
     "dev": "node --import tsx ./src/cli.ts",
     "dev:demo-balance": "node --import tsx ./scripts/demo-balance.ts",
+    "fix-delegation": "node --import tsx ./scripts/fix-delegation.ts",
     "test:yc-demo-devnet": "node --import tsx ./scripts/test-yc-demo-devnet.ts"
   },
   "dependencies": {

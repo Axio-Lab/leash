@@ -19,10 +19,13 @@
  */
 
 import {
+  LEASH_EXPLORER_DEFAULT,
   TOKEN_2022_PROGRAM_ID,
   deriveAgentTreasuryAddress,
   deriveAgentTreasuryAta,
+  leashReceiptUrl,
   listSplBalances,
+  parseLeashHeaders,
 } from '@leash/core';
 import {
   fetchDiscover,
@@ -100,6 +103,7 @@ class StdioHost implements LeashHost {
   network: SvmNetwork;
   rpcUrl: string;
   apiBaseUrl: string;
+  explorerBaseUrl: string;
 
   private readonly config: LeashAgentConfig;
   private readonly signer: LeashSigner;
@@ -112,6 +116,7 @@ class StdioHost implements LeashHost {
     this.network = config.network;
     this.rpcUrl = config.rpcUrl;
     this.apiBaseUrl = config.apiBaseUrl;
+    this.explorerBaseUrl = config.explorerBaseUrl ?? LEASH_EXPLORER_DEFAULT;
   }
 
   async checkTreasuryBalance(args: CheckTreasuryBalanceArgs): Promise<LeashToolResult> {
@@ -186,6 +191,18 @@ class StdioHost implements LeashHost {
         .catch(() => '');
 
       if (receipt.tx_sig && response.ok) {
+        // Prefer the seller-stamped `X-Leash-*` headers over the
+        // buyer-kit's locally-computed receipt. The buyer-side hash is
+        // computed against the buyer's view of the request (its own
+        // `nonce` / `ts`) so it diverges from the canonical seller-side
+        // earn receipt that `apps/api`'s paywall publishes — and the
+        // explorer only indexes the seller-side hash. Falling back to
+        // the local hash keeps legacy paywalls (no header stamping)
+        // working. Same precedence as the chat product applies in
+        // `apps/agents/components/chat/pay-request-artifact.tsx`.
+        const stamped = parseLeashHeaders(response);
+        const txSignature = stamped.txSig ?? receipt.tx_sig;
+        const receiptHash = stamped.receiptHash ?? receipt.receipt_hash ?? null;
         return jsonResult({
           kind: 'payment_receipt',
           status: 'ok',
@@ -194,11 +211,12 @@ class StdioHost implements LeashHost {
           network: this.network,
           paid_amount_atomic: receipt.price?.amount ?? null,
           currency: receipt.price?.currency ?? null,
-          tx_signature: receipt.tx_sig,
+          tx_signature: txSignature,
           response_status: response.status,
           response_body: bodyText.slice(0, 4000),
-          receipt_hash: receipt.receipt_hash ?? null,
-          explorer_url: explorerTxUrl(receipt.tx_sig, this.network),
+          receipt_hash: receiptHash,
+          receipt_url: leashReceiptUrl(receiptHash, { baseUrl: this.explorerBaseUrl }),
+          explorer_url: explorerTxUrl(txSignature, this.network),
         });
       }
 

@@ -11,6 +11,7 @@
  *   - LEASH_NETWORK             → network ('solana-mainnet' | 'solana-devnet')
  *   - LEASH_API_URL             → apiBaseUrl
  *   - LEASH_RPC_URL             → rpcUrl override (otherwise picked per network)
+ *   - LEASH_EXPLORER_URL        → explorerBaseUrl (default explorer.leash.market)
  *   - LEASH_API_KEY             → bearer token for legacy API-key endpoints
  *                                 (X-Leash-Sig auth lands in batch 4)
  *
@@ -38,11 +39,33 @@ export type LeashAgentConfig = {
   apiBaseUrl: string;
   /** Solana RPC URL used for direct chain reads + tx submission. */
   rpcUrl: string;
+  /**
+   * Base URL of the Leash protocol explorer used to build
+   * `receipt_url` / `agent_url` deep-links. Defaults to
+   * `https://explorer.leash.market`.
+   */
+  explorerBaseUrl: string;
   /** Optional legacy API-key bearer token. Goes away once X-Leash-Sig auth is in. */
   apiKey: string | null;
 };
 
 const DEFAULT_API_URL = 'https://api.leash.market';
+const DEFAULT_EXPLORER_URL = 'https://explorer.leash.market';
+/**
+ * Public Solana RPC fallbacks. Used only when `LEASH_RPC_URL` and
+ * `agent.json:rpc_url` are both unset.
+ *
+ * **These are slow.** They are public, heavily rate-limited
+ * (429s under load), and add 4-8s of latency to every
+ * `leash_pay_payment_link` call (each settlement makes 3-5 RPC
+ * round-trips). Production users should set `LEASH_RPC_URL` (or
+ * persist `rpc_url` in `~/.config/leash/agent.json`) to a Helius /
+ * Triton / QuickNode / Alchemy / self-hosted endpoint — settlement
+ * latency drops to sub-second and 429s disappear.
+ *
+ * The MCP and CLI docs surface this in a "Bring your own RPC"
+ * callout; keep this comment in sync if those move.
+ */
 const DEFAULT_RPC: Record<SvmNetwork, string> = {
   'solana-devnet': 'https://api.devnet.solana.com',
   'solana-mainnet': 'https://api.mainnet-beta.solana.com',
@@ -60,6 +83,7 @@ type FileShape = {
   network?: string;
   api_url?: string;
   rpc_url?: string;
+  explorer_url?: string;
   api_key?: string;
   created_at?: string;
 };
@@ -113,6 +137,8 @@ export function loadAgentConfig(opts?: { path?: string }): LeashAgentConfig | nu
   const network = normalizeNetwork(process.env.LEASH_NETWORK ?? file?.network);
   const apiBaseUrl = pick(process.env.LEASH_API_URL, file?.api_url) ?? DEFAULT_API_URL;
   const rpcUrl = pick(process.env.LEASH_RPC_URL, file?.rpc_url) ?? DEFAULT_RPC[network];
+  const explorerBaseUrl =
+    pick(process.env.LEASH_EXPLORER_URL, file?.explorer_url) ?? DEFAULT_EXPLORER_URL;
   const apiKey = pick(process.env.LEASH_API_KEY, file?.api_key) ?? null;
 
   return {
@@ -121,6 +147,7 @@ export function loadAgentConfig(opts?: { path?: string }): LeashAgentConfig | nu
     network,
     apiBaseUrl,
     rpcUrl,
+    explorerBaseUrl,
     apiKey,
   };
 }

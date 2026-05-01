@@ -241,6 +241,7 @@ export class HostRef implements LeashHost {
         network: sandbox.network,
         apiBaseUrl,
         rpcUrl: process.env.LEASH_RPC_URL?.trim() || defaultRpcFor(sandbox.network),
+        explorerBaseUrl: process.env.LEASH_EXPLORER_URL?.trim() || 'https://explorer.leash.market',
         apiKey: process.env.LEASH_API_KEY?.trim() || null,
       };
 

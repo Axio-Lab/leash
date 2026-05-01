@@ -28,7 +28,16 @@ environment variable overrides:
 | `LEASH_EXECUTIVE_KEY` | `5Jz...` (base58) or `[12,34,...]` (JSON arr) |
 | `LEASH_NETWORK`       | `solana-devnet` (default) / `solana-mainnet`  |
 | `LEASH_API_URL`       | `https://api.leash.market` (default)          |
-| `LEASH_RPC_URL`       | overrides the per-network default RPC         |
+| `LEASH_RPC_URL`       | **strongly recommended** — see below          |
+| `LEASH_EXPLORER_URL`  | `https://explorer.leash.market` (default)     |
+
+> **Bring your own RPC.** The default endpoints
+> (`api.devnet.solana.com`, `api.mainnet-beta.solana.com`) are public,
+> rate-limited, and slow. Each `leash pay` makes 3-5 RPC calls — on a
+> public endpoint that's a 4-8s settlement, sometimes a 429. Set
+> `LEASH_RPC_URL` (or `rpc_url` in `agent.json`) to a Helius / Triton /
+> QuickNode / Alchemy / self-hosted endpoint and settlement drops
+> under one second.
 
 ## Quickstart (devnet, auto-funded)
 

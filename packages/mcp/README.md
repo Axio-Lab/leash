@@ -19,6 +19,31 @@ treasury balance — without a browser in the loop.
 }
 ```
 
+Most MCP hosts support an `env` map on each server — use it to override
+the default public RPC (slow / rate-limited). Swap in your own URL:
+
+```jsonc
+{
+  "mcpServers": {
+    "leash": {
+      "command": "npx",
+      "args": ["-y", "@leash/mcp"],
+      "env": {
+        "LEASH_RPC_URL": "https://devnet.helius-rpc.com/?api-key=YOUR_KEY",
+        // optional — match mainnet if your agent + links are on mainnet:
+        // "LEASH_NETWORK": "solana-mainnet",
+        // "LEASH_RPC_URL": "https://mainnet.helius-rpc.com/?api-key=YOUR_KEY",
+      },
+    },
+  },
+}
+```
+
+You can set any other overrides the same way (`LEASH_AGENT_MINT`,
+`LEASH_EXECUTIVE_KEY`, `LEASH_API_URL`, `LEASH_EXPLORER_URL`, …).
+Alternatively, put `rpc_url` in `~/.config/leash/agent.json` — env wins
+over the file when both are set.
+
 ## Configure
 
 The server looks at, in order:
@@ -27,16 +52,25 @@ The server looks at, in order:
    `gcloud`/`gh`/`aws`.
 2. Environment variables (override the file when set):
 
-   | env                   | required | example                                       |
-   | --------------------- | -------- | --------------------------------------------- |
-   | `LEASH_AGENT_MINT`    | yes      | `Agnt7XQ...`                                  |
-   | `LEASH_EXECUTIVE_KEY` | yes      | `5Jz...` (base58) or `[12,34,...]` (JSON arr) |
-   | `LEASH_NETWORK`       | no       | `solana-devnet` (default) / `solana-mainnet`  |
-   | `LEASH_API_URL`       | no       | `https://api.leash.market` (default)          |
-   | `LEASH_RPC_URL`       | no       | overrides the per-network default RPC         |
-   | `LEASH_API_KEY`       | no       | legacy bearer for `/v1/payment-links`         |
-   | `LEASH_PER_CALL_USDC` | no       | per-call spend cap (default `1`)              |
-   | `LEASH_PER_DAY_USDC`  | no       | per-day spend cap (default `10`)              |
+   | env                   | required                 | example                                       |
+   | --------------------- | ------------------------ | --------------------------------------------- |
+   | `LEASH_AGENT_MINT`    | yes                      | `Agnt7XQ...`                                  |
+   | `LEASH_EXECUTIVE_KEY` | yes                      | `5Jz...` (base58) or `[12,34,...]` (JSON arr) |
+   | `LEASH_NETWORK`       | no                       | `solana-devnet` (default) / `solana-mainnet`  |
+   | `LEASH_API_URL`       | no                       | `https://api.leash.market` (default)          |
+   | `LEASH_RPC_URL`       | **strongly recommended** | bring your own — see below                    |
+   | `LEASH_EXPLORER_URL`  | no                       | `https://explorer.leash.market` (default)     |
+   | `LEASH_API_KEY`       | no                       | legacy bearer for `/v1/payment-links`         |
+   | `LEASH_PER_CALL_USDC` | no                       | per-call spend cap (default `1`)              |
+   | `LEASH_PER_DAY_USDC`  | no                       | per-day spend cap (default `10`)              |
+
+> **Bring your own RPC.** The default endpoints
+> (`api.devnet.solana.com`, `api.mainnet-beta.solana.com`) are public,
+> rate-limited, and slow. Each `leash_pay_payment_link` makes 3-5
+> RPC calls — on a public endpoint that's a 4-8s settlement, sometimes
+> a 429. Set `LEASH_RPC_URL` (or `rpc_url` in `agent.json`) to a
+> Helius / Triton / QuickNode / Alchemy / self-hosted endpoint and
+> settlement drops under one second.
 
 The server **starts without** an agent configured — `tools/list`
 still works, but every tool short-circuits with a `no_agent` JSON
@@ -51,6 +85,8 @@ blob asking the LLM to onboard the user. (The frictionless
   "agent_mint": "Agnt7XQ...",
   "executive_keypair": "5Jz...", // base58 OR a 64-element JSON array
   "network": "solana-devnet",
+  "rpc_url": "https://devnet.helius-rpc.com/?api-key=YOUR_KEY",
+  "explorer_url": "https://explorer.leash.market",
   "created_at": "2026-04-30T...",
 }
 ```

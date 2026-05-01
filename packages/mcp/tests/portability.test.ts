@@ -53,6 +53,7 @@ function freshConfig(): LeashAgentConfig {
     network: 'solana-devnet',
     apiBaseUrl: 'https://api.example.test',
     rpcUrl: 'https://rpc.example.test',
+    explorerBaseUrl: 'https://explorer.example.test',
     apiKey: null,
   };
 }
@@ -88,6 +89,7 @@ describe('config round-trip (powers `leash-mcp export` / `import`)', () => {
     expect(loaded!.network).toBe(cfg.network);
     expect(loaded!.apiBaseUrl).toBe(cfg.apiBaseUrl);
     expect(loaded!.rpcUrl).toBe(cfg.rpcUrl);
+    expect(loaded!.explorerBaseUrl).toBe(cfg.explorerBaseUrl);
   });
 
   it('JSON file shape matches the documented `LeashAgentConfig` v1', async () => {
@@ -101,6 +103,7 @@ describe('config round-trip (powers `leash-mcp export` / `import`)', () => {
     expect(parsed.network).toBe(cfg.network);
     expect(parsed.api_url).toBe(cfg.apiBaseUrl);
     expect(parsed.rpc_url).toBe(cfg.rpcUrl);
+    expect(parsed.explorer_url).toBe(cfg.explorerBaseUrl);
     // chmod-600 file should never include `api_key` when the input
     // had a null api_key. Otherwise `null` would leak into git diffs
     // when users commit non-sensitive parts of their config.

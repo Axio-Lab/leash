@@ -53,12 +53,50 @@ or another MCP host), point at it via env vars:
 | `LEASH_EXECUTIVE_KEY` | `5Jz...` (base58) or `[12,34,...]` (JSON arr) |
 | `LEASH_NETWORK`       | `solana-devnet` (default) / `solana-mainnet`  |
 | `LEASH_API_URL`       | `https://api.leash.market` (default)          |
-| `LEASH_RPC_URL`       | overrides the per-network default RPC         |
+| `LEASH_RPC_URL`       | **strongly recommended** — see below          |
+| `LEASH_EXPLORER_URL`  | `https://explorer.leash.market` (default)     |
 | `LEASH_API_KEY`       | bearer for legacy `/v1/payment-links` flow    |
 
 Or paste a JSON config into `~/.config/leash/agent.json` (chmod 600).
 The CLI subcommands `leash-mcp export` / `leash-mcp import` round-trip
 that file so an agent can move between hosts in one command.
+
+### Bring your own RPC (strongly recommended)
+
+<Warning>
+  The default RPCs (`api.devnet.solana.com`, `api.mainnet-beta.solana.com`)
+  are **public, rate-limited, and slow**. x402 settlement makes 3-5
+  RPC calls per `leash_pay_payment_link` (`getLatestBlockhash`,
+  `getAccountInfo`, `simulateTransaction`, `sendTransaction`,
+  `getSignatureStatuses`) — on a public endpoint that's a 4-8s
+  payment, sometimes a 429. With a private RPC it's typically under
+  one second.
+</Warning>
+
+Set `LEASH_RPC_URL` to a paid or self-hosted endpoint:
+
+```bash
+# Helius (free tier handles devnet + light mainnet)
+LEASH_RPC_URL=https://devnet.helius-rpc.com/?api-key=YOUR_KEY
+
+# Triton, QuickNode, Alchemy — any RPC that speaks the standard
+# JSON-RPC interface works.
+```
+
+Or persist it in `~/.config/leash/agent.json`:
+
+```jsonc
+{
+  "version": 1,
+  "agent_mint": "Agnt7XQ...",
+  "executive_keypair": "5Jz...",
+  "network": "solana-devnet",
+  "rpc_url": "https://devnet.helius-rpc.com/?api-key=YOUR_KEY"
+}
+```
+
+The same advice applies to the CLI — `leash` and `leash-mcp` share
+the config file.
 
 ## Tools
 
@@ -121,6 +159,7 @@ no faucets to hit manually.
 | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Tools list is empty / host can't connect           | Wrong path or stale cache. Run `npx clear-npx-cache`, restart the host, check the host's MCP logs.                          |
 | `leash_register_agent` returns `error: rate_limited` | Sandbox is rate-limited per IP. Wait 30s and retry.                                                                       |
+| `leash_pay_payment_link` is slow (5–10s) or 429s   | You're on the public RPC. Set `LEASH_RPC_URL` to a paid endpoint — see _Bring your own RPC_ above.                          |
 | `leash_pay_payment_link` returns `wrong_network`   | The link is on the other cluster. The MCP does not pay across networks — confirm the link's network and your `LEASH_NETWORK`. |
 | `tx_signature` returned but explorer shows nothing | RPC propagation delay (~2-3s on devnet). Refresh in 5s.                                                                     |
 | `leash_create_payment_link` returns `error`        | Today this tool calls back to the API with a legacy bearer token. Set `LEASH_API_KEY` until X-Leash-Sig auth lands here.   |

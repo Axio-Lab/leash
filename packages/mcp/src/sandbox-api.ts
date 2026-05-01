@@ -30,11 +30,14 @@ export type SandboxAgentResponse = {
     sol_drip: string;
     mint: string;
     usdc_drip: string;
+    /** Present on APIs >= the delegation fix (the buyer-kit needs this). */
+    delegate?: string;
   };
   explorer_urls: {
     mint: string;
     sol_drip: string;
     usdc_drip: string;
+    delegate?: string;
   };
   funded: {
     sol_lamports: string;

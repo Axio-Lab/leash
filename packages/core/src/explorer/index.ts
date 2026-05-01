@@ -67,3 +67,55 @@ export function addressExplorerUrl(
   const path = provider === 'solscan' ? 'account' : 'address';
   return `${base(provider)}/${path}/${address}${clusterParam(network, provider)}`;
 }
+
+/**
+ * Default base for the Leash protocol explorer. Override via the
+ * `baseUrl` option (or `LEASH_EXPLORER_URL` upstream) when running
+ * against a self-hosted explorer or a staging deployment.
+ */
+export const LEASH_EXPLORER_DEFAULT = 'https://explorer.leash.market';
+
+/**
+ * Page on `explorer.leash.market` for a Leash receipt hash. Returns
+ * `null` when no hash is supplied so callers can pipe through nullable
+ * fields without inline checks.
+ *
+ * The hash should be the seller-side (canonical) `receipt_hash` — the
+ * one stamped on the response via `X-Leash-Receipt-Hash`. The
+ * buyer-kit's locally-computed hash is per-buyer-view and the explorer
+ * does not index it.
+ */
+export function leashReceiptUrl(
+  hash: string | null | undefined,
+  opts: { baseUrl?: string } = {},
+): string | null {
+  if (!hash) return null;
+  const trimmed = hash.trim();
+  if (trimmed.length === 0) return null;
+  const base = (opts.baseUrl ?? LEASH_EXPLORER_DEFAULT).replace(/\/+$/, '');
+  return `${base}/receipt/${encodeURIComponent(trimmed)}`;
+}
+
+/** Page on `explorer.leash.market` for a Solana tx signature. */
+export function leashTxUrl(
+  signature: string | null | undefined,
+  opts: { baseUrl?: string } = {},
+): string | null {
+  if (!signature) return null;
+  const trimmed = signature.trim();
+  if (trimmed.length === 0) return null;
+  const base = (opts.baseUrl ?? LEASH_EXPLORER_DEFAULT).replace(/\/+$/, '');
+  return `${base}/tx/${encodeURIComponent(trimmed)}`;
+}
+
+/** Page on `explorer.leash.market` for an agent (MPL Core asset). */
+export function leashAgentUrl(
+  mint: string | null | undefined,
+  opts: { baseUrl?: string } = {},
+): string | null {
+  if (!mint) return null;
+  const trimmed = mint.trim();
+  if (trimmed.length === 0) return null;
+  const base = (opts.baseUrl ?? LEASH_EXPLORER_DEFAULT).replace(/\/+$/, '');
+  return `${base}/agent/${encodeURIComponent(trimmed)}`;
+}
