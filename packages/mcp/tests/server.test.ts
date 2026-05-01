@@ -41,7 +41,7 @@ describe('@leash/mcp server', () => {
     restoreEnv(envSnap);
   });
 
-  it('boots without an agent and returns tools/list with the four canonical tools', async () => {
+  it('boots without an agent and returns tools/list with all canonical tools', async () => {
     const { server, config } = buildServerFromEnv({
       configPath: '/nonexistent/path/agent.json',
     });
@@ -62,10 +62,12 @@ describe('@leash/mcp server', () => {
       'leash_create_payment_link',
       'leash_discover',
       'leash_get_identity',
+      'leash_get_spend_limit',
       'leash_pay_payment_link',
       'leash_receipts',
       'leash_register_agent',
       'leash_reputation',
+      'leash_set_spend_limit',
       'leash_withdraw_treasury',
     ]);
 
@@ -97,6 +99,27 @@ describe('@leash/mcp server', () => {
     expect(parsed.kind).toBe('treasury_balance');
     expect(parsed.status).toBe('no_agent');
     expect(parsed.message).toMatch(/No Leash agent configured/);
+
+    await client.close();
+    await server.close();
+  });
+
+  it('leash_set_spend_limit + leash_get_spend_limit return no_agent when unconfigured', async () => {
+    const { server } = buildServerFromEnv({ configPath: '/nonexistent/path/agent.json' });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client(
+      { name: 'leash-test-client', version: '0.0.1' },
+      { capabilities: {} },
+    );
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    for (const name of ['leash_set_spend_limit', 'leash_get_spend_limit'] as const) {
+      const result = await client.callTool({ name, arguments: {} });
+      const content = result.content as Array<{ type: string; text: string }> | undefined;
+      const parsed = JSON.parse(content![0]!.text) as { kind: string; status: string };
+      expect(parsed.kind).toBe('spend_limit');
+      expect(parsed.status).toBe('no_agent');
+    }
 
     await client.close();
     await server.close();

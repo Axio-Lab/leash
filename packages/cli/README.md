@@ -93,6 +93,11 @@ agent commands:
 treasury commands:
   treasury balance                   list SOL + token balances
   treasury withdraw --to W --amount N --token SOL|USDC|USDG|USDT
+  treasury limit [--token USDC|USDG|USDT]
+                                     show SPL Approve delegation + balance
+  treasury set-limit [--token USDC|USDG|USDT]
+                    (--unlimited | --revoke | --amount N)
+                                     change the executive's SPL spend authority
 
 marketplace + reputation:
   discover [-q QUERY] [--max-price N] [--pricing-type T] [--limit N]

@@ -43,19 +43,27 @@ const echoHost: LeashHost = {
   async reputation(args) {
     return jsonResult({ kind: 'echo:reputation', args });
   },
+  async setSpendLimit(args) {
+    return jsonResult({ kind: 'echo:set_spend_limit', args });
+  },
+  async getSpendLimit(args) {
+    return jsonResult({ kind: 'echo:get_spend_limit', args });
+  },
 };
 
 describe('LEASH_TOOLS', () => {
-  it('exposes the nine canonical tools in stable order', () => {
+  it('exposes the canonical tools in stable order', () => {
     expect(LEASH_TOOLS.map((t) => t.name)).toEqual([
       'leash_check_treasury_balance',
       'leash_create_payment_link',
       'leash_discover',
       'leash_get_identity',
+      'leash_get_spend_limit',
       'leash_pay_payment_link',
       'leash_receipts',
       'leash_register_agent',
       'leash_reputation',
+      'leash_set_spend_limit',
       'leash_withdraw_treasury',
     ]);
   });

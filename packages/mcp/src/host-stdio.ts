@@ -39,17 +39,24 @@ import {
   type CreatePaymentLinkArgs,
   type DiscoverArgs,
   type GetIdentityArgs,
+  type GetSpendLimitArgs,
   type LeashHost,
   type LeashToolResult,
   type PayArgs,
   type ReceiptsArgs,
   type RegisterAgentArgs,
   type ReputationArgs,
+  type SetSpendLimitArgs,
+  type StableSymbol,
   type SvmNetwork,
   type WithdrawArgs,
 } from '@leash/mcp-core';
 import {
+  SPL_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID as UMI_TOKEN_2022_PROGRAM_ID,
+  getSpendDelegation,
+  revokeSpendDelegation,
+  setSpendDelegation,
   withdrawTreasury,
   withdrawTreasurySol,
 } from '@leash/registry-utils';
@@ -517,6 +524,184 @@ class StdioHost implements LeashHost {
       query: args,
     });
   }
+
+  /**
+   * Owner-driven update of the SPL `Approve` delegation that lets the
+   * executive spend the requested stable from the agent treasury PDA.
+   * Mode + amount semantics:
+   *   - `unlimited` (default) → `u64::MAX` (the protocol default).
+   *   - `revoke`              → drop the delegation entirely.
+   *   - `amount` + `amount: N` → cap at `N * 10**decimals`.
+   */
+  async setSpendLimit(args: SetSpendLimitArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('spend_limit');
+    const symbol = (args.symbol ?? 'USDC') as StableSymbol;
+    const meta = lookupTokenBySymbolSafe(symbol, tokenNetwork(this.network));
+    if (!meta) {
+      return jsonResult({
+        kind: 'spend_limit',
+        status: 'error',
+        message: `${symbol} is not configured for ${this.network}.`,
+      });
+    }
+    const mode = args.mode ?? 'unlimited';
+    if (mode === 'amount' && (args.amount === undefined || !(args.amount > 0))) {
+      return jsonResult({
+        kind: 'spend_limit',
+        status: 'error',
+        message: '`mode: "amount"` requires `amount` (a positive decimal number).',
+      });
+    }
+
+    try {
+      const umi = this.signer.getUmi(this.rpcUrl);
+      const tokenProgram =
+        meta.program === 'spl-token-2022' ? UMI_TOKEN_2022_PROGRAM_ID : SPL_TOKEN_PROGRAM_ID;
+
+      if (mode === 'revoke') {
+        const result = await revokeSpendDelegation(umi, {
+          agentAsset: this.agentMint,
+          mint: meta.mint,
+          tokenProgram,
+        });
+        return jsonResult({
+          kind: 'spend_limit',
+          status: 'ok',
+          mode: 'revoke',
+          symbol,
+          mint: meta.mint,
+          treasury: result.treasury,
+          source_token_account: result.sourceTokenAccount,
+          delegated_amount_atomic: '0',
+          delegated_amount: '0',
+          tx_signature: result.signature,
+          network: this.network,
+          explorer_url: explorerTxUrl(result.signature, this.network),
+        });
+      }
+
+      const cap =
+        mode === 'unlimited'
+          ? 2n ** 64n - 1n
+          : decimalToAtomic(args.amount as number, meta.decimals);
+      if (cap <= 0n) {
+        return jsonResult({
+          kind: 'spend_limit',
+          status: 'error',
+          message: 'Resolved cap is zero — pass a larger `amount` or use `mode: "unlimited"`.',
+        });
+      }
+      const result = await setSpendDelegation(umi, {
+        agentAsset: this.agentMint,
+        mint: meta.mint,
+        executive: this.ownerWallet ?? '',
+        amount: cap,
+        tokenProgram,
+      });
+      return jsonResult({
+        kind: 'spend_limit',
+        status: 'ok',
+        mode,
+        symbol,
+        mint: meta.mint,
+        delegate: result.delegate,
+        treasury: result.treasury,
+        source_token_account: result.sourceTokenAccount,
+        delegated_amount_atomic: result.delegatedAmount.toString(),
+        delegated_amount: mode === 'unlimited' ? 'unlimited' : atomicToDecimal(cap, meta.decimals),
+        tx_signature: result.signature,
+        network: this.network,
+        explorer_url: explorerTxUrl(result.signature, this.network),
+      });
+    } catch (err) {
+      return jsonResult({
+        kind: 'spend_limit',
+        status: 'error',
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+
+  /**
+   * Read the current SPL delegation + treasury balance for `symbol`.
+   * Pure RPC — no signing.
+   */
+  async getSpendLimit(args: GetSpendLimitArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('spend_limit');
+    const symbol = (args.symbol ?? 'USDC') as StableSymbol;
+    const meta = lookupTokenBySymbolSafe(symbol, tokenNetwork(this.network));
+    if (!meta) {
+      return jsonResult({
+        kind: 'spend_limit',
+        status: 'error',
+        message: `${symbol} is not configured for ${this.network}.`,
+      });
+    }
+    try {
+      const umi = this.signer.getUmi(this.rpcUrl);
+      const tokenProgram =
+        meta.program === 'spl-token-2022' ? UMI_TOKEN_2022_PROGRAM_ID : SPL_TOKEN_PROGRAM_ID;
+      const status = await getSpendDelegation(umi, {
+        agentAsset: this.agentMint,
+        mint: meta.mint,
+        tokenProgram,
+      });
+      const isUnlimited = status.delegatedAmount === 2n ** 64n - 1n;
+      return jsonResult({
+        kind: 'spend_limit',
+        status: 'ok',
+        symbol,
+        mint: meta.mint,
+        treasury: status.treasury,
+        source_token_account: status.sourceTokenAccount,
+        source_exists: status.sourceExists,
+        delegate: status.delegate,
+        executive_pubkey: this.ownerWallet,
+        delegate_matches_executive: status.delegate === this.ownerWallet,
+        delegated_amount_atomic: status.delegatedAmount.toString(),
+        delegated_amount: isUnlimited
+          ? 'unlimited'
+          : atomicToDecimal(status.delegatedAmount, meta.decimals),
+        balance_atomic: status.balance.toString(),
+        balance: atomicToDecimal(status.balance, meta.decimals),
+        decimals: meta.decimals,
+        network: this.network,
+      });
+    } catch (err) {
+      return jsonResult({
+        kind: 'spend_limit',
+        status: 'error',
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+}
+
+/**
+ * Convert a human decimal (e.g. `100`, `1.5`) to atomic units using
+ * the mint's decimals. Floors to avoid silently rounding up.
+ */
+function decimalToAtomic(amount: number, decimals: number): bigint {
+  if (!Number.isFinite(amount) || amount <= 0) return 0n;
+  // Multiply via string to avoid float precision drift on small
+  // amounts (e.g. 0.000001 USDC).
+  const [whole, frac = ''] = amount.toString().split('.');
+  const fracPadded = (frac + '0'.repeat(decimals)).slice(0, decimals);
+  const combined = `${whole}${fracPadded}`.replace(/^0+(?=\d)/, '');
+  try {
+    return BigInt(combined);
+  } catch {
+    return 0n;
+  }
+}
+
+/** Inverse of {@link decimalToAtomic}. Trims trailing zeros. */
+function atomicToDecimal(amount: bigint, decimals: number): string {
+  if (decimals === 0) return amount.toString();
+  const s = amount.toString().padStart(decimals + 1, '0');
+  const whole = s.slice(0, s.length - decimals);
+  const frac = s.slice(s.length - decimals).replace(/0+$/, '');
+  return frac.length > 0 ? `${whole}.${frac}` : whole;
 }
 
 function explorerAccountUrl(pubkey: string, network: SvmNetwork): string {

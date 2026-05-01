@@ -133,6 +133,41 @@ export type ReputationArgs = {
   network?: SvmNetwork;
 };
 
+/**
+ * Inputs for `leash_set_spend_limit`. Lets the owner change the cap
+ * the agent treasury PDA delegates to the executive keypair for an
+ * SPL stable. `unlimited` writes `u64::MAX`; `revoke` zeros the
+ * delegation; an explicit decimal amount sets that cap (in
+ * human-readable units of the token).
+ */
+export type SetSpendLimitArgs = {
+  /** SPL stable to update the delegation for. Defaults to USDC. */
+  symbol?: StableSymbol;
+  /**
+   * What to write.
+   *   - `'unlimited'` (default) — `u64::MAX`, the protocol default.
+   *   - `'revoke'` — drop the delegation; the executive can no
+   *     longer move funds from the treasury until re-approved.
+   *   - `'amount'` — set a custom cap from `amount`.
+   */
+  mode?: 'unlimited' | 'revoke' | 'amount';
+  /**
+   * Required when `mode === 'amount'`. Decimal amount in
+   * human-readable units of the token (e.g. `100` = $100 USDC).
+   * Server applies the mint's `decimals` before broadcasting.
+   */
+  amount?: number;
+};
+
+/**
+ * Inputs for `leash_get_spend_limit`. No knobs beyond the symbol —
+ * the host already knows the agent + network from session state.
+ */
+export type GetSpendLimitArgs = {
+  /** SPL stable to inspect. Defaults to USDC. */
+  symbol?: StableSymbol;
+};
+
 // ────────────────────────────────────────────────────────────────────────────
 // LeashHost
 // ────────────────────────────────────────────────────────────────────────────
@@ -220,4 +255,22 @@ export interface LeashHost {
    * — both hosts hit `GET /v1/agents/:mint/reputation` directly.
    */
   reputation(args: ReputationArgs): Promise<LeashToolResult>;
+
+  /**
+   * Owner-driven update of the SPL `Approve` delegation that lets
+   * the executive spend stables out of the agent treasury PDA.
+   * Standalone MCP / CLI signs the `mpl-core::Execute(SPL.Approve|Revoke)`
+   * tx with the local owner key; chat product returns a
+   * `kind: 'spend_limit', status: 'manual'` artifact pointing the
+   * user at the Profile → Agent UI.
+   */
+  setSpendLimit(args: SetSpendLimitArgs): Promise<LeashToolResult>;
+
+  /**
+   * Read the current delegation + treasury balance for an SPL stable.
+   * Cheap — host-agnostic RPC read. Returns delegate pubkey,
+   * delegated atomic amount + decimal-formatted version, and current
+   * balance.
+   */
+  getSpendLimit(args: GetSpendLimitArgs): Promise<LeashToolResult>;
 }

@@ -29,6 +29,8 @@ export type {
   ReceiptsArgs,
   DiscoverArgs,
   ReputationArgs,
+  SetSpendLimitArgs,
+  GetSpendLimitArgs,
 } from './host.js';
 
 export {
@@ -45,10 +47,12 @@ export {
   createPaymentLinkTool,
   discoverTool,
   getIdentityTool,
+  getSpendLimitTool,
   payPaymentLinkTool,
   receiptsTool,
   registerAgentTool,
   reputationTool,
+  setSpendLimitTool,
   withdrawTreasuryTool,
 } from './tools/index.js';
 

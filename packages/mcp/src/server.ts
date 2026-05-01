@@ -47,6 +47,7 @@ import {
   type CreatePaymentLinkArgs,
   type DiscoverArgs,
   type GetIdentityArgs,
+  type GetSpendLimitArgs,
   type LeashHost,
   type LeashTool,
   type LeashToolResult,
@@ -54,6 +55,7 @@ import {
   type ReceiptsArgs,
   type RegisterAgentArgs,
   type ReputationArgs,
+  type SetSpendLimitArgs,
   type SvmNetwork,
   type WithdrawArgs,
 } from '@leash/mcp-core';
@@ -274,6 +276,12 @@ export class HostRef implements LeashHost {
   }
   reputation(args: ReputationArgs): Promise<LeashToolResult> {
     return this.inner.reputation(args);
+  }
+  setSpendLimit(args: SetSpendLimitArgs): Promise<LeashToolResult> {
+    return this.inner.setSpendLimit(args);
+  }
+  getSpendLimit(args: GetSpendLimitArgs): Promise<LeashToolResult> {
+    return this.inner.getSpendLimit(args);
   }
 
   /**
@@ -568,6 +576,12 @@ function makePlaceholderHost(defaults: LeashHostDefaults): LeashHost {
         network: defaults.network,
         query: args,
       });
+    },
+    async setSpendLimit() {
+      return noAgent('spend_limit');
+    },
+    async getSpendLimit() {
+      return noAgent('spend_limit');
     },
   };
 }

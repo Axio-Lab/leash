@@ -87,7 +87,14 @@ leash reputation AGENT_MINT_PUBKEY
 # 7. Pay something.
 leash pay https://example.com/x/abc123
 
-# 8. Cash out.
+# 8. Inspect or change the SPL spend authority. By default the agent
+#    is minted with unlimited USDC delegation; tighten / revoke as needed.
+leash treasury limit --token USDC
+leash treasury set-limit --token USDC --amount 100   # cap at $100 USDC
+leash treasury set-limit --token USDC --revoke       # pause autonomous spending
+leash treasury set-limit --token USDC --unlimited    # restore default
+
+# 9. Cash out.
 leash treasury balance
 leash treasury withdraw --to YOUR_WALLET_ADDRESS --amount 0.50 --token USDC
 ```
@@ -118,6 +125,17 @@ agent commands:
 treasury commands:
   treasury balance                   list SOL + token balances
   treasury withdraw --to W --amount N --token SOL|USDC|USDG|USDT
+  treasury limit [--token USDC|USDG|USDT]
+                                     show the active SPL Approve delegation
+                                     (delegate pubkey, remaining cap, balance)
+  treasury set-limit [--token USDC|USDG|USDT]
+                    (--unlimited | --revoke | --amount N)
+                                     update the executive's SPL spend authority.
+                                     `--unlimited` writes u64::MAX (default),
+                                     `--revoke` zeros it (the agent stops
+                                     settling outgoing payments until you
+                                     re-approve), `--amount N` caps at N
+                                     human units (e.g. --amount 100 = $100 USDC).
 
 marketplace + reputation:
   discover [-q QUERY] [--max-price N] [--pricing-type T] [--limit N]

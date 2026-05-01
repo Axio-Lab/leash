@@ -363,6 +363,31 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
         query: args,
       });
     },
+
+    async setSpendLimit(): Promise<LeashToolResult> {
+      // Chat product signs spend-delegation transactions through the
+      // Privy embedded wallet, not the model. Pointing the user at
+      // Profile → Agent keeps the experience consistent with how
+      // `register_agent` / `withdraw` already work in the chat host.
+      return jsonResult({
+        kind: 'spend_limit',
+        status: 'manual',
+        message:
+          'Use Profile → Agent in the chat UI to change the spend limit. The browser-side flow signs `mpl-core::Execute(SPL.Approve|Revoke)` with your Privy wallet.',
+      });
+    },
+
+    async getSpendLimit(): Promise<LeashToolResult> {
+      // Read-only delegation status will land alongside the chat-host
+      // implementation of setSpendLimit. For now fall through to
+      // Profile → Agent so the user sees the live numbers there.
+      return jsonResult({
+        kind: 'spend_limit',
+        status: 'manual',
+        message:
+          'Open Profile → Agent in the chat UI to inspect the active spend limit and treasury balance.',
+      });
+    },
   };
 }
 

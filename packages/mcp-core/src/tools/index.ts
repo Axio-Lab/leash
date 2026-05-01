@@ -18,6 +18,8 @@ import { getIdentityTool } from './get-identity.js';
 import { receiptsTool } from './receipts.js';
 import { discoverTool } from './discover.js';
 import { reputationTool } from './reputation.js';
+import { setSpendLimitTool } from './set-spend-limit.js';
+import { getSpendLimitTool } from './get-spend-limit.js';
 
 export {
   createPaymentLinkTool,
@@ -29,6 +31,8 @@ export {
   receiptsTool,
   discoverTool,
   reputationTool,
+  setSpendLimitTool,
+  getSpendLimitTool,
 };
 
 /** Stable alphabetical export order so tools/list output is deterministic. */
@@ -37,9 +41,11 @@ export const LEASH_TOOLS: ReadonlyArray<LeashTool> = [
   createPaymentLinkTool,
   discoverTool,
   getIdentityTool,
+  getSpendLimitTool,
   payPaymentLinkTool,
   receiptsTool,
   registerAgentTool,
   reputationTool,
+  setSpendLimitTool,
   withdrawTreasuryTool,
 ];

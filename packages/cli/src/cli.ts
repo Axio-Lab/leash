@@ -238,8 +238,14 @@ async function runTreasury(args: string[]): Promise<void> {
     case 'withdraw':
       await runTreasuryWithdraw(args.slice(1));
       return;
+    case 'limit':
+      await runTreasuryLimit(args.slice(1));
+      return;
+    case 'set-limit':
+      await runTreasurySetLimit(args.slice(1));
+      return;
     default:
-      process.stderr.write('usage: leash treasury {balance|withdraw}\n');
+      process.stderr.write('usage: leash treasury {balance|withdraw|limit|set-limit}\n');
       process.exit(2);
   }
 }
@@ -284,6 +290,81 @@ async function runTreasuryWithdraw(args: string[]): Promise<void> {
       `  destination:     ${asAny(payload).destination ?? asAny(payload).destination_wallet}`,
       `  tx_signature:    ${asAny(payload).tx_signature}`,
       `  explorer:        ${asAny(payload).explorer_url}`,
+    ].join('\n');
+  });
+}
+
+async function runTreasuryLimit(args: string[]): Promise<void> {
+  const { hostRef } = buildServerFromEnv();
+  const json = wantJson(args);
+  const symbol = (optArg(args, '--token') ?? optArg(args, '--symbol') ?? 'USDC').toUpperCase() as
+    | 'USDC'
+    | 'USDG'
+    | 'USDT';
+  const result = await hostRef.getSpendLimit({ symbol });
+  printResult(result, json, (payload) => {
+    if (payload.status !== 'ok') return formatStatusError(payload);
+    return [
+      `spend limit (${payload.symbol})`,
+      `  treasury:              ${payload.treasury}`,
+      `  source ata:            ${payload.source_token_account}${payload.source_exists ? '' : '  (not yet created)'}`,
+      `  delegate:              ${payload.delegate ?? '(none)'}`,
+      `  executive:             ${payload.executive_pubkey}`,
+      `  delegate matches:      ${payload.delegate_matches_executive ? 'yes' : 'no'}`,
+      `  delegated amount:      ${payload.delegated_amount} (atomic ${payload.delegated_amount_atomic})`,
+      `  treasury balance:      ${payload.balance} (atomic ${payload.balance_atomic})`,
+    ].join('\n');
+  });
+}
+
+async function runTreasurySetLimit(args: string[]): Promise<void> {
+  const { hostRef } = buildServerFromEnv();
+  const json = wantJson(args);
+  const symbol = (optArg(args, '--token') ?? optArg(args, '--symbol') ?? 'USDC').toUpperCase() as
+    | 'USDC'
+    | 'USDG'
+    | 'USDT';
+
+  // Mode resolution: explicit --revoke / --unlimited / --amount win;
+  // otherwise infer from `--amount <N>` presence (cap with that
+  // value), else default to unlimited.
+  const explicitAmount = numArg(args, '--amount');
+  let mode: 'unlimited' | 'revoke' | 'amount';
+  if (args.includes('--revoke')) mode = 'revoke';
+  else if (args.includes('--unlimited')) mode = 'unlimited';
+  else if (explicitAmount !== undefined) mode = 'amount';
+  else mode = 'unlimited';
+
+  if (mode === 'amount' && (explicitAmount === undefined || !(explicitAmount > 0))) {
+    process.stderr.write(
+      'usage: leash treasury set-limit [--token USDC|USDG|USDT] (--unlimited | --revoke | --amount N)\n',
+    );
+    process.exit(2);
+  }
+
+  const callArgs: { symbol: 'USDC' | 'USDG' | 'USDT'; mode: typeof mode; amount?: number } = {
+    symbol,
+    mode,
+  };
+  if (mode === 'amount') callArgs.amount = explicitAmount;
+  const result = await hostRef.setSpendLimit(callArgs);
+  printResult(result, json, (payload) => {
+    if (payload.status !== 'ok') return formatStatusError(payload);
+    if (payload.mode === 'revoke') {
+      return [
+        `revoke ok (${payload.symbol})`,
+        `  treasury:        ${payload.treasury}`,
+        `  tx_signature:    ${payload.tx_signature}`,
+        `  explorer:        ${payload.explorer_url}`,
+      ].join('\n');
+    }
+    return [
+      `set-limit ok (${payload.symbol}, ${payload.mode})`,
+      `  treasury:        ${payload.treasury}`,
+      `  delegate:        ${payload.delegate}`,
+      `  amount:          ${payload.delegated_amount} (atomic ${payload.delegated_amount_atomic})`,
+      `  tx_signature:    ${payload.tx_signature}`,
+      `  explorer:        ${payload.explorer_url}`,
     ].join('\n');
   });
 }
@@ -530,6 +611,15 @@ function printHelp(): void {
       '  treasury balance                   list SOL + token balances',
       '  treasury withdraw --to W --amount N [--symbol|--mint X]',
       '                                     owner-driven on-chain withdrawal',
+      '  treasury limit [--token USDC|USDG|USDT]',
+      '                                     show the active SPL Approve delegation +',
+      '                                     treasury balance for a stable',
+      '  treasury set-limit [--token USDC|USDG|USDT]',
+      '                    (--unlimited | --revoke | --amount N)',
+      "                                     update the executive's SPL spend authority.",
+      '                                     `--unlimited` (default) writes u64::MAX,',
+      '                                     `--revoke` zeros it, `--amount N` caps at N',
+      '                                     human units (e.g. --amount 100 = $100 USDC).',
       '',
       'marketplace + reputation:',
       '  discover [-q QUERY] [--max-price N] [--pricing-type T] [--limit N]',
