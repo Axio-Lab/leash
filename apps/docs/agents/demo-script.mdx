@@ -1,0 +1,135 @@
+---
+title: 'YC demo script (60 sec)'
+description: 'The exact prompts + tool calls that produce a recordable end-to-end Leash demo on Solana devnet.'
+---
+
+This is the script the `pnpm --filter @leash/mcp test:yc-demo-devnet`
+integration test exercises. It runs against live Solana devnet
+infrastructure — no mocks, no faucets to hit manually.
+
+## Setup (one-time)
+
+```bash
+git clone https://github.com/leash-market/leash
+cd leash
+pnpm install
+pnpm --filter @leash/mcp-core build
+pnpm --filter @leash/mcp build
+```
+
+Wire the standalone MCP into your AI host (Cursor shown):
+
+```jsonc
+// ~/Library/Application Support/Cursor/User/settings.json (or equivalent)
+{
+  "mcpServers": {
+    "leash": {
+      "command": "node",
+      "args": ["/absolute/path/to/leash/packages/mcp/dist/cli.js"]
+    }
+  }
+}
+```
+
+Restart the host. `tools/list` should now expose all nine `leash_*`
+tools.
+
+## The demo (60-90 seconds on camera)
+
+Each beat below is one prompt the operator types into the AI host;
+the next line is the tool the agent ends up calling.
+
+### 0. (Pre-roll: empty config)
+
+> _"What's my Leash balance?"_
+
+The agent calls `leash_check_treasury_balance`, gets back
+`status: no_agent` with a clean recovery message. **Don't skip this
+beat** — it's what makes the next step land.
+
+### 1. Onboard
+
+> _"Register me a Leash agent please."_
+
+The agent calls `leash_register_agent`. Behind the scenes:
+
+- `POST /v1/sandbox/agent` mints an MPL Core asset on devnet
+- Treasury PDA derived
+- 0.01 SOL + $1 USDC airdropped
+- Executive keypair persisted to `~/.config/leash/agent.json` (chmod 600)
+- In-memory MCP host hot-swapped — no MCP restart
+
+The agent surfaces the new `agent_mint` and a Solscan link.
+
+### 2. Identity
+
+> _"Who am I now?"_
+
+The agent calls `leash_get_identity`. Returns mint, treasury,
+executive pubkey, network. Show the Solscan link in passing.
+
+### 3. Balance
+
+> _"What's my balance?"_
+
+`leash_check_treasury_balance`. Shows the auto-funded $1 USDC and
+0.01 SOL. **This is the moment that lands** — the agent went from
+"I have nothing" to "I have a funded on-chain wallet" without the
+operator touching a wallet UI.
+
+### 4. Discover
+
+> _"Find me a paid OCR service under 10 cents."_
+
+`leash_discover` with `{ capability: 'ocr', max_price_usdc: 0.10 }`.
+Returns approved listings.
+
+### 5. Vet
+
+> _"What's the seller's reputation?"_
+
+`leash_reputation` against the seller's agent mint. Returns
+`settled_calls`, `dispute_rate`, normalised rating in `[0, 1]`.
+
+### 6. Pay
+
+> _"Pay this link: https://leash.market/x/abc123"_
+
+`leash_pay_payment_link`. Probes the x402 paywall, signs the SPL
+transfer locally, settles. Returns a real `tx_signature` and
+`receipt_hash`.
+
+### 7. Withdraw
+
+> _"Withdraw 50 cents USDC to <my-wallet>."_
+
+`leash_withdraw_treasury`. Real on-chain transfer via
+`mpl-core::Execute`. Returns the `tx_signature` and a Solscan link.
+
+## What to highlight on camera
+
+1. **No browser is open** during the demo — everything runs in the
+   AI host's chat and the terminal.
+2. **The Solscan link works on every step** — every state change is
+   on-chain and verifiable.
+3. **The same agent works in the chat product** — open
+   [`agent.leash.market`](https://agent.leash.market) and the
+   freshly-minted agent shows up.
+4. **The CLI works against the same identity** — `leash agent show`,
+   `leash treasury balance` from the terminal.
+
+## Recording tips
+
+- Use a 1080p screen recording at 30 fps. The MCP outputs are
+  tight — readability matters more than frame rate.
+- Increase the AI host's font size before recording so receipts and
+  signatures are legible.
+- Pre-load Solscan in a side tab so you can pivot to it after step 6
+  without dead air.
+
+## Source of truth
+
+- Live integration test: `pnpm --filter @leash/mcp test:yc-demo-devnet`
+- Agent transcript captured: [batch 5 commit](https://github.com/leash-market/leash/commit/2cd2318)
+- Last verified agent: `AjfeyPjXm4c2C1yQjtmCygQVmARPgErweiXiokBD3yz1`
+- Last verified withdraw tx: `3okaiSTQjh5TWyrHQCz9QEPNDvtZBCb9pMcNThAvbivs7M7njGRVLZKbvSqCb37fV1cq6n1pdtkgFdg6ndSuyQHJ`

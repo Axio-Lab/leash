@@ -1,0 +1,87 @@
+---
+title: 'Standalone MCP server'
+description: 'Drop Leash into Cursor, Claude Desktop, Cline, Continue, or ChatGPT-MCP. STDIO transport, nine tools, zero browser in the loop.'
+---
+
+`@leash/mcp` is the agent-first surface of Leash. It runs as a
+[Model Context Protocol](https://modelcontextprotocol.io) server
+over STDIO, so any MCP-compatible host (Cursor, Claude Desktop,
+Cline, Continue, ChatGPT-MCP, …) can let its agent **mint**, **pay**,
+**withdraw**, **discover**, and **earn** on Solana — without a
+browser or the chat product in the loop.
+
+## Install
+
+```jsonc
+// In Cursor → Settings → MCP, or your MCP host's equivalent:
+{
+  "mcpServers": {
+    "leash": {
+      "command": "npx",
+      "args": ["-y", "@leash/mcp"]
+    }
+  }
+}
+```
+
+That's the entire setup. The first call to `leash_register_agent`
+mints a sandbox agent on devnet, auto-funds it with $1 USDC + 0.01
+SOL, persists `~/.config/leash/agent.json`, and **hot-swaps** the
+in-memory MCP host so subsequent tool calls work without a restart.
+
+## Configure (optional)
+
+If you already have an agent (minted from the chat product, the CLI,
+or another MCP host), point at it via env vars:
+
+| env                   | example                                       |
+| --------------------- | --------------------------------------------- |
+| `LEASH_AGENT_MINT`    | `Agnt7XQ...`                                  |
+| `LEASH_EXECUTIVE_KEY` | `5Jz...` (base58) or `[12,34,...]` (JSON arr) |
+| `LEASH_NETWORK`       | `solana-devnet` (default) / `solana-mainnet`  |
+| `LEASH_API_URL`       | `https://api.leash.market` (default)          |
+| `LEASH_RPC_URL`       | overrides the per-network default RPC         |
+| `LEASH_API_KEY`       | bearer for legacy `/v1/payment-links` flow    |
+
+Or paste a JSON config into `~/.config/leash/agent.json` (chmod 600).
+The CLI subcommands `leash-mcp export` / `leash-mcp import` round-trip
+that file so an agent can move between hosts in one command.
+
+## Tools
+
+The MCP exposes nine canonical tools. Each is also available through
+the Claude Agent SDK in the chat product (same names, same shapes —
+[shared definitions](https://github.com/leash-market/leash/tree/main/packages/mcp-core/src/tools)).
+
+| Tool                           | What it does                                                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `leash_register_agent`         | First-run onboarding. Mints a devnet agent, funds it, persists config, hot-swaps the host.                         |
+| `leash_get_identity`           | Self-introspection — what agent am I, on which network, what's my treasury PDA.                                    |
+| `leash_check_treasury_balance` | Read SOL + USDC/USDG/USDT balances on the agent treasury PDA.                                                      |
+| `leash_pay_payment_link`       | Probe an x402 link, sign + settle the SPL transfer locally, return the receipt.                                    |
+| `leash_create_payment_link`    | Mint an x402 paywall the user can share.                                                                           |
+| `leash_withdraw_treasury`      | Owner-driven withdrawal of SOL or an SPL stable to any wallet (mpl-core::Execute).                                 |
+| `leash_receipts`               | List recent receipts for the active agent.                                                                         |
+| `leash_discover`               | Search the marketplace for paid services by capability + price. Public, no agent needed.                           |
+| `leash_reputation`             | Live reputation snapshot for any on-chain agent — settled-call volume, dispute rate, normalised rating in `[0,1]`. |
+
+## Demo flow (60 seconds)
+
+1. Add the MCP entry to your host config and restart.
+2. Ask the agent: _"register me a Leash agent"_ → calls
+   `leash_register_agent`, which mints + funds + hot-swaps.
+3. Ask: _"what's my balance?"_ → `leash_check_treasury_balance`.
+4. Ask: _"find me an OCR service under 10c"_ → `leash_discover`.
+5. Ask: _"pay this link"_ → `leash_pay_payment_link`. Returns a real
+   `tx_signature` + `receipt_hash` on devnet.
+6. Ask: _"withdraw 50c USDC to <wallet>"_ → `leash_withdraw_treasury`.
+   Real on-chain transfer via `mpl-core::Execute`.
+
+The whole demo runs against live devnet infrastructure — no mocks,
+no faucets to hit manually.
+
+## Source
+
+- Code: [`packages/mcp`](https://github.com/leash-market/leash/tree/main/packages/mcp)
+- Shared tool definitions: [`packages/mcp-core`](https://github.com/leash-market/leash/tree/main/packages/mcp-core)
+- Live integration test: `pnpm --filter @leash/mcp test:yc-demo-devnet`

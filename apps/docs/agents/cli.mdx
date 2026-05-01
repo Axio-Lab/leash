@@ -1,0 +1,98 @@
+---
+title: 'Human CLI — leash'
+description: 'Operate your Leash agent from the terminal. Same identity as the MCP, no chat product required.'
+---
+
+`@leash/cli` ships a `leash` binary for human operators. It wraps
+the same `LeashHost` the standalone MCP exposes to AI agents, but
+skips the MCP wire protocol and renders results as plain text (or
+`--json` for piping into `jq` / scripts).
+
+## Install
+
+```bash
+npm install -g @leash/cli
+# or
+pnpm add -g @leash/cli
+```
+
+Pair with `@leash/mcp` to expose the same identity to an AI agent.
+Both binaries read the same `~/.config/leash/agent.json`.
+
+## Quickstart (devnet, auto-funded)
+
+```bash
+# 1. Mint a sandbox agent — auto-funds 0.01 SOL + $1 USDC.
+leash agent create
+
+# 2. Confirm identity.
+leash agent show
+
+# 3. Look at the marketplace.
+leash discover -q ocr --max-price 0.10
+
+# 4. Vet a counterparty before paying.
+leash reputation <agent_mint>
+
+# 5. Pay something.
+leash pay https://example.com/x/abc123
+
+# 6. Cash out.
+leash treasury balance
+leash treasury withdraw --to <wallet> --amount 0.50 --token USDC
+```
+
+## All commands
+
+```text
+agent commands:
+  agent create [--name N]            mint a sandbox agent
+  agent show                         print active agent identity
+  agent export [--out PATH]          export agent.json
+  agent import <PATH>                install an agent.json
+
+treasury commands:
+  treasury balance                   list SOL + token balances
+  treasury withdraw --to W --amount N --token SOL|USDC|USDG|USDT
+
+marketplace + reputation:
+  discover [-q QUERY] [--max-price N] [--pricing-type T] [--limit N]
+  reputation <agent_mint> [--network solana-devnet|solana-mainnet]
+
+activity:
+  receipts [--limit N] [--direction outgoing|incoming|both]
+  pay <link-url>
+
+misc:
+  doctor                             config + RPC + API reachability check
+  help, -h                           full help
+  version, -v                        installed version
+
+global flags:
+  --json                             emit raw LeashToolResult payload
+```
+
+## Cross-interface portability
+
+`leash agent export` and `leash agent import` are aliases for the
+matching `leash-mcp` subcommands — same JSON shape, same on-disk
+location. An agent minted in any host can roam to any other host
+by exporting the file there and importing it on the new machine.
+
+```bash
+# On machine A:
+leash agent export --out /tmp/my-agent.json
+scp /tmp/my-agent.json user@machine-b:/tmp/
+
+# On machine B:
+leash agent import /tmp/my-agent.json
+leash agent show   # same on-chain identity, same treasury, same reputation
+```
+
+Same JSON also pastes cleanly into the chat product's _Profile →
+Agent → Import_ page (forthcoming).
+
+## Source
+
+- Code: [`packages/cli`](https://github.com/leash-market/leash/tree/main/packages/cli)
+- Shares the standalone host with: [`packages/mcp`](https://github.com/leash-market/leash/tree/main/packages/mcp)
