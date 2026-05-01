@@ -63,7 +63,12 @@ import { base58 } from '@metaplex-foundation/umi/serializers';
 import { mplCore } from '@metaplex-foundation/mpl-core';
 import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { createAgent } from '@leash/registry-utils';
+import {
+  createAgent,
+  setSpendDelegation,
+  KNOWN_STABLES,
+  SPL_TOKEN_PROGRAM_ID,
+} from '@leash/registry-utils';
 import { encryptSecret } from '@leash/platform-auth/encryption';
 
 import type { LeashApiConfig } from '../config.js';
@@ -169,11 +174,18 @@ const SandboxResponse = z
       sol_drip: z.string(),
       mint: z.string(),
       usdc_drip: z.string(),
+      delegate: z.string().openapi({
+        description:
+          'Signature of the `mpl-core::Execute(SPL.Approve)` tx that delegates ' +
+          'unlimited USDC spend authority from the agent treasury to the ' +
+          'executive keypair. Without it the buyer-kit returns `no_delegate`.',
+      }),
     }),
     explorer_urls: z.object({
       mint: z.string().url(),
       sol_drip: z.string().url(),
       usdc_drip: z.string().url(),
+      delegate: z.string().url(),
     }),
     funded: z.object({
       sol_lamports: z.string(),
@@ -259,6 +271,61 @@ async function waitForLamports(args: {
       throw rpcError(
         `account ${args.account} did not reach ${String(args.minLamports)} lamports within ${timeoutMs}ms`,
       );
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+}
+
+/**
+ * Surface a string description for any thrown value. Some `mpl-core`
+ * paths reject with non-Error objects (e.g. a `ProgramErrorContext`
+ * with no `message` property), which would otherwise format as
+ * `undefined`. We probe the common shapes and fall back to a JSON
+ * dump so the operator at least sees what went wrong.
+ */
+function describeError(err: unknown): string {
+  if (err == null) return 'unknown error';
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === 'string') return err;
+  if (typeof err === 'object') {
+    const e = err as Record<string, unknown>;
+    if (typeof e.message === 'string') return e.message;
+    if (typeof e.toString === 'function') {
+      const s = String(err);
+      if (s && s !== '[object Object]') return s;
+    }
+    try {
+      return JSON.stringify(err);
+    } catch {
+      // fall through
+    }
+  }
+  return String(err);
+}
+
+/**
+ * Poll `safeFetchAssetV1` until the freshly-minted asset is visible on
+ * the RPC. Without this, a follow-up `mpl-core::Execute` instruction
+ * (e.g. `setSpendDelegation`) can simulate against a node that hasn't
+ * caught the mint tx yet and fail with "Invalid Asset passed in".
+ */
+async function waitForAssetVisible(args: {
+  umi: Umi;
+  asset: string;
+  timeoutMs?: number;
+}): Promise<void> {
+  const timeoutMs = args.timeoutMs ?? 15_000;
+  const intervalMs = 500;
+  const started = Date.now();
+  while (true) {
+    try {
+      const asset = await safeFetchAssetV1(args.umi, publicKey(args.asset));
+      if (asset) return;
+    } catch {
+      // Treat transient RPC errors the same as "not yet visible".
+    }
+    if (Date.now() - started > timeoutMs) {
+      throw new Error(`asset ${args.asset} not visible within ${timeoutMs}ms`);
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
@@ -703,6 +770,56 @@ export function buildAgentSelfRegisterRoutes(deps: AgentSelfRegisterDeps): OpenA
         }
       }
 
+      // 4b. Approve unlimited USDC spend delegation to the executive.
+      //
+      // Without this step the buyer-kit pre-flight returns `no_delegate`
+      // and the very first `leash_pay_payment_link` call fails — even
+      // though the treasury holds USDC. The chat product runs the same
+      // approval through Privy after mint; sandbox-minted agents need
+      // it baked into the provisioning step so they're usable straight
+      // out of /v1/sandbox/agent.
+      //
+      // We wait for the asset to be visible on RPC first — devnet
+      // nodes routinely take 1–3s to reflect a freshly-confirmed mint,
+      // and `mpl-core::Execute(SPL.Approve)` errors with
+      // "Invalid Asset passed in" if the program reads an empty slot.
+      //
+      // Cap is `u64::MAX` (effectively unlimited). Owners can revoke or
+      // re-approve a smaller cap later via @leash/registry-utils
+      // `revokeSpendDelegation` / `setSpendDelegation`.
+      try {
+        await waitForAssetVisible({ umi: executiveUmi, asset: mint });
+      } catch (err) {
+        throw rpcError(
+          `mint ${mint} not visible on RPC within deadline: ${(err as Error).message}`,
+        );
+      }
+
+      let delegateSig = '';
+      try {
+        const usdc = KNOWN_STABLES[network].find((s) => s.symbol === 'USDC');
+        if (!usdc) throw new Error(`USDC not configured for ${network}`);
+        const delegation = await setSpendDelegation(executiveUmi, {
+          agentAsset: mint,
+          mint: usdc.mint,
+          executive: executivePubkey,
+          amount: 2n ** 64n - 1n,
+          tokenProgram: usdc.tokenProgram ?? SPL_TOKEN_PROGRAM_ID,
+        });
+        delegateSig = delegation.signature;
+      } catch (err) {
+        const detail = describeError(err);
+        console.error(
+          `[sandbox] setSpendDelegation failed for ${mint} (executive=${executivePubkey}):`,
+          err,
+        );
+        throw rpcError(
+          `USDC spend-delegation to executive failed (agent ${mint} is minted ` +
+            `and funded but the buyer-kit will report no_delegate until this ` +
+            `is set): ${detail}`,
+        );
+      }
+
       // 5. Record platform row.
       const receiptsServiceUrl = `${deps.config.publicOrigin.replace(/\/+$/, '')}/v1/receipts/${mint}`;
       await recordPlatformRow({
@@ -729,11 +846,13 @@ export function buildAgentSelfRegisterRoutes(deps: AgentSelfRegisterDeps): OpenA
             sol_drip: solDripSig,
             mint: mintSig,
             usdc_drip: usdcDripSig,
+            delegate: delegateSig,
           },
           explorer_urls: {
             mint: solscanTxUrl(network, mintSig),
             sol_drip: solscanTxUrl(network, solDripSig),
             usdc_drip: usdcDripSig ? solscanTxUrl(network, usdcDripSig) : '',
+            delegate: delegateSig ? solscanTxUrl(network, delegateSig) : '',
           },
           funded: {
             sol_lamports: String(solDripLamports),

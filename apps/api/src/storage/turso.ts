@@ -199,7 +199,11 @@ const SCHEMA_SQL: readonly string[] = [
     FOREIGN KEY (api_key_id) REFERENCES api_keys(id)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_webhooks_network ON webhooks(network) WHERE disabled_at IS NULL`,
-  `CREATE INDEX IF NOT EXISTS idx_webhooks_agent_mint ON webhooks(agent_mint) WHERE disabled_at IS NULL`,
+  // NOTE: `idx_webhooks_agent_mint` is created inside `migrateWebhooksAgentMint`
+  // and re-asserted unconditionally at the end of `runMigrations` so brand-new
+  // DBs (which skip the migration body) still get it. Declaring it here would
+  // race the v12 migration on existing DBs (the column doesn't exist yet at
+  // this point in the boot flow) and trip "no such column: agent_mint".
 
   // Per-delivery state with retry book-keeping. Created when an
   // event lands in webhook_deliveries_pending; the worker advances
@@ -524,6 +528,14 @@ export async function runMigrations(db: Client): Promise<void> {
   if (currentVersion < 12) {
     await migrateWebhooksAgentMint(db);
   }
+
+  // Always-on index assertions. These run after every boot — they're
+  // cheap (`IF NOT EXISTS`) and idempotent, and they cover the case
+  // where a brand-new DB takes the latest `SCHEMA_SQL` directly and
+  // every versioned migration short-circuits.
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_webhooks_agent_mint ON webhooks(agent_mint) WHERE disabled_at IS NULL`,
+  );
 
   if (currentVersion < SCHEMA_VERSION) {
     await db.execute({
