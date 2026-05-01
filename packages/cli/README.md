@@ -26,7 +26,7 @@ environment variable overrides:
 | --------------------- | --------------------------------------------- |
 | `LEASH_AGENT_MINT`    | `Agnt7XQ...`                                  |
 | `LEASH_EXECUTIVE_KEY` | `5Jz...` (base58) or `[12,34,...]` (JSON arr) |
-| `LEASH_NETWORK`       | `solana-devnet` (default) / `solana-mainnet`  |
+| `LEASH_NETWORK`       | `solana-mainnet` (default) / `solana-devnet`  |
 | `LEASH_API_URL`       | `https://api.leash.market` (default)          |
 | `LEASH_RPC_URL`       | **strongly recommended** — see below          |
 | `LEASH_EXPLORER_URL`  | `https://explorer.leash.market` (default)     |

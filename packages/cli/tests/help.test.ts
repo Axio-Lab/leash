@@ -6,14 +6,23 @@
  * stdout. Keeps them isolated from any global agent.json state.
  */
 
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cliEntry = join(here, '..', 'src', 'cli.ts');
+
+// Isolated HOME directory so `loadAgentSession` never finds a real
+// ~/.config/leash/agent.json on the developer's machine. This is the
+// correct isolation — blanking env vars alone is not enough because
+// the config-reader falls back to the file after the env check.
+const fakeHome = mkdtempSync(join(tmpdir(), 'leash-cli-test-home-'));
+afterAll(() => rmSync(fakeHome, { recursive: true, force: true }));
 
 function runCli(args: string[]): { code: number | null; stdout: string; stderr: string } {
   // We invoke `node --import tsx <entry>` to mirror the package.json
@@ -23,8 +32,11 @@ function runCli(args: string[]): { code: number | null; stdout: string; stderr: 
     encoding: 'utf8',
     env: {
       ...process.env,
-      // Strip any ambient agent so tests are deterministic — every
-      // command should still print *something* useful.
+      // Point HOME at an empty temp dir so os.homedir() resolves to a
+      // path that has no ~/.config/leash/agent.json. Also blank the env
+      // vars so there's no other source of ambient agent state.
+      HOME: fakeHome,
+      USERPROFILE: fakeHome, // Windows compat (os.homedir() reads this on win32)
       LEASH_AGENT_MINT: '',
       LEASH_EXECUTIVE_KEY: '',
     },

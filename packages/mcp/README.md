@@ -56,7 +56,7 @@ The server looks at, in order:
    | --------------------- | ------------------------ | --------------------------------------------- |
    | `LEASH_AGENT_MINT`    | yes                      | `Agnt7XQ...`                                  |
    | `LEASH_EXECUTIVE_KEY` | yes                      | `5Jz...` (base58) or `[12,34,...]` (JSON arr) |
-   | `LEASH_NETWORK`       | no                       | `solana-devnet` (default) / `solana-mainnet`  |
+   | `LEASH_NETWORK`       | no                       | `solana-mainnet` (default) / `solana-devnet`  |
    | `LEASH_API_URL`       | no                       | `https://api.leash.market` (default)          |
    | `LEASH_RPC_URL`       | **strongly recommended** | bring your own — see below                    |
    | `LEASH_EXPLORER_URL`  | no                       | `https://explorer.leash.market` (default)     |
@@ -127,13 +127,13 @@ _Profile → Agent → Import_ page (forthcoming).
 
 ## Try the read path
 
-Spin up an agent via the API (`pnpm --filter @leash/api test:self-register-devnet`),
-then poke balances through the MCP protocol:
+After provisioning an agent with `leash_register_agent` (or `leash agent create`),
+poke balances through the MCP protocol directly:
 
 ```bash
 LEASH_AGENT_MINT=<mint> \
 LEASH_EXECUTIVE_KEY=<base58 secret> \
-LEASH_NETWORK=solana-devnet \
+LEASH_NETWORK=solana-mainnet \
 pnpm --filter @leash/mcp dev:demo-balance
 ```
 

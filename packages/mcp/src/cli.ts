@@ -183,7 +183,7 @@ async function runImport(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const network = f.network === 'solana-mainnet' ? 'solana-mainnet' : ('solana-devnet' as const);
+  const network = f.network === 'solana-devnet' ? 'solana-devnet' : ('solana-mainnet' as const);
   const apiBaseUrl =
     typeof f.api_url === 'string' && f.api_url.length > 0 ? f.api_url : 'https://api.leash.market';
   const rpcUrl =

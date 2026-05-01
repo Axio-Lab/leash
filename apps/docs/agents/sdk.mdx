@@ -46,7 +46,7 @@ import { LeashClient } from '@leash/sdk';
 const leash = new LeashClient({ baseUrl: 'https://api.leash.market' });
 
 // 1. Marketplace browse — public, no auth.
-const services = await leash.discover({ capability: 'ocr', max_price_usdc: 0.10 });
+const services = await leash.discover({ capability: 'ocr', max_price_usdc: 0.1 });
 
 // 2. Reputation lookup before paying — public, no auth.
 const rep = await leash.reputation({
@@ -121,7 +121,7 @@ const leash = new LeashClient({
 
 const link = await leash.createPaymentLink({
   label: 'Tag a single image',
-  owner_agent: 'AjfeyP...',          // your agent mint
+  owner_agent: 'AjfeyP...', // your agent mint
   method: 'POST',
   price: '$0.01',
   currency: 'USDC',
@@ -141,11 +141,10 @@ await leash.deletePaymentLink(link.id);
 ```
 
 <Note>
-**The SDK does not pay payment links** — paying requires Solana
-signing, which `@leash/sdk` deliberately avoids so it stays
-browser-friendly. To pay programmatically, use
-[`@leash/buyer-kit`](/sdk/buyer-kit) (heavyweight, signs locally) or
-the [`@leash/mcp`](/agents/mcp) host's `pay()` tool.
+  **The SDK does not pay payment links** — paying requires Solana signing, which `@leash/sdk`
+  deliberately avoids so it stays browser-friendly. To pay programmatically, use
+  [`@leash/buyer-kit`](/sdk/buyer-kit) (heavyweight, signs locally) or the
+  [`@leash/mcp`](/agents/mcp) host's `pay()` tool.
 </Note>
 
 ## Reputation cheat sheet

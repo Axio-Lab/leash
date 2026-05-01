@@ -22,11 +22,9 @@ Both binaries read the same `~/.config/leash/agent.json`.
 ## Bring your own RPC (strongly recommended)
 
 <Warning>
-  The default RPCs (`api.devnet.solana.com`,
-  `api.mainnet-beta.solana.com`) are **public, rate-limited, and
-  slow**. Every `leash pay` makes 3-5 RPC calls; on a public endpoint
-  that's a 4-8s settlement, sometimes a 429. With a private RPC it's
-  typically under one second.
+  The default RPCs (`api.devnet.solana.com`, `api.mainnet-beta.solana.com`) are **public,
+  rate-limited, and slow**. Every `leash pay` makes 3-5 RPC calls; on a public endpoint that's a
+  4-8s settlement, sometimes a 429. With a private RPC it's typically under one second.
 </Warning>
 
 Set `LEASH_RPC_URL` once and `leash` + `leash-mcp` both pick it up:
@@ -48,9 +46,13 @@ mainnet — the network is taken from `LEASH_NETWORK` (or
 `agent.json:network`).
 
 ```bash
-# 1a. Default: generate a fresh executive keypair locally.
-LEASH_NETWORK=solana-devnet leash agent create
+# 1a. Default (mainnet): generate a fresh executive keypair locally.
+leash agent create
 # → prints the executive pubkey + a "send 0.01 SOL to ..." instruction.
+
+# 1a-devnet. Override to devnet for testing:
+LEASH_NETWORK=solana-devnet leash agent create
+# → same, but mints on Solana devnet.
 
 # 1b. Or import an existing one (e.g. a `solana-keygen new` output).
 leash agent create --executive 5Jz...      # base58 secret, implies --import
@@ -158,15 +160,15 @@ Today the portability flow is **one-way for the chat product**:
 
 ## Troubleshooting
 
-| Symptom                                          | Likely cause + fix                                                                              |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `leash agent create` returns `Step 1 of 2 — fund the executive...` | Expected. Send the printed SOL amount to the printed pubkey, then run `leash agent create` again. |
-| `leash agent create` errors with `... not visible on RPC within 20s` | RPC propagation delay between mint confirmation and account read. Re-run; the resume path picks up where it left off. |
-| `leash agent create --import` errors `mode: "import" requires executive_secret_base58` | Pass `--executive <base58_secret>` along with `--import` (or use `--executive` alone). |
-| `leash pay` is slow (5–10s) or 429s              | You're on the public RPC. Set `LEASH_RPC_URL` to a paid endpoint — see _Bring your own RPC_ above. |
-| Wrong network on every command                   | `leash-mcp` and `leash` both honour `LEASH_NETWORK`. Set it explicitly to override `agent.json`. |
-| `leash treasury withdraw` returns `error`        | Most common: amount > available balance, or wrong `--token` symbol for the network's mint.       |
-| `leash receipts` returns `error: 401`            | Receipts read still uses a bearer key today. Set `LEASH_API_KEY` in your shell.                  |
+| Symptom                                                                                | Likely cause + fix                                                                                                    |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `leash agent create` returns `Step 1 of 2 — fund the executive...`                     | Expected. Send the printed SOL amount to the printed pubkey, then run `leash agent create` again.                     |
+| `leash agent create` errors with `... not visible on RPC within 20s`                   | RPC propagation delay between mint confirmation and account read. Re-run; the resume path picks up where it left off. |
+| `leash agent create --import` errors `mode: "import" requires executive_secret_base58` | Pass `--executive <base58_secret>` along with `--import` (or use `--executive` alone).                                |
+| `leash pay` is slow (5–10s) or 429s                                                    | You're on the public RPC. Set `LEASH_RPC_URL` to a paid endpoint — see _Bring your own RPC_ above.                    |
+| Wrong network on every command                                                         | `leash-mcp` and `leash` both honour `LEASH_NETWORK`. Set it explicitly to override `agent.json`.                      |
+| `leash treasury withdraw` returns `error`                                              | Most common: amount > available balance, or wrong `--token` symbol for the network's mint.                            |
+| `leash receipts` returns `error: 401`                                                  | Receipts read still uses a bearer key today. Set `LEASH_API_KEY` in your shell.                                       |
 
 ## Source
 

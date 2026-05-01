@@ -18,9 +18,9 @@ browser or the chat product in the loop.
   "mcpServers": {
     "leash": {
       "command": "npx",
-      "args": ["-y", "@leash/mcp"]
-    }
-  }
+      "args": ["-y", "@leash/mcp"],
+    },
+  },
 }
 ```
 
@@ -63,7 +63,7 @@ or another MCP host), point at it via env vars:
 | --------------------- | --------------------------------------------- |
 | `LEASH_AGENT_MINT`    | `Agnt7XQ...`                                  |
 | `LEASH_EXECUTIVE_KEY` | `5Jz...` (base58) or `[12,34,...]` (JSON arr) |
-| `LEASH_NETWORK`       | `solana-devnet` (default) / `solana-mainnet`  |
+| `LEASH_NETWORK`       | `solana-mainnet` (default) / `solana-devnet`  |
 | `LEASH_API_URL`       | `https://api.leash.market` (default)          |
 | `LEASH_RPC_URL`       | **strongly recommended** — see below          |
 | `LEASH_EXPLORER_URL`  | `https://explorer.leash.market` (default)     |
@@ -76,13 +76,11 @@ that file so an agent can move between hosts in one command.
 ### Bring your own RPC (strongly recommended)
 
 <Warning>
-  The default RPCs (`api.devnet.solana.com`, `api.mainnet-beta.solana.com`)
-  are **public, rate-limited, and slow**. x402 settlement makes 3-5
-  RPC calls per `leash_pay_payment_link` (`getLatestBlockhash`,
-  `getAccountInfo`, `simulateTransaction`, `sendTransaction`,
-  `getSignatureStatuses`) — on a public endpoint that's a 4-8s
-  payment, sometimes a 429. With a private RPC it's typically under
-  one second.
+  The default RPCs (`api.devnet.solana.com`, `api.mainnet-beta.solana.com`) are **public,
+  rate-limited, and slow**. x402 settlement makes 3-5 RPC calls per `leash_pay_payment_link`
+  (`getLatestBlockhash`, `getAccountInfo`, `simulateTransaction`, `sendTransaction`,
+  `getSignatureStatuses`) — on a public endpoint that's a 4-8s payment, sometimes a 429. With a
+  private RPC it's typically under one second.
 </Warning>
 
 Set `LEASH_RPC_URL` to a paid or self-hosted endpoint:
@@ -103,7 +101,7 @@ Or persist it in `~/.config/leash/agent.json`:
   "agent_mint": "Agnt7XQ...",
   "executive_keypair": "5Jz...",
   "network": "solana-devnet",
-  "rpc_url": "https://devnet.helius-rpc.com/?api-key=YOUR_KEY"
+  "rpc_url": "https://devnet.helius-rpc.com/?api-key=YOUR_KEY",
 }
 ```
 
@@ -199,7 +197,7 @@ the MCP:
    executive (`setSpendDelegation` / SPL `Approve` capped at
    `u64::MAX`).
 5. POST `/v1/agents/record` so the Leash API has a row for receipts
-   + discovery + reputation.
+   - discovery + reputation.
 6. Promote the pending block to a full `agent.json` and hot-swap
    the in-memory host.
 
@@ -230,16 +228,16 @@ manual step is funding the executive in step 3.
 
 ## Troubleshooting
 
-| Symptom                                            | Likely cause + fix                                                                                                          |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Tools list is empty / host can't connect           | Wrong path or stale cache. Run `npx clear-npx-cache`, restart the host, check the host's MCP logs.                          |
-| `leash_register_agent` returns `funding_required`  | Expected — that's step 1. Send the printed SOL amount to the printed pubkey, then call the tool again with no args.         |
-| `leash_register_agent` returns `error: ... not visible on RPC within 20s` | RPC propagation. Try again in 5s — the second call resumes from `pending_register` and will pick up the just-confirmed mint. |
+| Symptom                                                                          | Likely cause + fix                                                                                                                   |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Tools list is empty / host can't connect                                         | Wrong path or stale cache. Run `npx clear-npx-cache`, restart the host, check the host's MCP logs.                                   |
+| `leash_register_agent` returns `funding_required`                                | Expected — that's step 1. Send the printed SOL amount to the printed pubkey, then call the tool again with no args.                  |
+| `leash_register_agent` returns `error: ... not visible on RPC within 20s`        | RPC propagation. Try again in 5s — the second call resumes from `pending_register` and will pick up the just-confirmed mint.         |
 | `leash_register_agent` returns `mode: "import" requires executive_secret_base58` | You passed `mode: "import"` but no secret. Either drop `mode` (defaults to `generate`) or include the base58-encoded 64-byte secret. |
-| `leash_pay_payment_link` is slow (5–10s) or 429s   | You're on the public RPC. Set `LEASH_RPC_URL` to a paid endpoint — see _Bring your own RPC_ above.                          |
-| `leash_pay_payment_link` returns `wrong_network`   | The link is on the other cluster. The MCP does not pay across networks — confirm the link's network and your `LEASH_NETWORK`. |
-| `tx_signature` returned but explorer shows nothing | RPC propagation delay (~2-3s on devnet). Refresh in 5s.                                                                     |
-| `leash_create_payment_link` returns `error`        | Today this tool calls back to the API with a legacy bearer token. Set `LEASH_API_KEY` until X-Leash-Sig auth lands here.   |
+| `leash_pay_payment_link` is slow (5–10s) or 429s                                 | You're on the public RPC. Set `LEASH_RPC_URL` to a paid endpoint — see _Bring your own RPC_ above.                                   |
+| `leash_pay_payment_link` returns `wrong_network`                                 | The link is on the other cluster. The MCP does not pay across networks — confirm the link's network and your `LEASH_NETWORK`.        |
+| `tx_signature` returned but explorer shows nothing                               | RPC propagation delay (~2-3s on devnet). Refresh in 5s.                                                                              |
+| `leash_create_payment_link` returns `error`                                      | Today this tool calls back to the API with a legacy bearer token. Set `LEASH_API_KEY` until X-Leash-Sig auth lands here.             |
 
 ## Source
 

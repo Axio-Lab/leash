@@ -8,7 +8,7 @@
  *
  *   - LEASH_AGENT_MINT          → agent_mint
  *   - LEASH_EXECUTIVE_KEY       → executive_keypair (base58 OR JSON array)
- *   - LEASH_NETWORK             → network ('solana-mainnet' | 'solana-devnet')
+ *   - LEASH_NETWORK             → network ('solana-mainnet' | 'solana-devnet'). Defaults to `solana-mainnet`.
  *   - LEASH_API_URL             → apiBaseUrl
  *   - LEASH_RPC_URL             → rpcUrl override (otherwise picked per network)
  *   - LEASH_EXPLORER_URL        → explorerBaseUrl (default explorer.leash.market)
@@ -157,8 +157,8 @@ function pick(envVal: string | undefined, fileVal: string | undefined): string |
 
 function normalizeNetwork(raw: string | undefined): SvmNetwork {
   const lower = raw?.toLowerCase().trim();
-  if (lower === 'solana-mainnet' || lower === 'mainnet') return 'solana-mainnet';
-  return 'solana-devnet';
+  if (lower === 'solana-devnet' || lower === 'devnet') return 'solana-devnet';
+  return 'solana-mainnet';
 }
 
 function resolveDefaults(file: FileShape | null): LeashHostDefaults {
