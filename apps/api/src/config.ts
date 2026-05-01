@@ -85,20 +85,6 @@ export type LeashApiConfig = {
    * with a BYOK LLM key fails fast (`platform-agents.ts`).
    */
   encryptionKey?: string;
-  /**
-   * Server-owned Solana keypair (devnet) used by `POST /v1/agents/self-register`
-   * and `POST /v1/sandbox/agent` to pay gas for agent minting and to fund
-   * sandbox treasuries.
-   *
-   * Format: base58-encoded secret-key OR JSON byte array (same format the
-   * `LEASH_E2E_OWNER_SECRET` script env accepts). Loaded once at server
-   * startup; the public key is logged on boot for ops sanity checks.
-   *
-   * When unset, both endpoints return 503. Production deployments should
-   * fund this wallet with at least 0.5 SOL + a few dollars of USDC on
-   * devnet; the sandbox endpoint draws from this same balance.
-   */
-  faucetSecret?: string;
 };
 
 function readEnv(key: string, fallback: string): string {
@@ -179,9 +165,6 @@ export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConf
     publicOrigin,
     ...(encryptionKey ? { encryptionKey } : {}),
     ...(adminSecretRaw ? { adminSecret: adminSecretRaw } : {}),
-    ...(env.LEASH_API_FAUCET_SECRET?.trim()
-      ? { faucetSecret: env.LEASH_API_FAUCET_SECRET.trim() }
-      : {}),
     ...(bootstrapKey
       ? {
           bootstrapKey: {

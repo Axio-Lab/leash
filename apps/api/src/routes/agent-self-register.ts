@@ -1,48 +1,37 @@
 /**
- * Public agent-onboarding endpoints used by the standalone MCP server,
- * the CLI, and any third-party integrator that wants a Leash agent
- * without going through agent.leash.market's Privy flow.
+ * Agent recording endpoint.
+ *
+ * The Leash protocol owns no keypairs and never auto-funds anyone.
+ * Agent provisioning is fully client-side — the MCP / CLI / SDK
+ * generate (or import) an executive keypair, the user funds it, and
+ * the client mints the MPL Core asset + sets the unlimited-USDC
+ * delegation locally. The API only records the resulting on-chain
+ * artefact so the platform's agent feed, receipts, and webhooks
+ * have something to key off.
  *
  * Endpoints
  * ---------
- *   GET  /v1/agents/self-register/info
- *     Health-check + faucet pubkey for clients that want to verify
- *     which wallet pays gas before they call /v1/faucet/drip-sol.
- *
- *   POST /v1/faucet/drip-sol           { destination, lamports? }
- *     Sends a small SOL drip from the server faucet to any pubkey.
- *     Used by first-run flows that need the caller's locally-generated
- *     ed25519 keypair to be funded enough to pay the mint fee
- *     (Metaplex Genesis API requires `wallet === umi.identity` —
- *     i.e. the executive must sign the mint, so it must have SOL).
- *     Capped at 0.05 SOL per call. Devnet-only.
- *
- *   POST /v1/agents/record             { mint, executive_pubkey, name, ... }
+ *   POST /v1/agents/record
  *     Records a platform-side row for an MPL Core asset that has
- *     already been minted on chain by the caller. Server fetches the
- *     asset, verifies `owner === executive_pubkey`, then writes the
- *     `agents` row + issues a stub service key. Idempotent on `mint`.
+ *     already been minted by the caller. Server reads the asset
+ *     from RPC (read-only — no signer required), verifies the
+ *     `owner === executive_pubkey`, then writes the platform row +
+ *     issues a stub service key. Idempotent on `mint`. Works on
+ *     both `solana-devnet` and `solana-mainnet`.
  *
- *   POST /v1/sandbox/agent             { name?, description? }
- *     Devnet-only convenience: server generates an ed25519 keypair,
- *     drips SOL to it, mints an MPL Core agent with that key as
- *     payer + owner, drips USDC to the treasury, records the
- *     platform row, and returns the executive secret bytes ONCE.
- *     Designed for the YC demo: one call → working agent.
+ * Why a separate "record" step at all
+ * -----------------------------------
+ * MPL Core's Agent API requires `wallet === umi.identity` — the
+ * executive must sign the mint tx, which means the server can never
+ * mint on behalf of an arbitrary caller pubkey (the server has no
+ * access to the caller's secret key). A faucet-mints-then-transfers
+ * approach panics inside `mpl-core::transferV1` for agent assets
+ * (the AgentIdentityV1 plugin layout trips an out-of-bounds read).
  *
- * Why a 3-endpoint shape instead of a single "self-register that mints"
- * --------------------------------------------------------------------
- * The Metaplex Agent API requires `wallet === umi.identity` — the
- * executive must sign the mint tx, which means the server can't mint
- * on behalf of an arbitrary caller pubkey (the server has no access
- * to the caller's secret key). A faucet-mints-then-transfers approach
- * panics inside `mpl-core::transferV1` for agent assets (the
- * AgentIdentityV1 plugin layout trips an out-of-bounds read).
- *
- * Splitting into "drip SOL → caller mints locally → record" keeps the
- * caller in control of their secret while the server provides the
- * one piece they can't (devnet SOL). Sandbox is the same flow with the
- * server playing both roles for the YC demo wedge.
+ * So the canonical flow is "client mints → server records" —
+ * implemented here. The previous `/v1/sandbox/agent` and
+ * `/v1/faucet/drip-sol` endpoints (devnet-only YC-demo wedge) were
+ * removed when the design moved to a single production-grade flow.
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
@@ -52,34 +41,18 @@ import {
   safeFetchAssetV1,
   type AssetV1,
 } from '@metaplex-foundation/mpl-core';
-import {
-  generateSigner,
-  keypairIdentity,
-  publicKey,
-  type Keypair,
-  type Umi,
-} from '@metaplex-foundation/umi';
-import { base58 } from '@metaplex-foundation/umi/serializers';
-import { mplCore } from '@metaplex-foundation/mpl-core';
-import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
-import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import {
-  createAgent,
-  setSpendDelegation,
-  KNOWN_STABLES,
-  SPL_TOKEN_PROGRAM_ID,
-} from '@leash/registry-utils';
+import { publicKey } from '@metaplex-foundation/umi';
 import { encryptSecret } from '@leash/platform-auth/encryption';
 
 import type { LeashApiConfig } from '../config.js';
 import { ApiErrorSchema, NetworkSchema, PubkeySchema } from '../openapi/common.js';
-import { fundExecutiveSol, fundTreasurySpl, getFaucetPubkey, getFaucetUmi } from '../lib/faucet.js';
+import { umiReadOnly } from '../util/umi.js';
 import { createPlatformAgent, getPlatformAgent } from '../storage/platform-agents.js';
 import { createApiKey } from '../storage/api-keys.js';
 import type { CacheClient } from '../storage/redis.js';
 import type { DbClient } from '../storage/turso.js';
 import { invalidRequest, rpcError } from '../util/errors.js';
-import { solscanTxUrl, type SvmNetwork } from '../util/network.js';
+import { type SvmNetwork } from '../util/network.js';
 
 export type AgentSelfRegisterDeps = {
   config: LeashApiConfig;
@@ -87,46 +60,12 @@ export type AgentSelfRegisterDeps = {
   cache: CacheClient;
 };
 
-const DEFAULT_DRIP_LAMPORTS = 20_000_000n; // 0.02 SOL — enough for the mint tx + a couple of follow-ups.
-const DRIP_LAMPORTS_CAP = 50_000_000n; // 0.05 SOL.
-const SANDBOX_USDC_ATOMIC = 1_000_000n; // 1.00 USDC.
-const SANDBOX_USDC_CAP = 5_000_000n; // 5.00 USDC.
-
 const RegistrationV1Service = z
   .object({
     name: z.string().min(1).max(64),
     endpoint: z.string().url().max(500),
   })
   .openapi('RegistrationV1Service');
-
-// ────────────────────────────────────────────────────────────────────────────
-// Schemas
-// ────────────────────────────────────────────────────────────────────────────
-
-const DripSolBody = z
-  .object({
-    destination: PubkeySchema.openapi({
-      description: 'Pubkey that should receive the SOL drip.',
-    }),
-    lamports: z
-      .union([z.string(), z.number()])
-      .optional()
-      .openapi({
-        description: `Amount in lamports. Defaults to ${String(DEFAULT_DRIP_LAMPORTS)} (0.02 SOL). Capped at ${String(DRIP_LAMPORTS_CAP)} per call.`,
-      }),
-    network: NetworkSchema.optional(),
-  })
-  .openapi('FaucetDripSolBody');
-
-const DripSolResponse = z
-  .object({
-    destination: PubkeySchema,
-    lamports: z.string(),
-    signature: z.string(),
-    network: NetworkSchema,
-    explorer_url: z.string().url(),
-  })
-  .openapi('FaucetDripSolResponse');
 
 const RecordMintBody = z
   .object({
@@ -154,182 +93,9 @@ const RecordMintResponse = z
   })
   .openapi('RecordMintResponse');
 
-const SandboxBody = z
-  .object({
-    name: z.string().min(1).max(120).optional(),
-    description: z.string().max(2048).optional(),
-    fund_sol_lamports: z.union([z.string(), z.number()]).optional(),
-    fund_usdc_atomic: z.union([z.string(), z.number()]).optional(),
-  })
-  .openapi('SandboxAgentBody');
-
-const SandboxResponse = z
-  .object({
-    mint: PubkeySchema,
-    treasury: PubkeySchema,
-    executive_pubkey: PubkeySchema,
-    executive_secret_base58: z.string(),
-    network: NetworkSchema,
-    tx_signatures: z.object({
-      sol_drip: z.string(),
-      mint: z.string(),
-      usdc_drip: z.string(),
-      delegate: z.string().openapi({
-        description:
-          'Signature of the `mpl-core::Execute(SPL.Approve)` tx that delegates ' +
-          'unlimited USDC spend authority from the agent treasury to the ' +
-          'executive keypair. Without it the buyer-kit returns `no_delegate`.',
-      }),
-    }),
-    explorer_urls: z.object({
-      mint: z.string().url(),
-      sol_drip: z.string().url(),
-      usdc_drip: z.string().url(),
-      delegate: z.string().url(),
-    }),
-    funded: z.object({
-      sol_lamports: z.string(),
-      usdc_atomic: z.string(),
-    }),
-    receipts_service: z.string().url(),
-  })
-  .openapi('SandboxAgentResponse');
-
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
-
-function defaultName(executivePubkey: string): string {
-  return `Agent ${executivePubkey.slice(0, 8)}`;
-}
-
-function clampBigint(input: unknown, defaultV: bigint, cap: bigint, fieldName: string): bigint {
-  if (input == null) return defaultV;
-  let v: bigint;
-  try {
-    v = BigInt(typeof input === 'number' ? Math.floor(input) : String(input));
-  } catch {
-    throw invalidRequest(`${fieldName} must be a non-negative integer`);
-  }
-  if (v < 0n) throw invalidRequest(`${fieldName} must be >= 0`);
-  if (v > cap) throw invalidRequest(`${fieldName} exceeds cap (${String(cap)})`);
-  return v;
-}
-
-function buildRegistrationDataUrl(input: {
-  name: string;
-  description: string;
-  image: string;
-  services: { name: string; endpoint: string }[];
-  receiptsTemplate: string;
-}): string {
-  const callerHasReceipts = input.services.some((s) => s.name === 'receipts');
-  const services = callerHasReceipts
-    ? input.services
-    : [...input.services, { name: 'receipts', endpoint: input.receiptsTemplate }];
-  const doc = {
-    type: 'https://eips.ethereum.org/EIPS/eip-8004#registration-v1' as const,
-    name: input.name,
-    description: input.description,
-    image: input.image,
-    services,
-    x402Support: true,
-    active: true,
-    registrations: [],
-    supportedTrust: [],
-  };
-  return `data:application/json;utf8,${encodeURIComponent(JSON.stringify(doc))}`;
-}
-
-/** Build a Umi instance whose identity is the supplied keypair, for sandbox flows. */
-function buildUmiWith(rpcUrl: string, kp: Keypair): Umi {
-  const umi = createUmi(rpcUrl).use(mplCore()).use(mplToolbox());
-  umi.use(keypairIdentity(kp));
-  return umi;
-}
-
-/**
- * Once a destination has been credited with SOL by the faucet, the
- * underlying RPC may still not see the new lamports for ~1-3s. We
- * poll the account until the balance >= expected before letting
- * callers proceed (mint will fail with "insufficient funds" if we
- * don't wait).
- */
-async function waitForLamports(args: {
-  umi: Umi;
-  account: string;
-  minLamports: bigint;
-  timeoutMs?: number;
-}): Promise<void> {
-  const timeoutMs = args.timeoutMs ?? 20_000;
-  const intervalMs = 750;
-  const started = Date.now();
-  while (true) {
-    const acct = await args.umi.rpc.getAccount(publicKey(args.account));
-    if (acct.exists && BigInt(acct.lamports.basisPoints) >= args.minLamports) return;
-    if (Date.now() - started > timeoutMs) {
-      throw rpcError(
-        `account ${args.account} did not reach ${String(args.minLamports)} lamports within ${timeoutMs}ms`,
-      );
-    }
-    await new Promise((r) => setTimeout(r, intervalMs));
-  }
-}
-
-/**
- * Surface a string description for any thrown value. Some `mpl-core`
- * paths reject with non-Error objects (e.g. a `ProgramErrorContext`
- * with no `message` property), which would otherwise format as
- * `undefined`. We probe the common shapes and fall back to a JSON
- * dump so the operator at least sees what went wrong.
- */
-function describeError(err: unknown): string {
-  if (err == null) return 'unknown error';
-  if (err instanceof Error && err.message) return err.message;
-  if (typeof err === 'string') return err;
-  if (typeof err === 'object') {
-    const e = err as Record<string, unknown>;
-    if (typeof e.message === 'string') return e.message;
-    if (typeof e.toString === 'function') {
-      const s = String(err);
-      if (s && s !== '[object Object]') return s;
-    }
-    try {
-      return JSON.stringify(err);
-    } catch {
-      // fall through
-    }
-  }
-  return String(err);
-}
-
-/**
- * Poll `safeFetchAssetV1` until the freshly-minted asset is visible on
- * the RPC. Without this, a follow-up `mpl-core::Execute` instruction
- * (e.g. `setSpendDelegation`) can simulate against a node that hasn't
- * caught the mint tx yet and fail with "Invalid Asset passed in".
- */
-async function waitForAssetVisible(args: {
-  umi: Umi;
-  asset: string;
-  timeoutMs?: number;
-}): Promise<void> {
-  const timeoutMs = args.timeoutMs ?? 15_000;
-  const intervalMs = 500;
-  const started = Date.now();
-  while (true) {
-    try {
-      const asset = await safeFetchAssetV1(args.umi, publicKey(args.asset));
-      if (asset) return;
-    } catch {
-      // Treat transient RPC errors the same as "not yet visible".
-    }
-    if (Date.now() - started > timeoutMs) {
-      throw new Error(`asset ${args.asset} not visible within ${timeoutMs}ms`);
-    }
-    await new Promise((r) => setTimeout(r, intervalMs));
-  }
-}
 
 async function recordPlatformRow(args: {
   deps: AgentSelfRegisterDeps;
@@ -402,123 +168,6 @@ export function buildAgentSelfRegisterRoutes(deps: AgentSelfRegisterDeps): OpenA
   const app = new OpenAPIHono();
 
   // ─────────────────────────────────────────────────────────
-  // GET /v1/agents/self-register/info
-  // ─────────────────────────────────────────────────────────
-  app.openapi(
-    createRoute({
-      method: 'get',
-      path: '/v1/agents/self-register/info',
-      tags: ['agents'],
-      summary: 'Faucet metadata for self-register / sandbox endpoints',
-      responses: {
-        200: {
-          description: 'ok',
-          content: {
-            'application/json': {
-              schema: z.object({
-                faucet_pubkey: PubkeySchema,
-                supported_networks: z.array(NetworkSchema),
-                drip_sol_default_lamports: z.string(),
-                drip_sol_cap_lamports: z.string(),
-                sandbox: z.object({
-                  default_usdc_atomic: z.string(),
-                  cap_usdc_atomic: z.string(),
-                }),
-              }),
-            },
-          },
-        },
-        503: {
-          description: 'faucet not configured',
-          content: { 'application/json': { schema: ApiErrorSchema } },
-        },
-      },
-    }),
-    async (c) => {
-      const faucetPubkey = getFaucetPubkey(deps.config, 'solana-devnet');
-      return c.json(
-        {
-          faucet_pubkey: faucetPubkey,
-          supported_networks: ['solana-devnet'] as ('solana-devnet' | 'solana-mainnet')[],
-          drip_sol_default_lamports: String(DEFAULT_DRIP_LAMPORTS),
-          drip_sol_cap_lamports: String(DRIP_LAMPORTS_CAP),
-          sandbox: {
-            default_usdc_atomic: String(SANDBOX_USDC_ATOMIC),
-            cap_usdc_atomic: String(SANDBOX_USDC_CAP),
-          },
-        },
-        200,
-      );
-    },
-  );
-
-  // ─────────────────────────────────────────────────────────
-  // POST /v1/faucet/drip-sol
-  // ─────────────────────────────────────────────────────────
-  app.openapi(
-    createRoute({
-      method: 'post',
-      path: '/v1/faucet/drip-sol',
-      tags: ['agents'],
-      summary: 'Send a small SOL drip from the server faucet (devnet)',
-      description:
-        'Used by first-run agent flows that need the caller-supplied executive ' +
-        'pubkey funded so it can pay its own mint tx fee. Capped per call.',
-      request: {
-        body: { required: true, content: { 'application/json': { schema: DripSolBody } } },
-      },
-      responses: {
-        200: {
-          description: 'sent',
-          content: { 'application/json': { schema: DripSolResponse } },
-        },
-        422: {
-          description: 'invalid',
-          content: { 'application/json': { schema: ApiErrorSchema } },
-        },
-        502: { description: 'rpc', content: { 'application/json': { schema: ApiErrorSchema } } },
-        503: {
-          description: 'faucet not configured',
-          content: { 'application/json': { schema: ApiErrorSchema } },
-        },
-      },
-    }),
-    async (c) => {
-      const body = c.req.valid('json');
-      const network: SvmNetwork = body.network ?? 'solana-devnet';
-      if (network !== 'solana-devnet') throw invalidRequest('drip-sol is devnet-only in v0.1');
-      const lamports = clampBigint(
-        body.lamports,
-        DEFAULT_DRIP_LAMPORTS,
-        DRIP_LAMPORTS_CAP,
-        'lamports',
-      );
-      try {
-        publicKey(body.destination);
-      } catch {
-        throw invalidRequest('destination is not a valid Solana pubkey');
-      }
-      const umi = getFaucetUmi(deps.config, network);
-      let signature: string;
-      try {
-        signature = await fundExecutiveSol({ umi, destination: body.destination, lamports });
-      } catch (err) {
-        throw rpcError(`drip-sol failed: ${(err as Error).message}`);
-      }
-      return c.json(
-        {
-          destination: body.destination,
-          lamports: String(lamports),
-          signature,
-          network,
-          explorer_url: solscanTxUrl(network, signature),
-        },
-        200,
-      );
-    },
-  );
-
-  // ─────────────────────────────────────────────────────────
   // POST /v1/agents/record
   // ─────────────────────────────────────────────────────────
   app.openapi(
@@ -528,8 +177,10 @@ export function buildAgentSelfRegisterRoutes(deps: AgentSelfRegisterDeps): OpenA
       tags: ['agents'],
       summary: 'Record a platform row for an MPL Core agent already minted by the caller',
       description:
-        'Server fetches the asset, verifies the owner matches `executive_pubkey`, then writes the ' +
-        '`agents` row + issues a stub service key. Idempotent on `mint`.',
+        'Server reads the asset from RPC (read-only), verifies the owner matches `executive_pubkey`, ' +
+        'then writes the `agents` row + issues a stub service key. Idempotent on `mint`. ' +
+        'The MCP / CLI / SDK call this after locally minting + delegating; no server-side keypairs ' +
+        'are involved.',
       request: {
         body: { required: true, content: { 'application/json': { schema: RecordMintBody } } },
       },
@@ -547,16 +198,11 @@ export function buildAgentSelfRegisterRoutes(deps: AgentSelfRegisterDeps): OpenA
           content: { 'application/json': { schema: ApiErrorSchema } },
         },
         502: { description: 'rpc', content: { 'application/json': { schema: ApiErrorSchema } } },
-        503: {
-          description: 'faucet not configured',
-          content: { 'application/json': { schema: ApiErrorSchema } },
-        },
       },
     }),
     async (c) => {
       const body = c.req.valid('json');
       const network: SvmNetwork = body.network ?? 'solana-devnet';
-      if (network !== 'solana-devnet') throw invalidRequest('record is devnet-only in v0.1');
 
       try {
         publicKey(body.mint);
@@ -570,9 +216,15 @@ export function buildAgentSelfRegisterRoutes(deps: AgentSelfRegisterDeps): OpenA
         throw invalidRequest(`agent ${body.mint} is already recorded`);
       }
 
-      const umi = getFaucetUmi(deps.config, network);
-      // RPC propagation between confirmation and account-read indexing can
-      // take 1–6s on devnet. Poll until visible.
+      // Read-only Umi — no signer, no faucet, just an RPC URL. Works
+      // identically for devnet + mainnet because all we do here is
+      // `fetchAssetV1` + a PDA derivation (both are pure reads).
+      const umi = umiReadOnly(deps.config, network);
+
+      // RPC propagation between confirmation and account-read indexing
+      // can take 1-6s on devnet (occasionally on mainnet too). Poll
+      // until visible so the very-fresh-mint case doesn't 422 the
+      // caller right after they confirmed locally.
       let asset: AssetV1 | null = null;
       const pollDeadline = Date.now() + 20_000;
       while (Date.now() < pollDeadline) {
@@ -590,8 +242,6 @@ export function buildAgentSelfRegisterRoutes(deps: AgentSelfRegisterDeps): OpenA
         await new Promise((r) => setTimeout(r, 750));
       }
       if (!asset) {
-        // One last unconditional read so the error message includes whatever
-        // detail the SDK surfaces on definitive failures.
         try {
           asset = await fetchAssetV1(umi, publicKey(body.mint));
         } catch (err) {
@@ -628,236 +278,6 @@ export function buildAgentSelfRegisterRoutes(deps: AgentSelfRegisterDeps): OpenA
           treasury,
           executive_pubkey: body.executive_pubkey,
           network,
-          receipts_service: receiptsServiceUrl,
-        },
-        200,
-      );
-    },
-  );
-
-  // ─────────────────────────────────────────────────────────
-  // POST /v1/sandbox/agent
-  // ─────────────────────────────────────────────────────────
-  app.openapi(
-    createRoute({
-      method: 'post',
-      path: '/v1/sandbox/agent',
-      tags: ['agents'],
-      summary: 'Generate + fund + mint a fresh devnet agent in one round-trip',
-      description:
-        'Devnet-only YC-demo wedge: server generates an ed25519 keypair, drips SOL to it, mints ' +
-        'an MPL Core agent with that keypair as payer + owner, drips USDC to the treasury, records ' +
-        'the platform row, and returns the secret bytes ONCE.',
-      request: {
-        body: { required: false, content: { 'application/json': { schema: SandboxBody } } },
-      },
-      responses: {
-        200: {
-          description: 'sandbox agent provisioned',
-          content: { 'application/json': { schema: SandboxResponse } },
-        },
-        422: {
-          description: 'invalid input',
-          content: { 'application/json': { schema: ApiErrorSchema } },
-        },
-        502: {
-          description: 'rpc error during one of the on-chain steps',
-          content: { 'application/json': { schema: ApiErrorSchema } },
-        },
-        503: {
-          description: 'faucet not configured',
-          content: { 'application/json': { schema: ApiErrorSchema } },
-        },
-      },
-    }),
-    async (c) => {
-      const raw = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-      const body = SandboxBody.parse(raw);
-      const network: SvmNetwork = 'solana-devnet';
-
-      const solDripLamports = clampBigint(
-        body.fund_sol_lamports,
-        DEFAULT_DRIP_LAMPORTS,
-        DRIP_LAMPORTS_CAP,
-        'fund_sol_lamports',
-      );
-      const usdcDripAtomic = clampBigint(
-        body.fund_usdc_atomic,
-        SANDBOX_USDC_ATOMIC,
-        SANDBOX_USDC_CAP,
-        'fund_usdc_atomic',
-      );
-
-      const faucetUmi = getFaucetUmi(deps.config, network);
-      const fresh = generateSigner(faucetUmi);
-      const executivePubkey = String(fresh.publicKey);
-      const executiveSecret = base58.deserialize(fresh.secretKey)[0];
-
-      const name = (body.name ?? '').trim() || defaultName(executivePubkey);
-      const description = body.description ?? 'Sandbox agent provisioned by /v1/sandbox/agent';
-
-      // 1. Drip SOL → executive
-      let solDripSig: string;
-      try {
-        solDripSig = await fundExecutiveSol({
-          umi: faucetUmi,
-          destination: executivePubkey,
-          lamports: solDripLamports,
-        });
-      } catch (err) {
-        throw rpcError(`SOL drip to executive failed: ${(err as Error).message}`);
-      }
-
-      // 2. Wait for lamports to land before minting (RPC propagation race).
-      try {
-        await waitForLamports({
-          umi: faucetUmi,
-          account: executivePubkey,
-          minLamports: solDripLamports,
-        });
-      } catch (err) {
-        throw rpcError(`SOL drip not visible: ${(err as Error).message}`);
-      }
-
-      // 3. Mint agent — executive pays + owns.
-      const executiveKp: Keypair = {
-        publicKey: fresh.publicKey,
-        secretKey: fresh.secretKey,
-      };
-      const executiveUmi = buildUmiWith(deps.config.rpc[network], executiveKp);
-      const receiptsTemplate = `${deps.config.publicOrigin.replace(/\/+$/, '')}/v1/receipts/{agent}`;
-      const uri = buildRegistrationDataUrl({
-        name,
-        description,
-        image: '',
-        services: [],
-        receiptsTemplate,
-      });
-      let mintSig: string;
-      let mint: string;
-      try {
-        const result = await createAgent(executiveUmi, {
-          wallet: executivePubkey,
-          name,
-          uri,
-          description,
-          network,
-          services: [],
-        });
-        mintSig = result.signature;
-        mint = result.assetAddress;
-      } catch (err) {
-        throw rpcError(`mintAndSubmitAgent failed: ${(err as Error).message}`);
-      }
-
-      const [treasuryPda] = findAssetSignerPda(executiveUmi, { asset: publicKey(mint) });
-      const treasury = String(treasuryPda);
-
-      // 4. Drip USDC → treasury.
-      let usdcDripSig = '';
-      if (usdcDripAtomic > 0n) {
-        try {
-          usdcDripSig = await fundTreasurySpl({
-            umi: faucetUmi,
-            treasuryPda: treasury,
-            symbol: 'USDC',
-            amountAtomic: usdcDripAtomic,
-          });
-        } catch (err) {
-          throw rpcError(
-            `USDC drip to treasury failed (agent ${mint} is minted but unfunded for USDC): ${(err as Error).message}`,
-          );
-        }
-      }
-
-      // 4b. Approve unlimited USDC spend delegation to the executive.
-      //
-      // Without this step the buyer-kit pre-flight returns `no_delegate`
-      // and the very first `leash_pay_payment_link` call fails — even
-      // though the treasury holds USDC. The chat product runs the same
-      // approval through Privy after mint; sandbox-minted agents need
-      // it baked into the provisioning step so they're usable straight
-      // out of /v1/sandbox/agent.
-      //
-      // We wait for the asset to be visible on RPC first — devnet
-      // nodes routinely take 1–3s to reflect a freshly-confirmed mint,
-      // and `mpl-core::Execute(SPL.Approve)` errors with
-      // "Invalid Asset passed in" if the program reads an empty slot.
-      //
-      // Cap is `u64::MAX` (effectively unlimited). Owners can revoke or
-      // re-approve a smaller cap later via @leash/registry-utils
-      // `revokeSpendDelegation` / `setSpendDelegation`.
-      try {
-        await waitForAssetVisible({ umi: executiveUmi, asset: mint });
-      } catch (err) {
-        throw rpcError(
-          `mint ${mint} not visible on RPC within deadline: ${(err as Error).message}`,
-        );
-      }
-
-      let delegateSig = '';
-      try {
-        const usdc = KNOWN_STABLES[network].find((s) => s.symbol === 'USDC');
-        if (!usdc) throw new Error(`USDC not configured for ${network}`);
-        const delegation = await setSpendDelegation(executiveUmi, {
-          agentAsset: mint,
-          mint: usdc.mint,
-          executive: executivePubkey,
-          amount: 2n ** 64n - 1n,
-          tokenProgram: usdc.tokenProgram ?? SPL_TOKEN_PROGRAM_ID,
-        });
-        delegateSig = delegation.signature;
-      } catch (err) {
-        const detail = describeError(err);
-        console.error(
-          `[sandbox] setSpendDelegation failed for ${mint} (executive=${executivePubkey}):`,
-          err,
-        );
-        throw rpcError(
-          `USDC spend-delegation to executive failed (agent ${mint} is minted ` +
-            `and funded but the buyer-kit will report no_delegate until this ` +
-            `is set): ${detail}`,
-        );
-      }
-
-      // 5. Record platform row.
-      const receiptsServiceUrl = `${deps.config.publicOrigin.replace(/\/+$/, '')}/v1/receipts/${mint}`;
-      await recordPlatformRow({
-        deps,
-        mint,
-        treasury,
-        executivePubkey,
-        name,
-        description,
-        imageUrl: '',
-        services: [],
-        network,
-        receiptsServiceUrl,
-      });
-
-      return c.json(
-        {
-          mint,
-          treasury,
-          executive_pubkey: executivePubkey,
-          executive_secret_base58: executiveSecret,
-          network,
-          tx_signatures: {
-            sol_drip: solDripSig,
-            mint: mintSig,
-            usdc_drip: usdcDripSig,
-            delegate: delegateSig,
-          },
-          explorer_urls: {
-            mint: solscanTxUrl(network, mintSig),
-            sol_drip: solscanTxUrl(network, solDripSig),
-            usdc_drip: usdcDripSig ? solscanTxUrl(network, usdcDripSig) : '',
-            delegate: delegateSig ? solscanTxUrl(network, delegateSig) : '',
-          },
-          funded: {
-            sol_lamports: String(solDripLamports),
-            usdc_atomic: String(usdcDripAtomic),
-          },
           receipts_service: receiptsServiceUrl,
         },
         200,
