@@ -38,7 +38,7 @@ export function WrongNetworkNotice({ current, other, entity, identifier }: Props
   }
 
   return (
-    <div className="card flex flex-col gap-3 border-[--color-warning] bg-[oklch(0.22_0.06_70)] px-5 py-4 text-sm sm:flex-row sm:items-center">
+    <div className="card flex flex-col gap-3 border-[oklch(0.5_0.18_70/0.5)] bg-[oklch(0.22_0.06_70/0.4)] px-5 py-4 text-sm sm:flex-row sm:items-center">
       <div className="flex-1 space-y-1">
         <p className="font-medium text-[--color-fg]">
           This {entity} doesn&rsquo;t exist on{' '}
@@ -55,8 +55,10 @@ export function WrongNetworkNotice({ current, other, entity, identifier }: Props
         onClick={switchAndRefresh}
         disabled={pending}
         className={cn(
-          'inline-flex shrink-0 items-center gap-1.5 rounded-md border border-[--color-border-strong] bg-[--color-brand-soft] px-3 py-1.5 text-xs font-medium text-[--color-fg] transition-opacity',
-          pending ? 'opacity-60' : 'hover:bg-[--color-brand]',
+          'inline-flex shrink-0 items-center gap-1.5 rounded-md border border-[--color-border-strong] bg-[--color-brand-soft] px-3 py-1.5 text-xs font-medium text-[--color-fg] transition-all',
+          pending
+            ? 'opacity-60'
+            : 'hover:border-[--color-brand-strong] hover:bg-[--color-brand] hover:shadow-[0_0_0_1px_oklch(0.66_0.19_268/0.4),0_8px_24px_-12px_oklch(0.66_0.19_268/0.5)]',
         )}
       >
         Switch to {NETWORK_LABEL[other]}
@@ -81,10 +83,10 @@ export function NoRecordFound({
   network: Network;
 }) {
   return (
-    <div className="rounded-lg border border-dashed border-[--color-border] bg-[--color-bg-elev] px-6 py-10 text-center">
+    <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[--color-border-strong] bg-[--color-bg-elev]/50 px-6 py-12 text-center backdrop-blur-md">
       <p className="text-sm font-medium text-[--color-fg]">No {entity} found</p>
-      <p className="mt-1 break-all font-mono text-xs text-[--color-fg-muted]">{identifier}</p>
-      <p className="mt-3 text-xs text-[--color-fg-subtle]">
+      <p className="break-all font-mono text-xs text-[--color-fg-muted]">{identifier}</p>
+      <p className="mt-2 max-w-md text-xs leading-relaxed text-[--color-fg-subtle]">
         Searched both networks. Confirm the {entity} exists, or try a different cluster (currently{' '}
         <span className="font-mono">{networkToSlug(network)}</span>).
       </p>

@@ -74,6 +74,17 @@ export type LeashApiConfig = {
    * Override with `LEASH_API_PUBLIC_ORIGIN`.
    */
   publicOrigin: string;
+  /**
+   * 32-byte hex AES-GCM key used by the API to seal recoverable secrets
+   * at rest:
+   *   - `api_keys.encrypted_plaintext` (lets the BFF reveal a key later)
+   *   - `agents.encrypted_llm_key` (LLM provider key, decrypted in-runtime)
+   *
+   * Optional. When unset, secrets fall back to the legacy "show once,
+   * never persist plaintext" behaviour for API keys, and agent creation
+   * with a BYOK LLM key fails fast (`platform-agents.ts`).
+   */
+  encryptionKey?: string;
 };
 
 function readEnv(key: string, fallback: string): string {
@@ -107,6 +118,12 @@ export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConf
   if (adminSecretRaw && adminSecretRaw.length < MIN_ADMIN_SECRET_LEN) {
     throw new Error(
       `LEASH_API_ADMIN_SECRET: must be >= ${MIN_ADMIN_SECRET_LEN} chars; got ${adminSecretRaw.length}`,
+    );
+  }
+  const encryptionKey = env.ENCRYPTION_KEY?.trim();
+  if (encryptionKey && encryptionKey.length !== 64) {
+    throw new Error(
+      `ENCRYPTION_KEY: expected 64 hex chars (32 bytes), got ${encryptionKey.length}`,
     );
   }
   const docsDefault = env.NODE_ENV !== 'production';
@@ -146,6 +163,7 @@ export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConf
       ? { facilitatorUrlMainnet: env.LEASH_API_FACILITATOR_URL_MAINNET.trim() }
       : {}),
     publicOrigin,
+    ...(encryptionKey ? { encryptionKey } : {}),
     ...(adminSecretRaw ? { adminSecret: adminSecretRaw } : {}),
     ...(bootstrapKey
       ? {

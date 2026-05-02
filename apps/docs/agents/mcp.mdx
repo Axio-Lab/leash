@@ -1,0 +1,278 @@
+---
+title: 'Standalone MCP server'
+description: 'Drop Leash into Cursor, Claude Desktop, Cline, Continue, or ChatGPT-MCP. STDIO transport, 11 tools, zero browser in the loop.'
+---
+
+`@leash/mcp` is the agent-first surface of Leash. It runs as a
+[Model Context Protocol](https://modelcontextprotocol.io) server
+over STDIO, so any MCP-compatible host (Cursor, Claude Desktop,
+Cline, Continue, ChatGPT-MCP, …) can let its agent **mint**, **pay**,
+**withdraw**, **discover**, and **earn** on Solana — without a
+browser or the chat product in the loop.
+
+## Install
+
+```jsonc
+// In Cursor → Settings → MCP, or your MCP host's equivalent:
+{
+  "mcpServers": {
+    "leash": {
+      "command": "npx",
+      "args": ["-y", "@leash/mcp"],
+    },
+  },
+}
+```
+
+That's the entire setup. `leash_register_agent` provisions an agent
+in **two steps**:
+
+1. Generate (or import) a Solana keypair, persist it to
+   `~/.config/leash/agent.json`, and tell you to send ~0.01 SOL to
+   the printed address — this is the agent's owner / executive.
+2. After you fund it, call `leash_register_agent` again. The MCP
+   mints the MPL Core agent asset, sets unlimited USDC delegation
+   from the treasury PDA to the executive, records the asset on the
+   Leash API, and **hot-swaps** the in-memory host so subsequent
+   tool calls (`leash_pay_payment_link`, `leash_check_treasury_balance`,
+   etc.) work without a restart.
+
+The cluster (devnet vs mainnet) comes from `LEASH_NETWORK` — same
+flow either way, since rent + gas are paid by the user's executive
+on both.
+
+### Other MCP hosts
+
+The same JSON entry works (sometimes under a slightly different
+file path) in:
+
+- **Claude Desktop** — `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Cline** — VS Code extension settings → "Cline: MCP Servers"
+- **Continue** — `~/.continue/config.json` under `mcpServers`
+- **ChatGPT Desktop (MCP)** — Settings → Connectors → Add MCP server
+
+After editing the config, restart the host so it re-spawns the
+STDIO process.
+
+## Configure (optional)
+
+If you already have an agent (minted from the chat product, the CLI,
+or another MCP host), point at it via env vars:
+
+| env                   | example                                       |
+| --------------------- | --------------------------------------------- |
+| `LEASH_AGENT_MINT`    | `Agnt7XQ...`                                  |
+| `LEASH_EXECUTIVE_KEY` | `5Jz...` (base58) or `[12,34,...]` (JSON arr) |
+| `LEASH_NETWORK`       | `solana-mainnet` (default) / `solana-devnet`  |
+| `LEASH_API_URL`       | `https://api.leash.market` (default)          |
+| `LEASH_RPC_URL`       | **strongly recommended** — see below          |
+| `LEASH_EXPLORER_URL`  | `https://explorer.leash.market` (default)     |
+| `LEASH_API_KEY`       | bearer for legacy `/v1/payment-links` flow    |
+
+Or paste a JSON config into `~/.config/leash/agent.json` (chmod 600).
+The CLI subcommands `leash-mcp export` / `leash-mcp import` round-trip
+that file so an agent can move between hosts in one command.
+
+### Bring your own RPC (strongly recommended)
+
+<Warning>
+  The default RPCs (`api.devnet.solana.com`, `api.mainnet-beta.solana.com`) are **public,
+  rate-limited, and slow**. x402 settlement makes 3-5 RPC calls per `leash_pay_payment_link`
+  (`getLatestBlockhash`, `getAccountInfo`, `simulateTransaction`, `sendTransaction`,
+  `getSignatureStatuses`) — on a public endpoint that's a 4-8s payment, sometimes a 429. With a
+  private RPC it's typically under one second.
+</Warning>
+
+Set `LEASH_RPC_URL` to a paid or self-hosted endpoint:
+
+```bash
+# Helius (free tier handles devnet + light mainnet)
+LEASH_RPC_URL=https://devnet.helius-rpc.com/?api-key=YOUR_KEY
+
+# Triton, QuickNode, Alchemy — any RPC that speaks the standard
+# JSON-RPC interface works.
+```
+
+Or persist it in `~/.config/leash/agent.json`:
+
+```jsonc
+{
+  "version": 1,
+  "agent_mint": "Agnt7XQ...",
+  "executive_keypair": "5Jz...",
+  "network": "solana-devnet",
+  "rpc_url": "https://devnet.helius-rpc.com/?api-key=YOUR_KEY",
+}
+```
+
+The same advice applies to the CLI — `leash` and `leash-mcp` share
+the config file.
+
+## Tools
+
+The MCP exposes 11 canonical tools. Each is also available through
+the Claude Agent SDK in the chat product (same names, same shapes —
+[shared definitions](https://github.com/leash-market/leash/tree/main/packages/mcp-core/src/tools)).
+
+| Tool                           | What it does                                                                                                                       |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `leash_register_agent`         | Two-step onboarding. First call returns funding instructions; second call mints + delegates + records + hot-swaps.                 |
+| `leash_get_identity`           | Self-introspection — what agent am I, on which network, what's my treasury PDA.                                                    |
+| `leash_check_treasury_balance` | Read SOL + USDC/USDG/USDT balances on the agent treasury PDA.                                                                      |
+| `leash_pay_payment_link`       | Probe an x402 link, sign + settle the SPL transfer locally, return the receipt.                                                    |
+| `leash_create_payment_link`    | Mint an x402 paywall the user can share.                                                                                           |
+| `leash_withdraw_treasury`      | Owner-driven withdrawal of SOL or an SPL stable to any wallet (mpl-core::Execute).                                                 |
+| `leash_set_spend_limit`        | Owner-driven update of the SPL `Approve` delegation. Tighten / revoke / restore the executive's spend authority for an SPL stable. |
+| `leash_get_spend_limit`        | Inspect the active SPL delegation (delegate pubkey, remaining cap, treasury balance) for an SPL stable.                            |
+| `leash_receipts`               | List recent receipts for the active agent.                                                                                         |
+| `leash_discover`               | Search the marketplace for paid services by capability + price. Public, no agent needed.                                           |
+| `leash_reputation`             | Live reputation snapshot for any on-chain agent — settled-call volume, dispute rate, normalised rating in `[0,1]`.                 |
+
+## Verify it works
+
+Once the host is running, ask the agent:
+
+> _"List the Leash MCP tools."_
+
+You should see all 11 `leash_*` tools. If you don't, check the
+host's MCP logs (in Cursor: `~/Library/Application Support/Cursor/logs/.../MCP Logs.log`) — most failures are wrong path, missing
+network access, or a stale cached `npx` install (clear with
+`npx clear-npx-cache`).
+
+You can also smoke-test outside any host using the in-memory
+transport:
+
+```bash
+leash-mcp doctor
+```
+
+Prints config path, derived executive pubkey, network, RPC + API
+reachability — useful first stop for any "why isn't this working"
+question.
+
+## Onboarding flow
+
+`leash_register_agent` walks the LLM through two calls. Either or
+both can be initiated by the user (you) or the agent (Cursor /
+Claude Desktop / etc.):
+
+**Step 1 — choose an executive keypair + fill in agent metadata.**
+Default is `mode: "generate"` — the MCP creates a fresh ed25519
+keypair locally and persists it to `~/.config/leash/agent.json`
+under `pending_register` (chmod 600). To bring your own (e.g. an
+existing `solana-keygen` keypair), pass
+`mode: "import"` + `executive_secret_base58`.
+
+While you're at it, supply the agent's public profile so it lands
+in the on-chain MPL Core metadata + the off-chain EIP-8004
+RegistrationV1 doc on the very first mint:
+
+| Arg           | Notes                                                                                                                                                                 |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | Friendly label (recorded on-chain).                                                                                                                                   |
+| `description` | Free-text description.                                                                                                                                                |
+| `image_url`   | Public URL of the agent avatar.                                                                                                                                       |
+| `services`    | EIP-8004 service entries other agents and humans use to discover the agent — `[{ name, endpoint }, …]`. **Do not** include `receipts`; the protocol auto-injects one. |
+
+These fields are persisted alongside the keypair in
+`pending_register.meta` so Step 2 picks them up automatically — you
+do not have to re-supply them after funding.
+
+```jsonc
+// Step 1 example tool call
+{
+  "name": "Plexpert",
+  "description": "Onchain accountant for indie operators.",
+  "image_url": "https://plexpert.xyz/avatar.png",
+  "services": [
+    { "name": "web", "endpoint": "https://plexpert.xyz" },
+    { "name": "api", "endpoint": "https://api.plexpert.xyz" },
+  ],
+}
+```
+
+The tool returns:
+
+```jsonc
+{
+  "kind": "register_agent",
+  "status": "funding_required",
+  "network": "solana-devnet", // or solana-mainnet, from LEASH_NETWORK
+  "executive_pubkey": "947dU4Nk8HsdkFcrVip5Zt9XLnfFF5iJSvepEArdr5Ma",
+  "required_sol": "0.01",
+  "balance_sol": "0.0",
+  "instructions": [
+    "Send at least 0.01 SOL on devnet to 947dU4Nk8...",
+    "Devnet SOL is free — request it via `solana airdrop 1 947dU4Nk8... --url https://api.devnet.solana.com`",
+    "Once funded, call `leash_register_agent` again WITH NO ARGUMENTS",
+    "...",
+  ],
+}
+```
+
+**Step 2 — fund the executive, then re-run.**
+On devnet, `solana airdrop 1 <executive_pubkey> --url https://api.devnet.solana.com`
+or any free faucet (faucet.solana.com, quicknode.com/faucet/sol)
+works. On mainnet, send SOL from any wallet you control. ~0.01 SOL
+is enough — covers the agent asset rent (~0.0034 SOL), one ATA
+creation rent (~0.00203 SOL), and tx fees with comfortable buffer.
+
+Calling `leash_register_agent` a second time (no arguments) makes
+the MCP:
+
+1. Read the persisted `pending_register` block.
+2. Re-check the executive's SOL balance via RPC.
+3. Mint the MPL Core agent asset (`createAgent`).
+4. Set unlimited USDC spend delegation from the treasury PDA to the
+   executive (`setSpendDelegation` / SPL `Approve` capped at
+   `u64::MAX`).
+5. POST `/v1/agents/record` so the Leash API has a row for receipts
+   - discovery + reputation.
+6. Promote the pending block to a full `agent.json` and hot-swap
+   the in-memory host.
+
+The result blob contains `mint`, `treasury_address`, both tx
+signatures, and the path to the persisted config. From this point
+forward the agent can pay, earn, withdraw, and be discovered just
+like one minted via the chat product.
+
+## Demo flow (90 seconds)
+
+1. Add the MCP entry to your host config and restart.
+2. Ask the agent: _"register me a Leash agent"_ → first call returns
+   `funding_required` + a printed pubkey.
+3. `solana airdrop 1 <pubkey> --url https://api.devnet.solana.com`
+   (or paste the pubkey into your devnet faucet of choice).
+4. Ask the agent again: _"continue registering my Leash agent"_ →
+   second call mints + delegates + records + hot-swaps.
+5. Ask: _"what's my balance?"_ → `leash_check_treasury_balance`.
+6. Ask: _"find me an OCR service under 10c"_ → `leash_discover`.
+7. Ask: _"pay this link"_ → `leash_pay_payment_link`. Returns a real
+   `tx_signature` + `receipt_hash` on devnet.
+8. Ask: _"withdraw 50c USDC to YOUR_WALLET_ADDRESS"_ →
+   `leash_withdraw_treasury`. Real on-chain transfer via
+   `mpl-core::Execute`.
+
+The whole demo runs against live devnet infrastructure — the only
+manual step is funding the executive in step 3.
+
+## Troubleshooting
+
+| Symptom                                                                          | Likely cause + fix                                                                                                                   |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Tools list is empty / host can't connect                                         | Wrong path or stale cache. Run `npx clear-npx-cache`, restart the host, check the host's MCP logs.                                   |
+| `leash_register_agent` returns `funding_required`                                | Expected — that's step 1. Send the printed SOL amount to the printed pubkey, then call the tool again with no args.                  |
+| `leash_register_agent` returns `error: ... not visible on RPC within 20s`        | RPC propagation. Try again in 5s — the second call resumes from `pending_register` and will pick up the just-confirmed mint.         |
+| `leash_register_agent` returns `mode: "import" requires executive_secret_base58` | You passed `mode: "import"` but no secret. Either drop `mode` (defaults to `generate`) or include the base58-encoded 64-byte secret. |
+| `leash_pay_payment_link` is slow (5–10s) or 429s                                 | You're on the public RPC. Set `LEASH_RPC_URL` to a paid endpoint — see _Bring your own RPC_ above.                                   |
+| `leash_pay_payment_link` returns `wrong_network`                                 | The link is on the other cluster. The MCP does not pay across networks — confirm the link's network and your `LEASH_NETWORK`.        |
+| `tx_signature` returned but explorer shows nothing                               | RPC propagation delay (~2-3s on devnet). Refresh in 5s.                                                                              |
+| `leash_create_payment_link` returns `error`                                      | Today this tool calls back to the API with a legacy bearer token. Set `LEASH_API_KEY` until X-Leash-Sig auth lands here.             |
+| `leash_set_spend_limit` returns `no_agent`                                       | No agent configured. Run `leash_register_agent` first.                                                                               |
+| `leash_set_spend_limit mode: "amount"` returns `error`                           | `amount` was missing or ≤ 0. Pass a positive decimal number (e.g. `amount: 100` = $100 USDC).                                        |
+| `leash_get_spend_limit` shows `delegate_matches_executive: false`                | The delegation was set by a different keypair (e.g. previously rotated). Re-run `leash_set_spend_limit` to re-write the cap.         |
+
+## Source
+
+- Code: [`packages/mcp`](https://github.com/leash-market/leash/tree/main/packages/mcp)
+- Shared tool definitions: [`packages/mcp-core`](https://github.com/leash-market/leash/tree/main/packages/mcp-core)

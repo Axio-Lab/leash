@@ -1,12 +1,12 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "name": "Leash",
-  "description": "An open rail for agents that spend on the open internet.",
+  "name": "leash · docs",
+  "description": "The operating system for agent-to-agent commerce. Built on Solana.",
   "theme": "maple",
-  "favicon": "/leash_icon.svg",
+  "favicon": "/leash-logo.png",
   "logo": {
-    "light": "/leash-wordmark-light.png",
-    "dark": "/leash-wordmark-dark.png"
+    "light": "/leash-logo.png",
+    "dark": "/leash-logo.png"
   },
   "colors": {
     "primary": "#9b8cff",
@@ -32,6 +32,10 @@
           {
             "group": "Getting started",
             "pages": ["introduction", "quickstart"]
+          },
+          {
+            "group": "Agents",
+            "pages": ["agents/mcp", "agents/cli", "agents/sdk"]
           },
           {
             "group": "Concepts",
@@ -92,6 +96,7 @@
           {
             "group": "SDK reference",
             "pages": [
+              "sdk/sdk",
               "sdk/core",
               "sdk/seller-kit",
               "sdk/buyer-kit",

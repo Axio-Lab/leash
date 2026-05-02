@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 12;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -50,6 +50,12 @@ const SCHEMA_SQL: readonly string[] = [
     last4 TEXT NOT NULL,
     hash TEXT NOT NULL UNIQUE,
     owner_wallet TEXT,
+    scopes TEXT,
+    -- AES-GCM envelope (same format as user_llm_keys.envelope) of the
+    -- plaintext key. Lets the BFF reveal the key on demand so users can
+    -- copy it later instead of only at creation time. NULL for legacy
+    -- rows minted before the v10 migration; new keys always have a value.
+    encrypted_plaintext TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     disabled_at TEXT
   )`,
@@ -90,10 +96,7 @@ const SCHEMA_SQL: readonly string[] = [
   `CREATE INDEX IF NOT EXISTS idx_events_network_ts ON events(network, ts DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_events_agent_ts ON events(agent_asset, ts DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_events_kind_ts ON events(kind, ts DESC)`,
-  // Lookup index for `(network, signature)`. NOT unique — one signature
-  // can produce multiple event rows when an `Execute` withdraws several
-  // SPL mints in a single tx (one row per mint). Cross-network
-  // isolation is preserved by including `network` in every query.
+
   `CREATE INDEX IF NOT EXISTS idx_events_network_signature ON events(network, signature) WHERE signature IS NOT NULL`,
 
   `CREATE TABLE IF NOT EXISTS receipts (
@@ -169,19 +172,38 @@ const SCHEMA_SQL: readonly string[] = [
   // sender HMAC-signs each delivery with — receivers verify it via
   // the X-Leash-Signature header. `events` is a JSON array of
   // EventKind strings; `null` / empty = subscribe to all kinds.
+  // v12: webhook subscriptions can now be keyed to either an API key
+  // (legacy / web product, every event in `network` matches) or to an
+  // agent_mint (standalone MCP/CLI authenticated via X-Leash-Sig, only
+  // events whose `agent_asset` matches `agent_mint` fan out). Exactly
+  // one of `api_key_id` / `agent_mint` is set; the CHECK constraint
+  // enforces it. The original `(api_key_id, url)` UNIQUE is preserved
+  // for legacy keys; we add a parallel `(agent_mint, url)` UNIQUE for
+  // agent-keyed rows.
   `CREATE TABLE IF NOT EXISTS webhooks (
     id TEXT PRIMARY KEY,
-    api_key_id TEXT NOT NULL,
+    api_key_id TEXT,
+    agent_mint TEXT,
     network TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
     url TEXT NOT NULL,
     secret TEXT NOT NULL,
     events_json TEXT NOT NULL DEFAULT '[]',
     disabled_at TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    CHECK (
+      (api_key_id IS NOT NULL AND agent_mint IS NULL) OR
+      (api_key_id IS NULL AND agent_mint IS NOT NULL)
+    ),
     UNIQUE (api_key_id, url),
+    UNIQUE (agent_mint, url),
     FOREIGN KEY (api_key_id) REFERENCES api_keys(id)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_webhooks_network ON webhooks(network) WHERE disabled_at IS NULL`,
+  // NOTE: `idx_webhooks_agent_mint` is created inside `migrateWebhooksAgentMint`
+  // and re-asserted unconditionally at the end of `runMigrations` so brand-new
+  // DBs (which skip the migration body) still get it. Declaring it here would
+  // race the v12 migration on existing DBs (the column doesn't exist yet at
+  // this point in the boot flow) and trip "no such column: agent_mint".
 
   // Per-delivery state with retry book-keeping. Created when an
   // event lands in webhook_deliveries_pending; the worker advances
@@ -249,6 +271,177 @@ const SCHEMA_SQL: readonly string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_payment_links_key_created ON payment_links(api_key_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_payment_links_agent ON payment_links(owner_agent)`,
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Platform layer (v6+) — Privy-backed users for agent.leash.market &
+  // leash.market, and the join table that maps a Privy user to one or
+  // more `lsh_*` API keys with scope metadata.
+  //
+  // `platform_users.privy_id` is the Privy DID returned by their JWT.
+  // `wallet` is the Solana pubkey of the user's connected (or embedded)
+  // wallet — same value we pass as `owner_wallet` when issuing keys, so
+  // analytics joins line up across platform_api_keys → api_keys.
+  `CREATE TABLE IF NOT EXISTS platform_users (
+    privy_id   TEXT PRIMARY KEY,
+    wallet     TEXT NOT NULL,
+    email      TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_platform_users_wallet ON platform_users(wallet)`,
+
+  // `scopes` is a JSON array like `["agents"]` / `["marketplace"]` /
+  // `["agents","marketplace"]`. The same `lsh_*` key can be used on
+  // both surfaces; scopes are advisory metadata for the BFF to enforce.
+  `CREATE TABLE IF NOT EXISTS platform_api_keys (
+    privy_id   TEXT NOT NULL,
+    key_id     TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    scopes     TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    PRIMARY KEY (privy_id, key_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_platform_api_keys_key ON platform_api_keys(key_id)`,
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Agents (v7) — the user-facing record of an agent created through
+  // agent.leash.market. The MPL Core asset itself is minted browser-side
+  // (Privy + Umi); this row is the platform's view: who owns it, what
+  // tools it can use, what budget it operates under, and which service
+  // key the agent-runtime worker uses to call apps/api on its behalf.
+  //
+  // `encrypted_llm_key` is AES-GCM ciphertext of the user's LLM provider
+  // key (Anthropic / OpenAI). Decrypted only inside agent-runtime.
+  // FKs to platform_users / api_keys intentionally omitted: SQLite
+  // doesn't enforce them by default, and we want admin-driven seeding
+  // (devnet, ops scripts) to work without first creating a Privy row.
+  `CREATE TABLE IF NOT EXISTS agents (
+    mint              TEXT PRIMARY KEY,
+    owner_privy_id    TEXT NOT NULL,
+    owner_wallet      TEXT NOT NULL,
+    name              TEXT NOT NULL,
+    description       TEXT,
+    image_url         TEXT,
+    network           TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    model             TEXT NOT NULL,
+    system_prompt     TEXT NOT NULL,
+    capabilities      TEXT NOT NULL DEFAULT '[]',
+    services          TEXT NOT NULL DEFAULT '[]',
+    budget_per_action TEXT NOT NULL DEFAULT '0.10',
+    budget_per_task   TEXT NOT NULL DEFAULT '1.00',
+    budget_per_day    TEXT NOT NULL DEFAULT '10.00',
+    treasury          TEXT NOT NULL,
+    service_key_id    TEXT NOT NULL,
+    encrypted_llm_key TEXT NOT NULL,
+    llm_provider      TEXT NOT NULL CHECK (llm_provider IN ('anthropic','openai','platform')),
+    status            TEXT NOT NULL DEFAULT 'active',
+    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agents_owner ON agents(owner_privy_id)`,
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Tasks (v8) — one row per "do this" the agent is given. The
+  // agent-runtime worker claims pending tasks via UPDATE WHERE status
+  // = 'pending' and runs the LLM loop until done / out_of_budget /
+  // failed.
+  `CREATE TABLE IF NOT EXISTS tasks (
+    id              TEXT PRIMARY KEY,
+    agent_mint      TEXT NOT NULL,
+    prompt          TEXT NOT NULL,
+    budget_cap      TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                      CHECK (status IN ('pending','running','done','failed','out_of_budget')),
+    spent           TEXT NOT NULL DEFAULT '0',
+    final_output    TEXT,
+    error           TEXT,
+    started_at      TEXT,
+    finished_at     TEXT,
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (agent_mint) REFERENCES agents(mint)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_tasks_agent_created ON tasks(agent_mint, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`,
+
+  // Each step inside a task: think → tool_call → payment → tool_result
+  // → done | error. Payload is JSON; cost_usdc is set on payment rows.
+  // The activity feed in the UI is live-streamed via Redis pub/sub but
+  // also persisted here so reloads can replay history.
+  `CREATE TABLE IF NOT EXISTS task_activities (
+    id           TEXT PRIMARY KEY,
+    task_id      TEXT NOT NULL,
+    type         TEXT NOT NULL,
+    payload      TEXT NOT NULL DEFAULT '{}',
+    cost_usdc    TEXT,
+    receipt_id   TEXT,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (task_id) REFERENCES tasks(id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_activities_task ON task_activities(task_id, created_at)`,
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Marketplace listings (v9) — third-party MCP servers published on
+  // leash.market. `pricing` and `tools` are JSON blobs validated at
+  // POST time. `health_status` is updated by the hourly health-check
+  // worker that pings each listing's `/.well-known/leash-mcp.json`.
+  // FK to platform_users intentionally omitted — listings can be
+  // backfilled by ops scripts or seed data before the user has logged
+  // into the BFF (which is what creates the platform_users row).
+  `CREATE TABLE IF NOT EXISTS listings (
+    id              TEXT PRIMARY KEY,
+    slug            TEXT NOT NULL UNIQUE,
+    name            TEXT NOT NULL,
+    description     TEXT NOT NULL,
+    category        TEXT NOT NULL,
+    owner_privy_id  TEXT NOT NULL,
+    owner_wallet    TEXT NOT NULL,
+    endpoint        TEXT NOT NULL,
+    pricing         TEXT NOT NULL DEFAULT '{}',
+    tools           TEXT NOT NULL DEFAULT '[]',
+    docs_url        TEXT,
+    free_tier       INTEGER NOT NULL DEFAULT 0,
+    health_status   TEXT,
+    health_checked  TEXT,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                      CHECK (status IN ('pending','approved','rejected','disabled')),
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_listings_status_created ON listings(status, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_listings_category ON listings(category)`,
+
+  `CREATE TABLE IF NOT EXISTS listing_ratings (
+    listing_id   TEXT NOT NULL,
+    privy_id     TEXT NOT NULL,
+    stars        INTEGER NOT NULL CHECK (stars BETWEEN 1 AND 5),
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    PRIMARY KEY (listing_id, privy_id)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS listing_reviews (
+    id          TEXT PRIMARY KEY,
+    listing_id  TEXT NOT NULL,
+    privy_id    TEXT NOT NULL,
+    body        TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_listing_reviews_listing ON listing_reviews(listing_id, created_at DESC)`,
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Image blobs (v11) — content-addressable image store. Used by agent
+  // creation: the user uploads a profile image, the bytes land here keyed
+  // by sha256, and the resulting `/v1/uploads/{hash}` URL is embedded in
+  // the EIP-8004 RegistrationV1 metadata document the agent mints with.
+  //
+  // We keep this table small and generic on purpose — it isn't bound to
+  // any agent row. A future cron can reap unreferenced blobs by scanning
+  // every `agents.image_url` and deleting any hash that's no longer
+  // mentioned. Bytes are stored as `data` BLOB; libsql exposes them as
+  // base64 over JSON.
+  `CREATE TABLE IF NOT EXISTS image_blobs (
+    hash       TEXT PRIMARY KEY,
+    mime       TEXT NOT NULL,
+    bytes      BLOB NOT NULL,
+    size       INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  )`,
 ];
 
 let cached: Client | null = null;
@@ -301,6 +494,49 @@ export async function runMigrations(db: Client): Promise<void> {
     await migrateApiKeysOwnerWallet(db);
   }
 
+  // v6: add `scopes` column to api_keys for surface-aware key issuance
+  // (`["agents"]`, `["marketplace"]`, etc.). The new platform_* tables
+  // are covered by `IF NOT EXISTS` in SCHEMA_SQL above; only the column
+  // add needs an explicit migration on existing DBs.
+  if (currentVersion < 6) {
+    await migrateApiKeysScopes(db);
+  }
+
+  // v10: encrypted_plaintext column on api_keys so the BFF can reveal
+  // keys after creation. Existing rows stay NULL — old keys remain
+  // hash-only and aren't recoverable; new keys mint with a value.
+  if (currentVersion < 10) {
+    await migrateApiKeysEncryptedPlaintext(db);
+  }
+
+  // v11: agent identity expansion + content-addressable image store.
+  //   - Adds `description`, `image_url`, `services` columns to `agents`.
+  //   - Widens the `llm_provider` CHECK to include `'platform'` (the
+  //     existing schema rejected the value the platform-managed flow
+  //     has been writing for months — table rebuild required because
+  //     SQLite can't ALTER a CHECK constraint).
+  //   - Creates `image_blobs` (already covered by IF NOT EXISTS in
+  //     SCHEMA_SQL above; no work needed for new DBs).
+  if (currentVersion < 11) {
+    await migrateAgentsExpansion(db);
+  }
+
+  // v12: webhooks can be keyed to an `agent_mint` instead of an
+  // `api_key_id`. Adds the column + relaxes the `api_key_id NOT NULL`
+  // constraint via table rebuild (SQLite cannot drop NOT NULL or
+  // change a CHECK in place). Idempotent.
+  if (currentVersion < 12) {
+    await migrateWebhooksAgentMint(db);
+  }
+
+  // Always-on index assertions. These run after every boot — they're
+  // cheap (`IF NOT EXISTS`) and idempotent, and they cover the case
+  // where a brand-new DB takes the latest `SCHEMA_SQL` directly and
+  // every versioned migration short-circuits.
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_webhooks_agent_mint ON webhooks(agent_mint) WHERE disabled_at IS NULL`,
+  );
+
   if (currentVersion < SCHEMA_VERSION) {
     await db.execute({
       sql: 'INSERT OR REPLACE INTO schema_version(version) VALUES(?)',
@@ -325,6 +561,142 @@ async function migrateApiKeysOwnerWallet(db: Client): Promise<void> {
   }
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_api_keys_owner_wallet ON api_keys(owner_wallet) WHERE owner_wallet IS NOT NULL`,
+  );
+}
+
+async function migrateApiKeysScopes(db: Client): Promise<void> {
+  const info = await db.execute('PRAGMA table_info(api_keys)');
+  const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
+  if (!names.has('scopes')) {
+    await db.execute('ALTER TABLE api_keys ADD COLUMN scopes TEXT');
+  }
+}
+
+async function migrateApiKeysEncryptedPlaintext(db: Client): Promise<void> {
+  const info = await db.execute('PRAGMA table_info(api_keys)');
+  const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
+  if (!names.has('encrypted_plaintext')) {
+    await db.execute('ALTER TABLE api_keys ADD COLUMN encrypted_plaintext TEXT');
+  }
+}
+
+/**
+ * v11: expand the agents row + widen the llm_provider CHECK.
+ *
+ * Adds `description`, `image_url`, and `services` (JSON array) columns
+ * via `ALTER TABLE` (cheap), then rebuilds the table to widen the
+ * `llm_provider` CHECK from `('anthropic','openai')` to also accept
+ * `'platform'` — the value the platform-managed flow has been writing.
+ * SQLite cannot alter CHECK constraints in place, so we copy through
+ * a temp table and atomically swap names.
+ */
+async function migrateAgentsExpansion(db: Client): Promise<void> {
+  const info = await db.execute('PRAGMA table_info(agents)');
+  const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
+  if (!names.has('description')) {
+    await db.execute('ALTER TABLE agents ADD COLUMN description TEXT');
+  }
+  if (!names.has('image_url')) {
+    await db.execute('ALTER TABLE agents ADD COLUMN image_url TEXT');
+  }
+  if (!names.has('services')) {
+    await db.execute(`ALTER TABLE agents ADD COLUMN services TEXT NOT NULL DEFAULT '[]'`);
+  }
+
+  // Rebuild the CHECK on llm_provider only if the current table still
+  // has the legacy 2-value constraint. We probe by trying to insert a
+  // dummy 'platform' row in a savepoint; if the existing constraint
+  // already allows it, we're done. (Cheaper than parsing sqlite_master.)
+  const probe = await db.execute(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='agents'",
+  );
+  const sql = String((probe.rows[0] as Record<string, unknown> | undefined)?.sql ?? '');
+  if (!sql.includes("'platform'") && sql.includes('llm_provider')) {
+    await db.execute('DROP TABLE IF EXISTS agents_v11_tmp');
+    await db.execute(`CREATE TABLE agents_v11_tmp (
+      mint              TEXT PRIMARY KEY,
+      owner_privy_id    TEXT NOT NULL,
+      owner_wallet      TEXT NOT NULL,
+      name              TEXT NOT NULL,
+      description       TEXT,
+      image_url         TEXT,
+      network           TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+      model             TEXT NOT NULL,
+      system_prompt     TEXT NOT NULL,
+      capabilities      TEXT NOT NULL DEFAULT '[]',
+      services          TEXT NOT NULL DEFAULT '[]',
+      budget_per_action TEXT NOT NULL DEFAULT '0.10',
+      budget_per_task   TEXT NOT NULL DEFAULT '1.00',
+      budget_per_day    TEXT NOT NULL DEFAULT '10.00',
+      treasury          TEXT NOT NULL,
+      service_key_id    TEXT NOT NULL,
+      encrypted_llm_key TEXT NOT NULL,
+      llm_provider      TEXT NOT NULL CHECK (llm_provider IN ('anthropic','openai','platform')),
+      status            TEXT NOT NULL DEFAULT 'active',
+      created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    )`);
+    await db.execute(`INSERT INTO agents_v11_tmp (
+      mint, owner_privy_id, owner_wallet, name, description, image_url,
+      network, model, system_prompt, capabilities, services,
+      budget_per_action, budget_per_task, budget_per_day,
+      treasury, service_key_id, encrypted_llm_key, llm_provider,
+      status, created_at
+    ) SELECT
+      mint, owner_privy_id, owner_wallet, name, description, image_url,
+      network, model, system_prompt, capabilities, services,
+      budget_per_action, budget_per_task, budget_per_day,
+      treasury, service_key_id, encrypted_llm_key, llm_provider,
+      status, created_at
+    FROM agents`);
+    await db.execute('DROP TABLE agents');
+    await db.execute('ALTER TABLE agents_v11_tmp RENAME TO agents');
+    await db.execute(`CREATE INDEX IF NOT EXISTS idx_agents_owner ON agents(owner_privy_id)`);
+  }
+}
+
+/**
+ * v12: relax `webhooks.api_key_id NOT NULL` and add `agent_mint` so
+ * standalone-agent webhooks (X-Leash-Sig auth) can land in the same
+ * table. SQLite can't drop NOT NULL or change a CHECK in place, so
+ * we rebuild and swap. Idempotent — the probe returns early if the
+ * table already has the agent_mint column.
+ */
+async function migrateWebhooksAgentMint(db: Client): Promise<void> {
+  const info = await db.execute('PRAGMA table_info(webhooks)');
+  const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
+  if (names.has('agent_mint')) return;
+
+  await db.execute('DROP TABLE IF EXISTS webhooks_v12_tmp');
+  await db.execute(`CREATE TABLE webhooks_v12_tmp (
+    id TEXT PRIMARY KEY,
+    api_key_id TEXT,
+    agent_mint TEXT,
+    network TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    url TEXT NOT NULL,
+    secret TEXT NOT NULL,
+    events_json TEXT NOT NULL DEFAULT '[]',
+    disabled_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    CHECK (
+      (api_key_id IS NOT NULL AND agent_mint IS NULL) OR
+      (api_key_id IS NULL AND agent_mint IS NOT NULL)
+    ),
+    UNIQUE (api_key_id, url),
+    UNIQUE (agent_mint, url),
+    FOREIGN KEY (api_key_id) REFERENCES api_keys(id)
+  )`);
+  await db.execute(`INSERT INTO webhooks_v12_tmp (
+    id, api_key_id, agent_mint, network, url, secret, events_json, disabled_at, created_at
+  ) SELECT
+    id, api_key_id, NULL, network, url, secret, events_json, disabled_at, created_at
+  FROM webhooks`);
+  await db.execute('DROP TABLE webhooks');
+  await db.execute('ALTER TABLE webhooks_v12_tmp RENAME TO webhooks');
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_webhooks_network ON webhooks(network) WHERE disabled_at IS NULL`,
+  );
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_webhooks_agent_mint ON webhooks(agent_mint) WHERE disabled_at IS NULL`,
   );
 }
 

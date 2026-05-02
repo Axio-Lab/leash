@@ -24,11 +24,12 @@ FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
-    PORT=3000
+    PORT=3100
 
 COPY --from=build /app/apps/explorer/.next/standalone ./
 COPY --from=build /app/apps/explorer/.next/static ./apps/explorer/.next/static
 COPY --from=build /app/apps/explorer/public ./apps/explorer/public
 
-EXPOSE 3000
-CMD ["node", "apps/explorer/server.js"]
+EXPOSE 3100
+# Railway injects `PORT`; honour it if set so the platform can assign its own port.
+CMD ["sh", "-c", "PORT=${PORT:-3100} node apps/explorer/server.js"]

@@ -275,6 +275,55 @@ export async function listProtocolFeeTotals(network: Network): Promise<ProtocolF
 }
 
 /**
+ * All-time stablecoin settlement totals for a network.
+ *
+ * Sums `price.amount` and `price.fee` from every `earn` receipt
+ * (so each x402 settlement counts once — every settlement creates
+ * paired earn + spend receipts). Stables are USDC/USDG/USDT, all
+ * 6-decimals 1:1-to-USD, so the SQL can sum atomic ints and the
+ * caller divides by 1e6 to get USD without per-mint arithmetic.
+ *
+ * The receipts table stores the canonical `ReceiptV1` payload as
+ * `raw_json`, so we extract the relevant scalars via `json_extract`.
+ * Receipts that lack a `price.amount` (rare — e.g. legacy denied
+ * rows) are simply skipped via the `WHERE` clause.
+ */
+export type SettlementTotals = {
+  /** USD-equivalent gross volume (sum of `price.amount`), human units. */
+  gross_usd: number;
+  /** USD-equivalent protocol fees collected (sum of `price.fee`). */
+  fees_usd: number;
+  /** Number of distinct earn receipts that contributed to the totals. */
+  settled_count: number;
+};
+
+const STABLE_DECIMALS = 6;
+
+export async function getSettlementTotals(network: Network): Promise<SettlementTotals> {
+  const row = await withDb(async (db) => {
+    const sql = `SELECT
+        COALESCE(SUM(CAST(json_extract(raw_json, '$.price.amount') AS INTEGER)), 0) AS gross_atomic,
+        COALESCE(SUM(CAST(json_extract(raw_json, '$.price.fee') AS INTEGER)), 0)    AS fee_atomic,
+        COUNT(*) AS n
+       FROM receipts
+       WHERE network = ?
+         AND kind = 'earn'
+         AND json_extract(raw_json, '$.price.amount') IS NOT NULL`;
+    const res = await db.execute({ sql, args: [networkToSlug(network)] });
+    return res.rows[0] ?? null;
+  });
+  if (!row) return { gross_usd: 0, fees_usd: 0, settled_count: 0 };
+  const grossAtomic = Number(row.gross_atomic ?? 0);
+  const feeAtomic = Number(row.fee_atomic ?? 0);
+  const divisor = 10 ** STABLE_DECIMALS;
+  return {
+    gross_usd: grossAtomic / divisor,
+    fees_usd: feeAtomic / divisor,
+    settled_count: Number(row.n ?? 0),
+  };
+}
+
+/**
  * For each `tx_sig`, return the (payer, receiver) agent pair derived
  * from the receipts table — buyer-side `spend` receipts give us the
  * payer, seller-side `earn` receipts give us the receiver. When only

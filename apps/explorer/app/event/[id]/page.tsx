@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ExternalLink } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Activity } from 'lucide-react';
 import { DbUnavailableError, getEventById } from '@/lib/db';
 import { probeEventOnOtherNetwork } from '@/lib/cross-network';
 import type { EventRow } from '@/lib/types';
@@ -13,6 +13,7 @@ import { NoRecordFound, WrongNetworkNotice } from '@/components/wrong-network-no
 import { solscanTxUrl, solscanAddrUrl } from '@/lib/solscan';
 import { formatTs, formatRelative } from '@/lib/format';
 import { formatTokenAmount, tokenInfoFor } from '@/lib/token-info';
+import { cn } from '@/lib/cn';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,29 +54,34 @@ export default async function EventPage({ params }: Props) {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
-          Event · {networkToSlug(network)}
-        </p>
-        <h1 className="break-all font-mono text-2xl font-semibold tracking-tight">{id}</h1>
-        <div className="flex flex-wrap items-center gap-3">
+      <header className="card-glow space-y-4 px-6 py-6 sm:px-8 sm:py-7">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[--color-fg-muted] backdrop-blur-md">
+            <Activity className="h-3 w-3 text-[--color-brand]" />
+            Event · {networkToSlug(network)}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <EventBadge descriptor={desc} />
           <PhaseBadge phase={row.phase} />
           <span className="text-xs text-[--color-fg-muted]">
             {formatTs(row.ts)} · {formatRelative(row.ts)}
           </span>
         </div>
-        <p className="text-sm text-[--color-fg-muted]">{desc.description(row)}</p>
+        <h1 className="break-all font-mono text-xl tracking-tight text-[--color-fg] sm:text-2xl">
+          {id}
+        </h1>
+        <p className="text-sm leading-relaxed text-[--color-fg-muted]">{desc.description(row)}</p>
       </header>
 
-      <section className="card px-5 py-4">
-        <h2 className="mb-3 text-sm font-semibold">Lifecycle</h2>
+      <section className="card px-5 py-4 sm:px-6 sm:py-5">
+        <h2 className="mb-4 text-sm font-semibold tracking-tight">Lifecycle</h2>
         <Timeline row={row} />
       </section>
 
-      <section className="card px-5 py-4">
-        <h2 className="mb-3 text-sm font-semibold">Details</h2>
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
+      <section className="card px-5 py-4 sm:px-6 sm:py-5">
+        <h2 className="mb-4 text-sm font-semibold tracking-tight">Details</h2>
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-3 text-xs sm:grid-cols-2">
           <Field label="Kind">{row.kind}</Field>
           <Field
             label="Status"
@@ -107,7 +113,9 @@ export default async function EventPage({ params }: Props) {
               label="Amount"
               hint={`Raw on-chain integer (atoms): ${row.amount_atomic}. Human value uses the mint's decimals.`}
             >
-              {formatTokenAmount(row.amount_atomic, tokenInfoFor(network, row.mint))}
+              <span className="font-mono text-sm text-[--color-fg]">
+                {formatTokenAmount(row.amount_atomic, tokenInfoFor(network, row.mint))}
+              </span>
             </Field>
           ) : null}
           {row.client_reference ? <Field label="Client ref">{row.client_reference}</Field> : null}
@@ -117,26 +125,41 @@ export default async function EventPage({ params }: Props) {
       </section>
 
       {Object.keys(row.metadata ?? {}).length > 0 ? (
-        <section className="card px-5 py-4">
-          <h2 className="mb-3 text-sm font-semibold">Metadata</h2>
-          <pre className="overflow-x-auto rounded-md bg-[oklch(0.18_0.02_280)] p-3 font-mono text-[11px] leading-relaxed">
+        <section className="card px-5 py-4 sm:px-6 sm:py-5">
+          <h2 className="mb-3 text-sm font-semibold tracking-tight">Metadata</h2>
+          <pre className="overflow-x-auto rounded-lg border border-[--color-border] bg-[--color-bg]/60 p-4 font-mono text-[11px] leading-relaxed text-[--color-fg]">
             {JSON.stringify(row.metadata, null, 2)}
           </pre>
         </section>
       ) : null}
 
-      {row.signature ? (
+      <div className="flex flex-wrap items-center gap-3">
         <Link
-          href={`/tx/${row.signature}`}
-          className="inline-flex items-center gap-1 text-xs text-[--color-brand] hover:text-[--color-brand-strong]"
+          href="/events"
+          className="group inline-flex items-center gap-1.5 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1.5 text-xs text-[--color-fg-muted] backdrop-blur-md transition-all hover:border-[--color-border-strong] hover:text-[--color-fg]"
         >
-          See full transaction <ExternalLink className="h-3 w-3" />
+          <ArrowLeft className="h-3 w-3 transition-transform group-hover:-translate-x-0.5" />
+          Back to events
         </Link>
-      ) : null}
+        {row.signature ? (
+          <Link
+            href={`/tx/${row.signature}`}
+            className="group inline-flex items-center gap-1.5 rounded-full border border-[--color-border] bg-[--color-brand-soft]/40 px-3 py-1.5 text-xs text-[--color-fg] backdrop-blur-md transition-all hover:border-[--color-brand-strong] hover:bg-[--color-brand-soft]"
+          >
+            See full transaction
+            <ExternalLink className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        ) : null}
+      </div>
     </div>
   );
 }
 
+/**
+ * Vertical timeline: prepared → submitted → confirmed (or → failed).
+ * Brighter rail segments connect "reached" steps; the active step gets
+ * a pulsing dot to anchor the user's eye.
+ */
 function Timeline({ row }: { row: EventRow }) {
   const phases = (
     [
@@ -148,8 +171,8 @@ function Timeline({ row }: { row: EventRow }) {
   ).filter((p) => (p.key === 'failed' ? row.failed_at != null : true));
 
   return (
-    <ol className="space-y-2">
-      {phases.map((p) => {
+    <ol className="relative space-y-3">
+      {phases.map((p, idx) => {
         const isCurrent = p.key === row.phase;
         const reached =
           row.phase === 'failed'
@@ -157,18 +180,51 @@ function Timeline({ row }: { row: EventRow }) {
             : ['prepared', 'submitted', 'confirmed'].indexOf(p.key) <=
               ['prepared', 'submitted', 'confirmed'].indexOf(row.phase as 'prepared');
         return (
-          <li key={p.key} className="flex items-center gap-3 text-xs">
-            <span
-              className={`inline-block h-2 w-2 rounded-full ${
-                isCurrent
-                  ? 'bg-[--color-brand]'
-                  : reached
-                    ? 'bg-[--color-success]'
-                    : 'bg-[--color-border-strong]'
-              }`}
-            />
-            <span className="font-medium text-[--color-fg]">{p.label}</span>
-            <span className="ml-auto text-[--color-fg-muted]">{p.ts ? formatTs(p.ts) : '—'}</span>
+          <li
+            key={p.key}
+            className={cn(
+              'relative flex items-center gap-3 rounded-lg border border-[--color-border] bg-[--color-bg-elev-2]/40 px-3 py-2.5 backdrop-blur-md transition-colors',
+              isCurrent && 'border-[--color-brand-soft]/70 bg-[--color-brand-soft]/15',
+            )}
+          >
+            <span className="relative inline-flex h-2 w-2 shrink-0 items-center justify-center">
+              <span
+                className={cn(
+                  'inline-block h-2 w-2 rounded-full',
+                  isCurrent
+                    ? p.key === 'failed'
+                      ? 'bg-[--color-danger] shadow-[0_0_8px_oklch(0.7_0.22_25/0.6)]'
+                      : 'bg-[--color-brand] shadow-[0_0_8px_oklch(0.66_0.19_268/0.6)]'
+                    : reached
+                      ? 'bg-[--color-success]'
+                      : 'bg-[--color-border-strong]',
+                )}
+              />
+              {isCurrent ? (
+                <span
+                  className={cn(
+                    'absolute inset-0 inline-block h-2 w-2 rounded-full opacity-50 motion-safe:animate-ping',
+                    p.key === 'failed' ? 'bg-[--color-danger]' : 'bg-[--color-brand]',
+                  )}
+                  aria-hidden="true"
+                />
+              ) : null}
+            </span>
+            <span className="text-xs font-medium text-[--color-fg]">{p.label}</span>
+            <span className="ml-auto font-mono text-[11px] text-[--color-fg-muted]">
+              {p.ts ? formatTs(p.ts) : '—'}
+            </span>
+            {idx < phases.length - 1 ? (
+              <span
+                className={cn(
+                  'absolute left-[1.625rem] top-full block h-3 w-px',
+                  reached
+                    ? 'bg-gradient-to-b from-[--color-success]/60 to-transparent'
+                    : 'bg-[--color-border]',
+                )}
+                aria-hidden="true"
+              />
+            ) : null}
           </li>
         );
       })}
@@ -190,7 +246,7 @@ function NotFoundShell({
   return (
     <div className="space-y-6">
       <header className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
+        <p className="inline-flex items-center gap-2 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[--color-fg-muted] backdrop-blur-md">
           {title} · {networkToSlug(network)}
         </p>
         <h1 className="break-all font-mono text-2xl font-semibold tracking-tight">{identifier}</h1>
@@ -210,15 +266,15 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-baseline gap-3">
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
       <dt
-        className="w-28 shrink-0 text-[10px] uppercase tracking-wider text-[--color-fg-subtle]"
+        className="text-[10px] uppercase tracking-wider text-[--color-fg-subtle] sm:w-32 sm:shrink-0"
         title={hint}
       >
         {label}
         {hint ? <span className="ml-1 cursor-help text-[--color-fg-muted]">ⓘ</span> : null}
       </dt>
-      <dd className="font-mono text-xs text-[--color-fg]">{children}</dd>
+      <dd className="min-w-0 break-all font-mono text-xs text-[--color-fg]">{children}</dd>
     </div>
   );
 }

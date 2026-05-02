@@ -21,8 +21,8 @@ export function CopyButton({ value, label = 'Copy' }: { value: string; label?: s
         void navigator.clipboard.writeText(value).then(() => setCopied(true));
       }}
       className={cn(
-        'inline-flex items-center justify-center rounded-md border border-[--color-border] bg-[--color-bg-elev] p-1 text-[--color-fg-muted] hover:text-[--color-fg] transition-colors',
-        copied && 'text-[--color-success] border-[--color-success]',
+        'inline-flex h-6 w-6 items-center justify-center rounded-md border border-[--color-border] bg-[--color-bg-elev]/60 p-1 text-[--color-fg-muted] backdrop-blur-md transition-all hover:border-[--color-border-strong] hover:bg-[--color-bg-elev-2]/80 hover:text-[--color-fg]',
+        copied && 'border-[--color-success] text-[--color-success]',
       )}
     >
       {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}

@@ -19,6 +19,7 @@ import type { AuthVariables } from './auth/types.js';
 import { ApiError, internal, jsonError } from './util/errors.js';
 import { mountOpenApi } from './openapi/doc.js';
 import { buildHealthRoutes } from './routes/health.js';
+import { buildStatsRoutes } from './routes/stats.js';
 import { buildIdentityRoutes } from './routes/identity.js';
 import { buildExecutiveRoutes } from './routes/executive.js';
 import { buildDelegationRoutes } from './routes/delegation.js';
@@ -32,10 +33,17 @@ import { buildIndexerRoutes } from './routes/indexer.js';
 import { buildWebhookRoutes } from './routes/webhooks.js';
 import { buildMetricsRoutes } from './routes/metrics.js';
 import { buildAdminRoutes } from './routes/admin.js';
+import { buildMarketplaceRoutes } from './routes/marketplace.js';
+import { buildPlatformAgentRoutes } from './routes/platform-agents.js';
+import { buildPlatformTaskRoutes } from './routes/platform-tasks.js';
+import { buildAgentSelfRegisterRoutes } from './routes/agent-self-register.js';
+import { buildDiscoverReputationRoutes } from './routes/discover-reputation.js';
+import { buildAgentWebhookRoutes } from './routes/agent-webhooks.js';
 import { buildPaymentLinkRoutes } from './routes/payment-links.js';
 import { buildPaywallRoutes } from './routes/paywall.js';
 import { buildSellerUtilsRoutes } from './routes/seller-utils.js';
 import { buildBuyerRoutes } from './routes/buyer.js';
+import { buildPublicUploadRoutes, buildUploadRoutes } from './routes/uploads.js';
 
 export type CreateLeashApiArgs = AuthDeps;
 
@@ -54,6 +62,7 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   // Swagger UI) BEFORE the authed sub-app so its catch-all auth
   // middleware doesn't shadow the public surface.
   app.route('/', buildHealthRoutes());
+  app.route('/', buildStatsRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   mountOpenApi(app, deps.config);
 
   // Admin routes use their own secret-based auth. They're always
@@ -62,6 +71,31 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   // Mounted BEFORE the user-key sub-app so its API key middleware
   // doesn't intercept admin requests.
   app.route('/', buildAdminRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
+  app.route('/', buildPlatformAgentRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
+  app.route('/', buildPlatformTaskRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
+  // Public agent-onboarding routes — `/v1/agents/self-register`,
+  // `/v1/sandbox/agent`, `/v1/agents/self-register/info`. Mounted before
+  // the authed sub-app so the faucet doesn't sit behind an API key.
+  app.route(
+    '/',
+    buildAgentSelfRegisterRoutes({ config: deps.config, db: deps.db, cache: deps.cache }),
+  );
+  app.route('/', buildMarketplaceRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
+  // Public discover + reputation. Mounted before the authed sub-app so
+  // `/v1/discover` and `/v1/agents/:mint/reputation` are reachable without
+  // an API key — these are the agent equivalent of "google a service before
+  // paying it" and must work for any caller (MCP host, CLI, indexer).
+  app.route(
+    '/',
+    buildDiscoverReputationRoutes({ config: deps.config, db: deps.db, cache: deps.cache }),
+  );
+  // Agent-keyed webhooks. Mounted before the authed sub-app because
+  // the auth model is `X-Leash-Sig` (executive-keypair signature),
+  // not the platform API key — standalone-MCP / CLI agents don't have
+  // an API key. The route module installs `onChainAuth` itself.
+  app.route('/', buildAgentWebhookRoutes({ config: deps.config, db: deps.db }));
+  app.route('/', buildUploadRoutes({ config: deps.config, db: deps.db }));
+  app.route('/', buildPublicUploadRoutes({ config: deps.config, db: deps.db }));
 
   // Public x402 paywall (`GET/POST /x/{id}`). Anonymous buyers must
   // be able to reach this without an API key, so it's mounted BEFORE

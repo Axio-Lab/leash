@@ -673,7 +673,12 @@ export function buildDiscoveryView(
   const payTo = String(signer);
   const networkCaip2 = networkToCaip2(network);
   const facilitator = facilitatorForNetwork(config, network);
-  const shareUrl = `${config.publicOrigin.replace(/\/+$/, '')}/x/${args.id}`;
+  // Self-describing share URL: include `?network=<svm>` so a buyer who
+  // shares the link without any context still hits the right paywall.
+  // The paywall route also falls back to whichever network the slug
+  // actually exists on, but baking the query in keeps things explicit
+  // and makes the URL safe to embed in QR codes / receipts.
+  const shareUrl = `${config.publicOrigin.replace(/\/+$/, '')}/x/${args.id}?network=${network}`;
 
   // Stamp every advertised entry with the same Leash fee block. Bps +
   // authority are constant per network — only the destination ATA

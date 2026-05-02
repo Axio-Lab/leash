@@ -1,3 +1,4 @@
+import { Activity } from 'lucide-react';
 import { DbUnavailableError, getIndexerStatus } from '@/lib/db';
 import type { IndexerStatus } from '@/lib/types';
 import type { Network } from '@/lib/network';
@@ -23,9 +24,12 @@ export default async function HealthPage() {
   return (
     <div className="space-y-8">
       <header className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">Operational</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Indexer status</h1>
-        <p className="text-sm text-[--color-fg-muted]">
+        <p className="inline-flex items-center gap-2 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[--color-fg-muted] backdrop-blur-md">
+          <span className="h-1.5 w-1.5 rounded-full bg-[--color-success] motion-safe:animate-pulse" />
+          Operational
+        </p>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Indexer status</h1>
+        <p className="max-w-2xl text-sm leading-relaxed text-[--color-fg-muted]">
           Per-network freshness for the chain indexer behind explorer.leash.market.
         </p>
       </header>
@@ -40,19 +44,27 @@ export default async function HealthPage() {
 function NetworkCard({ network, res }: { network: Network; res: Result }) {
   if (!res.ok) {
     return (
-      <div className="card px-5 py-4">
-        <h2 className="text-sm font-semibold capitalize">{network}</h2>
-        <DbUnreachable network={network} message={res.message} />
+      <div className="card-glow px-5 py-4">
+        <h2 className="text-sm font-semibold capitalize tracking-tight">{network}</h2>
+        <div className="mt-3">
+          <DbUnreachable network={network} message={res.message} />
+        </div>
       </div>
     );
   }
   return (
-    <div className="card px-5 py-4">
-      <h2 className="text-sm font-semibold capitalize">{network}</h2>
+    <div className="card-glow px-5 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold capitalize tracking-tight">{network}</h2>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[--color-success]/40 bg-[oklch(0.30_0.16_150/0.4)] px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[--color-success]">
+          <Activity className="h-3 w-3" />
+          live
+        </span>
+      </div>
       <p className="mt-1 text-xs text-[--color-fg-muted]">
         Last tick: {formatRelative(res.data.cursors.last_run_at)}
       </p>
-      <dl className="mt-3 grid grid-cols-2 gap-y-1.5 text-xs">
+      <dl className="mt-4 grid grid-cols-2 gap-y-2 text-xs">
         <Row label="Watchlist">{res.data.watchlist_size.toLocaleString()}</Row>
         <Row label="Cursors">{res.data.cursors.total.toLocaleString()}</Row>
         {Object.entries(res.data.events_last_hour).map(([k, n]) => (

@@ -1,6 +1,6 @@
 # Leash
 
-> Stablecoin rails for autonomous agents. Built on Solana.
+> The operating system for agent-to-agent commerce. Built on Solana.
 > Leash gives every agent a wallet (an MPL Core asset with an Asset Signer
 > PDA treasury), a capped spend allowance you control, real x402 settlement
 > in SPL stables (USDC, USDT, USDG), and a hash-chained `ReceiptV1` audit log
@@ -18,6 +18,12 @@
 
 - [Introduction](https://docs.leash.market/introduction.md): What Leash is, what ships, how the pieces fit together.
 - [Quickstart](https://docs.leash.market/quickstart.md): Bring up the Leash split or merged stack locally in five minutes.
+
+## Agents (drop Leash into your AI host)
+
+- [Standalone MCP server](https://docs.leash.market/agents/mcp.md): `npx -y @leash/mcp` — Cursor / Claude Desktop / Cline / Continue / ChatGPT-MCP wiring, 11 canonical tools (`leash_register_agent`, `leash_pay_payment_link`, `leash_set_spend_limit`, `leash_discover`, …), STDIO transport.
+- [Human CLI — `leash`](https://docs.leash.market/agents/cli.md): `npm install -g @leash/cli` — terminal-driven agent ops sharing the same `agent.json` as the MCP.
+- [TypeScript SDK — `@leash/sdk`](https://docs.leash.market/agents/sdk.md): Typed `LeashClient` for app developers. Browser/Bun/Deno/Node friendly; X-Leash-Sig auth for agent-scoped endpoints.
 
 ## Concepts (read first)
 

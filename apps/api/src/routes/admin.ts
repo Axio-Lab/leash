@@ -27,11 +27,14 @@ import {
   getApiKeyById,
   listApiKeys,
   normalizeOwnerWallet,
+  revealApiKeyPlaintext,
 } from '../storage/api-keys.js';
 import type { DbClient } from '../storage/turso.js';
 import { invalidRequest, notFound } from '../util/errors.js';
 
 const NetworkSchema = z.enum(['solana-devnet', 'solana-mainnet']);
+
+const ScopeSchema = z.enum(['agents', 'marketplace', 'admin']);
 
 const ApiKeyRecordSchema = z
   .object({
@@ -43,6 +46,10 @@ const ApiKeyRecordSchema = z
     owner_wallet: z.string().nullable().openapi({
       description:
         'Solana wallet (base58) this key is attributed to; null for keys created before owner tracking or bootstrap keys.',
+    }),
+    scopes: z.array(ScopeSchema).nullable().openapi({
+      description:
+        'Surface scopes for platform-issued keys (agents, marketplace, admin). null for legacy / unrestricted keys.',
     }),
     created_at: z.string(),
     disabled_at: z.string().nullable(),
@@ -57,6 +64,10 @@ const CreateApiKeyBody = z
       description:
         'Solana wallet (base58) of the customer who owns this key — required on every new issuance.',
     }),
+    scopes: z.array(ScopeSchema).optional().openapi({
+      description:
+        'Optional surface scopes (`agents`, `marketplace`, `admin`). Omit for unrestricted keys.',
+    }),
   })
   .openapi('AdminCreateApiKeyBody');
 
@@ -69,6 +80,15 @@ const CreateApiKeyResponse = z
   })
   .openapi('AdminCreateApiKeyResponse');
 
+type AdminApiScope = z.infer<typeof ScopeSchema>;
+
+function narrowScopes(scopes: string[] | null): AdminApiScope[] | null {
+  if (scopes == null) return null;
+  const allowed: AdminApiScope[] = ['agents', 'marketplace', 'admin'];
+  const filtered = scopes.filter((s): s is AdminApiScope => (allowed as string[]).includes(s));
+  return filtered;
+}
+
 function recordToWire(r: Awaited<ReturnType<typeof getApiKeyById>>) {
   if (!r) return null;
   return {
@@ -78,6 +98,7 @@ function recordToWire(r: Awaited<ReturnType<typeof getApiKeyById>>) {
     prefix: r.prefix,
     last4: r.last4,
     owner_wallet: r.ownerWallet,
+    scopes: narrowScopes(r.scopes),
     created_at: r.createdAt,
     disabled_at: r.disabledAt,
   };
@@ -132,6 +153,8 @@ export function buildAdminRoutes(deps: AdminDeps): OpenAPIHono {
           label: body.label,
           network: body.network,
           ownerWallet,
+          ...(body.scopes && body.scopes.length > 0 ? { scopes: body.scopes } : {}),
+          ...(deps.config.encryptionKey ? { encryptionKey: deps.config.encryptionKey } : {}),
         });
       } catch (err) {
         throw invalidRequest((err as Error).message);
@@ -231,6 +254,61 @@ export function buildAdminRoutes(deps: AdminDeps): OpenAPIHono {
       await markKeyRevoked(deps.cache, id);
       const after = await getApiKeyById(deps.db, id);
       return c.json({ key: recordToWire(after)! }, 200);
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/v1/admin/api-keys/{id}/reveal',
+      tags: ['admin'],
+      summary: 'Reveal the plaintext value of a previously-issued key',
+      description:
+        'Returns the AES-GCM-decrypted plaintext for an api key. Only available for keys created on schema v10+ (rows minted earlier are hash-only).',
+      security: [{ AdminSecret: [] }],
+      request: {
+        params: z.object({ id: z.string().min(1) }),
+      },
+      responses: {
+        200: {
+          description: 'Decrypted key.',
+          content: {
+            'application/json': {
+              schema: z.object({
+                plaintext: z.string(),
+              }),
+            },
+          },
+        },
+        401: {
+          description: 'Missing or invalid admin secret',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+        404: {
+          description: 'No such key',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+        409: {
+          description:
+            'Key cannot be revealed (legacy hash-only row, or server is missing ENCRYPTION_KEY).',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const { id } = c.req.valid('param');
+      const existing = await getApiKeyById(deps.db, id);
+      if (!existing) throw notFound('api key not found');
+      if (!deps.config.encryptionKey) {
+        throw invalidRequest('ENCRYPTION_KEY is not configured on the server');
+      }
+      const plaintext = revealApiKeyPlaintext(existing, deps.config.encryptionKey);
+      if (!plaintext) {
+        throw invalidRequest(
+          'this key was issued before encrypted-at-rest plaintext was supported and cannot be revealed; revoke and re-issue a fresh key.',
+        );
+      }
+      return c.json({ plaintext }, 200);
     },
   );
 

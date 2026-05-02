@@ -75,12 +75,26 @@ describe('GET /x/{id} routing', () => {
     expect(body.error).toBe('not_found');
   });
 
-  it('returns 404 with a wrong-network hint when slug is on the sibling network', async () => {
+  it('falls back to the sibling network when no `?network=` is supplied', async () => {
     const rig = await createTestRig();
     const created = await createLink(rig, defaultLinkBody({ id: 'devnet-only' }));
-    // Default network is mainnet → looking up the devnet slug there
-    // should redirect via the friendly wrong_network message.
+    // Visiting the bare slug used to 404 with a "wrong_network" hint.
+    // It now transparently resolves to whichever network owns the slug
+    // and forwards to the seller-kit middleware. The middleware itself
+    // 500s in unit tests (facilitator is unreachable), so what we
+    // assert is that we got PAST the routing layer — i.e. neither
+    // `not_found` nor `wrong_network` is returned.
     const res = await publicFetch(rig, `/x/${created.id}`);
+    expect([404]).not.toContain(res.status);
+    // call_count must bump because routing succeeded
+    const row = await getPaymentLink(rig.db, 'solana-devnet', created.id);
+    expect(row?.callCount).toBe(1);
+  });
+
+  it('still surfaces wrong_network when an explicit `?network=` mismatches', async () => {
+    const rig = await createTestRig();
+    const created = await createLink(rig, defaultLinkBody({ id: 'devnet-explicit' }));
+    const res = await publicFetch(rig, `/x/${created.id}?network=solana-mainnet`);
     expect(res.status).toBe(404);
     const body = (await res.json()) as { error: string; message: string };
     expect(body.error).toBe('wrong_network');

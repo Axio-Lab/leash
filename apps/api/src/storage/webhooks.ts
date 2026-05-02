@@ -26,7 +26,13 @@ import type { EventKind, EventRow } from './events.js';
 
 export type WebhookRow = {
   id: string;
-  apiKeyId: string;
+  /**
+   * Owner key. Mutually exclusive: a row is either keyed to an API
+   * key (legacy / web product) or to an agent_mint (standalone MCP /
+   * CLI authenticated via X-Leash-Sig).
+   */
+  apiKeyId: string | null;
+  agentMint: string | null;
   network: SvmNetwork;
   url: string;
   secret: string;
@@ -37,6 +43,13 @@ export type WebhookRow = {
 
 export type CreateWebhookInput = {
   apiKeyId: string;
+  network: SvmNetwork;
+  url: string;
+  events?: EventKind[];
+};
+
+export type CreateAgentWebhookInput = {
+  agentMint: string;
   network: SvmNetwork;
   url: string;
   events?: EventKind[];
@@ -53,8 +66,8 @@ export async function createWebhook(db: DbClient, input: CreateWebhookInput): Pr
   const eventsJson = JSON.stringify(input.events ?? []);
   await execute(
     db,
-    `INSERT INTO webhooks (id, api_key_id, network, url, secret, events_json)
-       VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO webhooks (id, api_key_id, agent_mint, network, url, secret, events_json)
+       VALUES (?, ?, NULL, ?, ?, ?, ?)
        ON CONFLICT(api_key_id, url) DO UPDATE SET
          events_json = excluded.events_json,
          disabled_at = NULL`,
@@ -65,6 +78,59 @@ export async function createWebhook(db: DbClient, input: CreateWebhookInput): Pr
   const row = await getWebhookByUrl(db, input.apiKeyId, input.url);
   if (!row) throw new Error('webhook insert succeeded but lookup failed');
   return row;
+}
+
+/**
+ * Agent-keyed companion to `createWebhook`. Used by the standalone
+ * MCP / CLI flow where the caller authenticates with an X-Leash-Sig
+ * header derived from their executive keypair instead of an API key.
+ *
+ * `(agent_mint, url)` is UNIQUE so re-issuing is a no-op upsert that
+ * preserves the original `id` + `secret` (matching the legacy
+ * `(api_key_id, url)` semantics).
+ */
+export async function createAgentWebhook(
+  db: DbClient,
+  input: CreateAgentWebhookInput,
+): Promise<WebhookRow> {
+  const id = ulid();
+  const secret = generateSecret();
+  const eventsJson = JSON.stringify(input.events ?? []);
+  await execute(
+    db,
+    `INSERT INTO webhooks (id, api_key_id, agent_mint, network, url, secret, events_json)
+       VALUES (?, NULL, ?, ?, ?, ?, ?)
+       ON CONFLICT(agent_mint, url) DO UPDATE SET
+         events_json = excluded.events_json,
+         disabled_at = NULL`,
+    [id, input.agentMint, input.network, input.url, secret, eventsJson],
+  );
+  const row = await getAgentWebhookByUrl(db, input.agentMint, input.url);
+  if (!row) throw new Error('agent webhook insert succeeded but lookup failed');
+  return row;
+}
+
+export async function listAgentWebhooks(db: DbClient, agentMint: string): Promise<WebhookRow[]> {
+  const res = await execute(
+    db,
+    `SELECT * FROM webhooks WHERE agent_mint = ? ORDER BY created_at DESC`,
+    [agentMint],
+  );
+  return res.rows.map(rowToWebhook);
+}
+
+export async function getAgentWebhookByUrl(
+  db: DbClient,
+  agentMint: string,
+  url: string,
+): Promise<WebhookRow | null> {
+  const res = await execute(db, `SELECT * FROM webhooks WHERE agent_mint = ? AND url = ? LIMIT 1`, [
+    agentMint,
+    url,
+  ]);
+  const row = res.rows[0];
+  if (!row) return null;
+  return rowToWebhook(row);
 }
 
 export async function listWebhooks(db: DbClient, apiKeyId: string): Promise<WebhookRow[]> {
@@ -95,6 +161,32 @@ export async function getWebhookByUrl(
   const row = res.rows[0];
   if (!row) return null;
   return rowToWebhook(row);
+}
+
+/**
+ * Find every active subscription that should receive an event. The
+ * legacy api-key rows match on `network` only; the new agent-keyed
+ * rows additionally require `agent_mint == event.agent_asset` so an
+ * agent only sees its own activity. Wildcard subs (empty events
+ * array) match every kind on their network.
+ */
+export async function listMatchingWebhooksScoped(
+  db: DbClient,
+  args: { network: SvmNetwork; kind: EventKind; agentAsset: string | null },
+): Promise<WebhookRow[]> {
+  const res = await execute(
+    db,
+    `SELECT * FROM webhooks
+       WHERE network = ? AND disabled_at IS NULL
+         AND (
+           api_key_id IS NOT NULL
+           OR (agent_mint IS NOT NULL AND agent_mint = ?)
+         )`,
+    [args.network, args.agentAsset ?? '__no_agent__'],
+  );
+  return res.rows
+    .map(rowToWebhook)
+    .filter((w) => w.events.length === 0 || w.events.includes(args.kind));
 }
 
 export async function disableWebhook(db: DbClient, id: string): Promise<void> {
@@ -151,7 +243,11 @@ export async function enqueueDeliveriesForEvent(
   db: DbClient,
   event: EventRow,
 ): Promise<{ created: number }> {
-  const subs = await listMatchingWebhooks(db, event.network, event.kind);
+  const subs = await listMatchingWebhooksScoped(db, {
+    network: event.network,
+    kind: event.kind,
+    agentAsset: event.agentAsset,
+  });
   if (subs.length === 0) return { created: 0 };
   const payload = buildEventPayload(event);
   const payloadJson = JSON.stringify(payload);
@@ -280,7 +376,8 @@ function rowToWebhook(row: Record<string, unknown>): WebhookRow {
   }
   return {
     id: String(row.id),
-    apiKeyId: String(row.api_key_id),
+    apiKeyId: row.api_key_id != null ? String(row.api_key_id) : null,
+    agentMint: row.agent_mint != null ? String(row.agent_mint) : null,
     network,
     url: String(row.url),
     secret: String(row.secret),

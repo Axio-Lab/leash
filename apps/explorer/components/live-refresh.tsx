@@ -188,14 +188,28 @@ export function LiveRefresh({ network, intervalSec = 5, label = 'live' }: Props)
   }
 
   return (
-    <span className="inline-flex items-center gap-2 text-xs text-[--color-fg-muted]">
-      <span className={cn('inline-block h-1.5 w-1.5 rounded-full', dotClass)} aria-hidden="true" />
+    <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-2.5 py-1 text-xs text-[--color-fg-muted] backdrop-blur-md">
+      <span className="relative inline-flex items-center" aria-hidden="true">
+        <span className={cn('inline-block h-1.5 w-1.5 rounded-full', dotClass)} />
+        {!paused && mode !== 'connecting' ? (
+          <span
+            className={cn(
+              'absolute inset-0 inline-flex h-1.5 w-1.5 rounded-full opacity-60 motion-safe:animate-ping',
+              mode === 'sse' ? 'bg-[--color-success]' : 'bg-[--color-warning]',
+            )}
+          />
+        ) : null}
+      </span>
       <span className="font-mono uppercase tracking-wider text-[--color-fg-subtle]">{label}</span>
-      {detail}
+      {/* Secondary detail (`stream` / `⟲ 5s` / `paused`) is the first
+          thing to drop when there isn't enough horizontal room — on
+          phones the dot + label + pause button still tell the user
+          everything they need (live or not). */}
+      <span className="hidden sm:inline-flex">{detail}</span>
       <button
         type="button"
         onClick={() => setPaused((p) => !p)}
-        className="inline-flex items-center justify-center rounded-md border border-[--color-border] bg-[--color-bg-elev] p-1 text-[--color-fg-muted] hover:text-[--color-fg] transition-colors"
+        className="inline-flex items-center justify-center rounded-md border border-[--color-border] bg-[--color-bg-elev-2]/60 p-1 text-[--color-fg-muted] transition-colors hover:border-[--color-border-strong] hover:text-[--color-fg]"
         aria-label={paused ? 'Resume live refresh' : 'Pause live refresh'}
         title={paused ? 'Resume live refresh' : 'Pause live refresh'}
       >

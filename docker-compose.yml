@@ -1,53 +1,253 @@
-# Split (default): runner + seller-demo + web. Merged profile: single merged-demo process.
+# Leash monorepo — production docker-compose
+#
+# Usage
+# ─────
+# 1. Copy each app's .env.example to a .env file (or export the vars).
+# 2. Supply the required build-arg:
+#      NEXT_PUBLIC_PRIVY_APP_ID=<your privy app id>
+#    Either export it before running compose, or put it in a top-level
+#    .env file here (docker-compose reads it automatically).
+# 3. Start everything:
+#      docker compose up -d
+#
+# Override the network at build time (example — devnet for testing):
+#   NEXT_PUBLIC_SOLANA_NETWORK=solana-devnet \
+#   NEXT_PUBLIC_SOLANA_RPC=https://api.devnet.solana.com \
+#   docker compose up -d --build
+#
+# ─── Notes on NEXT_PUBLIC_* ──────────────────────────────────────────────────
+# These variables are embedded by Next.js into the client bundle during
+# `next build`. They CANNOT be changed after the image is built.
+# All services share the same base image — if agents and marketplace need
+# different NEXT_PUBLIC_ values, build separate images. In a normal
+# single-tenant deploy they share the same Privy app and RPC, so one
+# build covers all.
+#
+# ─── Notes on LEASH_DB_URL ───────────────────────────────────────────────────
+# All services that read the database use the LEASH_DB_URL env var.
+# For local/single-host deploys, keep the default file:/data/leash-api.db
+# which writes into the shared `api-data` Docker volume.
+# For Railway / Fly / Render with hosted Turso, set:
+#   LEASH_DB_URL=libsql://your-db.turso.io
+#   LEASH_DB_AUTH_TOKEN=eyJ…
+# and the api-data volume is unused.
+
+x-build: &shared-build
+  context: .
+  dockerfile: docker/Dockerfile
+  args:
+    NEXT_PUBLIC_PRIVY_APP_ID: ${NEXT_PUBLIC_PRIVY_APP_ID}
+    NEXT_PUBLIC_SOLANA_RPC: ${NEXT_PUBLIC_SOLANA_RPC:-https://api.mainnet-beta.solana.com}
+    NEXT_PUBLIC_SOLANA_NETWORK: ${NEXT_PUBLIC_SOLANA_NETWORK:-solana-mainnet}
+    NEXT_PUBLIC_EXPLORER_URL: ${NEXT_PUBLIC_EXPLORER_URL:-https://explorer.leash.market}
+    NEXT_PUBLIC_AGENTS_URL: ${NEXT_PUBLIC_AGENTS_URL:-https://agents.leash.market}
+
 services:
-  runner:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  # Required by: api (rate-limit + idempotency keys), agent-runtime
+  # (SSE pub/sub task queue), explorer (live event stream SSE).
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Leash API ──────────────────────────────────────────────────────────────
+  # Public REST + x402 paywall. Port 8801.
+  api:
+    build: *shared-build
     image: leash:local
-    command: ['node', 'packages/runner/dist/cli.js']
+    restart: unless-stopped
+    command: ['node', 'apps/api/dist/cli.js']
+    working_dir: /app
+    ports:
+      - '8801:8801'
+    environment:
+      NODE_ENV: production
+      LEASH_API_HOST: '0.0.0.0'
+      LEASH_API_PORT: '8801'
+      # RPC — strongly recommended: override with your Helius/QuickNode/Triton URL
+      LEASH_API_RPC_MAINNET: ${LEASH_API_RPC_MAINNET:-https://api.mainnet-beta.solana.com}
+      LEASH_API_RPC_DEVNET: ${LEASH_API_RPC_DEVNET:-https://api.devnet.solana.com}
+      # Database (libsql / Turso — set libsql:// for hosted Turso)
+      LEASH_API_DB_URL: ${LEASH_DB_URL:-file:/data/leash-api.db}
+      LEASH_API_DB_AUTH_TOKEN: ${LEASH_DB_AUTH_TOKEN:-}
+      # Redis
+      LEASH_API_REDIS_URL: redis://redis:6379
+      # Auth — REQUIRED: generate with `openssl rand -hex 32` (>= 32 chars)
+      LEASH_API_ADMIN_SECRET: ${LEASH_API_ADMIN_SECRET}
+      # Encryption — REQUIRED: 64 hex chars (openssl rand -hex 32)
+      # Must match the same value in agents + marketplace + agent-runtime
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      # Rate limit
+      LEASH_API_RATELIMIT_RPM: ${LEASH_API_RATELIMIT_RPM:-120}
+      # Facilitator URLs (x402 settlement)
+      LEASH_API_FACILITATOR_URL_DEVNET: ${LEASH_API_FACILITATOR_URL_DEVNET:-https://devnet-facilitator.leash.market}
+      LEASH_API_FACILITATOR_URL_MAINNET: ${LEASH_API_FACILITATOR_URL_MAINNET:-https://facilitator.leash.market}
+      # Public origin (canonical URL this API is reachable on)
+      LEASH_API_PUBLIC_ORIGIN: ${LEASH_API_PUBLIC_ORIGIN:-https://api.leash.market}
+      # Swagger UI — off by default in prod
+      LEASH_API_DOCS_ENABLED: ${LEASH_API_DOCS_ENABLED:-false}
+    volumes:
+      - api-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── Agents chat app ────────────────────────────────────────────────────────
+  # Next.js chat product (agents.leash.market). Port 4100.
+  agents:
+    build: *shared-build
+    image: leash:local
+    restart: unless-stopped
+    command: ['pnpm', '--filter', '@leash/agents', 'start']
+    working_dir: /app
+    ports:
+      - '4100:4100'
+    environment:
+      NODE_ENV: production
+      PORT: '4100'
+      # Privy — REQUIRED
+      NEXT_PUBLIC_PRIVY_APP_ID: ${NEXT_PUBLIC_PRIVY_APP_ID}
+      PRIVY_APP_ID: ${PRIVY_APP_ID}
+      PRIVY_APP_SECRET: ${PRIVY_APP_SECRET}
+      # Leash API BFF
+      LEASH_API_URL: ${LEASH_API_URL:-http://api:8801}
+      LEASH_API_ADMIN_SECRET: ${LEASH_API_ADMIN_SECRET}
+      # Shared DB
+      LEASH_DB_URL: ${LEASH_DB_URL:-file:/data/leash-api.db}
+      LEASH_DB_AUTH_TOKEN: ${LEASH_DB_AUTH_TOKEN:-}
+      # Encryption — must match api + marketplace + agent-runtime
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      # LLM
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      COMPOSIO_API_KEY: ${COMPOSIO_API_KEY:-}
+      # Per-tier model ids (leave empty to use platform defaults)
+      LEASH_AGENT_MODEL_HAIKU: ${LEASH_AGENT_MODEL_HAIKU:-}
+      LEASH_AGENT_MODEL_SONNET: ${LEASH_AGENT_MODEL_SONNET:-}
+      LEASH_AGENT_MODEL_OPUS: ${LEASH_AGENT_MODEL_OPUS:-}
+      # Hard model override — leave unset in prod unless pinning a revision
+      LEASH_AGENT_MODEL: ${LEASH_AGENT_MODEL:-}
+    volumes:
+      - api-data:/data
+    depends_on:
+      - api
+
+  # ── Marketplace ────────────────────────────────────────────────────────────
+  # Next.js agent marketplace (marketplace.leash.market). Port 4200.
+  marketplace:
+    build: *shared-build
+    image: leash:local
+    restart: unless-stopped
+    command: ['pnpm', '--filter', '@leash/marketplace', 'start']
+    working_dir: /app
+    ports:
+      - '4200:4200'
+    environment:
+      NODE_ENV: production
+      PORT: '4200'
+      # Privy — REQUIRED
+      NEXT_PUBLIC_PRIVY_APP_ID: ${NEXT_PUBLIC_PRIVY_APP_ID}
+      PRIVY_APP_ID: ${PRIVY_APP_ID}
+      PRIVY_APP_SECRET: ${PRIVY_APP_SECRET}
+      # Leash API BFF
+      LEASH_API_URL: ${LEASH_API_URL:-http://api:8801}
+      LEASH_API_ADMIN_SECRET: ${LEASH_API_ADMIN_SECRET}
+      # Shared DB
+      LEASH_DB_URL: ${LEASH_DB_URL:-file:/data/leash-api.db}
+      LEASH_DB_AUTH_TOKEN: ${LEASH_DB_AUTH_TOKEN:-}
+      # Admin privy ids (comma-separated; leave empty to disable admin surface)
+      LEASH_ADMIN_PRIVY_IDS: ${LEASH_ADMIN_PRIVY_IDS:-}
+    volumes:
+      - api-data:/data
+    depends_on:
+      - api
+
+  # ── Explorer ───────────────────────────────────────────────────────────────
+  # Next.js receipt/block explorer (explorer.leash.market). Port 3100.
+  explorer:
+    build: *shared-build
+    image: leash:local
+    restart: unless-stopped
+    command: ['pnpm', '--filter', '@leash/explorer', 'start']
+    working_dir: /app
+    ports:
+      - '3100:3100'
+    environment:
+      NODE_ENV: production
+      PORT: '3100'
+      # Database
+      LEASH_DB_URL: ${LEASH_DB_URL:-file:/data/leash-api.db}
+      LEASH_DB_AUTH_TOKEN: ${LEASH_DB_AUTH_TOKEN:-}
+      # RPC (server-side, read-only)
+      LEASH_RPC_MAINNET: ${LEASH_API_RPC_MAINNET:-https://api.mainnet-beta.solana.com}
+      LEASH_RPC_DEVNET: ${LEASH_API_RPC_DEVNET:-https://api.devnet.solana.com}
+      # Live event stream (SSE bridge via Redis)
+      LEASH_API_REDIS_URL: redis://redis:6379
+    volumes:
+      - api-data:/data
+    depends_on:
+      - api
+      redis:
+        condition: service_healthy
+
+  # ── Facilitator ────────────────────────────────────────────────────────────
+  # x402 payment facilitator. Port 8787.
+  facilitator:
+    build: *shared-build
+    image: leash:local
+    restart: unless-stopped
+    command: ['pnpm', '--filter', '@leash/facilitator-app', 'start']
+    working_dir: /app
     ports:
       - '8787:8787'
     environment:
-      PORT: '8787'
+      NODE_ENV: production
+      LEASH_FACILITATOR_HOST: '0.0.0.0'
+      LEASH_FACILITATOR_PORT: '8787'
+      # Fee-payer keypair — REQUIRED (base58 or Solana CLI JSON byte array)
+      # MUST be a different key from any agent executive keypair.
+      LEASH_FACILITATOR_SECRET_KEY: ${LEASH_FACILITATOR_SECRET_KEY}
+      # Networks (comma-separated: devnet, mainnet)
+      LEASH_FACILITATOR_NETWORKS: ${LEASH_FACILITATOR_NETWORKS:-mainnet}
+      # Optional RPC override (strongly recommended for mainnet performance)
+      LEASH_FACILITATOR_RPC_URL: ${LEASH_FACILITATOR_RPC_URL:-}
 
-  seller-demo:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
+  # ── Agent runtime ──────────────────────────────────────────────────────────
+  # Background worker that drains the agent task queue via Redis pub/sub.
+  agent-runtime:
+    build: *shared-build
     image: leash:local
-    command: ['node', 'apps/seller-demo/dist/index.js']
-    ports:
-      - '3001:3001'
-    environment:
-      PORT: '3001'
-      SOLANA_RPC: '${SOLANA_RPC:-https://api.devnet.solana.com}'
-      AGENT_ASSET: '${AGENT_ASSET:-11111111111111111111111111111111}'
-
-  web:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
-    image: leash:local
-    command: ['pnpm', '--filter', '@leash/web', 'start']
+    restart: unless-stopped
+    command: ['node', 'apps/agent-runtime/dist/cli.js']
     working_dir: /app
-    ports:
-      - '3000:3000'
     environment:
-      LEASH_RUNNER_URL: 'http://runner:8787'
+      NODE_ENV: production
+      # Shared DB
+      LEASH_DB_URL: ${LEASH_DB_URL:-file:/data/leash-api.db}
+      LEASH_DB_AUTH_TOKEN: ${LEASH_DB_AUTH_TOKEN:-}
+      # Redis
+      LEASH_REDIS_URL: redis://redis:6379
+      # Encryption — must match api + agents + marketplace
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      # Poll interval (ms) when no tasks are queued
+      LEASH_RUNTIME_POLL_MS: ${LEASH_RUNTIME_POLL_MS:-750}
+    volumes:
+      - api-data:/data
     depends_on:
-      - runner
+      - api
+      redis:
+        condition: service_healthy
 
-  merged-demo:
-    profiles: [merged]
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
-    image: leash:local
-    command: ['node', 'apps/merged-demo/dist/index.js']
-    ports:
-      - '3003:3003'
-    environment:
-      PORT: '3003'
-      SOLANA_RPC: '${SOLANA_RPC:-https://api.devnet.solana.com}'
-      AGENT_ASSET: '${AGENT_ASSET:-11111111111111111111111111111111}'
+volumes:
+  redis-data:
+  # Shared SQLite/libsql data volume used when LEASH_DB_URL is a local
+  # file path (file:/data/…). Unused when pointing at hosted Turso.
+  api-data:

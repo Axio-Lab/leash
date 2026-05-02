@@ -1,21 +1,18 @@
 import Link from 'next/link';
-import { Activity, FileSignature, Wallet, Zap } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import {
   DbUnavailableError,
   getCounterpartiesForTxs,
-  getIndexerStatus,
   listEvents,
   listRecentReceipts,
 } from '@/lib/db';
-import type { EventPage, IndexerStatus, ReceiptPage } from '@/lib/types';
+import type { EventPage, ReceiptPage } from '@/lib/types';
 import { getNetwork } from '@/lib/server-network';
-import { networkToSlug } from '@/lib/network';
 import { EventsTable } from '@/components/events-table';
 import { ReceiptsTable } from '@/components/receipts-table';
 import { DbUnreachable } from '@/components/empty';
-import { SearchBar } from '@/components/search-bar';
 import { LiveRefresh } from '@/components/live-refresh';
-import { formatRelative } from '@/lib/format';
+import { AgentNetworkBackground } from '@/components/agent-network-background';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,9 +32,8 @@ async function safe<T>(fn: () => Promise<T>): Promise<Result<T>> {
 export default async function HomePage() {
   const network = await getNetwork();
 
-  const [eventsRes, statusRes, recentReceiptsRes] = await Promise.all([
+  const [eventsRes, recentReceiptsRes] = await Promise.all([
     safe<EventPage>(() => listEvents({ network, limit: 15 })),
-    safe<IndexerStatus>(() => getIndexerStatus(network)),
     safe<ReceiptPage>(() => listRecentReceipts({ network, limit: 15 })),
   ]);
 
@@ -54,33 +50,41 @@ export default async function HomePage() {
   const counterparties = counterpartiesRes.ok ? counterpartiesRes.data : undefined;
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-5">
-        <div className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
-            {networkToSlug(network)} · live feed
-          </p>
-          <h1 className="text-3xl font-semibold tracking-tight">Leash Explorer</h1>
-          <p className="max-w-2xl text-sm text-[--color-fg-muted]">
-            Every agent created, every executive bound, every receipt published id.
-          </p>
+    <div className="space-y-12">
+      {/* Hero — compact card with the same agent-network animation used on
+          apps/agents (drifting nodes + brand-coloured signal pulses). The
+          headline reads as plain bright foreground with a `text-brand`
+          accent on the punchline, mirroring the agents landing. No
+          eyebrow (network is already in the topbar) and no inline search
+          (the topbar carries one). */}
+      <section className="card-glow relative isolate overflow-hidden px-5 py-7 sm:px-10 sm:py-10">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -left-24 -top-24 size-72 rounded-full bg-brand/15 blur-[100px]"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-24 -right-24 size-80 rounded-full bg-brand-soft/30 blur-[120px]"
+        />
+        <AgentNetworkBackground />
+        <div className="relative">
+          <h1 className="text-balance text-2xl font-semibold leading-[1.08] tracking-tight sm:text-4xl md:text-5xl">
+            The receipt engine for <span className="text-brand">agent-to-agent commerce</span>
+          </h1>
         </div>
-        <div className="max-w-2xl">
-          <SearchBar size="lg" />
-        </div>
-        <StatusStrip status={statusRes.ok ? statusRes.data : null} />
       </section>
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Recent activity</h2>
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <h2 className="text-lg font-semibold tracking-tight">Recent activity</h2>
+          <div className="flex flex-wrap items-center gap-2">
             <LiveRefresh network={network} intervalSec={5} />
             <Link
               href="/events"
-              className="text-xs text-[--color-fg-muted] hover:text-[--color-fg]"
+              className="group inline-flex items-center gap-1 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-xs text-[--color-fg-muted] backdrop-blur-md transition-colors hover:border-[--color-border-strong] hover:text-[--color-fg]"
             >
-              view all →
+              View all
+              <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
             </Link>
           </div>
         </div>
@@ -92,13 +96,14 @@ export default async function HomePage() {
       </section>
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Recent receipts</h2>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <h2 className="text-lg font-semibold tracking-tight">Recent receipts</h2>
           <Link
             href="/receipts"
-            className="text-xs text-[--color-fg-muted] hover:text-[--color-fg]"
+            className="group inline-flex items-center gap-1 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-xs text-[--color-fg-muted] backdrop-blur-md transition-colors hover:border-[--color-border-strong] hover:text-[--color-fg]"
           >
-            view all →
+            View all
+            <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
         {recentReceiptsRes.ok ? (
@@ -108,49 +113,5 @@ export default async function HomePage() {
         )}
       </section>
     </div>
-  );
-}
-
-function StatusStrip({ status }: { status: IndexerStatus | null }) {
-  if (!status) {
-    return (
-      <div className="card flex flex-wrap items-center gap-6 px-5 py-3 text-xs text-[--color-fg-muted]">
-        Indexer status unavailable on this network.
-      </div>
-    );
-  }
-  return (
-    <div className="card flex flex-wrap items-center gap-6 px-5 py-3 text-xs text-[--color-fg-muted]">
-      <Stat icon={<Wallet className="h-3.5 w-3.5" />} label="Watchlist">
-        {status.watchlist_size.toLocaleString()}
-      </Stat>
-      <Stat icon={<Activity className="h-3.5 w-3.5" />} label="Cursors">
-        {status.cursors.total.toLocaleString()}
-      </Stat>
-      <Stat icon={<Zap className="h-3.5 w-3.5" />} label="Last tick">
-        {formatRelative(status.cursors.last_run_at)}
-      </Stat>
-      <Stat icon={<FileSignature className="h-3.5 w-3.5" />} label="Receipts/hr">
-        {(status.events_last_hour['receipt.published'] ?? 0).toLocaleString()}
-      </Stat>
-    </div>
-  );
-}
-
-function Stat({
-  icon,
-  label,
-  children,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <span className="inline-flex items-center gap-2">
-      <span className="text-[--color-brand]">{icon}</span>
-      <span className="uppercase tracking-wider text-[--color-fg-subtle]">{label}</span>
-      <span className="font-mono text-[--color-fg]">{children}</span>
-    </span>
   );
 }

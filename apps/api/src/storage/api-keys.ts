@@ -1,7 +1,10 @@
 /**
  * API key creation, hashing, and lookup. Keys are stored as
- * SHA-256(hex) — the raw value is shown to the user exactly once at
- * creation time and never persisted in plaintext.
+ * SHA-256(hex) for auth + AES-GCM ciphertext for "show again later".
+ *
+ * Reveal flow: callers pass `revealPlaintextWithKey(record, encKey)`
+ * which decrypts {@link ApiKeyRecord.encryptedPlaintext}. Legacy rows
+ * (pre-v10 migration) won't have ciphertext and aren't recoverable.
  *
  * Format: `lsh_test_<24 random chars>` or `lsh_live_<24 random chars>`.
  * Prefix encodes the network (devnet vs mainnet); see `networkFromKey`
@@ -11,6 +14,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { address } from '@solana/kit';
 import { ulid } from 'ulid';
+import { decryptSecret, encryptSecret } from '@leash/platform-auth/encryption';
 
 import type { DbClient } from './turso.js';
 import { execute } from './turso.js';
@@ -27,6 +31,18 @@ export type ApiKeyRecord = {
   last4: string;
   /** Solana wallet (base58 pubkey) this key was issued for; null if unset. */
   ownerWallet: string | null;
+  /**
+   * Surface scopes for platform-issued keys (e.g. `['agents']`,
+   * `['marketplace']`). `null` for legacy keys and bootstrap keys; the
+   * BFFs treat `null` as "all scopes" for backwards compatibility.
+   */
+  scopes: string[] | null;
+  /**
+   * AES-GCM envelope of the plaintext key. NULL for rows minted before
+   * the v10 migration — those keys are not recoverable. Use
+   * {@link revealApiKeyPlaintext} to decrypt.
+   */
+  encryptedPlaintext: string | null;
   createdAt: string;
   disabledAt: string | null;
 };
@@ -78,6 +94,14 @@ export async function createApiKey(
     network: SvmNetwork;
     plaintext?: string;
     ownerWallet: string | null;
+    scopes?: string[] | null;
+    /**
+     * 32-byte hex encryption key used to seal the plaintext for later
+     * reveal. When omitted, the row is created without an encrypted
+     * envelope — it'll be hash-only (legacy behaviour). Pass this for
+     * any user-facing flow so the key stays copyable.
+     */
+    encryptionKey?: string;
   },
 ): Promise<CreateApiKeyResult> {
   const plaintext = generateApiKey(args.network, args.plaintext);
@@ -92,39 +116,45 @@ export async function createApiKey(
   const prefix = plaintext.slice(0, 9);
   const last4 = plaintext.slice(-4);
   const hash = hashKey(plaintext);
+  const scopesJson = args.scopes && args.scopes.length > 0 ? JSON.stringify(args.scopes) : null;
+  const envelope = args.encryptionKey ? encryptSecret(plaintext, args.encryptionKey) : null;
   await execute(
     db,
-    `INSERT INTO api_keys (id, label, network, prefix, last4, hash, owner_wallet) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [id, args.label, network, prefix, last4, hash, ownerWallet],
+    `INSERT INTO api_keys (id, label, network, prefix, last4, hash, owner_wallet, scopes, encrypted_plaintext) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, args.label, network, prefix, last4, hash, ownerWallet, scopesJson, envelope],
   );
   const created = await getApiKeyById(db, id);
   if (!created) throw new Error('api key insert succeeded but lookup failed');
   return { key: created, plaintext };
 }
 
+/**
+ * Decrypt the plaintext for `record` (returns `null` for legacy rows
+ * that pre-date the encrypted_plaintext column).
+ */
+export function revealApiKeyPlaintext(record: ApiKeyRecord, encryptionKey: string): string | null {
+  if (!record.encryptedPlaintext) return null;
+  return decryptSecret(record.encryptedPlaintext, encryptionKey);
+}
+
+const SELECT_COLS =
+  'id, label, network, prefix, last4, owner_wallet, scopes, encrypted_plaintext, created_at, disabled_at';
+
 export async function getApiKeyByPlaintext(
   db: DbClient,
   plaintext: string,
 ): Promise<ApiKeyRecord | null> {
   const hash = hashKey(plaintext);
-  const res = await execute(
-    db,
-    `SELECT id, label, network, prefix, last4, owner_wallet, created_at, disabled_at
-       FROM api_keys WHERE hash = ? LIMIT 1`,
-    [hash],
-  );
+  const res = await execute(db, `SELECT ${SELECT_COLS} FROM api_keys WHERE hash = ? LIMIT 1`, [
+    hash,
+  ]);
   const row = res.rows[0];
   if (!row) return null;
   return rowToRecord(row);
 }
 
 export async function getApiKeyById(db: DbClient, id: string): Promise<ApiKeyRecord | null> {
-  const res = await execute(
-    db,
-    `SELECT id, label, network, prefix, last4, owner_wallet, created_at, disabled_at
-       FROM api_keys WHERE id = ? LIMIT 1`,
-    [id],
-  );
+  const res = await execute(db, `SELECT ${SELECT_COLS} FROM api_keys WHERE id = ? LIMIT 1`, [id]);
   const row = res.rows[0];
   if (!row) return null;
   return rowToRecord(row);
@@ -163,7 +193,7 @@ export async function listApiKeys(
   if (!args.includeDisabled) {
     where.push('disabled_at IS NULL');
   }
-  const sql = `SELECT id, label, network, prefix, last4, owner_wallet, created_at, disabled_at
+  const sql = `SELECT ${SELECT_COLS}
     FROM api_keys
     ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY created_at DESC
@@ -178,6 +208,17 @@ function rowToRecord(row: Record<string, unknown>): ApiKeyRecord {
   if (network !== 'solana-devnet' && network !== 'solana-mainnet') {
     throw new Error(`unexpected network in api_keys: ${network}`);
   }
+  let scopes: string[] | null = null;
+  if (row.scopes != null) {
+    try {
+      const parsed = JSON.parse(String(row.scopes));
+      if (Array.isArray(parsed)) {
+        scopes = parsed.map((s) => String(s));
+      }
+    } catch {
+      scopes = null;
+    }
+  }
   return {
     id: String(row.id),
     label: String(row.label),
@@ -185,6 +226,8 @@ function rowToRecord(row: Record<string, unknown>): ApiKeyRecord {
     prefix: String(row.prefix),
     last4: String(row.last4),
     ownerWallet: row.owner_wallet != null ? String(row.owner_wallet) : null,
+    scopes,
+    encryptedPlaintext: row.encrypted_plaintext != null ? String(row.encrypted_plaintext) : null,
     createdAt: String(row.created_at),
     disabledAt: row.disabled_at != null ? String(row.disabled_at) : null,
   };

@@ -1,0 +1,210 @@
+---
+title: 'Human CLI — leash'
+description: 'Operate your Leash agent from the terminal. Same identity as the MCP, no chat product required.'
+---
+
+`@leash/cli` ships a `leash` binary for human operators. It wraps
+the same `LeashHost` the standalone MCP exposes to AI agents, but
+skips the MCP wire protocol and renders results as plain text (or
+`--json` for piping into `jq` / scripts).
+
+## Install
+
+```bash
+npm install -g @leash/cli
+# or
+pnpm add -g @leash/cli
+```
+
+Pair with `@leash/mcp` to expose the same identity to an AI agent.
+Both binaries read the same `~/.config/leash/agent.json`.
+
+## Bring your own RPC (strongly recommended)
+
+<Warning>
+  The default RPCs (`api.devnet.solana.com`, `api.mainnet-beta.solana.com`) are **public,
+  rate-limited, and slow**. Every `leash pay` makes 3-5 RPC calls; on a public endpoint that's a
+  4-8s settlement, sometimes a 429. With a private RPC it's typically under one second.
+</Warning>
+
+Set `LEASH_RPC_URL` once and `leash` + `leash-mcp` both pick it up:
+
+```bash
+export LEASH_RPC_URL="https://devnet.helius-rpc.com/?api-key=YOUR_KEY"
+leash doctor    # confirms RPC reachability
+```
+
+Helius, Triton, QuickNode, Alchemy, or self-hosted — any standard
+JSON-RPC endpoint works. You can also persist it in
+`~/.config/leash/agent.json` under `rpc_url` so it's the default for
+every future shell.
+
+## Quickstart
+
+`leash agent create` is a **two-step** flow on both devnet and
+mainnet — the network is taken from `LEASH_NETWORK` (or
+`agent.json:network`).
+
+```bash
+# 1a. Default (mainnet): generate a fresh executive keypair locally
+#     and capture the agent's public profile (name, services, …).
+leash agent create \
+  --name "Plexpert" \
+  --description "Onchain accountant for indie operators." \
+  --image https://plexpert.xyz/avatar.png \
+  --service web=https://plexpert.xyz \
+  --service api=https://api.plexpert.xyz
+# → prints the executive pubkey + a "send 0.01 SOL to ..." instruction.
+# The metadata is persisted to ~/.config/leash/agent.json under
+# pending_register.meta so the funded re-run picks it up.
+
+# 1a-devnet. Override to devnet for testing:
+LEASH_NETWORK=solana-devnet leash agent create --name "Plexpert"
+# → same, but mints on Solana devnet.
+
+# 1b. Or import an existing keypair (e.g. a `solana-keygen new` output).
+leash agent create --executive 5Jz... \
+  --name "Plexpert" \
+  --service web=https://plexpert.xyz   # base58 secret implies --import
+
+# 2. Fund the executive (devnet airdrop is free; mainnet pulls from
+#    any wallet you control).
+solana airdrop 1 <executive_pubkey> --url https://api.devnet.solana.com
+
+# 3. Re-run — the same command resumes from the persisted keypair,
+#    mints + delegates + records, and lands `agent.json`.
+leash agent create
+
+# 4. Confirm identity.
+leash agent show
+
+# 5. Look at the marketplace.
+leash discover -q ocr --max-price 0.10
+
+# 6. Vet a counterparty before paying.
+leash reputation AGENT_MINT_PUBKEY
+
+# 7. Pay something.
+leash pay https://example.com/x/abc123
+
+# 8. Inspect or change the SPL spend authority. By default the agent
+#    is minted with unlimited USDC delegation; tighten / revoke as needed.
+leash treasury limit --token USDC
+leash treasury set-limit --token USDC --amount 100   # cap at $100 USDC
+leash treasury set-limit --token USDC --revoke       # pause autonomous spending
+leash treasury set-limit --token USDC --unlimited    # restore default
+
+# 9. Cash out.
+leash treasury balance
+leash treasury withdraw --to YOUR_WALLET_ADDRESS --amount 0.50 --token USDC
+```
+
+The first call always returns a `funding_required` block — render
+the `executive` and `required` fields, fund the address, and re-run.
+On mainnet the same flow applies; the only difference is you bring
+your own SOL.
+
+## All commands
+
+```text
+agent commands:
+  agent create [--name N] [--description T] [--image URL]
+               [--service name=https://endpoint] (repeatable)
+               [--generate | --import --executive <secret>]
+                                     two-step provisioning. Network = LEASH_NETWORK.
+                                     First run prints funding instructions; second
+                                     run mints + delegates + records. `--service`
+                                     advertises EIP-8004 endpoints other agents
+                                     and humans use to discover this agent
+                                     (e.g. --service web=https://my-agent.xyz).
+                                     Reserved name `receipts` is auto-injected.
+  agent show                         print active agent identity
+  agent export [--out PATH]          export agent.json
+  agent import <PATH>                install an agent.json
+
+treasury commands:
+  treasury balance                   list SOL + token balances
+  treasury withdraw --to W --amount N --token SOL|USDC|USDG|USDT
+  treasury limit [--token USDC|USDG|USDT]
+                                     show the active SPL Approve delegation
+                                     (delegate pubkey, remaining cap, balance)
+  treasury set-limit [--token USDC|USDG|USDT]
+                    (--unlimited | --revoke | --amount N)
+                                     update the executive's SPL spend authority.
+                                     `--unlimited` writes u64::MAX (default),
+                                     `--revoke` zeros it (the agent stops
+                                     settling outgoing payments until you
+                                     re-approve), `--amount N` caps at N
+                                     human units (e.g. --amount 100 = $100 USDC).
+
+marketplace + reputation:
+  discover [-q QUERY] [--max-price N] [--pricing-type T] [--limit N]
+  reputation AGENT_MINT [--network solana-devnet|solana-mainnet]
+
+activity:
+  receipts [--limit N] [--direction outgoing|incoming|both]
+  pay LINK_URL
+
+misc:
+  doctor                             config + RPC + API reachability check
+  help, -h                           full help
+  version, -v                        installed version
+
+global flags:
+  --json                             emit raw LeashToolResult payload
+```
+
+## Verify it works
+
+```bash
+leash doctor
+```
+
+Prints config path, derived executive pubkey, network, RPC + API
+reachability — first stop for any "why isn't this working" question.
+
+## Cross-interface portability
+
+`leash agent export` and `leash agent import` are aliases for the
+matching `leash-mcp` subcommands — same JSON shape, same on-disk
+location. An agent minted in any host can roam to any other host
+by exporting the file there and importing it on the new machine.
+
+```bash
+# On machine A:
+leash agent export --out /tmp/my-agent.json
+scp /tmp/my-agent.json user@machine-b:/tmp/
+
+# On machine B:
+leash agent import /tmp/my-agent.json
+leash agent show   # same on-chain identity, same treasury, same reputation
+```
+
+Today the portability flow is **one-way for the chat product**:
+
+- **Chat → CLI / Cursor** — Yes. Open the agent's profile in the
+  chat product, copy its mint + executive secret into
+  `~/.config/leash/agent.json` (or use `leash agent import`), and
+  every CLI / MCP command operates on the same on-chain identity.
+- **CLI / Cursor → Chat** — On the roadmap. The chat product's
+  database currently only knows about agents minted from its own UI;
+  importing a CLI-minted agent requires a server-side ownership-
+  proof endpoint (signs a nonce with the executive key) that hasn't
+  shipped yet.
+
+## Troubleshooting
+
+| Symptom                                                                                | Likely cause + fix                                                                                                    |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `leash agent create` returns `Step 1 of 2 — fund the executive...`                     | Expected. Send the printed SOL amount to the printed pubkey, then run `leash agent create` again.                     |
+| `leash agent create` errors with `... not visible on RPC within 20s`                   | RPC propagation delay between mint confirmation and account read. Re-run; the resume path picks up where it left off. |
+| `leash agent create --import` errors `mode: "import" requires executive_secret_base58` | Pass `--executive <base58_secret>` along with `--import` (or use `--executive` alone).                                |
+| `leash pay` is slow (5–10s) or 429s                                                    | You're on the public RPC. Set `LEASH_RPC_URL` to a paid endpoint — see _Bring your own RPC_ above.                    |
+| Wrong network on every command                                                         | `leash-mcp` and `leash` both honour `LEASH_NETWORK`. Set it explicitly to override `agent.json`.                      |
+| `leash treasury withdraw` returns `error`                                              | Most common: amount > available balance, or wrong `--token` symbol for the network's mint.                            |
+| `leash receipts` returns `error: 401`                                                  | Receipts read still uses a bearer key today. Set `LEASH_API_KEY` in your shell.                                       |
+
+## Source
+
+- Code: [`packages/cli`](https://github.com/leash-market/leash/tree/main/packages/cli)
+- Shares the standalone host with: [`packages/mcp`](https://github.com/leash-market/leash/tree/main/packages/mcp)
