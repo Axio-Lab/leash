@@ -160,8 +160,7 @@
 @utility card-glow {
   position: relative;
   background:
-    linear-gradient(180deg, oklch(0.5 0.22 268 / 0.06), transparent 35%),
-    oklch(0.2 0.012 280 / 65%);
+    linear-gradient(180deg, oklch(0.5 0.22 268 / 0.06), transparent 35%), oklch(0.2 0.012 280 / 65%);
   border: 1px solid oklch(0.38 0.012 280 / 45%);
   border-radius: var(--radius-lg);
   backdrop-filter: blur(16px);
