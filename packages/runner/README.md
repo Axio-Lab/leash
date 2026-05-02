@@ -19,4 +19,4 @@ kill <pid>                         # stop it
 PORT=8788 pnpm --filter @leash/runner start
 ```
 
-If you change `PORT`, set `LEASH_RUNNER_URL` in `apps/web/.env` to match (e.g. `http://localhost:8788`).
+If you change `PORT`, set `LEASH_RUNNER_URL` in `apps/playground/.env` to match (e.g. `http://localhost:8788`).

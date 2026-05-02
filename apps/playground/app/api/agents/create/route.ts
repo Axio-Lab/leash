@@ -12,8 +12,8 @@ export const runtime = 'nodejs';
  *  seeding). Requires `LEASH_DEV_PAYER_SECRET_KEY`.
  *
  *  The web playground signs `createAgent` directly in the browser using the
- *  user's connected Privy wallet (see `apps/web/app/agents/new/page.tsx` and
- *  `apps/web/lib/privy-umi.ts`) — that path does NOT hit this endpoint.
+ *  user's connected Privy wallet (see `apps/playground/app/agents/new/page.tsx` and
+ *  `apps/playground/lib/privy-umi.ts`) — that path does NOT hit this endpoint.
  */
 const Body = z.object({
   name: z.string().min(1).max(64),

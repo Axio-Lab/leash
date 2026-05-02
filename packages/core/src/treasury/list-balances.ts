@@ -5,8 +5,8 @@
  * render them.
  *
  * This consolidates logic that previously lived in
- * `apps/web/app/api/agents/balance/route.ts` and
- * `apps/web/app/api/wallet/balance/route.ts`. Calling it from the SDK means
+ * `apps/playground/app/api/agents/balance/route.ts` and
+ * `apps/playground/app/api/wallet/balance/route.ts`. Calling it from the SDK means
  * any future Leash surface (CLI, mobile, downstream agents) gets the same
  * canonical balance shape without re-implementing the RPC plumbing.
  */

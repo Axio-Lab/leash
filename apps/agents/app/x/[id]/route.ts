@@ -8,7 +8,7 @@
  * issues a CORS preflight that any non-CORS-enabled paywall will fail —
  * surfacing as the generic "Failed to fetch" error in the chat.
  *
- * Mirroring the `apps/web` playground, we expose a same-origin
+ * Mirroring the `apps/playground` UI, we expose a same-origin
  * `/x/[id]` here that streams the request and response between the
  * browser and the upstream `apps/api` paywall verbatim. Because both
  * sides of the buyer-kit dance now happen against the same origin

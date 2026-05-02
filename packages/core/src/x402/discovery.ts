@@ -140,7 +140,7 @@ export type FetchPaymentLinkMetaOptions = {
  * Resolve a payment-link metadata descriptor from a Leash web host.
  *
  * This is a typed wrapper around the browser-friendly `GET /x/<id>` discovery
- * surface implemented by the web app route (`apps/web/app/x/[id]/route.ts`).
+ * surface implemented by the playground app route (`apps/playground/app/x/[id]/route.ts`).
  *
  * Overloads:
  *   1) `fetchPaymentLinkMeta("https://host/x/abc123")`

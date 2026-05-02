@@ -1,5 +1,5 @@
 {
-  "name": "@leash/web",
+  "name": "@leash/playground",
   "private": true,
   "scripts": {
     "dev": "next dev -p 4000",

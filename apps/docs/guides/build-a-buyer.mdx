@@ -71,12 +71,12 @@ header walkthrough and the facilitator landscape.
 ## Browser usage
 
 In a browser, supply any `@solana/kit` `TransactionPartialSigner`. The web
-playground (`apps/web/lib/privy-svm-signer.ts`) adapts a Privy embedded
+playground (`apps/playground/lib/privy-svm-signer.ts`) adapts a Privy embedded
 wallet to this interface — copy that file as a starting point.
 
 ## Hosted: the autonomous-agent cockpit
 
-The web playground at `apps/web/buyer` ships this exact flow as a UI:
+The web playground at `apps/playground/buyer` ships this exact flow as a UI:
 
 1. The user signs in with Privy (email / Google).
 2. The user picks one of their agents from the dropdown.

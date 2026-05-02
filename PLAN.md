@@ -38,7 +38,7 @@ These were debated across earlier docs. Picking them now so we can build.
 | **LLM funding (MVP)**      | **User brings their own LLM API key** (Anthropic / OpenAI / Groq), stored encrypted server-side.                                                             | Zero LLM cost risk for us. v2 can add a Leash-hosted, x402-gated LLM proxy as a paid capability. |
 | **Treasury delegation**    | **Per-agent platform delegate**, auto-created on agent mint via Agent Tools `DelegateExecutionV1`. User signs once at create-time.                           | Smooth UX. Owner can revoke anytime.                                                             |
 | **Hackathon scope**        | **Both surfaces ship.** `agent.leash.market` is the demo hero; `leash.market` is the supply story.                                                           | The two-sided narrative is what makes this fundable, not just buildable.                         |
-| **Login**                  | **Privy** on both surfaces (email + wallet, embedded wallet on signup).                                                                                      | Reuse `apps/web/lib/privy-umi.ts`.                                                               |
+| **Login**                  | **Privy** on both surfaces (email + wallet, embedded wallet on signup).                                                                                      | Reuse `apps/playground/lib/privy-umi.ts`.                                                        |
 | **Marketplace listings**   | **NEW entity** (`listings` table). Not a fork of `payment_links`. A listing has multiple tools, MCP-compatible schema, links to the seller's own MCP server. | Different shape; payment-links are static paywalls, listings are tool registries.                |
 | **Real-time activity**     | **Reuse Leash API Redis pub/sub** (`task:{id}:activities` channel).                                                                                          | Already proven; explorer's live-refresh pattern works.                                           |
 | **Build order**            | **`apps/agents` first**, then `apps/marketplace`.                                                                                                            | Demand drives supply. Without agents using tools, no developer wants to list.                    |
@@ -243,7 +243,7 @@ The agent's installed tools become its "favorites." The runtime injects them int
 
 **Day 1 — auth + keys**
 
-- [ ] Scaffold `apps/agents/app/(auth)/login/page.tsx` with Privy provider (copy from `apps/web/lib/privy-umi.ts`)
+- [ ] Scaffold `apps/agents/app/(auth)/login/page.tsx` with Privy provider (copy from `apps/playground/lib/privy-umi.ts`)
 - [ ] Add `platform_users`, `platform_api_keys` tables to a new `platform` Turso DB (or same DB, separate prefix)
 - [ ] Build `/settings/api-keys` page (list / create / revoke)
 - [ ] Add `apps/agents/app/api/keys/[route].ts` Next.js BFF that proxies to existing `POST /v1/admin/api-keys`
@@ -415,7 +415,7 @@ I lean: `/.well-known/leash-mcp.json` ✓ / manual review for 50 ✓ / one ratin
 
 Scaffold Phase 1 Day 1:
 
-1. Set up Privy provider in `apps/agents` (copy from `apps/web/lib/privy-umi.ts`)
+1. Set up Privy provider in `apps/agents` (copy from `apps/playground/lib/privy-umi.ts`)
 2. Add `platform_users` + `platform_api_keys` tables (migration on the existing Turso DB)
 3. Build `/settings/api-keys` UI + the BFF route that calls `apps/api`'s admin endpoint
 
