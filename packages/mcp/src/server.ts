@@ -45,8 +45,10 @@ import {
   fetchReputation,
   type CheckTreasuryBalanceArgs,
   type CreatePaymentLinkArgs,
+  type DailyTransactionsArgs,
   type DiscoverArgs,
   type GetIdentityArgs,
+  type GetReceiptArgs,
   type GetSpendLimitArgs,
   type LeashHost,
   type LeashTool,
@@ -57,6 +59,7 @@ import {
   type ReputationArgs,
   type SetSpendLimitArgs,
   type SvmNetwork,
+  type TransactionHistoryArgs,
   type WithdrawArgs,
 } from '@leash/mcp-core';
 
@@ -282,6 +285,15 @@ export class HostRef implements LeashHost {
   }
   getSpendLimit(args: GetSpendLimitArgs): Promise<LeashToolResult> {
     return this.inner.getSpendLimit(args);
+  }
+  getReceipt(args: GetReceiptArgs): Promise<LeashToolResult> {
+    return this.inner.getReceipt(args);
+  }
+  transactionHistory(args: TransactionHistoryArgs): Promise<LeashToolResult> {
+    return this.inner.transactionHistory(args);
+  }
+  dailyTransactions(args: DailyTransactionsArgs): Promise<LeashToolResult> {
+    return this.inner.dailyTransactions(args);
   }
 
   /**
@@ -582,6 +594,15 @@ function makePlaceholderHost(defaults: LeashHostDefaults): LeashHost {
     },
     async getSpendLimit() {
       return noAgent('spend_limit');
+    },
+    async getReceipt() {
+      return noAgent('receipt');
+    },
+    async transactionHistory() {
+      return noAgent('transaction_history');
+    },
+    async dailyTransactions() {
+      return noAgent('daily_transactions');
     },
   };
 }

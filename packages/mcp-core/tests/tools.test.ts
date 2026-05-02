@@ -49,6 +49,15 @@ const echoHost: LeashHost = {
   async getSpendLimit(args) {
     return jsonResult({ kind: 'echo:get_spend_limit', args });
   },
+  async getReceipt(args) {
+    return jsonResult({ kind: 'echo:get_receipt', args });
+  },
+  async transactionHistory(args) {
+    return jsonResult({ kind: 'echo:transaction_history', args });
+  },
+  async dailyTransactions(args) {
+    return jsonResult({ kind: 'echo:daily_transactions', args });
+  },
 };
 
 describe('LEASH_TOOLS', () => {
@@ -56,14 +65,17 @@ describe('LEASH_TOOLS', () => {
     expect(LEASH_TOOLS.map((t) => t.name)).toEqual([
       'leash_check_treasury_balance',
       'leash_create_payment_link',
+      'leash_daily_transactions',
       'leash_discover',
       'leash_get_identity',
+      'leash_get_receipt',
       'leash_get_spend_limit',
       'leash_pay_payment_link',
       'leash_receipts',
       'leash_register_agent',
       'leash_reputation',
       'leash_set_spend_limit',
+      'leash_transaction_history',
       'leash_withdraw_treasury',
     ]);
   });

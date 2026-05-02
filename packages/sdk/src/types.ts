@@ -67,6 +67,63 @@ export type ReceiptsResponse = {
   next_cursor: string | null;
 };
 
+/**
+ * Per-day bucket emitted by {@link LeashClient.dailyTransactions}.
+ * Stable USD totals are summed at 1:1 across USDC/USDG/USDT.
+ */
+export type DailyTxBucket = {
+  date: string;
+  sent_count: number;
+  sent_usd: string;
+  received_count: number;
+  received_usd: string;
+  net_usd: string;
+};
+
+export type DailyTransactionsResponse = {
+  agent_mint: string;
+  network: SvmNetwork;
+  range: { from: string; to: string; days: number };
+  daily: DailyTxBucket[];
+  totals: {
+    sent_count: number;
+    sent_usd: string;
+    received_count: number;
+    received_usd: string;
+    net_usd: string;
+    non_usd_count: number;
+  };
+  truncated: boolean;
+};
+
+export type TransactionHistoryItem = {
+  receipt_hash: string;
+  direction: 'outgoing' | 'incoming';
+  decision: string;
+  tx_signature: string | null;
+  url: string | null;
+  method: string | null;
+  amount: string | null;
+  currency: string | null;
+  timestamp: string;
+};
+
+export type TransactionHistoryResponse = {
+  agent_mint: string;
+  network: SvmNetwork;
+  range: { from: string; to: string; days: number };
+  direction: 'both' | 'outgoing' | 'incoming';
+  count: number;
+  truncated: boolean;
+  total_sent_usd: string;
+  total_received_usd: string;
+  net_usd: string;
+  sent_count: number;
+  received_count: number;
+  non_usd_count: number;
+  items: TransactionHistoryItem[];
+};
+
 export type AgentWebhook = {
   id: string;
   agent_mint: string;

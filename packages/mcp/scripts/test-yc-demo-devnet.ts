@@ -136,18 +136,23 @@ async function main(): Promise<void> {
     await Promise.all([server.connect(serverT), client.connect(clientT)]);
 
     // ── 2. tools/list ───────────────────────────────────────────────
-    step('tools/list returns 9 canonical tools');
+    step('tools/list returns 14 canonical tools');
     const list = await client.listTools();
     const names = list.tools.map((t) => t.name).sort();
     const expected = [
       'leash_check_treasury_balance',
       'leash_create_payment_link',
+      'leash_daily_transactions',
       'leash_discover',
       'leash_get_identity',
+      'leash_get_receipt',
+      'leash_get_spend_limit',
       'leash_pay_payment_link',
       'leash_receipts',
       'leash_register_agent',
       'leash_reputation',
+      'leash_set_spend_limit',
+      'leash_transaction_history',
       'leash_withdraw_treasury',
     ];
     if (JSON.stringify(names) !== JSON.stringify(expected)) {

@@ -31,6 +31,9 @@ export type {
   ReputationArgs,
   SetSpendLimitArgs,
   GetSpendLimitArgs,
+  GetReceiptArgs,
+  TransactionHistoryArgs,
+  DailyTransactionsArgs,
 } from './host.js';
 
 export {
@@ -45,14 +48,17 @@ export {
   LEASH_TOOLS,
   checkBalancesTool,
   createPaymentLinkTool,
+  dailyTransactionsTool,
   discoverTool,
   getIdentityTool,
+  getReceiptTool,
   getSpendLimitTool,
   payPaymentLinkTool,
   receiptsTool,
   registerAgentTool,
   reputationTool,
   setSpendLimitTool,
+  transactionHistoryTool,
   withdrawTreasuryTool,
 } from './tools/index.js';
 

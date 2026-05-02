@@ -73,7 +73,14 @@ leash reputation <agent_mint>
 # 5. Pay something.
 leash pay https://example.com/x/abc123
 
-# 6. Cash out.
+# 6. Inspect activity.
+leash receipts                                # latest receipts (newest first)
+leash history --days 7                        # last week + USD totals
+leash daily --days 14                         # per-day buckets
+leash receipt c3c50cb352a2624f783ca6a51bdb7fbcd3b67f04b4a42cd431444db05504181a
+                                              # full ReceiptV1 by hash
+
+# 7. Cash out.
 leash treasury balance
 leash treasury withdraw --to <wallet> --amount 0.50 --token USDC
 ```
@@ -105,7 +112,18 @@ marketplace + reputation:
 
 activity:
   receipts [--limit N] [--direction outgoing|incoming|both]
-  pay <link-url>
+                                     paginated receipt feed for the active agent
+  receipt <receipt_hash>             fetch a single ReceiptV1 by hash
+                                     (the same hash the explorer renders at
+                                     /receipt/{hash})
+  history [--days N] [--direction outgoing|incoming|both] [--limit N]
+                                     receipts in the last N days (default 7)
+                                     plus running USD totals (sent / received /
+                                     net). Stables (USDC/USDG/USDT) summed at 1:1.
+  daily [--days N]                   per-day P&L buckets for the last N days
+                                     (default 7). One row per UTC day with
+                                     sent_usd, received_usd, net_usd, counts.
+  pay <link-url>                     probe → sign → settle an x402 paywall
 
 misc:
   doctor                             config + RPC + API reachability check

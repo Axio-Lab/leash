@@ -14,7 +14,7 @@ description: >-
 
 # Leash — Agent payments on Solana via x402
 
-Leash is a Stablecoin rails for autonomous agents.
+Leash is the operating system for agent-to-agent commerce.
 
 Leash gives every agent a wallet (an MPL Core asset whose **Asset Signer
 PDA** is the treasury), a capped spend allowance the owner controls (an
@@ -34,6 +34,105 @@ on the same identity** — one mint, two roles.
 | Mint a brand-new agent (asset + AgentIdentity) in one tx | `@leash/registry-utils` `createAgent`, or `POST /v1/agents/prepare` |
 | Inspect agents / receipts / events with a UI             | `https://explorer.leash.market`                                     |
 | Settle locally without depending on hosted infra         | `@leash/facilitator` (devnet) — see `REFERENCE.md`                  |
+| Drop Leash tools into a coding agent (Cursor / Claude)   | `@leash/mcp` STDIO MCP — see "Agent surfaces" below                 |
+| Run agent ops from the terminal                          | `leash` CLI in `@leash/cli` — see "Agent surfaces" below            |
+
+## Agent surfaces — MCP / CLI / SDK
+
+Leash ships three first-class surfaces for autonomous agents. They all
+delegate to the same `LeashHost` contract in `@leash/mcp-core`, so the
+behavior is identical across them; only the wire protocol differs.
+
+### `@leash/mcp` — 14-tool STDIO MCP server
+
+Drop into Cursor, Claude Desktop, Cline, Continue, ChatGPT-MCP, or any
+host that speaks Model Context Protocol over STDIO. Settlement happens
+in-process — `leash_pay_payment_link` actually signs + submits with
+the local executive keypair and returns the on-chain receipt.
+
+| Tool name                      | What it does                                                                                    |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `leash_register_agent`         | Two-step provisioning (generate / import executive → fund → mint + delegate + record).          |
+| `leash_get_identity`           | Self-introspection: agent mint, treasury PDA, executive pubkey, network.                        |
+| `leash_check_treasury_balance` | List SOL + SPL stable balances on the treasury PDA.                                             |
+| `leash_create_payment_link`    | Mint a hosted x402 paywall (`/v1/payment-links`).                                               |
+| `leash_pay_payment_link`       | Probe → policy-check → sign → settle → finalise receipt for an x402 URL.                        |
+| `leash_withdraw_treasury`      | Owner-driven SOL or stable withdrawal via `mpl-core::Execute`.                                  |
+| `leash_set_spend_limit`        | Update the SPL `Approve` delegation (unlimited / amount / revoke).                              |
+| `leash_get_spend_limit`        | Read the live delegation + treasury balance for an SPL stable.                                  |
+| `leash_receipts`               | Paginated receipts feed for the active agent.                                                   |
+| `leash_get_receipt`            | Look up a single ReceiptV1 by `receipt_hash` (the `/receipt/{hash}` blob the explorer renders). |
+| `leash_transaction_history`    | All earn + spend receipts in the last N days (default 7) with USD totals.                       |
+| `leash_daily_transactions`     | Per-day buckets for the same window (`{ date, sent_usd, received_usd, net_usd, ... }`).         |
+| `leash_discover`               | Public marketplace search (`/v1/discover`).                                                     |
+| `leash_reputation`             | Reputation snapshot for any agent mint (`/v1/agents/:mint/reputation`).                         |
+
+Install:
+
+```bash
+npx -y @leash/mcp@latest doctor    # one-shot config check
+npx -y @leash/mcp@latest run       # bind to STDIO
+```
+
+Provision an agent end-to-end (no human in the loop):
+
+```bash
+npx -y @leash/mcp@latest run         # in your MCP host's config
+# then ask the agent: "Use leash_register_agent to mint a fresh agent"
+# → returns funding_required with a generated executive pubkey
+# (LLM walks the user through funding, then re-calls the tool)
+```
+
+### `@leash/cli` — `leash` terminal wrapper
+
+Same `LeashHost`, plain-text output. Designed to be the "git/gh/aws"
+of the Leash agent economy. Pass `--json` on any command for a
+machine-readable `LeashToolResult`.
+
+```text
+leash agent create [--name N] [--description T] [--image URL]
+                   [--service name=https://endpoint] (repeatable)
+                   [--generate | --import --executive <secret>]
+leash agent show
+leash treasury balance
+leash treasury withdraw --to W --amount N --token SOL|USDC|USDG|USDT
+leash treasury limit [--token USDC|USDG|USDT]
+leash treasury set-limit [--token T] (--unlimited | --revoke | --amount N)
+leash discover [-q QUERY] [--max-price N] [--pricing-type T] [--limit N]
+leash reputation <agent_mint> [--network solana-devnet|solana-mainnet]
+leash receipts [--limit N] [--direction outgoing|incoming|both]
+leash receipt <receipt_hash>
+leash history [--days N] [--direction outgoing|incoming|both] [--limit N]
+leash daily   [--days N]
+leash pay <link-url>
+leash doctor
+```
+
+### `@leash/sdk` — typed API client
+
+Anonymous reads, agent-signed writes (X-Leash-Sig), legacy bearer-key
+auth for endpoints that haven't migrated yet. Browser/Bun/Deno-friendly.
+
+```ts
+import { LeashClient } from '@leash/sdk';
+const leash = new LeashClient({ apiKey: process.env.LEASH_API_KEY });
+
+// Single receipt by hash → full ReceiptV1.
+const r = await leash.getReceipt(
+  'c3c50cb352a2624f783ca6a51bdb7fbcd3b67f04b4a42cd431444db05504181a',
+);
+
+// Last 7 days, both directions, with USD totals.
+const week = await leash.transactionHistory({ agentMint, days: 7 });
+// → { range, count, total_sent_usd, total_received_usd, net_usd, items }
+
+// Same window, bucketed by UTC day.
+const daily = await leash.dailyTransactions({ agentMint, days: 7 });
+// → { daily: [{ date, sent_usd, received_usd, net_usd, ... }], totals, ... }
+```
+
+All three surfaces enforce the same network binding as the API: a
+`lsh_test_*` key (devnet) cannot read mainnet receipts, and vice versa.
 
 ## Mental model — five primitives
 

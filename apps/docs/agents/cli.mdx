@@ -94,7 +94,14 @@ leash treasury set-limit --token USDC --amount 100   # cap at $100 USDC
 leash treasury set-limit --token USDC --revoke       # pause autonomous spending
 leash treasury set-limit --token USDC --unlimited    # restore default
 
-# 9. Cash out.
+# 9. Inspect activity.
+leash receipts                                # latest receipts (newest first)
+leash history --days 7                        # last week + USD totals
+leash daily --days 14                         # per-day buckets
+leash receipt c3c50cb352a2624f783ca6a51bdb7fbcd3b67f04b4a42cd431444db05504181a
+                                              # full ReceiptV1 by hash
+
+# 10. Cash out.
 leash treasury balance
 leash treasury withdraw --to YOUR_WALLET_ADDRESS --amount 0.50 --token USDC
 ```
@@ -143,7 +150,22 @@ marketplace + reputation:
 
 activity:
   receipts [--limit N] [--direction outgoing|incoming|both]
-  pay LINK_URL
+                                     paginated receipt feed for the active agent
+  receipt RECEIPT_HASH               fetch a single ReceiptV1 by its hash (the
+                                     same hash the explorer renders at
+                                     /receipt/{hash}). Returns price legs,
+                                     decision, request URL, tx_signature, and
+                                     the prev/current hash chain.
+  history [--days N] [--direction outgoing|incoming|both] [--limit N]
+                                     receipts in the last N days (default 7)
+                                     plus running totals: sent / received /
+                                     net in USD. Stables (USDC/USDG/USDT)
+                                     summed at 1:1 USD.
+  daily [--days N]                   per-day P&L buckets for the last N days
+                                     (default 7). One row per UTC day with
+                                     sent_usd, received_usd, net_usd, and
+                                     per-direction counts.
+  pay LINK_URL                       probe → sign → settle an x402 paywall
 
 misc:
   doctor                             config + RPC + API reachability check
