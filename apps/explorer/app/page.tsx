@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Activity, FileSignature, Wallet, Zap } from 'lucide-react';
+import { Activity, FileSignature, Wallet, Zap, ArrowRight } from 'lucide-react';
 import {
   DbUnavailableError,
   getCounterpartiesForTxs,
@@ -54,33 +54,45 @@ export default async function HomePage() {
   const counterparties = counterpartiesRes.ok ? counterpartiesRes.data : undefined;
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-5">
-        <div className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
-            {networkToSlug(network)} · live feed
-          </p>
-          <h1 className="text-3xl font-semibold tracking-tight">Leash Explorer</h1>
-          <p className="max-w-2xl text-sm text-[--color-fg-muted]">
-            Every agent created, every executive bound, every receipt published id.
-          </p>
+    <div className="space-y-10">
+      {/* Hero — frosted glass over the body's aurora gradient. The grid
+          overlay reads as a faint tech-print, mirroring apps/agents. */}
+      <section className="card-glow relative overflow-hidden bg-grid px-6 py-8 sm:px-10 sm:py-12">
+        <div className="pointer-events-none absolute inset-0 opacity-50 [mask-image:radial-gradient(60%_50%_at_30%_30%,#000_30%,transparent_75%)]" />
+        <div className="relative space-y-5">
+          <div className="space-y-3">
+            <p className="inline-flex items-center gap-2 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[--color-fg-muted] backdrop-blur-md">
+              <span className="h-1.5 w-1.5 rounded-full bg-[--color-brand] motion-safe:animate-pulse" />
+              {networkToSlug(network)} · live feed
+            </p>
+            <h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
+              <span className="bg-gradient-to-br from-[--color-fg] via-[--color-fg] to-[--color-fg-muted] bg-clip-text text-transparent">
+                Every receipt, every event, every agent.
+              </span>
+            </h1>
+            <p className="max-w-2xl text-sm leading-relaxed text-[--color-fg-muted]">
+              The receipt engine for agent-to-agent commerce. Search any agent, transaction,
+              receipt, or event ID across both clusters — settled in real SPL stables on Solana.
+            </p>
+          </div>
+          <div className="max-w-2xl">
+            <SearchBar size="lg" />
+          </div>
+          <StatusStrip status={statusRes.ok ? statusRes.data : null} />
         </div>
-        <div className="max-w-2xl">
-          <SearchBar size="lg" />
-        </div>
-        <StatusStrip status={statusRes.ok ? statusRes.data : null} />
       </section>
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Recent activity</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold tracking-tight">Recent activity</h2>
           <div className="flex items-center gap-3">
             <LiveRefresh network={network} intervalSec={5} />
             <Link
               href="/events"
-              className="text-xs text-[--color-fg-muted] hover:text-[--color-fg]"
+              className="group inline-flex items-center gap-1 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-xs text-[--color-fg-muted] backdrop-blur-md transition-colors hover:border-[--color-border-strong] hover:text-[--color-fg]"
             >
-              view all →
+              View all
+              <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
             </Link>
           </div>
         </div>
@@ -92,13 +104,14 @@ export default async function HomePage() {
       </section>
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Recent receipts</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold tracking-tight">Recent receipts</h2>
           <Link
             href="/receipts"
-            className="text-xs text-[--color-fg-muted] hover:text-[--color-fg]"
+            className="group inline-flex items-center gap-1 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-xs text-[--color-fg-muted] backdrop-blur-md transition-colors hover:border-[--color-border-strong] hover:text-[--color-fg]"
           >
-            view all →
+            View all
+            <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
         {recentReceiptsRes.ok ? (
@@ -114,13 +127,13 @@ export default async function HomePage() {
 function StatusStrip({ status }: { status: IndexerStatus | null }) {
   if (!status) {
     return (
-      <div className="card flex flex-wrap items-center gap-6 px-5 py-3 text-xs text-[--color-fg-muted]">
+      <div className="rounded-xl border border-[--color-border] bg-[--color-bg-elev]/60 px-5 py-3 text-xs text-[--color-fg-muted] backdrop-blur-md">
         Indexer status unavailable on this network.
       </div>
     );
   }
   return (
-    <div className="card flex flex-wrap items-center gap-6 px-5 py-3 text-xs text-[--color-fg-muted]">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
       <Stat icon={<Wallet className="h-3.5 w-3.5" />} label="Watchlist">
         {status.watchlist_size.toLocaleString()}
       </Stat>
@@ -147,10 +160,14 @@ function Stat({
   children: React.ReactNode;
 }) {
   return (
-    <span className="inline-flex items-center gap-2">
-      <span className="text-[--color-brand]">{icon}</span>
-      <span className="uppercase tracking-wider text-[--color-fg-subtle]">{label}</span>
-      <span className="font-mono text-[--color-fg]">{children}</span>
-    </span>
+    <div className="group flex items-center gap-3 rounded-xl border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-2.5 backdrop-blur-md transition-colors hover:border-[--color-border-strong]">
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-[--color-brand-soft]/40 text-[--color-brand-strong] ring-1 ring-inset ring-[--color-brand-soft]">
+        {icon}
+      </span>
+      <div className="min-w-0 leading-tight">
+        <div className="text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">{label}</div>
+        <div className="truncate font-mono text-sm text-[--color-fg]">{children}</div>
+      </div>
+    </div>
   );
 }

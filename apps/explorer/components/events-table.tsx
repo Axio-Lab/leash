@@ -4,6 +4,7 @@ import { describeEvent } from '@/lib/event-label';
 import { formatRelative } from '@/lib/format';
 import { EventBadge, PhaseBadge } from './event-badge';
 import { Mono } from './mono';
+import { Empty } from './empty';
 import type { Network } from '@/lib/network';
 import { solscanTxUrl } from '@/lib/solscan';
 import { formatTokenAmount, tokenInfoFor } from '@/lib/token-info';
@@ -39,10 +40,6 @@ function referenceFor(row: EventRow, network: Network): Ref | null {
     return { label: 'receipt', value: rh, href: `/receipt/${rh}` };
   }
 
-  // Treasury rows: show the action + the formatted amount so the
-  // column carries real signal even without an upstream id to point
-  // at. Falls through to `client_reference` if something exotic comes
-  // in without an `amount_atomic`.
   switch (row.kind) {
     case 'agent.treasury.withdraw':
     case 'agent.treasury.fund': {
@@ -93,100 +90,109 @@ export function EventsTable({
 }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-[--color-border] bg-[--color-bg-elev] px-6 py-10 text-center text-sm text-[--color-fg-muted]">
-        {emptyTitle}
-      </div>
+      <Empty
+        title={emptyTitle}
+        description="As soon as activity hits the network you'll see it here."
+      />
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-[--color-border] bg-[--color-bg-elev]">
-      <table className="min-w-full divide-y divide-[--color-border] text-sm">
-        <thead className="bg-[oklch(0.18_0.02_280)] text-left text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">
-          <tr>
-            <th className="px-3 py-2 font-medium">Kind</th>
-            <th
-              className="px-3 py-2 font-medium"
-              title="Lifecycle position: prepared → submitted → confirmed (or failed)."
-            >
-              Status <span className="cursor-help text-[--color-fg-muted]">ⓘ</span>
-            </th>
-            <th className="px-3 py-2 font-medium">Agent</th>
-            <th className="px-3 py-2 font-medium">Reference</th>
-            <th className="px-3 py-2 font-medium">Signature</th>
-            <th className="px-3 py-2 font-medium text-right">When</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[--color-border]">
-          {rows.map((row) => {
-            const desc = describeEvent(row);
-            const ref = referenceFor(row, network);
-            // Whole-row click target: tx detail when we have a signature
-            // (the most useful destination for activity rows), event
-            // detail otherwise (e.g. for prepared events without a tx).
-            const rowHref = row.signature ? `/tx/${row.signature}` : `/event/${row.id}`;
-            const rowLabel = row.signature
-              ? `View transaction ${row.signature}`
-              : `View event ${row.id}`;
-            return (
-              <tr key={row.id} className="group relative hover:bg-[oklch(0.2_0.02_280/0.6)]">
-                {/* Stretched link sits behind the inline cell links so they
-                    retain their own click targets (agent / signature /
-                    reference deep-links). */}
-                <td className="p-0">
-                  <Link
-                    href={rowHref}
-                    aria-label={rowLabel}
-                    className="absolute inset-0 z-0"
-                    tabIndex={-1}
-                  />
-                  <div className="relative z-10 px-3 py-2.5 align-middle">
-                    <Link href={`/event/${row.id}`} className="inline-flex items-center gap-2">
-                      <EventBadge descriptor={desc} />
-                      <span className="text-xs text-[--color-fg-muted]">{desc.label}</span>
-                    </Link>
-                  </div>
-                </td>
-                <td className="relative z-10 px-3 py-2.5 align-middle">
-                  <PhaseBadge phase={row.phase} />
-                </td>
-                <td className="relative z-10 px-3 py-2.5 align-middle">
-                  <Mono
-                    value={row.agent_asset}
-                    href={row.agent_asset ? `/agent/${row.agent_asset}` : undefined}
-                  />
-                </td>
-                <td className="relative z-10 px-3 py-2.5 align-middle">
-                  {ref ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">
-                        {ref.label}
+    <div className="card overflow-hidden p-0">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-[--color-border] text-sm">
+          <thead className="bg-[--color-bg-elev]/40 text-left text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">
+            <tr>
+              <th className="px-4 py-2.5 font-medium">Kind</th>
+              <th
+                className="px-3 py-2.5 font-medium"
+                title="Lifecycle position: prepared → submitted → confirmed (or failed)."
+              >
+                Status <span className="cursor-help text-[--color-fg-muted]">ⓘ</span>
+              </th>
+              <th className="px-3 py-2.5 font-medium">Agent</th>
+              <th className="px-3 py-2.5 font-medium">Reference</th>
+              <th className="px-3 py-2.5 font-medium">Signature</th>
+              <th className="px-4 py-2.5 font-medium text-right">When</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[--color-border]/60">
+            {rows.map((row, idx) => {
+              const desc = describeEvent(row);
+              const ref = referenceFor(row, network);
+              // Whole-row click target: tx detail when we have a signature
+              // (the most useful destination for activity rows), event
+              // detail otherwise (e.g. for prepared events without a tx).
+              const rowHref = row.signature ? `/tx/${row.signature}` : `/event/${row.id}`;
+              const rowLabel = row.signature
+                ? `View transaction ${row.signature}`
+                : `View event ${row.id}`;
+              return (
+                <tr
+                  key={row.id}
+                  className="group relative motion-safe:[animation:var(--animate-row-in)] transition-colors hover:bg-[--color-brand-soft]/15"
+                  style={{ animationDelay: `${Math.min(idx, 12) * 24}ms` }}
+                >
+                  {/* Stretched link sits behind the inline cell links so they
+                      retain their own click targets (agent / signature /
+                      reference deep-links). */}
+                  <td className="p-0">
+                    <Link
+                      href={rowHref}
+                      aria-label={rowLabel}
+                      className="absolute inset-0 z-0"
+                      tabIndex={-1}
+                    />
+                    <div className="relative z-10 px-4 py-2.5 align-middle">
+                      <Link href={`/event/${row.id}`} className="inline-flex items-center gap-2">
+                        <EventBadge descriptor={desc} />
+                        <span className="text-xs text-[--color-fg-muted] group-hover:text-[--color-fg]">
+                          {desc.label}
+                        </span>
+                      </Link>
+                    </div>
+                  </td>
+                  <td className="relative z-10 px-3 py-2.5 align-middle">
+                    <PhaseBadge phase={row.phase} />
+                  </td>
+                  <td className="relative z-10 px-3 py-2.5 align-middle">
+                    <Mono
+                      value={row.agent_asset}
+                      href={row.agent_asset ? `/agent/${row.agent_asset}` : undefined}
+                    />
+                  </td>
+                  <td className="relative z-10 px-3 py-2.5 align-middle">
+                    {ref ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">
+                          {ref.label}
+                        </span>
+                        {ref.mono === false ? (
+                          <span className="text-xs text-[--color-fg]">{ref.value}</span>
+                        ) : (
+                          <Mono value={ref.value} href={ref.href} />
+                        )}
                       </span>
-                      {ref.mono === false ? (
-                        <span className="text-xs text-[--color-fg]">{ref.value}</span>
-                      ) : (
-                        <Mono value={ref.value} href={ref.href} />
-                      )}
-                    </span>
-                  ) : (
-                    <span className="text-[--color-fg-subtle]">—</span>
-                  )}
-                </td>
-                <td className="relative z-10 px-3 py-2.5 align-middle">
-                  <Mono
-                    value={row.signature}
-                    href={row.signature ? `/tx/${row.signature}` : undefined}
-                    external={row.signature ? solscanTxUrl(network, row.signature) : undefined}
-                  />
-                </td>
-                <td className="relative z-10 px-3 py-2.5 text-right align-middle text-xs text-[--color-fg-muted]">
-                  {formatRelative(row.ts)}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                    ) : (
+                      <span className="text-[--color-fg-subtle]">—</span>
+                    )}
+                  </td>
+                  <td className="relative z-10 px-3 py-2.5 align-middle">
+                    <Mono
+                      value={row.signature}
+                      href={row.signature ? `/tx/${row.signature}` : undefined}
+                      external={row.signature ? solscanTxUrl(network, row.signature) : undefined}
+                    />
+                  </td>
+                  <td className="relative z-10 px-4 py-2.5 text-right align-middle text-xs text-[--color-fg-muted]">
+                    {formatRelative(row.ts)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

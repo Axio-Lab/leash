@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { Bot, Coins, Receipt as ReceiptIcon } from 'lucide-react';
 import { DbUnavailableError, getCounterpartiesForTxs, listEvents, listReceipts } from '@/lib/db';
 import { probeAgentOnOtherNetwork } from '@/lib/cross-network';
 import { RpcUnavailableError, getAgentSummaryFor, getTreasuryBalancesFor } from '@/lib/rpc';
@@ -67,12 +68,6 @@ export default async function AgentPage({ params }: Props) {
     safeDb<ReceiptPage>(() => listReceipts({ network, agent: mint, limit: 25 })),
   ]);
 
-  // The agent page is meaningful even for unregistered mints (empty
-  // identity panel + empty feeds), so we only 404 when the underlying
-  // mint pubkey is malformed enough that the snapshot helper itself
-  // throws — which RpcUnavailableError doesn't catch separately. Treat
-  // an empty summary with no identity and no recent activity as a
-  // valid (but empty) page rather than a hard 404.
   if (!summaryRes.ok && !eventsRes.ok && !receiptsRes.ok) {
     notFound();
   }
@@ -103,13 +98,18 @@ export default async function AgentPage({ params }: Props) {
           identifier={mint}
         />
       ) : null}
-      <header className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
-          Agent · {networkToSlug(network)}
-        </p>
-        <h1 className="break-all font-mono text-2xl font-semibold tracking-tight">{mint}</h1>
+      <header className="card-glow space-y-4 px-6 py-6 sm:px-8 sm:py-7">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[--color-fg-muted] backdrop-blur-md">
+            <Bot className="h-3 w-3 text-[--color-brand]" />
+            Agent · {networkToSlug(network)}
+          </span>
+        </div>
+        <h1 className="break-all font-mono text-xl tracking-tight text-[--color-fg] sm:text-2xl">
+          {mint}
+        </h1>
         {summaryRes.ok ? (
-          <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-[--color-fg-muted]">
+          <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-xs text-[--color-fg-muted]">
             <span>
               Identity:{' '}
               <span className="font-mono text-[--color-fg]">
@@ -118,7 +118,7 @@ export default async function AgentPage({ params }: Props) {
                   : 'unregistered'}
               </span>
             </span>
-            <span>
+            <span className="inline-flex items-center gap-1">
               Treasury:{' '}
               <Mono
                 value={summaryRes.data.treasury}
@@ -126,7 +126,7 @@ export default async function AgentPage({ params }: Props) {
               />
             </span>
             {summaryRes.data.token.has_token ? (
-              <span>
+              <span className="inline-flex items-center gap-1">
                 Agent token:{' '}
                 <Mono
                   value={summaryRes.data.token.mint}
@@ -143,7 +143,10 @@ export default async function AgentPage({ params }: Props) {
       </header>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Treasury balances</h2>
+        <h2 className="inline-flex items-center gap-2 text-lg font-semibold tracking-tight">
+          <Coins className="h-4 w-4 text-[--color-brand]" />
+          Treasury balances
+        </h2>
         {balancesRes.ok ? (
           <Balances data={balancesRes.data} />
         ) : (
@@ -152,8 +155,8 @@ export default async function AgentPage({ params }: Props) {
       </section>
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Event timeline</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold tracking-tight">Event timeline</h2>
           <LiveRefresh network={network} intervalSec={5} />
         </div>
         {eventsRes.ok ? (
@@ -168,7 +171,10 @@ export default async function AgentPage({ params }: Props) {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Receipt feed</h2>
+        <h2 className="inline-flex items-center gap-2 text-lg font-semibold tracking-tight">
+          <ReceiptIcon className="h-4 w-4 text-[--color-brand]" />
+          Receipt feed
+        </h2>
         {receiptsRes.ok ? (
           <ReceiptsTable
             rows={receiptsRes.data.items}
@@ -184,11 +190,6 @@ export default async function AgentPage({ params }: Props) {
   );
 }
 
-/**
- * "Has this treasury ever held anything?" — a non-zero SOL or SPL
- * balance is enough to consider the agent alive on this cluster, even
- * if it has no Leash events yet (e.g. user just funded the wallet).
- */
 function hasAnyBalance(b: TreasuryBalances): boolean {
   if (b.sol.sol > 0) return true;
   return b.spl.some((row) => row.ui_amount > 0);
@@ -197,21 +198,26 @@ function hasAnyBalance(b: TreasuryBalances): boolean {
 function Balances({ data }: { data: TreasuryBalances }) {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <div className="card px-4 py-3">
+      <div className="card group relative overflow-hidden px-4 py-4 transition-all hover:border-[--color-brand-soft]/60">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[--color-brand-strong]/40 to-transparent opacity-60 transition-opacity group-hover:opacity-100" />
         <p className="text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">SOL</p>
-        <p className="mt-1 font-mono text-lg">
+        <p className="mt-1 font-mono text-lg text-[--color-fg]">
           {data.sol.sol.toLocaleString(undefined, { maximumFractionDigits: 9 })}
         </p>
       </div>
       {data.spl.map((b) => (
-        <div key={b.mint} className="card px-4 py-3">
+        <div
+          key={b.mint}
+          className="card group relative overflow-hidden px-4 py-4 transition-all hover:border-[--color-brand-soft]/60"
+        >
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[--color-brand-strong]/40 to-transparent opacity-60 transition-opacity group-hover:opacity-100" />
           <p className="text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">
             {b.symbol ?? 'SPL'}
           </p>
-          <p className="mt-1 font-mono text-lg">
+          <p className="mt-1 font-mono text-lg text-[--color-fg]">
             {b.ui_amount.toLocaleString(undefined, { maximumFractionDigits: b.decimals })}
           </p>
-          <p className="text-xs text-[--color-fg-muted]">
+          <p className="mt-2 truncate text-[11px] text-[--color-fg-muted]">
             <Mono value={b.mint} truncate copy={false} /> · ata{' '}
             <Mono value={b.ata} truncate copy={false} />
           </p>

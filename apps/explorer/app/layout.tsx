@@ -1,37 +1,50 @@
 import type { Metadata } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import { Roboto, Roboto_Mono } from 'next/font/google';
 import { Topbar } from '@/components/topbar';
 import { Footer } from '@/components/footer';
 import { getNetwork } from '@/lib/server-network';
 import './globals.css';
 
-const inter = Inter({
+const roboto = Roboto({
   subsets: ['latin'],
   variable: '--font-sans',
+  weight: ['300', '400', '500', '700'],
   display: 'swap',
 });
 
-const mono = JetBrains_Mono({
+const robotoMono = Roboto_Mono({
   subsets: ['latin'],
   variable: '--font-mono',
+  weight: ['400', '500'],
   display: 'swap',
 });
 
 export const metadata: Metadata = {
-  title: 'Leash Explorer',
-  description: 'Search agents, transactions, receipts, and events on the Leash protocol.',
+  title: 'leash · explorer',
+  description:
+    'A semantic, dual-network protocol explorer for the Leash agent economy. Search agents, transactions, receipts, and events on Solana.',
   metadataBase: new URL('https://explorer.leash.market'),
   icons: {
-    icon: [{ url: '/leash.svg', type: 'image/png' }],
-    apple: '/leash.svg',
+    icon: '/leash-logo.png',
+    shortcut: '/leash-logo.png',
+    apple: '/leash-logo.png',
+  },
+  openGraph: {
+    title: 'leash · explorer',
+    description: 'Every agent created, every executive bound, every receipt published.',
+    siteName: 'leash.explorer',
   },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const network = await getNetwork();
   return (
-    <html lang="en" className={`${inter.variable} ${mono.variable}`} suppressHydrationWarning>
-      <body suppressHydrationWarning className="min-h-dvh">
+    <html
+      lang="en"
+      className={`${roboto.variable} ${robotoMono.variable} dark`}
+      suppressHydrationWarning
+    >
+      <body suppressHydrationWarning className="min-h-dvh font-sans antialiased">
         <Topbar network={network} />
         <main className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 sm:py-8">{children}</main>
         <Footer />

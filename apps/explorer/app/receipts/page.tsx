@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { ArrowRight, Receipt } from 'lucide-react';
 import {
   DbUnavailableError,
   getCounterpartiesForTxs,
@@ -12,6 +14,7 @@ import { ReceiptsTable } from '@/components/receipts-table';
 import { DbUnreachable } from '@/components/empty';
 import { LiveRefresh } from '@/components/live-refresh';
 import { formatTokenAmount, tokenInfoFor } from '@/lib/token-info';
+import { cn } from '@/lib/cn';
 
 /** Best-effort counterparty join: never fails the page render. */
 async function loadCounterparties(network: Network, rows: ReceiptRow[]) {
@@ -60,13 +63,14 @@ export default async function ReceiptsPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-end justify-between gap-4">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
+          <p className="inline-flex items-center gap-2 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[--color-fg-muted] backdrop-blur-md">
+            <span className="h-1.5 w-1.5 rounded-full bg-[--color-brand] motion-safe:animate-pulse" />
             {networkToSlug(network)} · receipts
           </p>
-          <h1 className="text-2xl font-semibold tracking-tight">Receipt feed</h1>
-          <p className="max-w-2xl text-sm text-[--color-fg-muted]">
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Receipt feed</h1>
+          <p className="max-w-2xl text-sm leading-relaxed text-[--color-fg-muted]">
             Every x402 settlement that any agent has emitted. Earn receipts come from paywall-served
             calls; spend receipts come from buyer-side payments.
           </p>
@@ -74,22 +78,26 @@ export default async function ReceiptsPage({ searchParams }: Props) {
         {sp.cursor ? null : <LiveRefresh network={network} intervalSec={5} />}
       </header>
 
-      <nav className="flex flex-wrap gap-2">
+      <nav
+        aria-label="Filter receipts by kind"
+        className="flex flex-wrap gap-1.5 rounded-xl border border-[--color-border] bg-[--color-bg-elev]/40 p-1.5 backdrop-blur-md"
+      >
         {KIND_OPTIONS.map((opt) => {
           const href = opt.value ? `/receipts?kind=${opt.value}` : '/receipts';
           const active = (sp.kind ?? '') === opt.value;
           return (
-            <a
+            <Link
               key={opt.value || 'all'}
               href={href}
-              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+              className={cn(
+                'rounded-full px-3 py-1 text-xs transition-all',
                 active
-                  ? 'border-[--color-brand-strong] bg-[--color-brand-soft] text-[--color-fg]'
-                  : 'border-[--color-border] bg-[--color-bg-elev] text-[--color-fg-muted] hover:text-[--color-fg]'
-              }`}
+                  ? 'bg-[--color-brand-soft] text-[--color-fg] shadow-[0_0_0_1px_oklch(0.66_0.19_268/0.4),0_8px_24px_-12px_oklch(0.66_0.19_268/0.5)]'
+                  : 'text-[--color-fg-muted] hover:bg-[--color-bg-elev-2]/60 hover:text-[--color-fg]',
+              )}
             >
               {opt.label}
-            </a>
+            </Link>
           );
         })}
       </nav>
@@ -105,15 +113,16 @@ export default async function ReceiptsPage({ searchParams }: Props) {
           />
           {res.data.next_cursor ? (
             <div className="flex justify-end">
-              <a
+              <Link
                 href={`/receipts?${new URLSearchParams({
                   ...(sp.kind ? { kind: sp.kind } : {}),
                   cursor: res.data.next_cursor,
                 }).toString()}`}
-                className="rounded-md border border-[--color-border] bg-[--color-bg-elev] px-3 py-1.5 text-xs text-[--color-fg-muted] hover:text-[--color-fg]"
+                className="group inline-flex items-center gap-1.5 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-4 py-1.5 text-xs text-[--color-fg-muted] backdrop-blur-md transition-all hover:border-[--color-border-strong] hover:text-[--color-fg]"
               >
-                Older →
-              </a>
+                Older
+                <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+              </Link>
             </div>
           ) : null}
         </>
@@ -139,9 +148,14 @@ async function ProtocolFeesPanel({ network }: { network: Network }) {
   if (totals.length === 0) return null;
 
   return (
-    <section className="rounded-lg border border-[--color-border] bg-[--color-bg-elev] px-4 py-3">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold">Protocol fees collected</h2>
+    <section className="card-glow px-5 py-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="inline-flex items-center gap-2 text-sm font-semibold tracking-tight">
+          <span className="grid h-6 w-6 place-items-center rounded-md bg-[oklch(0.32_0.16_85/0.55)] text-[oklch(0.9_0.18_95)] ring-1 ring-inset ring-[oklch(0.5_0.2_95/0.35)]">
+            <Receipt className="h-3 w-3" />
+          </span>
+          Protocol fees collected
+        </h2>
         <span className="text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">
           {networkToSlug(network)}
         </span>
@@ -153,9 +167,9 @@ async function ProtocolFeesPanel({ network }: { network: Network }) {
           return (
             <li
               key={`${t.mint ?? 'native'}-${i}`}
-              className="flex items-center justify-between rounded-md bg-[oklch(0.18_0.02_280)] px-3 py-2 text-xs"
+              className="flex items-center justify-between rounded-lg border border-[--color-border] bg-[--color-bg-elev-2]/50 px-3 py-2.5 text-xs backdrop-blur-md"
             >
-              <span className="text-[--color-fg-muted]">
+              <span className="font-medium text-[--color-fg-muted]">
                 {info.symbol ?? t.currency ?? 'unknown'}
               </span>
               <span className="text-right">

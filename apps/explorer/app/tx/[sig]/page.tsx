@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ExternalLink } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Layers } from 'lucide-react';
 import { DbUnavailableError, listEventsForSignature } from '@/lib/db';
 import { probeTxOnOtherNetwork } from '@/lib/cross-network';
 import type { EventRow } from '@/lib/types';
@@ -54,44 +54,58 @@ export default async function TxPage({ params }: Props) {
 
   return (
     <div className="space-y-8">
-      <header className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
-          Transaction · {networkToSlug(network)}
-        </p>
-        <h1 className="break-all font-mono text-2xl font-semibold tracking-tight">{sig}</h1>
-        <div className="flex flex-wrap items-center gap-3 text-xs text-[--color-fg-muted]">
+      <header className="card-glow space-y-4 px-6 py-6 sm:px-8 sm:py-7">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[--color-fg-muted] backdrop-blur-md">
+            <Layers className="h-3 w-3 text-[--color-brand]" />
+            Transaction · {networkToSlug(network)}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
           <PhaseBadge phase={head.phase} />
-          <span>{formatTs(head.ts)}</span>
-          <span>·</span>
-          <span>{formatRelative(head.ts)}</span>
+          <span className="text-xs text-[--color-fg-muted]">
+            {formatTs(head.ts)} · {formatRelative(head.ts)}
+          </span>
           <a
             href={solscanTxUrl(network, sig)}
             target="_blank"
             rel="noreferrer noopener"
-            className="ml-auto inline-flex items-center gap-1 text-[--color-brand] hover:text-[--color-brand-strong]"
+            className="group ml-auto inline-flex items-center gap-1 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-xs text-[--color-brand-strong] backdrop-blur-md transition-all hover:border-[--color-brand-strong] hover:text-[--color-brand]"
           >
-            View on Solscan <ExternalLink className="h-3 w-3" />
+            View on Solscan
+            <ExternalLink className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
           </a>
         </div>
+        <h1 className="break-all font-mono text-xl tracking-tight text-[--color-fg] sm:text-2xl">
+          {sig}
+        </h1>
       </header>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Decoded events ({matches.length})</h2>
+        <h2 className="text-lg font-semibold tracking-tight">
+          Decoded events{' '}
+          <span className="ml-1 rounded-full bg-[--color-brand-soft]/40 px-2 py-0.5 text-xs font-normal text-[--color-fg-muted]">
+            {matches.length}
+          </span>
+        </h2>
         <div className="space-y-3">
-          {matches.map((row) => (
-            <DecodedRow key={row.id} row={row} network={network} />
+          {matches.map((row, idx) => (
+            <DecodedRow key={row.id} row={row} network={network} idx={idx} />
           ))}
         </div>
       </section>
+
+      <Link
+        href="/events"
+        className="group inline-flex items-center gap-1.5 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1.5 text-xs text-[--color-fg-muted] backdrop-blur-md transition-all hover:border-[--color-border-strong] hover:text-[--color-fg]"
+      >
+        <ArrowLeft className="h-3 w-3 transition-transform group-hover:-translate-x-0.5" />
+        Back to events
+      </Link>
     </div>
   );
 }
 
-/**
- * Header + container shared between the "real" tx view and the
- * not-found / wrong-network states. Keeps Solscan link and identifier
- * visible so the user can verify the cluster they need.
- */
 function NotFoundShell({
   title,
   network,
@@ -106,7 +120,7 @@ function NotFoundShell({
   return (
     <div className="space-y-6">
       <header className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.2em] text-[--color-fg-subtle]">
+        <p className="inline-flex items-center gap-2 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[--color-fg-muted] backdrop-blur-md">
           {title} · {networkToSlug(network)}
         </p>
         <h1 className="break-all font-mono text-2xl font-semibold tracking-tight">{sig}</h1>
@@ -124,22 +138,27 @@ function NotFoundShell({
   );
 }
 
-function DecodedRow({ row, network }: { row: EventRow; network: Network }) {
+function DecodedRow({ row, network, idx }: { row: EventRow; network: Network; idx: number }) {
   const desc = describeEvent(row);
   return (
-    <div className="card px-5 py-4">
+    <div
+      className="card motion-safe:[animation:var(--animate-row-in)] px-5 py-4 transition-all hover:border-[--color-brand-soft]/60 hover:bg-[--color-brand-soft]/5"
+      style={{ animationDelay: `${Math.min(idx, 8) * 40}ms` }}
+    >
       <div className="flex items-center gap-2">
         <EventBadge descriptor={desc} />
         <span className="text-sm font-medium">{desc.label}</span>
         <Link
           href={`/event/${row.id}`}
-          className="ml-auto text-xs text-[--color-fg-muted] hover:text-[--color-fg]"
+          className="ml-auto text-xs text-[--color-fg-muted] transition-colors hover:text-[--color-fg]"
         >
           event {row.id.slice(-6)} →
         </Link>
       </div>
-      <p className="mt-2 text-sm text-[--color-fg-muted]">{desc.description(row)}</p>
-      <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-2">
+      <p className="mt-2 text-sm leading-relaxed text-[--color-fg-muted]">
+        {desc.description(row)}
+      </p>
+      <dl className="mt-3 grid grid-cols-1 gap-x-8 gap-y-2 text-xs sm:grid-cols-2">
         {row.agent_asset ? (
           <Field label="Agent">
             <Mono value={row.agent_asset} href={`/agent/${row.agent_asset}`} />
