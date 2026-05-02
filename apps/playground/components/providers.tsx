@@ -31,7 +31,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           config={{
             appearance: {
               theme: 'dark',
-              accentColor: '#9b8cff',
+              accentColor: '#5e78f5',
               walletChainType: 'solana-only',
               showWalletLoginFirst: false,
               logo: 'https://avatars.githubusercontent.com/u/171483738?s=200&v=4',

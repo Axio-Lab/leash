@@ -173,23 +173,28 @@ export function Sidebar() {
           <Link
             href="/"
             className="flex items-center gap-2"
-            title={collapsed ? 'Leash Playground' : undefined}
+            title={collapsed ? 'leash · playground' : undefined}
+            aria-label="Leash Playground — home"
           >
+            {/* White-inverted PNG so the brand mark reads on the dark
+                aurora background — same asset + filter trick as
+                apps/explorer + apps/agents. */}
             <Image
-              src="/images/leash_icon.svg"
+              src="/leash-logo.png"
               alt="Leash"
-              width={48}
-              height={48}
+              width={28}
+              height={28}
               priority
-              className="size-7 rounded-md shadow-inner shadow-black/20"
+              className="size-7 shrink-0 select-none [filter:brightness(0)_invert(1)]"
             />
             {!collapsed && (
-              <div className="flex flex-col leading-tight">
-                <span className="text-[12px] font-semibold tracking-tight">Leash</span>
-                <span className="text-[9px] uppercase tracking-widest text-fg-subtle">
-                  Playground
+              <span className="flex flex-col leading-tight">
+                <span className="text-[12px] font-semibold tracking-tight">
+                  leash
+                  <span className="font-normal text-fg-muted"> · playground</span>
                 </span>
-              </div>
+                <span className="text-[9px] uppercase tracking-widest text-fg-subtle">devnet</span>
+              </span>
             )}
           </Link>
           {/*
@@ -238,21 +243,27 @@ export function Sidebar() {
         aria-hidden={!mobileOpen}
       >
         <div className="flex items-center justify-between shrink-0">
-          <Link href="/" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
+          <Link
+            href="/"
+            className="flex items-center gap-2"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Leash Playground — home"
+          >
             <Image
-              src="/images/leash_icon.svg"
+              src="/leash-logo.png"
               alt="Leash"
               width={28}
               height={28}
               priority
-              className="size-7 rounded-md shadow-inner shadow-black/20"
+              className="size-7 shrink-0 select-none [filter:brightness(0)_invert(1)]"
             />
-            <div className="flex flex-col leading-tight">
-              <span className="text-[12px] font-semibold tracking-tight">Leash</span>
-              <span className="text-[9px] uppercase tracking-widest text-fg-subtle">
-                Playground
+            <span className="flex flex-col leading-tight">
+              <span className="text-[12px] font-semibold tracking-tight">
+                leash
+                <span className="font-normal text-fg-muted"> · playground</span>
               </span>
-            </div>
+              <span className="text-[9px] uppercase tracking-widest text-fg-subtle">devnet</span>
+            </span>
           </Link>
           <button
             type="button"

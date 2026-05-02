@@ -1,49 +1,58 @@
 import type { Metadata } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import { Roboto, Roboto_Mono } from 'next/font/google';
 import { Providers } from '@/components/providers';
 import { Sidebar } from '@/components/sidebar';
 import { Topbar } from '@/components/topbar';
 import './globals.css';
 
-const inter = Inter({
+const roboto = Roboto({
   subsets: ['latin'],
   variable: '--font-sans',
+  weight: ['300', '400', '500', '700'],
   display: 'swap',
 });
 
-const mono = JetBrains_Mono({
+const robotoMono = Roboto_Mono({
   subsets: ['latin'],
   variable: '--font-mono',
+  weight: ['400', '500'],
   display: 'swap',
 });
 
 export const metadata: Metadata = {
-  title: 'Leash · Playground',
-  description: 'A wallet, a leash, and a public receipt for every AI agent.',
-  // Next routes /icon.svg to the file in `public/images/` via this
-  // metadata entry — single source of truth for the brand mark, no
-  // duplicate file in `app/`. The PNG is registered as a fallback for
-  // browsers that ignore SVG favicons (e.g. older Safari).
+  title: 'leash · playground',
+  description: 'The operating system for agent-to-agent commerce — interactive playground.',
+  metadataBase: new URL('https://playground.leash.market'),
+  // Mirror apps/explorer + apps/agents: the white-inverted `leash-logo.png`
+  // is the single source of truth for the brand mark across all surfaces.
   icons: {
-    icon: [
-      { url: '/images/leash_icon.svg', type: 'image/svg+xml' },
-      { url: '/images/leash_icon.png', type: 'image/png', sizes: 'any' },
-    ],
-    shortcut: '/images/leash_icon.svg',
-    apple: '/images/leash_icon.png',
+    icon: '/leash-logo.png',
+    shortcut: '/leash-logo.png',
+    apple: '/leash-logo.png',
+  },
+  openGraph: {
+    title: 'leash · playground',
+    description: 'Mint agents, wire endpoints, fire payments. All from one place.',
+    siteName: 'leash.playground',
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    // `suppressHydrationWarning` on <html> and <body> is intentional: browser
-    // extensions like Grammarly (data-gr-*, data-new-gr-*) and ColorZilla
-    // (cz-shortcut-listen) inject attributes onto these nodes before React
-    // hydrates. The diff is cosmetic and React would otherwise log a hydration
-    // mismatch on every page load. This flag only silences mismatches on THIS
-    // node — children still validate normally.
-    <html lang="en" className={`${inter.variable} ${mono.variable}`} suppressHydrationWarning>
-      <body suppressHydrationWarning>
+    // `dark` matches the explorer + agents surfaces — the playground is
+    // intentionally dark-first to keep brand parity. `suppressHydrationWarning`
+    // on <html> and <body> is intentional: browser extensions like Grammarly
+    // (data-gr-*, data-new-gr-*) and ColorZilla (cz-shortcut-listen) inject
+    // attributes onto these nodes before React hydrates. The diff is cosmetic
+    // and React would otherwise log a hydration mismatch on every page load.
+    // This flag only silences mismatches on THIS node — children still validate
+    // normally.
+    <html
+      lang="en"
+      className={`${roboto.variable} ${robotoMono.variable} dark`}
+      suppressHydrationWarning
+    >
+      <body suppressHydrationWarning className="min-h-dvh font-sans antialiased">
         <Providers>
           <div className="min-h-dvh flex">
             <Sidebar />
@@ -51,14 +60,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Topbar />
               <main className="flex-1 px-3 py-4 sm:px-5 sm:py-6 md:px-8 md:py-7">
                 {/*
-                 * Hard pixel cap (1500px) instead of `max-w-6xl`. With the
-                 * tightened 14px root font + collapsible sidebar the legacy
-                 * 6xl cap (1008px) left ~30%+ empty gutters on standard
-                 * laptop/monitor widths and made cards feel marooned in a
-                 * narrow center column. 1500px lets the grid layouts on
-                 * /buyer, /seller, and /agents/[mint] actually breathe out
-                 * to fill the viewport, while still keeping line-lengths
-                 * readable on ultra-wide displays (>2K).
+                 * Hard pixel cap (1500px) instead of `max-w-6xl`. Matches
+                 * apps/explorer exactly so multi-app browsing doesn't shift
+                 * the eye-line. Keeps line-lengths readable on ultra-wide
+                 * displays (>2K) while letting cards breathe on laptops.
                  */}
                 <div className="mx-auto w-full max-w-[1500px]">{children}</div>
               </main>
