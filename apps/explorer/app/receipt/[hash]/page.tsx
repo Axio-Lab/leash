@@ -327,16 +327,19 @@ function Field({
   hint?: string;
   children: React.ReactNode;
 }) {
+  // On mobile we stack label-above-value so long hashes don't get
+  // squeezed into a 150-px gutter; on `sm`+ we revert to the
+  // two-column layout the desktop reading flow expects.
   return (
-    <div className="flex items-baseline gap-3">
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
       <dt
-        className="w-32 shrink-0 text-[10px] uppercase tracking-wider text-[--color-fg-subtle]"
+        className="text-[10px] uppercase tracking-wider text-[--color-fg-subtle] sm:w-32 sm:shrink-0"
         title={hint}
       >
         {label}
         {hint ? <span className="ml-1 cursor-help text-[--color-fg-muted]">ⓘ</span> : null}
       </dt>
-      <dd className="font-mono text-xs text-[--color-fg]">{children}</dd>
+      <dd className="min-w-0 break-all font-mono text-xs text-[--color-fg]">{children}</dd>
     </div>
   );
 }

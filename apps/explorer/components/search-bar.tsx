@@ -20,15 +20,18 @@ export function SearchBar({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
     startTransition(() => router.push(href));
   }
 
+  // `min-w-0` lets the input shrink inside its `flex-1` parent on narrow
+  // viewports — without it Flexbox preserves the placeholder's intrinsic
+  // width and pushes the search bar past the topbar's right edge. The
+  // `truncate`-style trio (overflow-hidden + ellipsis + nowrap) lets
+  // the verbose placeholder gracefully clip with `…` instead of
+  // overflowing on a 360-px-wide phone.
   const inputCls = cn(
-    'w-full bg-transparent outline-none placeholder:text-[--color-fg-subtle]',
+    'w-full min-w-0 truncate bg-transparent outline-none placeholder:text-[--color-fg-subtle]',
     size === 'lg' && 'text-base',
     size === 'sm' && 'text-xs',
   );
 
-  // Frosted glass shell mirroring the chat-glass aesthetic in apps/agents
-  // — slightly translucent so the page aurora bleeds through, with an
-  // indigo focus ring tied to the brand variables.
   const padCls = cn(
     'group flex items-center gap-2 rounded-xl border border-[--color-border] bg-[--color-bg-elev]/70 backdrop-blur-md transition-all',
     'focus-within:border-[--color-brand-strong] focus-within:bg-[--color-bg-elev]/90',
@@ -39,12 +42,12 @@ export function SearchBar({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
   );
 
   return (
-    <form onSubmit={onSubmit} className="w-full">
+    <form onSubmit={onSubmit} className="w-full min-w-0">
       <label className={padCls}>
         {pending ? (
           <Spinner size={size === 'lg' ? 'sm' : 'xs'} className="text-[--color-fg-subtle]" />
         ) : (
-          <Search className="h-4 w-4 text-[--color-fg-subtle] transition-colors group-focus-within:text-[--color-brand]" />
+          <Search className="h-4 w-4 shrink-0 text-[--color-fg-subtle] transition-colors group-focus-within:text-[--color-brand]" />
         )}
         <input
           type="text"

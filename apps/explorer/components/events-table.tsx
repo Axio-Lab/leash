@@ -99,30 +99,32 @@ export function EventsTable({
 
   return (
     <div className="card overflow-hidden p-0">
+      {/* `overflow-x-auto` keeps the wide layout scrollable on tablet
+          breakpoints; the `hidden md:table-cell` columns drop off on
+          phones so what's left fits comfortably without sideways
+          scrolling. The full-width row link still lives in the first
+          cell so the entire row remains tappable. */}
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-[--color-border] text-sm">
           <thead className="bg-[--color-bg-elev]/40 text-left text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">
             <tr>
-              <th className="px-4 py-2.5 font-medium">Kind</th>
+              <th className="px-3 py-2.5 font-medium sm:px-4">Kind</th>
               <th
-                className="px-3 py-2.5 font-medium"
+                className="hidden px-3 py-2.5 font-medium md:table-cell"
                 title="Lifecycle position: prepared → submitted → confirmed (or failed)."
               >
                 Status <span className="cursor-help text-[--color-fg-muted]">ⓘ</span>
               </th>
               <th className="px-3 py-2.5 font-medium">Agent</th>
-              <th className="px-3 py-2.5 font-medium">Reference</th>
-              <th className="px-3 py-2.5 font-medium">Signature</th>
-              <th className="px-4 py-2.5 font-medium text-right">When</th>
+              <th className="hidden px-3 py-2.5 font-medium md:table-cell">Reference</th>
+              <th className="hidden px-3 py-2.5 font-medium lg:table-cell">Signature</th>
+              <th className="px-3 py-2.5 text-right font-medium sm:px-4">When</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[--color-border]/60">
             {rows.map((row, idx) => {
               const desc = describeEvent(row);
               const ref = referenceFor(row, network);
-              // Whole-row click target: tx detail when we have a signature
-              // (the most useful destination for activity rows), event
-              // detail otherwise (e.g. for prepared events without a tx).
               const rowHref = row.signature ? `/tx/${row.signature}` : `/event/${row.id}`;
               const rowLabel = row.signature
                 ? `View transaction ${row.signature}`
@@ -133,9 +135,6 @@ export function EventsTable({
                   className="group relative motion-safe:[animation:var(--animate-row-in)] transition-colors hover:bg-[--color-brand-soft]/15"
                   style={{ animationDelay: `${Math.min(idx, 12) * 24}ms` }}
                 >
-                  {/* Stretched link sits behind the inline cell links so they
-                      retain their own click targets (agent / signature /
-                      reference deep-links). */}
                   <td className="p-0">
                     <Link
                       href={rowHref}
@@ -143,16 +142,16 @@ export function EventsTable({
                       className="absolute inset-0 z-0"
                       tabIndex={-1}
                     />
-                    <div className="relative z-10 px-4 py-2.5 align-middle">
+                    <div className="relative z-10 px-3 py-2.5 align-middle sm:px-4">
                       <Link href={`/event/${row.id}`} className="inline-flex items-center gap-2">
                         <EventBadge descriptor={desc} />
-                        <span className="text-xs text-[--color-fg-muted] group-hover:text-[--color-fg]">
+                        <span className="hidden text-xs text-[--color-fg-muted] group-hover:text-[--color-fg] sm:inline">
                           {desc.label}
                         </span>
                       </Link>
                     </div>
                   </td>
-                  <td className="relative z-10 px-3 py-2.5 align-middle">
+                  <td className="relative z-10 hidden px-3 py-2.5 align-middle md:table-cell">
                     <PhaseBadge phase={row.phase} />
                   </td>
                   <td className="relative z-10 px-3 py-2.5 align-middle">
@@ -161,7 +160,7 @@ export function EventsTable({
                       href={row.agent_asset ? `/agent/${row.agent_asset}` : undefined}
                     />
                   </td>
-                  <td className="relative z-10 px-3 py-2.5 align-middle">
+                  <td className="relative z-10 hidden px-3 py-2.5 align-middle md:table-cell">
                     {ref ? (
                       <span className="inline-flex items-center gap-1.5">
                         <span className="text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">
@@ -177,14 +176,14 @@ export function EventsTable({
                       <span className="text-[--color-fg-subtle]">—</span>
                     )}
                   </td>
-                  <td className="relative z-10 px-3 py-2.5 align-middle">
+                  <td className="relative z-10 hidden px-3 py-2.5 align-middle lg:table-cell">
                     <Mono
                       value={row.signature}
                       href={row.signature ? `/tx/${row.signature}` : undefined}
                       external={row.signature ? solscanTxUrl(network, row.signature) : undefined}
                     />
                   </td>
-                  <td className="relative z-10 px-4 py-2.5 text-right align-middle text-xs text-[--color-fg-muted]">
+                  <td className="relative z-10 px-3 py-2.5 text-right align-middle text-xs text-[--color-fg-muted] sm:px-4">
                     {formatRelative(row.ts)}
                   </td>
                 </tr>

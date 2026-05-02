@@ -188,7 +188,7 @@ export function LiveRefresh({ network, intervalSec = 5, label = 'live' }: Props)
   }
 
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-2.5 py-1 text-xs text-[--color-fg-muted] backdrop-blur-md">
+    <span className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-2.5 py-1 text-xs text-[--color-fg-muted] backdrop-blur-md">
       <span className="relative inline-flex items-center" aria-hidden="true">
         <span className={cn('inline-block h-1.5 w-1.5 rounded-full', dotClass)} />
         {!paused && mode !== 'connecting' ? (
@@ -201,7 +201,11 @@ export function LiveRefresh({ network, intervalSec = 5, label = 'live' }: Props)
         ) : null}
       </span>
       <span className="font-mono uppercase tracking-wider text-[--color-fg-subtle]">{label}</span>
-      {detail}
+      {/* Secondary detail (`stream` / `⟲ 5s` / `paused`) is the first
+          thing to drop when there isn't enough horizontal room — on
+          phones the dot + label + pause button still tell the user
+          everything they need (live or not). */}
+      <span className="hidden sm:inline-flex">{detail}</span>
       <button
         type="button"
         onClick={() => setPaused((p) => !p)}

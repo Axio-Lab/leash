@@ -12,20 +12,17 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Curated filter set — one button per category that actually shows
- * results today. We deliberately don't enumerate every `EventKind`
- * the indexer can emit (e.g. `agent.create`, `agent.treasury.fund_sol`,
- * `agent.token.set`) because most of them have ~zero rows on devnet
- * and clicking through an empty filter is a worse UX than not having
- * the chip at all.
+ * results today AND maps cleanly onto a single indexer kind. We
+ * deliberately don't enumerate every `EventKind` because most of
+ * them have ~zero rows on devnet (or are internal lifecycle steps
+ * like `submit.raw` / `agent.delegation.set`) and clicking through
+ * an empty filter is a worse UX than not having the chip at all.
  */
 const KIND_OPTIONS = [
   { value: '', label: 'All' },
   { value: 'receipt.published', label: 'Receipts' },
-  { value: 'receipt.pulled', label: 'Pulled' },
   { value: 'agent.treasury.withdraw', label: 'Withdraw' },
   { value: 'agent.treasury.fund', label: 'Fund' },
-  { value: 'agent.delegation.set', label: 'Allowance' },
-  { value: 'submit.raw', label: 'Submit' },
 ];
 
 type Props = {

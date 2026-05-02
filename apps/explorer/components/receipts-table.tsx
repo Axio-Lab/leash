@@ -82,18 +82,23 @@ export function ReceiptsTable({
 
   return (
     <div className="card overflow-hidden p-0">
+      {/* Phones see KIND + AMOUNT + HASH + WHEN — the four columns
+          a user actually needs to scan a feed. Tablets unlock
+          DECISION, payer/receiver, and fee. The full row remains
+          tappable, so every collapsed column is still one click
+          away on the receipt detail page. */}
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-[--color-border] text-sm">
           <thead className="bg-[--color-bg-elev]/40 text-left text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">
             <tr>
-              <th className="px-4 py-2.5 font-medium">Kind</th>
-              <th className="px-3 py-2.5 font-medium">Decision</th>
-              <th className="px-3 py-2.5 font-medium">Payer</th>
-              <th className="px-3 py-2.5 font-medium">Receiver</th>
+              <th className="px-3 py-2.5 font-medium sm:px-4">Kind</th>
+              <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Decision</th>
+              <th className="hidden px-3 py-2.5 font-medium md:table-cell">Payer</th>
+              <th className="hidden px-3 py-2.5 font-medium md:table-cell">Receiver</th>
               <th className="px-3 py-2.5 font-medium">Amount</th>
-              <th className="px-3 py-2.5 font-medium">Fee</th>
+              <th className="hidden px-3 py-2.5 font-medium lg:table-cell">Fee</th>
               <th className="px-3 py-2.5 font-medium">Hash</th>
-              <th className="px-4 py-2.5 font-medium text-right">When</th>
+              <th className="px-3 py-2.5 text-right font-medium sm:px-4">When</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[--color-border]/60">
@@ -116,17 +121,17 @@ export function ReceiptsTable({
                       className="absolute inset-0 z-0"
                       tabIndex={-1}
                     />
-                    <div className="relative z-10 px-4 py-2.5 align-middle">
+                    <div className="relative z-10 px-3 py-2.5 align-middle sm:px-4">
                       <Pill value={r.kind} cls={KIND_CLS[r.kind]} />
                     </div>
                   </td>
-                  <td className="relative z-10 px-3 py-2.5 align-middle">
+                  <td className="relative z-10 hidden px-3 py-2.5 align-middle sm:table-cell">
                     <Pill value={r.decision} cls={DECISION_CLS[r.decision]} />
                   </td>
-                  <td className="relative z-10 px-3 py-2.5 align-middle">
+                  <td className="relative z-10 hidden px-3 py-2.5 align-middle md:table-cell">
                     <Mono value={payer} href={payer ? `/agent/${payer}` : undefined} />
                   </td>
-                  <td className="relative z-10 px-3 py-2.5 align-middle">
+                  <td className="relative z-10 hidden px-3 py-2.5 align-middle md:table-cell">
                     <Mono value={receiver} href={receiver ? `/agent/${receiver}` : undefined} />
                   </td>
                   <td className="relative z-10 px-3 py-2.5 align-middle font-mono text-xs text-[--color-fg]">
@@ -137,7 +142,7 @@ export function ReceiptsTable({
                         )
                       : '—'}
                   </td>
-                  <td className="relative z-10 px-3 py-2.5 align-middle font-mono text-xs text-[--color-fg-muted]">
+                  <td className="relative z-10 hidden px-3 py-2.5 align-middle font-mono text-xs text-[--color-fg-muted] lg:table-cell">
                     {r.price?.fee
                       ? formatTokenAmount(
                           r.price.fee,
@@ -149,7 +154,7 @@ export function ReceiptsTable({
                   <td className="relative z-10 px-3 py-2.5 align-middle">
                     <Mono value={r.receipt_hash} href={`/receipt/${r.receipt_hash}`} />
                   </td>
-                  <td className="relative z-10 px-4 py-2.5 text-right align-middle text-xs text-[--color-fg-muted]">
+                  <td className="relative z-10 px-3 py-2.5 text-right align-middle text-xs text-[--color-fg-muted] sm:px-4">
                     {formatRelative(r.ts)}
                   </td>
                 </tr>

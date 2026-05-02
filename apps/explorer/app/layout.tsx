@@ -46,7 +46,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     >
       <body suppressHydrationWarning className="min-h-dvh font-sans antialiased">
         <Topbar network={network} />
-        <main className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1500px] px-3 py-5 sm:px-6 sm:py-8">{children}</main>
         <Footer />
       </body>
     </html>

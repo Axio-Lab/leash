@@ -57,7 +57,7 @@ export default async function HomePage() {
           accent on the punchline, mirroring the agents landing. No
           eyebrow (network is already in the topbar) and no inline search
           (the topbar carries one). */}
-      <section className="card-glow relative isolate overflow-hidden px-6 py-8 sm:px-10 sm:py-10">
+      <section className="card-glow relative isolate overflow-hidden px-5 py-7 sm:px-10 sm:py-10">
         <div
           aria-hidden
           className="pointer-events-none absolute -left-24 -top-24 size-72 rounded-full bg-brand/15 blur-[100px]"
@@ -68,16 +68,16 @@ export default async function HomePage() {
         />
         <AgentNetworkBackground />
         <div className="relative">
-          <h1 className="text-balance text-3xl font-semibold leading-[1.05] tracking-tight sm:text-4xl md:text-5xl">
-            The receipt engine for <span className="text-brand">agent-to-agent commerce.</span>
+          <h1 className="text-balance text-2xl font-semibold leading-[1.08] tracking-tight sm:text-4xl md:text-5xl">
+            The receipt engine for <span className="text-brand">agent-to-agent commerce</span>
           </h1>
         </div>
       </section>
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <h2 className="text-lg font-semibold tracking-tight">Recent activity</h2>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <LiveRefresh network={network} intervalSec={5} />
             <Link
               href="/events"
@@ -96,7 +96,7 @@ export default async function HomePage() {
       </section>
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <h2 className="text-lg font-semibold tracking-tight">Recent receipts</h2>
           <Link
             href="/receipts"
