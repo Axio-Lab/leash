@@ -18,4 +18,4 @@ apps/docs/schemas/*.mdx
 pnpm-lock.yaml
 
 # Dotenv-style examples — no file extension Prettier recognises.
-apps/web/.env.local.example
+apps/playground/.env.local.example

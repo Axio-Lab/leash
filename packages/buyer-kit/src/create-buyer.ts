@@ -32,7 +32,7 @@ export type BuyerConfig = {
   /**
    * `@solana/kit` `TransactionSigner` used to sign x402 SPL token transfers.
    * On Node, build it via `createKeyPairSignerFromBytes(secret) via @solana/kit`. In the
-   * browser, use the Privy → kit adapter (`apps/web/lib/privy-x402-signer.ts`).
+   * browser, use the Privy → kit adapter (`apps/playground/lib/privy-x402-signer.ts`).
    */
   signer: ClientSvmSigner;
   /**

@@ -388,7 +388,354 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
           'Open Profile → Agent in the chat UI to inspect the active spend limit and treasury balance.',
       });
     },
+
+    async getReceipt(args): Promise<LeashToolResult> {
+      const hash = (args.receipt_hash ?? '').trim();
+      if (!hash) {
+        return jsonResult({
+          kind: 'receipt',
+          status: 'error',
+          message:
+            '`receipt_hash` is required (the 64-hex-char value the explorer renders at /receipt/{hash}).',
+        });
+      }
+      try {
+        const url = `${env.leashApiUrl}/v1/receipts/by-hash/${encodeURIComponent(hash)}`;
+        const apiKey = await revealAnyApiKey(ctx.privyId);
+        const res = await fetch(url, { headers: { authorization: `Bearer ${apiKey}` } });
+        const text = await res.text();
+        if (res.status === 404) {
+          return jsonResult({
+            kind: 'receipt',
+            status: 'not_found',
+            receipt_hash: hash,
+            network: SOLANA_NETWORK,
+            message: `No receipt with hash ${hash} on ${SOLANA_NETWORK} \u2014 cross-network reads are impossible by design.`,
+          });
+        }
+        if (!res.ok) {
+          return jsonResult({
+            kind: 'receipt',
+            status: 'error',
+            message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+          });
+        }
+        const row = JSON.parse(text) as {
+          receipt_hash: string;
+          network: 'solana-devnet' | 'solana-mainnet';
+          agent: string;
+          decision: string;
+          kind: 'spend' | 'earn';
+          tx_sig: string | null;
+          ingested_at: string;
+          raw: Record<string, unknown>;
+        };
+        return jsonResult({
+          kind: 'receipt',
+          status: 'ok',
+          receipt_hash: row.receipt_hash,
+          agent: row.agent,
+          direction: row.kind === 'spend' ? 'outgoing' : 'incoming',
+          decision: row.decision,
+          network: row.network,
+          tx_signature: row.tx_sig,
+          ingested_at: row.ingested_at,
+          receipt: row.raw,
+        });
+      } catch (e) {
+        return jsonResult({
+          kind: 'receipt',
+          status: 'error',
+          message: e instanceof Error ? e.message : 'unknown',
+        });
+      }
+    },
+
+    async transactionHistory(args): Promise<LeashToolResult> {
+      if (!ctx.agentMint) return noAgentResult('transaction_history');
+      const days = clampInt(args.days ?? 7, 1, 90);
+      const limit = clampInt(args.limit ?? 200, 1, 1000);
+      const direction: 'both' | 'outgoing' | 'incoming' = args.direction ?? 'both';
+      const cutoffMs = Date.now() - days * 86_400_000;
+      try {
+        const apiKey = await revealAnyApiKey(ctx.privyId);
+        const rows = await fetchReceiptWindow({
+          apiBaseUrl: env.leashApiUrl,
+          apiKey,
+          agent: ctx.agentMint,
+          direction,
+          limit,
+          cutoffMs,
+        });
+        const totals = aggregateReceipts(rows.items);
+        return jsonResult({
+          kind: 'transaction_history',
+          status: 'ok',
+          agent_mint: ctx.agentMint,
+          network: SOLANA_NETWORK,
+          range: {
+            from: new Date(cutoffMs).toISOString(),
+            to: new Date().toISOString(),
+            days,
+          },
+          direction,
+          count: rows.items.length,
+          truncated: rows.truncated,
+          total_sent_usd: totals.totalSentUsd,
+          total_received_usd: totals.totalReceivedUsd,
+          net_usd: totals.netUsd,
+          sent_count: totals.sentCount,
+          received_count: totals.receivedCount,
+          non_usd_count: totals.nonUsdCount,
+          items: rows.items.map((r) => ({
+            receipt_hash: r.receipt_hash,
+            direction: r.kind === 'spend' ? 'outgoing' : 'incoming',
+            decision: r.decision,
+            tx_signature: r.tx_sig,
+            url: r.raw?.request?.url ?? null,
+            method: r.raw?.request?.method ?? null,
+            amount: r.raw?.price?.amount ?? null,
+            currency: r.raw?.price?.currency ?? null,
+            timestamp: r.ingested_at,
+          })),
+        });
+      } catch (e) {
+        return jsonResult({
+          kind: 'transaction_history',
+          status: 'error',
+          message: e instanceof Error ? e.message : 'unknown',
+        });
+      }
+    },
+
+    async dailyTransactions(args): Promise<LeashToolResult> {
+      if (!ctx.agentMint) return noAgentResult('daily_transactions');
+      const days = clampInt(args.days ?? 7, 1, 90);
+      const cutoffMs = Date.now() - days * 86_400_000;
+      try {
+        const apiKey = await revealAnyApiKey(ctx.privyId);
+        const rows = await fetchReceiptWindow({
+          apiBaseUrl: env.leashApiUrl,
+          apiKey,
+          agent: ctx.agentMint,
+          direction: 'both',
+          limit: 1000,
+          cutoffMs,
+        });
+        const buckets = bucketReceiptsByDay(rows.items, days);
+        const totals = aggregateReceipts(rows.items);
+        return jsonResult({
+          kind: 'daily_transactions',
+          status: 'ok',
+          agent_mint: ctx.agentMint,
+          network: SOLANA_NETWORK,
+          range: {
+            from: new Date(cutoffMs).toISOString(),
+            to: new Date().toISOString(),
+            days,
+          },
+          daily: buckets,
+          totals: {
+            sent_count: totals.sentCount,
+            sent_usd: totals.totalSentUsd,
+            received_count: totals.receivedCount,
+            received_usd: totals.totalReceivedUsd,
+            net_usd: totals.netUsd,
+            non_usd_count: totals.nonUsdCount,
+          },
+          truncated: rows.truncated,
+        });
+      } catch (e) {
+        return jsonResult({
+          kind: 'daily_transactions',
+          status: 'error',
+          message: e instanceof Error ? e.message : 'unknown',
+        });
+      }
+    },
   };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Receipt-window helpers (chat-host copy of the standalone-MCP
+// implementation in `packages/mcp/src/host-stdio.ts`). Kept inline here
+// instead of in a shared package because the chat host's transport for
+// receipts is an HTTP fetch with a per-user platform key, not an
+// agent-signed call \u2014 the URL/auth shape diverges enough that pulling
+// it into `@leash/mcp-core` would force an awkward strategy parameter.
+// ────────────────────────────────────────────────────────────────────────────
+
+type ChatReceiptRow = {
+  receipt_hash: string;
+  tx_sig: string | null;
+  decision: string;
+  kind: 'spend' | 'earn';
+  ingested_at: string;
+  raw: {
+    request?: { url?: string; method?: string };
+    price?: { amount?: string; currency?: string };
+  };
+};
+
+function clampInt(n: number, min: number, max: number): number {
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, Math.floor(n)));
+}
+
+async function fetchReceiptWindow(args: {
+  apiBaseUrl: string;
+  apiKey: string;
+  agent: string;
+  direction: 'both' | 'outgoing' | 'incoming';
+  limit: number;
+  cutoffMs: number;
+}): Promise<{ items: ChatReceiptRow[]; truncated: boolean }> {
+  const items: ChatReceiptRow[] = [];
+  let cursor: string | null = null;
+  let truncated = false;
+  const maxPages = 10;
+
+  for (let page = 0; page < maxPages; page++) {
+    const url = new URL(`${args.apiBaseUrl}/v1/receipts/${args.agent}`);
+    url.searchParams.set('limit', '200');
+    if (args.direction === 'outgoing') url.searchParams.set('kind', 'spend');
+    else if (args.direction === 'incoming') url.searchParams.set('kind', 'earn');
+    if (cursor) url.searchParams.set('cursor', cursor);
+
+    const res = await fetch(url, { headers: { authorization: `Bearer ${args.apiKey}` } });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(`Leash API ${res.status}: ${text.slice(0, 300)}`);
+    }
+    const json = JSON.parse(text) as {
+      items: ChatReceiptRow[];
+      next_cursor: string | null;
+    };
+
+    let stop = false;
+    for (const r of json.items) {
+      const ingestedMs = Date.parse(r.ingested_at);
+      if (Number.isFinite(ingestedMs) && ingestedMs < args.cutoffMs) {
+        stop = true;
+        break;
+      }
+      items.push(r);
+      if (items.length >= args.limit) {
+        truncated = true;
+        stop = true;
+        break;
+      }
+    }
+    if (stop || !json.next_cursor) break;
+    cursor = json.next_cursor;
+  }
+
+  return { items, truncated };
+}
+
+const USD_STABLES = new Set(['USDC', 'USDG', 'USDT']);
+
+function aggregateReceipts(items: ChatReceiptRow[]): {
+  sentCount: number;
+  receivedCount: number;
+  totalSentUsd: string;
+  totalReceivedUsd: string;
+  netUsd: string;
+  nonUsdCount: number;
+} {
+  let sentCount = 0;
+  let receivedCount = 0;
+  let nonUsdCount = 0;
+  let sentSum = 0;
+  let receivedSum = 0;
+
+  for (const r of items) {
+    const amt = parseFloat(r.raw?.price?.amount ?? '');
+    const cur = (r.raw?.price?.currency ?? '').toUpperCase();
+    if (r.kind === 'spend') sentCount++;
+    else if (r.kind === 'earn') receivedCount++;
+    if (!Number.isFinite(amt) || !cur) continue;
+    if (!USD_STABLES.has(cur)) {
+      nonUsdCount++;
+      continue;
+    }
+    if (r.kind === 'spend') sentSum += amt;
+    else if (r.kind === 'earn') receivedSum += amt;
+  }
+
+  const round = (n: number) => Math.round(n * 1_000_000) / 1_000_000;
+  return {
+    sentCount,
+    receivedCount,
+    nonUsdCount,
+    totalSentUsd: round(sentSum).toString(),
+    totalReceivedUsd: round(receivedSum).toString(),
+    netUsd: round(receivedSum - sentSum).toString(),
+  };
+}
+
+function bucketReceiptsByDay(
+  items: ChatReceiptRow[],
+  days: number,
+): Array<{
+  date: string;
+  sent_count: number;
+  sent_usd: string;
+  received_count: number;
+  received_usd: string;
+  net_usd: string;
+}> {
+  const map = new Map<
+    string,
+    { sentCount: number; sentSum: number; receivedCount: number; receivedSum: number }
+  >();
+
+  const today = utcDay(new Date());
+  for (let i = 0; i < days; i++) {
+    const d = new Date(today.getTime() - i * 86_400_000);
+    map.set(formatUtcDate(d), { sentCount: 0, sentSum: 0, receivedCount: 0, receivedSum: 0 });
+  }
+
+  for (const r of items) {
+    const ingested = new Date(r.ingested_at);
+    if (Number.isNaN(ingested.getTime())) continue;
+    const key = formatUtcDate(ingested);
+    let bucket = map.get(key);
+    if (!bucket) {
+      bucket = { sentCount: 0, sentSum: 0, receivedCount: 0, receivedSum: 0 };
+      map.set(key, bucket);
+    }
+    if (r.kind === 'spend') bucket.sentCount++;
+    else if (r.kind === 'earn') bucket.receivedCount++;
+    const amt = parseFloat(r.raw?.price?.amount ?? '');
+    const cur = (r.raw?.price?.currency ?? '').toUpperCase();
+    if (!Number.isFinite(amt) || !USD_STABLES.has(cur)) continue;
+    if (r.kind === 'spend') bucket.sentSum += amt;
+    else if (r.kind === 'earn') bucket.receivedSum += amt;
+  }
+
+  const round = (n: number) => Math.round(n * 1_000_000) / 1_000_000;
+  return [...map.entries()]
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .map(([date, b]) => ({
+      date,
+      sent_count: b.sentCount,
+      sent_usd: round(b.sentSum).toString(),
+      received_count: b.receivedCount,
+      received_usd: round(b.receivedSum).toString(),
+      net_usd: round(b.receivedSum - b.sentSum).toString(),
+    }));
+}
+
+function utcDay(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+function formatUtcDate(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /**

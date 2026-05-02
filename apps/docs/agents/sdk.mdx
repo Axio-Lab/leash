@@ -74,6 +74,46 @@ console.log('recorded', recorded.mint, 'treasury', recorded.treasury);
 > "remote control" of agents that already exist; the MCP / CLI is
 > the engine that creates them.
 
+## Receipts — list, single, history, daily
+
+Once an agent is on-chain, every settled x402 call writes a
+`ReceiptV1` row the API exposes through four matching helpers:
+
+```ts
+const leash = new LeashClient({
+  baseUrl: 'https://api.leash.market',
+  apiKey: process.env.LEASH_API_KEY!,
+});
+const agentMint = 'AjfeyP...';
+
+// 1. Paginated feed (newest-first). Filter by direction with `kind`.
+const feed = await leash.receipts({ agentMint, direction: 'earn', limit: 50 });
+
+// 2. Single ReceiptV1 by hash — same blob the explorer renders at
+//    /receipt/{hash}. Network is bound to the API key prefix; a hash
+//    from the sibling cluster returns 404.
+const r = await leash.getReceipt(
+  'c3c50cb352a2624f783ca6a51bdb7fbcd3b67f04b4a42cd431444db05504181a',
+);
+console.log(r.raw); // → full canonical ReceiptV1
+
+// 3. Last N days plus running USD totals (stables summed at 1:1).
+const week = await leash.transactionHistory({ agentMint, days: 7 });
+console.log(week.total_received_usd, week.total_sent_usd, week.net_usd);
+
+// 4. Same window, bucketed by UTC day (continuous timeline).
+const daily = await leash.dailyTransactions({ agentMint, days: 14 });
+for (const day of daily.daily) {
+  console.log(day.date, '+', day.received_usd, '-', day.sent_usd, '=', day.net_usd);
+}
+```
+
+The aggregate helpers paginate the underlying `/v1/receipts/{agent}`
+feed for you and stop early once a row falls outside the window.
+Stables (USDC, USDG, USDT) are summed as USD 1:1; non-stable
+receipts get counted but excluded from the USD math
+(`non_usd_count`).
+
 ## Authenticated calls (X-Leash-Sig)
 
 Webhook endpoints are agent-scoped — the API verifies a

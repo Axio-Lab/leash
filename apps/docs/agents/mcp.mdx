@@ -1,6 +1,6 @@
 ---
 title: 'Standalone MCP server'
-description: 'Drop Leash into Cursor, Claude Desktop, Cline, Continue, or ChatGPT-MCP. STDIO transport, 11 tools, zero browser in the loop.'
+description: 'Drop Leash into Cursor, Claude Desktop, Cline, Continue, or ChatGPT-MCP. STDIO transport, 14 tools, zero browser in the loop.'
 ---
 
 `@leash/mcp` is the agent-first surface of Leash. It runs as a
@@ -110,7 +110,7 @@ the config file.
 
 ## Tools
 
-The MCP exposes 11 canonical tools. Each is also available through
+The MCP exposes 14 canonical tools. Each is also available through
 the Claude Agent SDK in the chat product (same names, same shapes —
 [shared definitions](https://github.com/leash-market/leash/tree/main/packages/mcp-core/src/tools)).
 
@@ -124,7 +124,10 @@ the Claude Agent SDK in the chat product (same names, same shapes —
 | `leash_withdraw_treasury`      | Owner-driven withdrawal of SOL or an SPL stable to any wallet (mpl-core::Execute).                                                 |
 | `leash_set_spend_limit`        | Owner-driven update of the SPL `Approve` delegation. Tighten / revoke / restore the executive's spend authority for an SPL stable. |
 | `leash_get_spend_limit`        | Inspect the active SPL delegation (delegate pubkey, remaining cap, treasury balance) for an SPL stable.                            |
-| `leash_receipts`               | List recent receipts for the active agent.                                                                                         |
+| `leash_receipts`               | Paginated receipts feed for the active agent.                                                                                      |
+| `leash_get_receipt`            | Fetch a single ReceiptV1 by `receipt_hash` — the same canonical JSON the explorer renders at `/receipt/{hash}`.                    |
+| `leash_transaction_history`    | List every earn + spend receipt in the last N days (default 7) plus running totals (`sent_usd`, `received_usd`, `net_usd`).        |
+| `leash_daily_transactions`     | Bin the same window into per-day buckets (`{ date, sent_usd, received_usd, net_usd, sent_count, received_count }`).                |
 | `leash_discover`               | Search the marketplace for paid services by capability + price. Public, no agent needed.                                           |
 | `leash_reputation`             | Live reputation snapshot for any on-chain agent — settled-call volume, dispute rate, normalised rating in `[0,1]`.                 |
 
@@ -134,7 +137,7 @@ Once the host is running, ask the agent:
 
 > _"List the Leash MCP tools."_
 
-You should see all 11 `leash_*` tools. If you don't, check the
+You should see all 14 `leash_*` tools. If you don't, check the
 host's MCP logs (in Cursor: `~/Library/Application Support/Cursor/logs/.../MCP Logs.log`) — most failures are wrong path, missing
 network access, or a stale cached `npx` install (clear with
 `npx clear-npx-cache`).

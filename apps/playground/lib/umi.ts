@@ -35,7 +35,7 @@ export function getServerUmi(): Umi {
   const secret = process.env.LEASH_DEV_PAYER_SECRET_KEY;
   if (!secret) {
     throw new Error(
-      'LEASH_DEV_PAYER_SECRET_KEY is not set. Add a base58 or JSON Solana secret key to apps/web/.env.local — the playground uses it as the on-chain payer for createAgent, registerExecutive, and delegateExecution.',
+      'LEASH_DEV_PAYER_SECRET_KEY is not set. Add a base58 or JSON Solana secret key to apps/playground/.env.local — the playground uses it as the on-chain payer for createAgent, registerExecutive, and delegateExecution.',
     );
   }
   const secretKey = decodeSecretKey(secret);

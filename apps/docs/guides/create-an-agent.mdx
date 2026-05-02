@@ -134,7 +134,7 @@ You can also add custom labels (e.g. `audit-firm-x`, `proof-of-humanity`) when y
 
 ## In the playground
 
-The Next.js playground (`apps/web`) wraps all of this in a UI **signed by your connected Privy wallet** — there is no shared hot key:
+The Next.js playground (`apps/playground`) wraps all of this in a UI **signed by your connected Privy wallet** — there is no shared hot key:
 
 - `/agents/new` — Create Agent form, **two tabs**: **1 · Identity & metadata** then **2 · Services & session**.
   - **Tab 1.** Name, description, network, and a **publicly fetchable JSON URL** for the on-chain Core metadata URI (HTTPS, IPFS gateway, Arweave, etc.) — you host that JSON yourself.
@@ -143,6 +143,6 @@ The Next.js playground (`apps/web`) wraps all of this in a UI **signed by your c
 - `/agents/[mint]` → **Execute** tab — `registerExecutiveV1` + `delegateExecutionV1`, same Privy wallet.
 - `/agents/[mint]` → **Token (Genesis)** tab — paste the token image URL Metaplex accepts, then launch (see [Launch an agent token](/guides/launch-agent-token)).
 
-Configure `NEXT_PUBLIC_PRIVY_APP_ID` in `apps/web/.env.local`, log in via the wallet button (top-right), and fund your embedded wallet on devnet (`solana airdrop 1 <pubkey> --url devnet`). The bridge is `apps/web/lib/privy-umi.ts` — `usePrivyUmi()` wraps the Privy `ConnectedSolanaWallet` in Metaplex's `walletAdapterIdentity` so any `@leash/registry-utils` SDK call works straight from a React component.
+Configure `NEXT_PUBLIC_PRIVY_APP_ID` in `apps/playground/.env.local`, log in via the wallet button (top-right), and fund your embedded wallet on devnet (`solana airdrop 1 <pubkey> --url devnet`). The bridge is `apps/playground/lib/privy-umi.ts` — `usePrivyUmi()` wraps the Privy `ConnectedSolanaWallet` in Metaplex's `walletAdapterIdentity` so any `@leash/registry-utils` SDK call works straight from a React component.
 
 > The `LEASH_DEV_PAYER_SECRET_KEY` env variable is **optional** and only used by the headless server fallback routes (`POST /api/agents/create`, `POST /api/agents/executive`) — useful for CI / cron / non-Privy callers, not the demo. Full walkthrough in [Bring your own keypair](/guides/bring-your-own-keypair).

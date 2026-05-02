@@ -6,7 +6,7 @@
  * `TransactionPartialSigner` shape that `@x402/svm`'s `ExactSvmScheme`
  * needs to attach as the SPL transfer authority.
  *
- * Mirrors `apps/web/lib/privy-svm-signer.ts`. Kept duplicated rather than
+ * Mirrors `apps/playground/lib/privy-svm-signer.ts`. Kept duplicated rather than
  * extracted into a shared package because the file is small, has no
  * server-only dependencies, and pulling it through a workspace package
  * would force every consumer to take a Privy peer dep just to import the

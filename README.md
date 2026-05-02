@@ -57,7 +57,7 @@ each tool call leave a receipt on the explorer.
 1. **Seller** — `pnpm --filter @leash/seller-demo start` (port `3001`).
 2. **Buyer** — `SELLER_URL=http://localhost:3001 pnpm --filter @leash/buyer-demo start` (polls seller).
 3. **Runner** — `pnpm --filter @leash/runner start` (JSONL feed on `:8787`).
-4. **Web** — `pnpm --filter @leash/web dev` (explorer; proxies receipts to `LEASH_RUNNER_URL`).
+4. **Playground** — `pnpm --filter @leash/playground dev` (interactive UI; proxies receipts to `LEASH_RUNNER_URL`).
 
 Scripted outline: `pnpm exec tsx scripts/e2e-demo.ts` (expects seller on `SELLER_URL`).
 

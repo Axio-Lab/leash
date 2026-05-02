@@ -1,0 +1,288 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans:
+    'Roboto', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Roboto Mono', ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+
+  /* Background ramp + foreground/border tokens — kept in lockstep with
+     apps/explorer + apps/agents so all three surfaces read as one product. */
+  --color-bg: oklch(0.13 0.012 280);
+  --color-bg-elev: oklch(0.18 0.012 280);
+  --color-bg-elev-2: oklch(0.22 0.014 280);
+  --color-border: oklch(0.27 0.012 280);
+  --color-border-strong: oklch(0.36 0.014 280);
+  --color-fg: oklch(0.97 0.005 280);
+  --color-fg-muted: oklch(0.7 0.018 280);
+  --color-fg-subtle: oklch(0.55 0.018 280);
+
+  /* Leash brand: #5e78f5 — kept identical to apps/explorer + apps/agents
+     so the playground reads as part of the same product surface. */
+  --color-brand: oklch(0.66 0.19 268);
+  --color-brand-strong: oklch(0.74 0.18 268);
+  --color-brand-soft: oklch(0.32 0.12 268);
+  --color-brand-hex: #5e78f5;
+
+  --color-success: oklch(0.78 0.16 150);
+  --color-warning: oklch(0.82 0.16 80);
+  --color-danger: oklch(0.7 0.22 25);
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  --animate-row-in: row-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-fade-in: fade-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  /*
+   * Drop the root font-size from the browser default of 16px → 14px so every
+   * Tailwind `text-*` / `p-*` / `gap-*` utility (which are all `rem`-based)
+   * scales down proportionally. Same trick as apps/explorer — gives the
+   * playground a denser, "dashboard-grade" feel without retrofitting every
+   * component.
+   */
+  html {
+    font-size: 14px;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    /* Same multi-stop aurora as apps/explorer so the eye doesn't shift
+       when bouncing between surfaces. The cool indigo wash anchors the
+       Leash brand at the top of every viewport. */
+    background:
+      radial-gradient(60% 40% at 12% -10%, oklch(0.32 0.18 268 / 0.18), transparent 60%),
+      radial-gradient(50% 30% at 100% 0%, oklch(0.45 0.18 240 / 0.12), transparent 60%),
+      radial-gradient(ellipse 80% 50% at 50% -20%, oklch(0.35 0.12 268 / 0.35), transparent),
+      var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv02', 'cv03', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--color-brand-soft);
+    color: var(--color-fg);
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family: var(--font-mono);
+    font-feature-settings: 'liga' 0;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border-strong);
+    border-radius: 999px;
+    border: 2px solid var(--color-bg);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-brand);
+  }
+}
+
+@layer utilities {
+  .bg-aurora {
+    background:
+      radial-gradient(circle at 20% 0%, oklch(0.5 0.22 268 / 0.35), transparent 55%),
+      radial-gradient(circle at 80% 100%, oklch(0.5 0.22 220 / 0.25), transparent 55%),
+      var(--color-bg-elev);
+  }
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, oklch(1 0 0 / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(1 0 0 / 0.04) 1px, transparent 1px);
+    background-size: 36px 36px;
+  }
+  .glow {
+    box-shadow:
+      0 0 0 1px oklch(0.66 0.19 268 / 0.35),
+      0 12px 40px -12px oklch(0.66 0.19 268 / 0.4);
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility shimmer-bg {
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    color-mix(in oklch, var(--color-brand) 30%, transparent) 50%,
+    transparent 70%
+  );
+}
+
+/* Frosted glass card. Adopts the chat-glass pattern from apps/explorer +
+   apps/agents so the playground reads as part of the same surface. */
+@utility card {
+  position: relative;
+  background: oklch(0.2 0.012 280 / 65%);
+  border: 1px solid oklch(0.38 0.012 280 / 45%);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(16px);
+  box-shadow:
+    0 0 0 1px oklch(1 0 0 / 4%) inset,
+    0 24px 48px -12px oklch(0 0 0 / 35%);
+}
+
+/* Card flavour with a subtle indigo top-edge highlight — used for hero
+   panels (welcome strip, primary stat bar) so they read as the primary
+   surface on a page. */
+@utility card-glow {
+  position: relative;
+  background:
+    linear-gradient(180deg, oklch(0.5 0.22 268 / 0.06), transparent 35%), oklch(0.2 0.012 280 / 65%);
+  border: 1px solid oklch(0.38 0.012 280 / 45%);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(16px);
+  box-shadow:
+    0 0 0 1px oklch(1 0 0 / 4%) inset,
+    0 24px 48px -12px oklch(0 0 0 / 35%);
+}
+
+/* ── iOS-style 12-blade spinner — matches apps/explorer's <Spinner /> ─ */
+.spinner-blade {
+  position: absolute;
+  height: 22%;
+  width: 8%;
+  background: currentColor;
+  border-radius: 1px;
+  top: 39%;
+  left: 46%;
+  opacity: 0.25;
+  animation: spinner-blade 1s linear infinite;
+  will-change: opacity;
+}
+.spinner-blade:nth-child(1) {
+  transform: rotate(0deg) translateY(-130%);
+  animation-delay: -1.667s;
+}
+.spinner-blade:nth-child(2) {
+  transform: rotate(30deg) translateY(-130%);
+  animation-delay: -1.583s;
+}
+.spinner-blade:nth-child(3) {
+  transform: rotate(60deg) translateY(-130%);
+  animation-delay: -1.5s;
+}
+.spinner-blade:nth-child(4) {
+  transform: rotate(90deg) translateY(-130%);
+  animation-delay: -1.417s;
+}
+.spinner-blade:nth-child(5) {
+  transform: rotate(120deg) translateY(-130%);
+  animation-delay: -1.333s;
+}
+.spinner-blade:nth-child(6) {
+  transform: rotate(150deg) translateY(-130%);
+  animation-delay: -1.25s;
+}
+.spinner-blade:nth-child(7) {
+  transform: rotate(180deg) translateY(-130%);
+  animation-delay: -1.167s;
+}
+.spinner-blade:nth-child(8) {
+  transform: rotate(210deg) translateY(-130%);
+  animation-delay: -1.083s;
+}
+.spinner-blade:nth-child(9) {
+  transform: rotate(240deg) translateY(-130%);
+  animation-delay: -1s;
+}
+.spinner-blade:nth-child(10) {
+  transform: rotate(270deg) translateY(-130%);
+  animation-delay: -0.917s;
+}
+.spinner-blade:nth-child(11) {
+  transform: rotate(300deg) translateY(-130%);
+  animation-delay: -0.833s;
+}
+.spinner-blade:nth-child(12) {
+  transform: rotate(330deg) translateY(-130%);
+  animation-delay: -0.75s;
+}
+
+@keyframes spinner-blade {
+  0% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.25;
+  }
+  100% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes leash-pulse {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+.animate-leash-pulse {
+  animation: leash-pulse 2.4s ease-in-out infinite;
+}

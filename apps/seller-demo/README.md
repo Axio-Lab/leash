@@ -1,7 +1,7 @@
 # `@leash/seller-demo`
 
 > **Headless path.** This is for self-hosted seller endpoints. The hosted
-> browser playground at `apps/web/seller` is a **Payment-Link Builder**: it
+> browser playground at `apps/playground/seller` is a **Payment-Link Builder**: it
 > lets anyone declare a price + response in the UI and the runner serves
 > them back as live `/x/<id>` x402 paywalls — no extra Node server needed.
 > Use this CLI when you want to wire `@leash/seller-kit` into your own

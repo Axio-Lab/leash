@@ -24,16 +24,21 @@ import { signRequest } from './sign.js';
 import type {
   AgentWebhook,
   AgentWebhookWithSecret,
+  DailyTransactionsResponse,
+  DailyTxBucket,
   DiscoverResponse,
   PaymentLink,
   PaymentLinkCreateInput,
   PaymentLinkPatchInput,
   PaymentLinksListResponse,
+  Receipt,
   RecordAgentInput,
   RecordAgentResponse,
   ReceiptsResponse,
   ReputationSnapshot,
   SvmNetwork,
+  TransactionHistoryItem,
+  TransactionHistoryResponse,
 } from './types.js';
 
 export type LeashClientOptions = {
@@ -141,6 +146,188 @@ export class LeashClient {
       'GET',
       `/v1/receipts/${encodeURIComponent(args.agentMint)}${params.toString() ? `?${params}` : ''}`,
     );
+  }
+
+  /**
+   * `GET /v1/receipts/by-hash/{hash}` — direct lookup of a single
+   * receipt by its deterministic `receipt_hash`. Network is bound to
+   * the API key prefix; cross-network hashes return 404.
+   *
+   * The response is the same row shape `receipts()` emits, with the
+   * full canonical ReceiptV1 in `raw`.
+   */
+  async getReceipt(hash: string): Promise<Receipt> {
+    if (!this.apiKey) {
+      throw new LeashError(
+        401,
+        'getReceipt() requires an API key today. Pass `{ apiKey }` to LeashClient.',
+        null,
+      );
+    }
+    return this.requestJson<Receipt>('GET', `/v1/receipts/by-hash/${encodeURIComponent(hash)}`);
+  }
+
+  /**
+   * Walk the paginated `/v1/receipts/{agent}` feed and return every
+   * receipt within the rolling `now - days` window. Stops early when
+   * `limit` is hit (default 200, max 1000) or when a row falls out of
+   * the window. Mirrors the `leash_transaction_history` MCP tool.
+   *
+   * Stables (USDC/USDG/USDT) are summed as USD 1:1 in the returned
+   * totals; non-stable receipts get counted but excluded from the USD
+   * math (`non_usd_count`).
+   */
+  async transactionHistory(args: {
+    agentMint: string;
+    days?: number;
+    direction?: 'both' | 'outgoing' | 'incoming';
+    limit?: number;
+  }): Promise<TransactionHistoryResponse> {
+    if (!this.apiKey) {
+      throw new LeashError(
+        401,
+        'transactionHistory() requires an API key today. Pass `{ apiKey }` to LeashClient.',
+        null,
+      );
+    }
+    const days = clampInt(args.days ?? 7, 1, 90);
+    const limit = clampInt(args.limit ?? 200, 1, 1000);
+    const direction = args.direction ?? 'both';
+    const cutoffMs = Date.now() - days * 86_400_000;
+    const window = await this.fetchReceiptWindow({
+      agent: args.agentMint,
+      direction,
+      limit,
+      cutoffMs,
+    });
+    const totals = aggregateReceiptUsd(window.items);
+    const network = (window.items[0]?.network ?? 'solana-devnet') as SvmNetwork;
+    return {
+      agent_mint: args.agentMint,
+      network,
+      range: {
+        from: new Date(cutoffMs).toISOString(),
+        to: new Date().toISOString(),
+        days,
+      },
+      direction,
+      count: window.items.length,
+      truncated: window.truncated,
+      total_sent_usd: totals.totalSentUsd,
+      total_received_usd: totals.totalReceivedUsd,
+      net_usd: totals.netUsd,
+      sent_count: totals.sentCount,
+      received_count: totals.receivedCount,
+      non_usd_count: totals.nonUsdCount,
+      items: window.items.map(
+        (r): TransactionHistoryItem => ({
+          receipt_hash: r.receipt_hash,
+          direction: r.kind === 'spend' ? 'outgoing' : 'incoming',
+          decision: r.decision,
+          tx_signature: r.tx_sig,
+          url: (r.raw?.request as { url?: string } | undefined)?.url ?? null,
+          method: (r.raw?.request as { method?: string } | undefined)?.method ?? null,
+          amount: (r.raw?.price as { amount?: string } | undefined)?.amount ?? null,
+          currency: (r.raw?.price as { currency?: string } | undefined)?.currency ?? null,
+          timestamp: r.ingested_at,
+        }),
+      ),
+    };
+  }
+
+  /**
+   * Same window as {@link transactionHistory} but folds the receipts
+   * into per-day buckets keyed on UTC ingest date. Days with no
+   * activity are emitted with zeros so the timeline is continuous.
+   * Mirrors the `leash_daily_transactions` MCP tool.
+   */
+  async dailyTransactions(args: {
+    agentMint: string;
+    days?: number;
+  }): Promise<DailyTransactionsResponse> {
+    if (!this.apiKey) {
+      throw new LeashError(
+        401,
+        'dailyTransactions() requires an API key today. Pass `{ apiKey }` to LeashClient.',
+        null,
+      );
+    }
+    const days = clampInt(args.days ?? 7, 1, 90);
+    const cutoffMs = Date.now() - days * 86_400_000;
+    const window = await this.fetchReceiptWindow({
+      agent: args.agentMint,
+      direction: 'both',
+      limit: 1000,
+      cutoffMs,
+    });
+    const totals = aggregateReceiptUsd(window.items);
+    const buckets = bucketReceiptsByDay(window.items, days);
+    const network = (window.items[0]?.network ?? 'solana-devnet') as SvmNetwork;
+    return {
+      agent_mint: args.agentMint,
+      network,
+      range: {
+        from: new Date(cutoffMs).toISOString(),
+        to: new Date().toISOString(),
+        days,
+      },
+      daily: buckets,
+      totals: {
+        sent_count: totals.sentCount,
+        sent_usd: totals.totalSentUsd,
+        received_count: totals.receivedCount,
+        received_usd: totals.totalReceivedUsd,
+        net_usd: totals.netUsd,
+        non_usd_count: totals.nonUsdCount,
+      },
+      truncated: window.truncated,
+    };
+  }
+
+  /**
+   * Walk the agent's receipts feed newest-first and stop once a row
+   * falls before `cutoffMs`, the cap is hit, or the feed is
+   * exhausted. Used by {@link transactionHistory} +
+   * {@link dailyTransactions}.
+   */
+  private async fetchReceiptWindow(args: {
+    agent: string;
+    direction: 'both' | 'outgoing' | 'incoming';
+    limit: number;
+    cutoffMs: number;
+  }): Promise<{ items: Receipt[]; truncated: boolean }> {
+    const items: Receipt[] = [];
+    let cursor: string | null = null;
+    let truncated = false;
+    const maxPages = 10;
+    for (let page = 0; page < maxPages; page++) {
+      const params = new URLSearchParams();
+      params.set('limit', '200');
+      if (args.direction === 'outgoing') params.set('kind', 'spend');
+      else if (args.direction === 'incoming') params.set('kind', 'earn');
+      if (cursor) params.set('cursor', cursor);
+      const json = await this.requestJson<ReceiptsResponse>(
+        'GET',
+        `/v1/receipts/${encodeURIComponent(args.agent)}?${params}`,
+      );
+      let stop = false;
+      for (const r of json.items) {
+        const ms = Date.parse(r.ingested_at);
+        if (Number.isFinite(ms) && ms < args.cutoffMs) {
+          stop = true;
+          break;
+        }
+        items.push(r);
+        if (items.length >= args.limit) {
+          truncated = true;
+          stop = true;
+          break;
+        }
+      }
+      if (stop || !json.next_cursor) break;
+      cursor = json.next_cursor;
+    }
+    return { items, truncated };
   }
 
   // ── agent webhooks (X-Leash-Sig auth) ────────────────────────────
@@ -305,4 +492,103 @@ export class LeashClient {
     }
     return parsed as T;
   }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Pure helpers (kept module-local — not exported)
+// ────────────────────────────────────────────────────────────────────────────
+
+const SDK_USD_STABLES = new Set(['USDC', 'USDG', 'USDT']);
+
+function clampInt(n: number, min: number, max: number): number {
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, Math.floor(n)));
+}
+
+function aggregateReceiptUsd(items: Receipt[]): {
+  sentCount: number;
+  receivedCount: number;
+  totalSentUsd: string;
+  totalReceivedUsd: string;
+  netUsd: string;
+  nonUsdCount: number;
+} {
+  let sentCount = 0;
+  let receivedCount = 0;
+  let nonUsdCount = 0;
+  let sentSum = 0;
+  let receivedSum = 0;
+  for (const r of items) {
+    const price = r.raw?.price as { amount?: string; currency?: string } | undefined;
+    const amt = parseFloat(price?.amount ?? '');
+    const cur = (price?.currency ?? '').toUpperCase();
+    if (r.kind === 'spend') sentCount++;
+    else if (r.kind === 'earn') receivedCount++;
+    if (!Number.isFinite(amt) || !cur) continue;
+    if (!SDK_USD_STABLES.has(cur)) {
+      nonUsdCount++;
+      continue;
+    }
+    if (r.kind === 'spend') sentSum += amt;
+    else if (r.kind === 'earn') receivedSum += amt;
+  }
+  const round = (n: number) => Math.round(n * 1_000_000) / 1_000_000;
+  return {
+    sentCount,
+    receivedCount,
+    nonUsdCount,
+    totalSentUsd: round(sentSum).toString(),
+    totalReceivedUsd: round(receivedSum).toString(),
+    netUsd: round(receivedSum - sentSum).toString(),
+  };
+}
+
+function bucketReceiptsByDay(items: Receipt[], days: number): DailyTxBucket[] {
+  const map = new Map<
+    string,
+    { sentCount: number; sentSum: number; receivedCount: number; receivedSum: number }
+  >();
+  const today = new Date(
+    Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()),
+  );
+  for (let i = 0; i < days; i++) {
+    const d = new Date(today.getTime() - i * 86_400_000);
+    map.set(formatUtcDate(d), { sentCount: 0, sentSum: 0, receivedCount: 0, receivedSum: 0 });
+  }
+  for (const r of items) {
+    const ingested = new Date(r.ingested_at);
+    if (Number.isNaN(ingested.getTime())) continue;
+    const key = formatUtcDate(ingested);
+    let bucket = map.get(key);
+    if (!bucket) {
+      bucket = { sentCount: 0, sentSum: 0, receivedCount: 0, receivedSum: 0 };
+      map.set(key, bucket);
+    }
+    if (r.kind === 'spend') bucket.sentCount++;
+    else if (r.kind === 'earn') bucket.receivedCount++;
+    const price = r.raw?.price as { amount?: string; currency?: string } | undefined;
+    const amt = parseFloat(price?.amount ?? '');
+    const cur = (price?.currency ?? '').toUpperCase();
+    if (!Number.isFinite(amt) || !SDK_USD_STABLES.has(cur)) continue;
+    if (r.kind === 'spend') bucket.sentSum += amt;
+    else if (r.kind === 'earn') bucket.receivedSum += amt;
+  }
+  const round = (n: number) => Math.round(n * 1_000_000) / 1_000_000;
+  return [...map.entries()]
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .map(([date, b]) => ({
+      date,
+      sent_count: b.sentCount,
+      sent_usd: round(b.sentSum).toString(),
+      received_count: b.receivedCount,
+      received_usd: round(b.receivedSum).toString(),
+      net_usd: round(b.receivedSum - b.sentSum).toString(),
+    }));
+}
+
+function formatUtcDate(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }

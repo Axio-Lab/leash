@@ -61,9 +61,9 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        eyebrow="Playground"
-        title="Leash control room"
-        description="An open rail for agents that spend on the open internet. One place to drive the runner, agents, sellers, buyers, and the schemas they share."
+        eyebrow="leash · playground"
+        title="The operating system for agent-to-agent commerce."
+        description="One control room for the runner, agents, sellers, buyers, and the schemas they share."
       />
 
       <section className="grid gap-4 md:grid-cols-3">

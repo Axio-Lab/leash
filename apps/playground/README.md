@@ -1,24 +1,26 @@
-# @leash/web
+# @leash/playground
 
-Interactive playground for the Leash stack. Drives the runner, agents, sellers,
-buyers, and schemas from one place.
+Interactive playground (`leash · playground`) for the Leash stack. Drives the
+runner, agents, sellers, buyers, and schemas from one place — same Roboto +
+JetBrains Mono typography, white inverted logo, and aurora theme as
+`@leash/explorer` and `@leash/agents`.
 
 ## Run
 
 ```bash
-cp apps/web/.env.local.example apps/web/.env.local   # paste your Privy appId
+cp apps/playground/.env.local.example apps/playground/.env.local   # paste your Privy appId
 pnpm install
-pnpm --filter @leash/web dev                         # http://localhost:3000
+pnpm --filter @leash/playground dev                                # http://localhost:4000
 ```
 
 For the dashboard's runner status to flip green, also start the runner:
 
 ```bash
-pnpm --filter @leash/runner start                    # http://localhost:8787
+pnpm --filter @leash/runner start                                  # http://localhost:8787
 ```
 
 If you start the runner on another port (e.g. `PORT=8788 pnpm --filter @leash/runner start`),
-set **`LEASH_RUNNER_URL=http://localhost:8788`** in `apps/web/.env` and restart `next dev` —
+set **`LEASH_RUNNER_URL=http://localhost:8788`** in `apps/playground/.env` and restart `next dev` —
 the UI calls the runner from the **Next server**, which still defaults to port **8787**.
 
 ## Pages

@@ -18,6 +18,8 @@ export { signRequest, buildEnvelope, type SigningHeaders, type SigningEnvelope }
 export type {
   AgentWebhook,
   AgentWebhookWithSecret,
+  DailyTransactionsResponse,
+  DailyTxBucket,
   DiscoverItem,
   DiscoverResponse,
   EndpointMethod,
@@ -35,6 +37,8 @@ export type {
   ReputationSnapshot,
   StableSymbol,
   SvmNetwork,
+  TransactionHistoryItem,
+  TransactionHistoryResponse,
 } from './types.js';
 
 export const LEASH_SDK_VERSION = '0.1.0';

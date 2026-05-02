@@ -83,6 +83,18 @@ async function main(): Promise<void> {
       await runReceipts(argv.slice(1));
       return;
 
+    case 'receipt':
+      await runReceipt(argv.slice(1));
+      return;
+
+    case 'history':
+      await runHistory(argv.slice(1));
+      return;
+
+    case 'daily':
+      await runDaily(argv.slice(1));
+      return;
+
     case 'pay':
       await runPay(argv.slice(1));
       return;
@@ -454,6 +466,103 @@ async function runReceipts(args: string[]): Promise<void> {
   });
 }
 
+async function runReceipt(args: string[]): Promise<void> {
+  const { hostRef } = buildServerFromEnv();
+  const json = wantJson(args);
+  // Accept the hash as a positional arg (skip `--*` flags).
+  const hash = args.find((a) => !a.startsWith('--'));
+  if (!hash) {
+    process.stderr.write(
+      'usage: leash receipt <receipt_hash> [--json]\n' +
+        '       (the 64-hex-char value the explorer renders at /receipt/{hash})\n',
+    );
+    process.exit(2);
+  }
+  const result = await hostRef.getReceipt({ receipt_hash: hash });
+  printResult(result, json, (payload) => {
+    if (payload.status === 'not_found') {
+      return `not found: ${payload.receipt_hash} on ${payload.network}`;
+    }
+    if (payload.status !== 'ok') return formatStatusError(payload);
+    const r = payload.receipt as Record<string, unknown>;
+    const price = (r.price ?? {}) as Record<string, unknown>;
+    const req = (r.request ?? {}) as Record<string, unknown>;
+    return [
+      `receipt ${payload.receipt_hash}`,
+      `  agent:           ${payload.agent}`,
+      `  direction:       ${payload.direction}`,
+      `  decision:        ${payload.decision}`,
+      `  network:         ${payload.network}`,
+      `  ingested_at:     ${payload.ingested_at}`,
+      `  amount:          ${price.amount ?? '?'} ${price.currency ?? ''}`,
+      `  request:         ${req.method ?? '?'} ${req.url ?? '(none)'}`,
+      `  tx_signature:    ${payload.tx_signature ?? '(none)'}`,
+      `  explorer:        ${payload.explorer_url ?? '(none)'}`,
+    ].join('\n');
+  });
+}
+
+async function runHistory(args: string[]): Promise<void> {
+  const { hostRef } = buildServerFromEnv();
+  const json = wantJson(args);
+  const days = numArg(args, '--days');
+  const limit = numArg(args, '--limit');
+  const direction = optArg(args, '--direction') as 'both' | 'outgoing' | 'incoming' | undefined;
+  const result = await hostRef.transactionHistory({
+    ...(days != null ? { days } : {}),
+    ...(limit != null ? { limit } : {}),
+    ...(direction ? { direction } : {}),
+  });
+  printResult(result, json, (payload) => {
+    if (payload.status !== 'ok') return formatStatusError(payload);
+    const lines = [
+      `history ${payload.range.days}d  ${payload.count} receipt(s)${payload.truncated ? '  (truncated)' : ''}`,
+      `  sent:     $${payload.total_sent_usd}  (${payload.sent_count})`,
+      `  received: $${payload.total_received_usd}  (${payload.received_count})`,
+      `  net:      $${payload.net_usd}`,
+    ];
+    if (payload.non_usd_count > 0) {
+      lines.push(`  non-USD:  ${payload.non_usd_count} receipt(s) (excluded from totals)`);
+    }
+    if (payload.items?.length) {
+      lines.push('');
+      for (const r of payload.items) {
+        lines.push(
+          `  ${r.timestamp}  ${String(r.direction).padEnd(8)}  ${String(r.decision).padEnd(6)}  ${r.amount ?? '?'} ${r.currency ?? ''}  ${r.tx_signature ?? '(no tx)'}`,
+        );
+      }
+    }
+    return lines.join('\n');
+  });
+}
+
+async function runDaily(args: string[]): Promise<void> {
+  const { hostRef } = buildServerFromEnv();
+  const json = wantJson(args);
+  const days = numArg(args, '--days');
+  const result = await hostRef.dailyTransactions({ ...(days != null ? { days } : {}) });
+  printResult(result, json, (payload) => {
+    if (payload.status !== 'ok') return formatStatusError(payload);
+    const lines = [
+      `daily ${payload.range.days}d (UTC)`,
+      `  ${'date'.padEnd(10)}  ${'sent'.padStart(10)}  ${'recv'.padStart(10)}  ${'net'.padStart(10)}  in/out`,
+    ];
+    for (const b of payload.daily ?? []) {
+      lines.push(
+        `  ${b.date.padEnd(10)}  ${`$${b.sent_usd}`.padStart(10)}  ${`$${b.received_usd}`.padStart(10)}  ${`$${b.net_usd}`.padStart(10)}  ${b.received_count}/${b.sent_count}`,
+      );
+    }
+    lines.push('');
+    lines.push(
+      `  totals: sent $${payload.totals.sent_usd}  received $${payload.totals.received_usd}  net $${payload.totals.net_usd}`,
+    );
+    if (payload.totals.non_usd_count > 0) {
+      lines.push(`  non-USD receipts (excluded): ${payload.totals.non_usd_count}`);
+    }
+    return lines.join('\n');
+  });
+}
+
 async function runPay(args: string[]): Promise<void> {
   const { hostRef } = buildServerFromEnv();
   const json = wantJson(args);
@@ -627,6 +736,14 @@ function printHelp(): void {
       '',
       'activity:',
       '  receipts [--limit N] [--direction outgoing|incoming|both]',
+      '                                     paginated receipt feed for the active agent',
+      '  receipt <receipt_hash>             fetch a single ReceiptV1 by its hash',
+      '                                     (the same hash the explorer renders at /receipt/{hash})',
+      '  history [--days N] [--limit N] [--direction outgoing|incoming|both]',
+      '                                     receipts in the last N days (default 7) plus',
+      '                                     running totals: sent/received/net in USD',
+      '  daily [--days N]                   per-day P&L buckets for the last N days',
+      '                                     (default 7); stables summed at 1:1 USD',
       '  pay <link-url> [--max-spend-usdc N]',
       '',
       'misc:',

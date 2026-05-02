@@ -168,6 +168,43 @@ export type GetSpendLimitArgs = {
   symbol?: StableSymbol;
 };
 
+/**
+ * Inputs for `leash_get_receipt`. Looks up one ReceiptV1 by its
+ * deterministic `receipt_hash` (the same hash the explorer URL
+ * carries: `/receipt/{hash}`). Network is host-bound so a hash from
+ * the sibling cluster returns `not_found`.
+ */
+export type GetReceiptArgs = {
+  /** 64-hex-char receipt_hash from the seller-side ReceiptV1. */
+  receipt_hash: string;
+};
+
+/**
+ * Inputs for `leash_transaction_history`. Lists every receipt for the
+ * active agent within the last `days` days, both directions by
+ * default. The host paginates the underlying `/v1/receipts/{agent}`
+ * feed and trims to the day window client-side.
+ */
+export type TransactionHistoryArgs = {
+  /** Window size in days (1 ≤ N ≤ 90). Defaults to 7. */
+  days?: number;
+  /** Filter by direction. Defaults to `both`. */
+  direction?: 'both' | 'outgoing' | 'incoming';
+  /** Hard cap on the total receipts returned (default 200, max 1000). */
+  limit?: number;
+};
+
+/**
+ * Inputs for `leash_daily_transactions`. Same window as
+ * `transaction_history` but the host bins receipts by UTC ingest
+ * date and returns per-day aggregates (count + USD-equivalent sums)
+ * plus grand totals. Stables (USDC/USDG/USDT) are summed as USD 1:1.
+ */
+export type DailyTransactionsArgs = {
+  /** Window size in days (1 ≤ N ≤ 90). Defaults to 7. */
+  days?: number;
+};
+
 // ────────────────────────────────────────────────────────────────────────────
 // LeashHost
 // ────────────────────────────────────────────────────────────────────────────
@@ -273,4 +310,28 @@ export interface LeashHost {
    * balance.
    */
   getSpendLimit(args: GetSpendLimitArgs): Promise<LeashToolResult>;
+
+  /**
+   * Look up a single receipt by its `receipt_hash`. Returns the full
+   * ReceiptV1 (the same JSON the explorer renders at
+   * `/receipt/{hash}`) plus a few convenience fields the LLM can
+   * inline into a reply (explorer URL, direction, ingested_at).
+   */
+  getReceipt(args: GetReceiptArgs): Promise<LeashToolResult>;
+
+  /**
+   * List every receipt for the active agent within the last `days`
+   * days, both directions by default. The host paginates the
+   * underlying `/v1/receipts/{agent}` feed and trims to the window
+   * client-side. Returns the receipts plus running USD totals.
+   */
+  transactionHistory(args: TransactionHistoryArgs): Promise<LeashToolResult>;
+
+  /**
+   * Bin the same receipts as `transactionHistory` by UTC ingest date
+   * and return per-day aggregates (count + USD-equivalent sums for
+   * each direction) plus grand totals. Useful for "show me last
+   * week's revenue" style prompts.
+   */
+  dailyTransactions(args: DailyTransactionsArgs): Promise<LeashToolResult>;
 }

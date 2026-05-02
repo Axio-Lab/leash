@@ -3,7 +3,7 @@ title: Bring your own keypair
 description: Mint and run an agent without Privy — using a local Solana keypair, a server-side env var, or a generated operator keypair.
 ---
 
-The web playground (`apps/web`) signs everything with a connected Privy embedded wallet because that's the lowest-friction path for trying Leash from a browser. The SDK itself has no Privy dependency — `@leash/registry-utils` only cares that `umi.identity` can sign Solana transactions. This guide shows the three production-grade alternatives.
+The web playground (`apps/playground`) signs everything with a connected Privy embedded wallet because that's the lowest-friction path for trying Leash from a browser. The SDK itself has no Privy dependency — `@leash/registry-utils` only cares that `umi.identity` can sign Solana transactions. This guide shows the three production-grade alternatives.
 
 ## Pick a signer style
 
@@ -63,7 +63,7 @@ Whoever holds `agent-owner.json` is now the owner — they alone can sign withdr
 The headless server routes (`POST /api/agents/create`, `POST /api/agents/executive`) and any custom Node service can use this pattern. Drop a base58 (or JSON-array) secret key into `LEASH_DEV_PAYER_SECRET_KEY` and the playground's `getServerUmi()` will load it as `umi.identity`:
 
 ```ts
-// apps/web/lib/umi.ts (excerpt)
+// apps/playground/lib/umi.ts (excerpt)
 const secret = process.env.LEASH_DEV_PAYER_SECRET_KEY;
 const umi = createUmi(rpcUrl).use(mplAgentIdentity());
 umi.use(keypairIdentity(umi.eddsa.createKeypairFromSecretKey(decodeSecret(secret))));

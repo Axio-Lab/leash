@@ -14,7 +14,7 @@ import { SOLANA_RPC } from './env';
 
 /**
  * Browser Umi backed by the user's Privy wallet — same shape as
- * `apps/web/lib/privy-umi.ts`. Returns `null` while the wallet is
+ * `apps/playground/lib/privy-umi.ts`. Returns `null` while the wallet is
  * still connecting so callers can render a "connect" placeholder.
  */
 export function usePrivyUmi(): {

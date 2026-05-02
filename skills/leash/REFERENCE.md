@@ -5,16 +5,20 @@ agent asks "which package / route / env var does X?".
 
 ## SDK packages (`@leash/*`)
 
-| Package                 | Headline export                                                                                            | Use it for                                                                                      |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `@leash/core`           | `Policy.evaluate`, `hashReceipt`, `chainReceipt`                                                           | Pure policy + receipt primitives. No I/O. Used by buyer + seller + runner alike.                |
-| `@leash/seller-kit`     | `createSeller(app, opts)`                                                                                  | Mounts the real `@x402/hono` middleware on a Hono app. PayTo = treasury PDA.                    |
-| `@leash/buyer-kit`      | `createBuyer({ agent, signer, ... })`                                                                      | Returns a `fetch`-shaped function that runs policy + signs x402 transfers + finalises receipts. |
-| `@leash/registry-utils` | `createAgent`, `prepareAgentMint`, `getSpendDelegation`, `prepareSetSpendDelegation`, `findAssetSignerPda` | Mint MIP-104 agents, derive treasury, manage delegations.                                       |
-| `@leash/runner`         | `leash-runner` CLI / `createRunner`                                                                        | HTTP service hosting JSONL receipt feed + payment-link endpoints + kill switch.                 |
-| `@leash/facilitator`    | `leash-facilitator` CLI                                                                                    | Run your own x402 facilitator (devnet in v0.1).                                                 |
-| `@leash/schemas`        | `ReceiptV1Schema`, `RulesV1Schema`, etc.                                                                   | Zod + JSON-Schema for every wire shape.                                                         |
-| `@leash/testing`        | `leash-conformance` CLI, in-memory facilitator                                                             | Conformance tests + offline fixtures.                                                           |
+| Package                 | Headline export                                                                                                                        | Use it for                                                                                           |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `@leash/core`           | `Policy.evaluate`, `hashReceipt`, `chainReceipt`                                                                                       | Pure policy + receipt primitives. No I/O. Used by buyer + seller + runner alike.                     |
+| `@leash/seller-kit`     | `createSeller(app, opts)`                                                                                                              | Mounts the real `@x402/hono` middleware on a Hono app. PayTo = treasury PDA.                         |
+| `@leash/buyer-kit`      | `createBuyer({ agent, signer, ... })`                                                                                                  | Returns a `fetch`-shaped function that runs policy + signs x402 transfers + finalises receipts.      |
+| `@leash/registry-utils` | `createAgent`, `prepareAgentMint`, `getSpendDelegation`, `prepareSetSpendDelegation`, `findAssetSignerPda`                             | Mint MIP-104 agents, derive treasury, manage delegations.                                            |
+| `@leash/runner`         | `leash-runner` CLI / `createRunner`                                                                                                    | HTTP service hosting JSONL receipt feed + payment-link endpoints + kill switch.                      |
+| `@leash/facilitator`    | `leash-facilitator` CLI                                                                                                                | Run your own x402 facilitator (devnet in v0.1).                                                      |
+| `@leash/schemas`        | `ReceiptV1Schema`, `RulesV1Schema`, etc.                                                                                               | Zod + JSON-Schema for every wire shape.                                                              |
+| `@leash/testing`        | `leash-conformance` CLI, in-memory facilitator                                                                                         | Conformance tests + offline fixtures.                                                                |
+| `@leash/sdk`            | `LeashClient` (`discover`, `reputation`, `receipts`, `getReceipt`, `transactionHistory`, `dailyTransactions`, payment-links, webhooks) | Typed wrapper over `api.leash.market`. Browser/Bun/Deno-friendly; agent-signed + legacy bearer auth. |
+| `@leash/mcp`            | `leash-mcp` STDIO MCP server, `mintAgentLocally`                                                                                       | Drop the 14-tool Leash MCP into Cursor / Claude / Cline / etc. Settles in-process.                   |
+| `@leash/cli`            | `leash` terminal CLI                                                                                                                   | Human-driven wrapper over the same `LeashHost`. `--json` for scripting.                              |
+| `@leash/mcp-core`       | `LeashHost`, `LEASH_TOOLS`, `defineTool`                                                                                               | Host-agnostic core every Leash MCP surface implements. Author new tools here.                        |
 
 ## HTTPS API — `https://api.leash.market`
 
@@ -101,9 +105,23 @@ Submit:
 ### Receipts
 
 - `POST /v1/receipts/{agent}` — push a `ReceiptV1`.
-- `GET  /v1/receipts/{agent}?cursor=&limit=` — JSONL feed (paged).
-- `GET  /v1/receipts/by-hash/{hash}` — single receipt by chain hash.
+- `GET  /v1/receipts/{agent}?cursor=&limit=&kind=spend|earn` — paged feed for one agent.
+- `GET  /v1/receipts/by-hash/{hash}` — single receipt by chain hash. Network is bound to the API key prefix; cross-network hashes return 404. Returns the canonical ReceiptV1 in `raw` (the same blob the explorer renders at `/receipt/{hash}`).
 - `POST /v1/agents/{mint}/pull-target` — register a remote receipts URL the indexer will poll.
+
+The MCP / CLI / SDK all expose helpers built on the receipts feed:
+
+| Surface | Tool / Method                                                                 | What you get                                                                                                 |
+| ------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| MCP     | `leash_get_receipt`                                                           | Full ReceiptV1 by `receipt_hash` + explorer URL.                                                             |
+| MCP     | `leash_transaction_history`                                                   | Receipts in the last N days (default 7) with USD totals (`total_sent_usd`, `total_received_usd`, `net_usd`). |
+| MCP     | `leash_daily_transactions`                                                    | Per-day buckets `[{ date, sent_usd, received_usd, net_usd, sent_count, received_count }]`.                   |
+| CLI     | `leash receipt <hash>` / `leash history` / `leash daily`                      | Plain-text or `--json` versions of the same.                                                                 |
+| SDK     | `getReceipt(hash)` / `transactionHistory({...})` / `dailyTransactions({...})` | Typed responses (see `@leash/sdk` types).                                                                    |
+
+Stables (USDC / USDG / USDT) are summed as USD 1:1 in the aggregate
+helpers. Receipts in non-stable currencies are still counted but
+excluded from the USD totals (`non_usd_count`).
 
 ### Indexer
 
