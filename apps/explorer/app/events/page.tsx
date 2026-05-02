@@ -3,7 +3,6 @@ import { ArrowRight } from 'lucide-react';
 import { DbUnavailableError, listEvents } from '@/lib/db';
 import type { EventPage } from '@/lib/types';
 import { getNetwork } from '@/lib/server-network';
-import { networkToSlug } from '@/lib/network';
 import { EventsTable } from '@/components/events-table';
 import { DbUnreachable } from '@/components/empty';
 import { LiveRefresh } from '@/components/live-refresh';
@@ -11,23 +10,22 @@ import { cn } from '@/lib/cn';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Curated filter set — one button per category that actually shows
+ * results today. We deliberately don't enumerate every `EventKind`
+ * the indexer can emit (e.g. `agent.create`, `agent.treasury.fund_sol`,
+ * `agent.token.set`) because most of them have ~zero rows on devnet
+ * and clicking through an empty filter is a worse UX than not having
+ * the chip at all.
+ */
 const KIND_OPTIONS = [
   { value: '', label: 'All' },
-  { value: 'agent.create', label: 'Create' },
-  { value: 'agent.identity.register', label: 'Identity' },
-  { value: 'agent.executive.register', label: 'Executive' },
-  { value: 'agent.executive.delegate', label: 'Delegate' },
-  { value: 'agent.delegation.set', label: 'Allowance' },
-  { value: 'agent.delegation.revoke', label: 'Revoke' },
-  { value: 'agent.treasury.provision', label: 'Provision' },
-  { value: 'agent.treasury.withdraw', label: 'Withdraw' },
-  { value: 'agent.treasury.withdraw_sol', label: 'Withdraw SOL' },
-  { value: 'agent.treasury.fund', label: 'Fund' },
-  { value: 'agent.treasury.fund_sol', label: 'Fund SOL' },
-  { value: 'agent.token.set', label: 'Token' },
-  { value: 'submit.raw', label: 'Submit' },
-  { value: 'receipt.published', label: 'Receipt' },
+  { value: 'receipt.published', label: 'Receipts' },
   { value: 'receipt.pulled', label: 'Pulled' },
+  { value: 'agent.treasury.withdraw', label: 'Withdraw' },
+  { value: 'agent.treasury.fund', label: 'Fund' },
+  { value: 'agent.delegation.set', label: 'Allowance' },
+  { value: 'submit.raw', label: 'Submit' },
 ];
 
 type Props = {
@@ -59,12 +57,8 @@ export default async function EventsPage({ searchParams }: Props) {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-2">
-          <p className="inline-flex items-center gap-2 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[--color-fg-muted] backdrop-blur-md">
-            <span className="h-1.5 w-1.5 rounded-full bg-[--color-brand] motion-safe:animate-pulse" />
-            {networkToSlug(network)} · events
-          </p>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Event feed</h1>
-          <p className="max-w-2xl text-sm text-[--color-fg-muted]">
+          <p className="whitespace-normal text-sm text-[--color-fg-muted]">
             Every state-changing call the indexer has tracked, in lifecycle order — prepared,
             submitted, confirmed, or failed.
           </p>

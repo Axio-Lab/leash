@@ -10,6 +10,82 @@
  */
 
 /* -------------------------------------------------------------------------- */
+/* 0. Brand logo + wordmark                                                    */
+/*                                                                             */
+/* Mintlify's `maple` theme renders ONLY the logo image at the top of the      */
+/* sidebar / mobile navbar — the `name` we set in docs.json ("leash · docs")   */
+/* is hoisted into an `<span class="sr-only">…home page</span>` for a11y but   */
+/* never displayed visually. We want the same brand chip used in apps/agents   */
+/* + apps/marketplace + apps/explorer (white square logo + lowercase wordmark) */
+/* so the whole product surface reads as one brand.                            */
+/*                                                                             */
+/* Strategy:                                                                   */
+/*  1. Target the `<a href="/">` that wraps `.nav-logo` (works on both the     */
+/*     desktop sidebar slot and the mobile top-bar slot).                      */
+/*  2. Lay it out as flex so logo + injected text sit side-by-side.            */
+/*  3. Constrain the logo PNG to a 22×22 square + invert it (white on dark,   */
+/*     black on light) — same recipe the other Leash apps use.                 */
+/*  4. Inject the wordmark with `::after { content: "leash · docs" }` and      */
+/*     style it to match the topbar wordmark used elsewhere (lowercase,        */
+/*     muted ".docs" tail rendered as a separate `::before` is not possible    */
+/*     so we rely on Mintlify's text colour for the whole string and let the   */
+/*     "·" act as the visual separator).                                       */
+/* -------------------------------------------------------------------------- */
+
+a:has(> img.nav-logo),
+a:has(> .sr-only + img.nav-logo),
+a:has(> img[src*='leash-logo']) {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  text-decoration: none !important;
+}
+
+img.nav-logo,
+a img[src*='leash-logo'] {
+  height: 22px !important;
+  width: 22px !important;
+  max-width: 22px !important;
+  max-height: 22px !important;
+  padding: 0 !important;
+  /* The logo PNG is opaque-on-transparent. On dark mode (default) we
+     force it white; on light mode we drop it back to black. */
+  filter: brightness(0) invert(1);
+}
+
+html.light img.nav-logo,
+html.light a img[src*='leash-logo'] {
+  filter: brightness(0);
+}
+
+/* Inject the visible "leash · docs" wordmark right after the logo image. */
+a:has(> img.nav-logo)::after,
+a:has(> img[src*='leash-logo'])::after {
+  content: 'leash · docs';
+  display: inline-flex;
+  align-items: center;
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  line-height: 1;
+  /* Inherit the navbar's foreground colour so dark/light modes track. */
+  color: currentColor;
+}
+
+/* On very narrow viewports drop the wordmark so the search-bar slot
+   has room to breathe. The logo alone keeps the home-link affordance. */
+@media (max-width: 380px) {
+  a:has(> img.nav-logo)::after,
+  a:has(> img[src*='leash-logo'])::after {
+    display: none;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* 1. Wider page content                                                      */
 /* -------------------------------------------------------------------------- */
 
