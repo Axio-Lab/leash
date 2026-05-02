@@ -200,7 +200,10 @@ export async function recordTaskActivity(
 export async function listTaskActivities(db: DbClient, taskId: string): Promise<TaskActivity[]> {
   const res = await execute(
     db,
-    `SELECT * FROM task_activities WHERE task_id = ? ORDER BY created_at ASC, id ASC`,
+    // `created_at` can tie when activities are recorded in rapid succession.
+    // Tie-break with `rowid` (insertion order) so replay order is stable
+    // across environments (CI/local) and matches user-visible task flow.
+    `SELECT * FROM task_activities WHERE task_id = ? ORDER BY created_at ASC, rowid ASC`,
     [taskId],
   );
   return res.rows.map((r) => rowToActivity(r as Record<string, unknown>));
