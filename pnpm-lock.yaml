@@ -544,35 +544,7 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.17)(lightningcss@1.32.0)
 
-  apps/seller-demo:
-    dependencies:
-      '@hono/node-server':
-        specifier: ^1.13.7
-        version: 1.19.14(hono@4.12.14)
-      '@leash/schemas':
-        specifier: workspace:*
-        version: link:../../packages/schemas
-      '@leash/seller-kit':
-        specifier: workspace:*
-        version: link:../../packages/seller-kit
-      '@metaplex-foundation/mpl-core':
-        specifier: ^1.10.0
-        version: 1.10.0(@metaplex-foundation/umi@1.5.1)(@noble/hashes@1.8.0)
-      '@metaplex-foundation/umi-bundle-defaults':
-        specifier: ^1.5.1
-        version: 1.5.1(@metaplex-foundation/umi@1.5.1)(@solana/web3.js@1.98.4(bufferutil@4.1.0)(encoding@0.1.13)(typescript@5.9.3))(encoding@0.1.13)
-      hono:
-        specifier: ^4.6.14
-        version: 4.12.14
-    devDependencies:
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-      vitest:
-        specifier: ^2.1.8
-        version: 2.1.9(@types/node@22.19.17)(lightningcss@1.32.0)
-
-  apps/web:
+  apps/playground:
     dependencies:
       '@hookform/resolvers':
         specifier: ^3.9.1
@@ -633,7 +605,7 @@ importers:
         version: 1.1.8(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@radix-ui/react-slot':
         specifier: ^1.1.1
-        version: 1.2.3(@types/react@19.2.14)(react@19.2.5)
+        version: 1.2.4(@types/react@19.2.14)(react@19.2.5)
       '@radix-ui/react-tabs':
         specifier: ^1.1.2
         version: 1.1.13(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -707,6 +679,34 @@ importers:
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
+
+  apps/seller-demo:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^1.13.7
+        version: 1.19.14(hono@4.12.14)
+      '@leash/schemas':
+        specifier: workspace:*
+        version: link:../../packages/schemas
+      '@leash/seller-kit':
+        specifier: workspace:*
+        version: link:../../packages/seller-kit
+      '@metaplex-foundation/mpl-core':
+        specifier: ^1.10.0
+        version: 1.10.0(@metaplex-foundation/umi@1.5.1)(@noble/hashes@1.8.0)
+      '@metaplex-foundation/umi-bundle-defaults':
+        specifier: ^1.5.1
+        version: 1.5.1(@metaplex-foundation/umi@1.5.1)(@solana/web3.js@1.98.4(bufferutil@4.1.0)(encoding@0.1.13)(typescript@5.9.3))(encoding@0.1.13)
+      hono:
+        specifier: ^4.6.14
+        version: 4.12.14
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.17)(lightningcss@1.32.0)
 
   packages/buyer-kit:
     dependencies:
@@ -17527,7 +17527,7 @@ snapshots:
 
   isexe@2.0.0: {}
 
-  isomorphic-ws@4.0.1(ws@7.5.10(bufferutil@4.1.0)):
+  isomorphic-ws@4.0.1(ws@7.5.10(bufferutil@4.1.0)(utf-8-validate@6.0.6)):
     dependencies:
       ws: 7.5.10(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
@@ -17552,7 +17552,7 @@ snapshots:
       delay: 5.0.0
       es6-promisify: 5.0.0
       eyes: 0.1.8
-      isomorphic-ws: 4.0.1(ws@7.5.10(bufferutil@4.1.0))
+      isomorphic-ws: 4.0.1(ws@7.5.10(bufferutil@4.1.0)(utf-8-validate@6.0.6))
       json-stringify-safe: 5.0.1
       stream-json: 1.9.1
       uuid: 8.3.2
