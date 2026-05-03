@@ -85,6 +85,15 @@ export type LeashApiConfig = {
    * with a BYOK LLM key fails fast (`platform-agents.ts`).
    */
   encryptionKey?: string;
+  /**
+   * Origin of the apps/agents BFF (the Next.js app that owns the chat
+   * runtime). The Telegram dispatcher posts `POST /api/agents/run` to
+   * this URL with `LEASH_AGENTS_BFF_SECRET` as the bearer to invoke a
+   * turn on behalf of an external user. Both fields are optional —
+   * external bridges are disabled if either is unset.
+   */
+  agentsBffUrl?: string;
+  agentsBffSecret?: string;
 };
 
 function readEnv(key: string, fallback: string): string {
@@ -165,6 +174,12 @@ export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConf
     publicOrigin,
     ...(encryptionKey ? { encryptionKey } : {}),
     ...(adminSecretRaw ? { adminSecret: adminSecretRaw } : {}),
+    ...(env.LEASH_AGENTS_BFF_URL?.trim()
+      ? { agentsBffUrl: env.LEASH_AGENTS_BFF_URL.trim().replace(/\/+$/, '') }
+      : {}),
+    ...(env.LEASH_AGENTS_BFF_SECRET?.trim()
+      ? { agentsBffSecret: env.LEASH_AGENTS_BFF_SECRET.trim() }
+      : {}),
     ...(bootstrapKey
       ? {
           bootstrapKey: {

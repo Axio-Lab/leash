@@ -47,8 +47,22 @@ import {
 import type { CacheClient } from '../storage/redis.js';
 import type { DbClient } from '../storage/turso.js';
 import { invalidRequest, notFound } from '../util/errors.js';
+import { dispatchTelegramMessage, type DispatcherDeps } from '../external/telegram-dispatcher.js';
+import type { TelegramClient } from '../external/telegram-client.js';
 
-export type ExternalRoutesDeps = { config: LeashApiConfig; db: DbClient; cache: CacheClient };
+export type ExternalRoutesDeps = {
+  config: LeashApiConfig;
+  db: DbClient;
+  cache: CacheClient;
+  /**
+   * Optional dispatcher overrides — used by tests to stub the
+   * apps/agents BFF fetch and the Telegram client without monkey-patching
+   * `globalThis.fetch`. In production callers leave both unset and the
+   * dispatcher uses the real implementations.
+   */
+  dispatcherBffFetch?: typeof fetch;
+  dispatcherTelegramClientFactory?: (botToken: string) => TelegramClient;
+};
 
 // ── schemas ──────────────────────────────────────────────────────────
 
@@ -780,12 +794,41 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
         payload: {
           from_id: fromId,
           // We intentionally don't store the body itself — only its
-          // length so we can sanity-check audit traffic later. The
-          // dispatcher in phase 3 hashes the body when persisting.
+          // length so audit rows stay PII-light. The dispatcher's
+          // outbound row carries the hash + length pair.
           text_len: text.length,
         },
       });
-      // Phase 3 will execute the agent and reply here.
+
+      // Fire-and-forget: run the agent + reply asynchronously so
+      // Telegram gets its 200 inside its 60s window even when the LLM
+      // takes longer. Errors inside the dispatcher are logged but
+      // never propagate — Telegram only retries non-2xx responses, and
+      // we'd rather drop a turn than re-process the same update twice.
+      const dispatcherDeps: DispatcherDeps = {
+        config: deps.config,
+        db: deps.db,
+        ...(deps.dispatcherBffFetch ? { bffFetch: deps.dispatcherBffFetch } : {}),
+        ...(deps.dispatcherTelegramClientFactory
+          ? { telegramClientFactory: deps.dispatcherTelegramClientFactory }
+          : {}),
+      };
+      const runPromise = dispatchTelegramMessage(dispatcherDeps, {
+        connection: conn,
+        message: text,
+        fromId: fromId ?? '',
+      }).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[external] dispatcher failed for connection=${conn.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+      // In tests we await the dispatcher so assertions can observe
+      // outbound side-effects (sendMessage call, approvals row). In
+      // production we let it run after the 200 returns.
+      if (process.env.LEASH_API_AWAIT_DISPATCH === '1') {
+        await runPromise;
+      }
       return c.json({ ok: true, queued: true }, 200);
     },
   );

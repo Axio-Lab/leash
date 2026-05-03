@@ -6,7 +6,7 @@
 
 import { createClient } from '@libsql/client';
 
-import { createLeashApiApp } from '../src/server.js';
+import { createLeashApiApp, type CreateLeashApiArgs } from '../src/server.js';
 import { boot } from '../src/bootstrap.js';
 import { createApiKey } from '../src/storage/api-keys.js';
 
@@ -86,7 +86,12 @@ export type TestRig = {
   apiKey: string;
 };
 
-export async function createTestRig(overrides: Partial<LeashApiConfig> = {}): Promise<TestRig> {
+export type CreateTestRigOverrides = Partial<LeashApiConfig> & {
+  externalDispatcherBffFetch?: CreateLeashApiArgs['externalDispatcherBffFetch'];
+  externalDispatcherTelegramClientFactory?: CreateLeashApiArgs['externalDispatcherTelegramClientFactory'];
+};
+
+export async function createTestRig(overrides: CreateTestRigOverrides = {}): Promise<TestRig> {
   _resetDbForTests();
   _resetCacheForTests();
   // Each rig gets its own anonymous in-memory DB so state never bleeds
@@ -94,6 +99,11 @@ export async function createTestRig(overrides: Partial<LeashApiConfig> = {}): Pr
   // (`file::memory:?cache=shared`) was a single global DB that every
   // rig wrote into, which made counting assertions impossible.
   const db = createClient({ url: ':memory:' });
+  const {
+    externalDispatcherBffFetch,
+    externalDispatcherTelegramClientFactory,
+    ...configOverrides
+  } = overrides;
   const config: LeashApiConfig = {
     host: '127.0.0.1',
     port: 0,
@@ -107,7 +117,7 @@ export async function createTestRig(overrides: Partial<LeashApiConfig> = {}): Pr
     docsEnabled: false,
     facilitatorUrlDevnet: 'https://facilitator.test.invalid',
     publicOrigin: 'http://test.local',
-    ...overrides,
+    ...configOverrides,
   };
   const cache = getCache(config);
   // Tests exercise the same fanout path production uses, so pub/sub
@@ -121,7 +131,13 @@ export async function createTestRig(overrides: Partial<LeashApiConfig> = {}): Pr
     network: 'solana-devnet',
     ownerWallet: TEST_API_KEY_OWNER_WALLET,
   });
-  const app = createLeashApiApp({ config, db, cache });
+  const app = createLeashApiApp({
+    config,
+    db,
+    cache,
+    ...(externalDispatcherBffFetch ? { externalDispatcherBffFetch } : {}),
+    ...(externalDispatcherTelegramClientFactory ? { externalDispatcherTelegramClientFactory } : {}),
+  });
   return { app, db, config, apiKey: plaintext };
 }
 

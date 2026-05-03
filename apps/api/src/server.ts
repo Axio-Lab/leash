@@ -44,9 +44,20 @@ import { buildPaywallRoutes } from './routes/paywall.js';
 import { buildSellerUtilsRoutes } from './routes/seller-utils.js';
 import { buildBuyerRoutes } from './routes/buyer.js';
 import { buildPublicUploadRoutes, buildUploadRoutes } from './routes/uploads.js';
-import { buildExternalPublicRoutes, buildExternalRoutes } from './routes/external.js';
+import {
+  buildExternalPublicRoutes,
+  buildExternalRoutes,
+  type ExternalRoutesDeps,
+} from './routes/external.js';
 
-export type CreateLeashApiArgs = AuthDeps;
+export type CreateLeashApiArgs = AuthDeps & {
+  /**
+   * Optional Telegram-dispatcher overrides for tests. Not exposed via
+   * any public env / config — production callers leave both unset.
+   */
+  externalDispatcherBffFetch?: ExternalRoutesDeps['dispatcherBffFetch'];
+  externalDispatcherTelegramClientFactory?: ExternalRoutesDeps['dispatcherTelegramClientFactory'];
+};
 
 export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -79,11 +90,19 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   // sub-app (approval read + Telegram webhook) is mounted before the
   // authed sub-app for the same reason as the paywall — third-party
   // services and unauthenticated browsers must reach those endpoints.
-  app.route('/', buildExternalRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
-  app.route(
-    '/',
-    buildExternalPublicRoutes({ config: deps.config, db: deps.db, cache: deps.cache }),
-  );
+  const externalDeps: ExternalRoutesDeps = {
+    config: deps.config,
+    db: deps.db,
+    cache: deps.cache,
+    ...(deps.externalDispatcherBffFetch
+      ? { dispatcherBffFetch: deps.externalDispatcherBffFetch }
+      : {}),
+    ...(deps.externalDispatcherTelegramClientFactory
+      ? { dispatcherTelegramClientFactory: deps.externalDispatcherTelegramClientFactory }
+      : {}),
+  };
+  app.route('/', buildExternalRoutes(externalDeps));
+  app.route('/', buildExternalPublicRoutes(externalDeps));
   // Public agent-onboarding routes — `/v1/agents/self-register`,
   // `/v1/sandbox/agent`, `/v1/agents/self-register/info`. Mounted before
   // the authed sub-app so the faucet doesn't sit behind an API key.
