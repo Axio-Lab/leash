@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 12;
+const SCHEMA_VERSION = 13;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -442,6 +442,122 @@ const SCHEMA_SQL: readonly string[] = [
     size       INTEGER NOT NULL,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
   )`,
+
+  // ─────────────────────────────────────────────────────────────────────
+  // External chat bridges (v13) — Telegram + WhatsApp connections that
+  // forward messages from the user's own number/account into the same
+  // Claude Agent SDK loop that powers the in-app chat.
+  //
+  // One row per (owner_privy_id, channel) connection. `routing_id`
+  // is what inbound traffic is matched on:
+  //   - Telegram: `sha256(bot_token)` so the public webhook URL never
+  //     leaks the BYO token (`/v1/external/telegram/webhook/{routing_id}`).
+  //   - WhatsApp (Phase 2): the user's own JID; Baileys lives in a
+  //     separate worker but writes into the same row.
+  //
+  // `encrypted_credential` is the channel's secret material:
+  //   - Telegram BYO bot token (small string).
+  //   - WhatsApp Baileys auth state (JSON-serialized, can be larger).
+  // Both sealed with the same `@leash/platform-auth` AES-GCM envelope
+  // we use for `agents.encrypted_llm_key`.
+  //
+  // `signing_mode` controls how chat-initiated signing tools resolve:
+  //   - `deep_link` (Pattern A, default): bot replies with a one-time
+  //     URL → user opens in apps/agents → existing Privy artifact UI.
+  //   - `delegated` (Pattern C): bot signs inline using a server-held
+  //     keypair (encrypted_delegated_key) capped at cap_per_tx /
+  //     cap_per_day. Withdrawals + delegation changes always remain
+  //     deep_link regardless of mode (enforced in route, not schema).
+  //
+  // `bound_chat_id` is `null` until the user runs `/start <token>` from
+  // their phone; that handler captures `from.id`, clears
+  // `verification_token`, and flips `status` from `pending` → `connected`.
+  //
+  // `allowlist_json` is reserved for future use: a JSON array of
+  // additional from-IDs that are permitted to issue commands (e.g.
+  // a household assistant phone). At launch only the `bound_chat_id`
+  // can drive the agent.
+  `CREATE TABLE IF NOT EXISTS external_connections (
+    id                      TEXT PRIMARY KEY,
+    owner_privy_id          TEXT NOT NULL,
+    channel                 TEXT NOT NULL CHECK (channel IN ('telegram','whatsapp')),
+    status                  TEXT NOT NULL DEFAULT 'pending'
+                              CHECK (status IN ('pending','connected','error','revoked')),
+    display_name            TEXT,
+    encrypted_credential    TEXT,
+    routing_id              TEXT,
+    bot_username            TEXT,
+    verification_token      TEXT,
+    bound_chat_id           TEXT,
+    allowlist_json          TEXT NOT NULL DEFAULT '[]',
+    signing_mode            TEXT NOT NULL DEFAULT 'deep_link'
+                              CHECK (signing_mode IN ('deep_link','delegated')),
+    cap_per_tx              TEXT,
+    cap_per_day             TEXT,
+    daily_spent             TEXT NOT NULL DEFAULT '0',
+    daily_window_start      TEXT,
+    encrypted_delegated_key TEXT,
+    delegated_pubkey        TEXT,
+    last_seen_at            TEXT,
+    error                   TEXT,
+    created_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_external_connections_owner ON external_connections(owner_privy_id, created_at DESC)`,
+  // Routing index used by the Telegram webhook to look up which connection
+  // an inbound update belongs to. WHERE clause keeps revoked rows out.
+  `CREATE INDEX IF NOT EXISTS idx_external_connections_routing ON external_connections(channel, routing_id) WHERE routing_id IS NOT NULL AND status != 'revoked'`,
+  `CREATE INDEX IF NOT EXISTS idx_external_connections_verification ON external_connections(verification_token) WHERE verification_token IS NOT NULL`,
+
+  // Audit/observability ledger for the bridge. Stores message metadata
+  // only — never plaintext bodies or tool arguments. body_hash is a
+  // sha256 of the user-visible text so we can de-dup retries from
+  // Telegram/Baileys without needing to retain the body itself.
+  // payload is a small JSON blob with `kind` + `tool_name` + lengths.
+  `CREATE TABLE IF NOT EXISTS external_messages (
+    id              TEXT PRIMARY KEY,
+    connection_id   TEXT NOT NULL,
+    direction       TEXT NOT NULL CHECK (direction IN ('inbound','outbound','tool_call','tool_result','approval')),
+    body_hash       TEXT,
+    payload         TEXT NOT NULL DEFAULT '{}',
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (connection_id) REFERENCES external_connections(id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_external_messages_conn_ts ON external_messages(connection_id, created_at DESC)`,
+
+  // One-time approval tokens minted when an external-channel message
+  // wants to invoke a signing tool that we won't sign server-side
+  // (Pattern A, plus the always-deep-link tools under Pattern C).
+  // The bot replies with `https://agents.leash.market/approve/<token>`;
+  // that page reads the row, renders the existing artifact UI, and
+  // POSTs the result back to mark consumed_at + result_*.
+  //
+  // payload is the JSON args the tool was called with (recipient, amount,
+  // network, etc.) — same shape as the corresponding LEASH_TOOLS input.
+  // We persist it so the approve UI can render a meaningful preview
+  // even minutes after the bot generated the link.
+  //
+  // Tokens expire after `external_approvals.expires_at` (default 5 min).
+  // consumed_at is set to a non-null ISO once the user signs (or
+  // explicitly cancels — distinguishable via result_error). Tokens are
+  // single-use: a UNIQUE constraint on the column would force NULL
+  // collisions, so the route enforces "consumed_at IS NULL" instead.
+  `CREATE TABLE IF NOT EXISTS external_approvals (
+    token               TEXT PRIMARY KEY,
+    connection_id       TEXT NOT NULL,
+    owner_privy_id      TEXT NOT NULL,
+    agent_mint          TEXT NOT NULL,
+    tool_name           TEXT NOT NULL,
+    payload             TEXT NOT NULL DEFAULT '{}',
+    expires_at          TEXT NOT NULL,
+    consumed_at         TEXT,
+    result_receipt_hash TEXT,
+    result_tx_sig       TEXT,
+    result_error        TEXT,
+    created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (connection_id) REFERENCES external_connections(id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_external_approvals_conn_ts ON external_approvals(connection_id, created_at DESC)`,
 ];
 
 let cached: Client | null = null;

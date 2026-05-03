@@ -44,6 +44,7 @@ import { buildPaywallRoutes } from './routes/paywall.js';
 import { buildSellerUtilsRoutes } from './routes/seller-utils.js';
 import { buildBuyerRoutes } from './routes/buyer.js';
 import { buildPublicUploadRoutes, buildUploadRoutes } from './routes/uploads.js';
+import { buildExternalPublicRoutes, buildExternalRoutes } from './routes/external.js';
 
 export type CreateLeashApiArgs = AuthDeps;
 
@@ -73,6 +74,16 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   app.route('/', buildAdminRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   app.route('/', buildPlatformAgentRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   app.route('/', buildPlatformTaskRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
+  // External chat bridges (Telegram + WhatsApp). The admin-gated CRUD
+  // sub-app is mounted alongside the other platform routes; the public
+  // sub-app (approval read + Telegram webhook) is mounted before the
+  // authed sub-app for the same reason as the paywall — third-party
+  // services and unauthenticated browsers must reach those endpoints.
+  app.route('/', buildExternalRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
+  app.route(
+    '/',
+    buildExternalPublicRoutes({ config: deps.config, db: deps.db, cache: deps.cache }),
+  );
   // Public agent-onboarding routes — `/v1/agents/self-register`,
   // `/v1/sandbox/agent`, `/v1/agents/self-register/info`. Mounted before
   // the authed sub-app so the faucet doesn't sit behind an API key.
