@@ -85,9 +85,18 @@ const agentsFetcher = async (url: string) => {
 export function PayRequestArtifact({
   payload,
   threadId,
+  onSettled,
 }: {
   payload: PayRequestPayload;
   threadId?: string;
+  /**
+   * Called once after a successful payment with the receipt + tx
+   * signature. Used by the external chat `/approve/[token]` page to
+   * forward the receipt to the consume endpoint so the dispatcher can
+   * mark the approval consumed. Optional — no-ops in the normal chat
+   * flow which uses `markPayRequestPaid` instead.
+   */
+  onSettled?: (settled: { tx_sig: string | null; receipt_hash: string }) => void;
 }) {
   const url = payload.url ?? '';
   const agentMint = payload.agent_mint ?? '';
@@ -264,6 +273,12 @@ export function PayRequestArtifact({
       } catch {
         // Storage failures shouldn't break the success toast — the
         // user already paid, this is just persistence polish.
+      }
+      try {
+        onSettled?.({ tx_sig: txSig, receipt_hash: receiptHash });
+      } catch {
+        // Same logic — once the on-chain side has settled, callback
+        // failures must not surface as "payment failed".
       }
       toast.success('Paid', { description: `Tx ${shortHash(txSig)}` });
     } catch (err) {
