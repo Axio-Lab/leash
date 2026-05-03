@@ -13,6 +13,7 @@ import {
 
 const links = [
   { href: '/settings/connections', label: 'Connections' },
+  { href: '/settings/external', label: 'External' },
   { href: '/settings/favorites', label: 'Favorites' },
   { href: '/settings/api-keys', label: 'API keys' },
 ] as const;

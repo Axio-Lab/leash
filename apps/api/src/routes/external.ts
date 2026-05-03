@@ -306,10 +306,16 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
   app.use('/v1/external/connections', adminAuth(deps.config.adminSecret));
   app.use('/v1/external/connections/*', adminAuth(deps.config.adminSecret));
   app.use('/v1/external/approvals', adminAuth(deps.config.adminSecret));
-  // Note: GET /v1/external/approvals/{token} is intentionally PUBLIC
-  // (deep-link landing page reads it); we re-mount it on a non-authed
-  // sub-app below. POST /v1/external/approvals/{token}/consume stays
-  // admin-gated, also installed below.
+  // GET /v1/external/approvals/{token} is intentionally PUBLIC (the
+  // deep-link landing page in apps/agents reads it before the user is
+  // authenticated). It's mounted on a separate non-authed sub-app
+  // below — Hono falls through when no handler in this sub-app
+  // matches, so the public sub-app gets first crack at the GET.
+  // POST /v1/external/approvals/{token}/consume stays admin-gated:
+  // we bracket the consume sub-path with this scoped middleware so
+  // the BFF (which has the secret) can call it but anonymous traffic
+  // can't. The bare GET still falls through to the public sub-app.
+  app.use('/v1/external/approvals/*/consume', adminAuth(deps.config.adminSecret));
 
   app.openapi(
     createRoute({

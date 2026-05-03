@@ -433,4 +433,20 @@ describe('external approvals', () => {
     );
     expect(adminRes.status).toBe(404);
   });
+
+  it('rejects unauthenticated POST /consume (regression — admin gate scope)', async () => {
+    const rig = await createTestRig({ adminSecret: ADMIN_SECRET, encryptionKey: ENC_KEY });
+    // No Authorization header — apps/api MUST refuse with 401, not 404
+    // or 200. A previous version of buildExternalRoutes only mounted
+    // admin auth on the bare /v1/external/approvals path which left
+    // /consume publicly callable.
+    const res = await rig.app.fetch(
+      new Request('http://test.local/v1/external/approvals/anything/consume', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ error: 'x' }),
+      }),
+    );
+    expect(res.status).toBe(401);
+  });
 });
