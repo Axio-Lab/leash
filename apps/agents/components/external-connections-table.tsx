@@ -28,7 +28,13 @@ const fetcher = async (url: string): Promise<ListResponse> => {
   return (await res.json()) as ListResponse;
 };
 
-export function ExternalConnectionsTable({ onAdd }: { onAdd: () => void }) {
+export function ExternalConnectionsTable({
+  onAddTelegram,
+  onAddWhatsApp,
+}: {
+  onAddTelegram: () => void;
+  onAddWhatsApp: () => void;
+}) {
   const { data, error, isLoading } = useSWR<ListResponse>('/api/external/connections', fetcher, {
     refreshInterval: 5_000,
     revalidateOnFocus: true,
@@ -38,17 +44,22 @@ export function ExternalConnectionsTable({ onAdd }: { onAdd: () => void }) {
 
   return (
     <div className="rounded-lg border border-border bg-bg-elev overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+      <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="font-medium text-sm">External connections</div>
           <div className="mt-0.5 text-xs text-fg-muted">
-            Talk to your agent from Telegram (or — soon — WhatsApp). One bot per connection, bound
-            to your own chat.
+            Talk to your agent from Telegram or WhatsApp. One device per connection, bound to your
+            own chat — DMs from anyone else are ignored.
           </div>
         </div>
-        <Button type="button" size="sm" onClick={onAdd}>
-          + Add Telegram
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button type="button" size="sm" variant="ghost" onClick={onAddTelegram}>
+            + Add Telegram
+          </Button>
+          <Button type="button" size="sm" onClick={onAddWhatsApp}>
+            + Add WhatsApp
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (

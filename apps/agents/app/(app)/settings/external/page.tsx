@@ -5,18 +5,24 @@ import { useSWRConfig } from 'swr';
 
 import { ExternalConnectionsTable } from '@/components/external-connections-table';
 import { AddTelegramModal } from '@/components/external-add-telegram-modal';
+import { AddWhatsAppModal } from '@/components/external-add-whatsapp-modal';
 
 export default function ExternalSettingsPage() {
-  const [addOpen, setAddOpen] = React.useState(false);
+  const [tgOpen, setTgOpen] = React.useState(false);
+  const [waOpen, setWaOpen] = React.useState(false);
   const { mutate } = useSWRConfig();
+
+  const refresh = React.useCallback(() => {
+    void mutate('/api/external/connections');
+  }, [mutate]);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">External chat</h1>
         <p className="mt-1 text-sm text-fg-muted">
-          Connect Telegram (and soon WhatsApp) so your agent reaches you where you already chat —
-          same tools, channel-native formatting.
+          Connect Telegram or WhatsApp so your agent reaches you where you already chat — same
+          tools, channel-native formatting.
         </p>
       </div>
 
@@ -36,15 +42,13 @@ export default function ExternalSettingsPage() {
         </ul>
       </div>
 
-      <ExternalConnectionsTable onAdd={() => setAddOpen(true)} />
-
-      <AddTelegramModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onPaired={() => {
-          void mutate('/api/external/connections');
-        }}
+      <ExternalConnectionsTable
+        onAddTelegram={() => setTgOpen(true)}
+        onAddWhatsApp={() => setWaOpen(true)}
       />
+
+      <AddTelegramModal open={tgOpen} onClose={() => setTgOpen(false)} onPaired={refresh} />
+      <AddWhatsAppModal open={waOpen} onClose={() => setWaOpen(false)} onPaired={refresh} />
     </div>
   );
 }

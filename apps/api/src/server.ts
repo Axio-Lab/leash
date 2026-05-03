@@ -49,6 +49,8 @@ import {
   buildExternalRoutes,
   type ExternalRoutesDeps,
 } from './routes/external.js';
+import { getWhatsAppManager } from './external/whatsapp-manager.js';
+import { dispatchWhatsAppMessage } from './external/whatsapp-dispatcher.js';
 
 export type CreateLeashApiArgs = AuthDeps & {
   /**
@@ -57,6 +59,13 @@ export type CreateLeashApiArgs = AuthDeps & {
    */
   externalDispatcherBffFetch?: ExternalRoutesDeps['dispatcherBffFetch'];
   externalDispatcherTelegramClientFactory?: ExternalRoutesDeps['dispatcherTelegramClientFactory'];
+  /**
+   * Optional pre-built WhatsApp manager — used by tests to inject a
+   * stubbed Baileys session. Production callers leave this undefined
+   * and rely on `LEASH_WHATSAPP_ENABLED=1` to lazily build the
+   * default manager.
+   */
+  externalWhatsAppManager?: ExternalRoutesDeps['whatsapp'];
 };
 
 export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
@@ -90,6 +99,31 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   // sub-app (approval read + Telegram webhook) is mounted before the
   // authed sub-app for the same reason as the paywall — third-party
   // services and unauthenticated browsers must reach those endpoints.
+  // The WhatsApp manager is opt-in (single replica only). Operators
+  // set LEASH_WHATSAPP_ENABLED=1 on exactly one apps/api replica;
+  // every other replica leaves the manager unset and the
+  // `/v1/external/whatsapp/*` routes return 503. Tests can pass a
+  // pre-built manager via `externalWhatsAppManager` to bypass the env
+  // gate without instantiating Baileys.
+  let whatsappManager: ExternalRoutesDeps['whatsapp'] = deps.externalWhatsAppManager;
+  if (!whatsappManager && process.env.LEASH_WHATSAPP_ENABLED === '1') {
+    whatsappManager = getWhatsAppManager({
+      config: deps.config,
+      db: deps.db,
+      onInboundMessage: async ({ connection, message, fromId, socket }) => {
+        await dispatchWhatsAppMessage(
+          { config: deps.config, db: deps.db, socket },
+          { connection, message, fromId },
+        ).catch((err) => {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[whatsapp] dispatcher failed for connection=${connection.id}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+      },
+    });
+  }
+
   const externalDeps: ExternalRoutesDeps = {
     config: deps.config,
     db: deps.db,
@@ -100,6 +134,7 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
     ...(deps.externalDispatcherTelegramClientFactory
       ? { dispatcherTelegramClientFactory: deps.externalDispatcherTelegramClientFactory }
       : {}),
+    ...(whatsappManager ? { whatsapp: whatsappManager } : {}),
   };
   app.route('/', buildExternalRoutes(externalDeps));
   app.route('/', buildExternalPublicRoutes(externalDeps));

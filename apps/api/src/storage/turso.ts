@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 13;
+const SCHEMA_VERSION = 14;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -558,6 +558,30 @@ const SCHEMA_SQL: readonly string[] = [
     FOREIGN KEY (connection_id) REFERENCES external_connections(id)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_external_approvals_conn_ts ON external_approvals(connection_id, created_at DESC)`,
+
+  // ── v14: WhatsApp / Baileys session state ───────────────────────────
+  // Single row per connection_id holding the full Baileys
+  // `AuthenticationState` serialised through `BufferJSON.replacer` and
+  // sealed with the platform AES-GCM key. We split creds and keys into
+  // two columns so the hot-path (saveCreds, fired on every message)
+  // doesn't have to re-encrypt the much larger keys blob.
+  //
+  // `last_qr` is the most recent QR pairing payload Baileys emitted for
+  // this connection. The BFF polls /v1/external/whatsapp/qr/{id} until
+  // it goes null (= paired) or the connection's status flips to
+  // 'connected'. Plaintext on purpose — QR codes are short-lived
+  // (~60s) and only useful inside an active pairing flow.
+  `CREATE TABLE IF NOT EXISTS external_whatsapp_state (
+    connection_id     TEXT PRIMARY KEY,
+    encrypted_creds   TEXT,
+    encrypted_keys    TEXT,
+    last_qr           TEXT,
+    last_qr_at        TEXT,
+    me_jid            TEXT,
+    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (connection_id) REFERENCES external_connections(id)
+  )`,
 ];
 
 let cached: Client | null = null;

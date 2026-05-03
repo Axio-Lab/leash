@@ -337,6 +337,30 @@ export async function setConnectionError(
 }
 
 /**
+ * Generalised status writer used by the WhatsApp manager — sets both
+ * `status` and `error` atomically. Pass `error: null` to clear an
+ * existing error on a successful re-pair.
+ */
+export async function updateConnectionStatus(
+  db: DbClient,
+  args: {
+    id: string;
+    status: 'pending' | 'connected' | 'error' | 'revoked';
+    error: string | null;
+  },
+): Promise<void> {
+  await execute(
+    db,
+    `UPDATE external_connections
+        SET status = ?,
+            error = ?,
+            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+      WHERE id = ?`,
+    [args.status, args.error, args.id],
+  );
+}
+
+/**
  * Soft-revoke: clear secrets, set status to `revoked`. We do NOT delete
  * the row — keeping it lets the user see the historical connection in
  * audit views, and the unique routing index correctly excludes revoked

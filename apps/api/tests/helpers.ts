@@ -89,6 +89,7 @@ export type TestRig = {
 export type CreateTestRigOverrides = Partial<LeashApiConfig> & {
   externalDispatcherBffFetch?: CreateLeashApiArgs['externalDispatcherBffFetch'];
   externalDispatcherTelegramClientFactory?: CreateLeashApiArgs['externalDispatcherTelegramClientFactory'];
+  externalWhatsAppManager?: CreateLeashApiArgs['externalWhatsAppManager'];
 };
 
 export async function createTestRig(overrides: CreateTestRigOverrides = {}): Promise<TestRig> {
@@ -102,6 +103,7 @@ export async function createTestRig(overrides: CreateTestRigOverrides = {}): Pro
   const {
     externalDispatcherBffFetch,
     externalDispatcherTelegramClientFactory,
+    externalWhatsAppManager,
     ...configOverrides
   } = overrides;
   const config: LeashApiConfig = {
@@ -137,6 +139,7 @@ export async function createTestRig(overrides: CreateTestRigOverrides = {}): Pro
     cache,
     ...(externalDispatcherBffFetch ? { externalDispatcherBffFetch } : {}),
     ...(externalDispatcherTelegramClientFactory ? { externalDispatcherTelegramClientFactory } : {}),
+    ...(externalWhatsAppManager ? { externalWhatsAppManager } : {}),
   });
   return { app, db, config, apiKey: plaintext };
 }

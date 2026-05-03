@@ -46,9 +46,15 @@ import {
 } from '../storage/external-connections.js';
 import type { CacheClient } from '../storage/redis.js';
 import type { DbClient } from '../storage/turso.js';
-import { invalidRequest, notFound } from '../util/errors.js';
+import { conflict, invalidRequest, notFound, unavailable } from '../util/errors.js';
 import { dispatchTelegramMessage, type DispatcherDeps } from '../external/telegram-dispatcher.js';
 import type { TelegramClient } from '../external/telegram-client.js';
+import type { WhatsAppManager } from '../external/whatsapp-manager.js';
+import {
+  deleteWhatsAppState,
+  ensureWhatsAppStateRow,
+  getWhatsAppState,
+} from '../storage/external-whatsapp.js';
 
 export type ExternalRoutesDeps = {
   config: LeashApiConfig;
@@ -62,6 +68,14 @@ export type ExternalRoutesDeps = {
    */
   dispatcherBffFetch?: typeof fetch;
   dispatcherTelegramClientFactory?: (botToken: string) => TelegramClient;
+  /**
+   * Optional WhatsApp session manager. When set, the routes can drive
+   * a real (or stubbed) Baileys session — `start`, `getStatus`, `stop`.
+   * Operators wire this in `server.ts` only when `LEASH_WHATSAPP_ENABLED=1`
+   * because Baileys requires a single replica to avoid duplicated
+   * Signal-protocol state.
+   */
+  whatsapp?: WhatsAppManager;
 };
 
 // ── schemas ──────────────────────────────────────────────────────────
@@ -376,6 +390,11 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
         verificationToken,
         signingMode: 'deep_link',
       });
+      // Pre-seed the WhatsApp state row so `manager.start(id)` can
+      // begin without an extra `INSERT OR IGNORE` round-trip.
+      if (body.channel === 'whatsapp') {
+        await ensureWhatsAppStateRow(deps.db, created.id);
+      }
       return c.json(
         { connection: connectionToWire(created), webhook_url: webhookUrl, deep_link: deepLink },
         200,
@@ -580,7 +599,114 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
       const existing = await getExternalConnection(deps.db, id);
       if (!existing) throw notFound('connection not found');
       await revokeExternalConnection(deps.db, id);
+      // Stop the WhatsApp socket if one is running for this connection.
+      // We use `logout: true` so the device is unlinked from the user's
+      // WhatsApp app — they don't end up with a stale "Leash Agents"
+      // session in their linked-devices list. The state row is wiped
+      // so a future re-pair starts from a clean slate.
+      if (existing.channel === 'whatsapp') {
+        if (deps.whatsapp) {
+          await deps.whatsapp.stop(id, { logout: true }).catch(() => {});
+        }
+        await deleteWhatsAppState(deps.db, id).catch(() => {});
+      }
       return c.json({ ok: true as const }, 200);
+    },
+  );
+
+  // ── whatsapp (admin-gated start + qr poll) ─────────────────────────
+  // These two routes are the WhatsApp equivalent of the Telegram
+  // `/start <token>` flow: the BFF calls `start` once when the user
+  // clicks "Add WhatsApp", then polls `qr` until either the QR clears
+  // (= paired) or the connection's `status` flips to `connected`.
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/v1/external/whatsapp/start/{id}',
+      tags: ['external'],
+      summary: 'Start (or resume) a Baileys session for a WhatsApp connection',
+      security: [{ AdminSecret: [] }],
+      request: { params: z.object({ id: z.string().min(1) }) },
+      responses: {
+        200: {
+          description: 'ok',
+          content: {
+            'application/json': {
+              schema: z.object({
+                status: z.enum(['pairing', 'connecting', 'connected', 'error']),
+                reason: z.string().optional(),
+              }),
+            },
+          },
+        },
+        404: { description: 'nf', content: { 'application/json': { schema: ApiErrorSchema } } },
+        409: {
+          description: 'wrong channel',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+        503: {
+          description: 'not enabled',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      if (!deps.whatsapp) {
+        throw unavailable(
+          'WhatsApp bridge is not enabled on this replica. Set LEASH_WHATSAPP_ENABLED=1 on the designated host.',
+        );
+      }
+      const { id } = c.req.valid('param');
+      const conn = await getExternalConnection(deps.db, id);
+      if (!conn) throw notFound('connection not found');
+      if (conn.channel !== 'whatsapp') {
+        throw conflict('connection is not whatsapp');
+      }
+      const result = await deps.whatsapp.start(id);
+      return c.json(result, 200);
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/v1/external/whatsapp/qr/{id}',
+      tags: ['external'],
+      summary: 'Read the most recent pairing QR for the polling UI',
+      security: [{ AdminSecret: [] }],
+      request: { params: z.object({ id: z.string().min(1) }) },
+      responses: {
+        200: {
+          description: 'ok',
+          content: {
+            'application/json': {
+              schema: z.object({
+                qr: z.string().nullable(),
+                qr_at: z.string().nullable(),
+                status: StatusSchema,
+                me_jid: z.string().nullable(),
+              }),
+            },
+          },
+        },
+        404: { description: 'nf', content: { 'application/json': { schema: ApiErrorSchema } } },
+      },
+    }),
+    async (c) => {
+      const { id } = c.req.valid('param');
+      const conn = await getExternalConnection(deps.db, id);
+      if (!conn) throw notFound('connection not found');
+      const row = await getWhatsAppState(deps.db, id);
+      return c.json(
+        {
+          qr: row?.lastQr ?? null,
+          qr_at: row?.lastQrAt ?? null,
+          status: conn.status,
+          me_jid: row?.meJid ?? null,
+        },
+        200,
+      );
     },
   );
 
