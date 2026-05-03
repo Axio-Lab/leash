@@ -8,22 +8,31 @@
 
 export const NEXT_PUBLIC_PRIVY_APP_ID: string = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? '';
 
-export const SOLANA_RPC: string =
-  process.env.NEXT_PUBLIC_SOLANA_RPC ?? 'https://api.devnet.solana.com';
+/** Explicit RPC endpoint for devnet surfaces. */
+export const SOLANA_RPC_DEVNET: string =
+  process.env.NEXT_PUBLIC_SOLANA_RPC_DEVNET?.trim() || 'https://api.devnet.solana.com';
+
+/** Explicit RPC endpoint for mainnet surfaces. */
+export const SOLANA_RPC_MAINNET: string =
+  process.env.NEXT_PUBLIC_SOLANA_RPC_MAINNET?.trim() || 'https://api.mainnet-beta.solana.com';
 
 export type SolanaNetwork = 'solana-mainnet' | 'solana-devnet';
 
 export function resolveNetwork(): SolanaNetwork {
   const explicit = process.env.NEXT_PUBLIC_SOLANA_NETWORK?.trim();
   if (explicit === 'solana-mainnet' || explicit === 'solana-devnet') return explicit;
-  return SOLANA_RPC.includes('devnet') ||
-    SOLANA_RPC.includes('localhost') ||
-    SOLANA_RPC.includes('127.0.0.1')
+  return SOLANA_RPC_DEVNET.includes('devnet') ||
+    SOLANA_RPC_DEVNET.includes('localhost') ||
+    SOLANA_RPC_DEVNET.includes('127.0.0.1')
     ? 'solana-devnet'
     : 'solana-mainnet';
 }
 
 export const SOLANA_NETWORK: SolanaNetwork = resolveNetwork();
+
+/** Active RPC endpoint selected from SOLANA_NETWORK. */
+export const SOLANA_RPC: string =
+  SOLANA_NETWORK === 'solana-mainnet' ? SOLANA_RPC_MAINNET : SOLANA_RPC_DEVNET;
 
 /**
  * Per-user model "tier". The platform exposes three Claude tiers in

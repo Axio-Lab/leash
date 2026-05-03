@@ -43,6 +43,9 @@ function copy(value: string | undefined, label = 'Copied') {
 
 export default function ProfileOverviewPage() {
   const { user } = usePrivy();
+  const [selectedNetwork, setSelectedNetwork] = React.useState<'solana-mainnet' | 'solana-devnet'>(
+    'solana-mainnet',
+  );
 
   type Account = {
     type?: string;
@@ -115,6 +118,34 @@ export default function ProfileOverviewPage() {
               The MPL-Core asset, stablecoin treasury, and spend delegation that power your chats.
             </p>
           </div>
+          <div className="shrink-0 rounded-md border border-border bg-bg/40 p-1">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setSelectedNetwork('solana-mainnet')}
+                className={`min-h-10 rounded-sm px-2.5 text-[10px] font-medium uppercase tracking-widest transition ${
+                  selectedNetwork === 'solana-mainnet'
+                    ? 'bg-bg-elev-2 text-fg shadow-[inset_0_0_0_1px_oklch(0.66_0.19_268/0.4)]'
+                    : 'text-fg-muted hover:text-fg hover:bg-bg-elev/60'
+                }`}
+                aria-pressed={selectedNetwork === 'solana-mainnet'}
+              >
+                Mainnet
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedNetwork('solana-devnet')}
+                className={`min-h-10 rounded-sm px-2.5 text-[10px] font-medium uppercase tracking-widest transition ${
+                  selectedNetwork === 'solana-devnet'
+                    ? 'bg-bg-elev-2 text-fg shadow-[inset_0_0_0_1px_oklch(0.66_0.19_268/0.4)]'
+                    : 'text-fg-muted hover:text-fg hover:bg-bg-elev/60'
+                }`}
+                aria-pressed={selectedNetwork === 'solana-devnet'}
+              >
+                Devnet
+              </button>
+            </div>
+          </div>
           {isLoading ? (
             <Spinner size="sm" />
           ) : hasAgent ? (
@@ -133,7 +164,7 @@ export default function ProfileOverviewPage() {
         {!isLoading && hasAgent && primary ? (
           <dl className="grid gap-3 sm:grid-cols-2">
             <Field label="Name" value={primary.name ?? '—'} />
-            <Field label="Network" value={primary.network ?? '—'} mono />
+            <Field label="Network" value={selectedNetwork} mono />
             <Field label="Mint" value={shortAddr(primary.mint)} fullValue={primary.mint} mono />
             <Field
               label="Treasury"

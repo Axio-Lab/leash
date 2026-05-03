@@ -54,18 +54,13 @@ export default function LandingPage() {
               <div className="flex items-center justify-center gap-4 pt-2 lg:justify-start">
                 <button
                   type="button"
-                  onClick={login}
-                  disabled={!ready}
+                  onClick={() => {
+                    if (ready) login();
+                  }}
                   className="group inline-flex items-center gap-2 rounded-md bg-brand px-6 py-3 text-sm font-medium text-white transition-all hover:bg-brand-strong hover:shadow-[0_0_60px_-10px_var(--color-brand)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {ready ? (
-                    <>
-                      Get started
-                      <span className="transition-transform group-hover:translate-x-0.5">→</span>
-                    </>
-                  ) : (
-                    <Spinner size="sm" />
-                  )}
+                  Get started
+                  <span className="transition-transform group-hover:translate-x-0.5">→</span>
                 </button>
               </div>
             </div>
