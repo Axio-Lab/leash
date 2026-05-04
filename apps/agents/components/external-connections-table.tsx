@@ -102,7 +102,7 @@ function ConnectionRow({ conn }: { conn: ExternalConnection }) {
             <span className="text-sm font-medium truncate">
               {conn.display_name || prettyChannel(conn.channel)}
             </span>
-            <StatusBadge status={conn.status} />
+            <StatusBadge status={conn.status} channel={conn.channel} />
           </div>
           <div className="mt-0.5 truncate text-xs text-fg-muted">
             {conn.bot_username ? <span className="font-mono">@{conn.bot_username}</span> : null}
@@ -184,15 +184,24 @@ function ConnectionDetails({ conn }: { conn: ExternalConnection }) {
           setWaPolling(true);
         }
       } else {
-        // Telegram: rotate the verification token / pair link.
         const res = await fetch(
           `/api/external/connections/${encodeURIComponent(conn.id)}/refresh`,
           { method: 'POST', credentials: 'include' },
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        toast.success('Pair link refreshed', {
-          description: 'Open the new pair link to re-bind your chat.',
-        });
+        const body = (await res.json()) as {
+          telegram_webhook_registered?: boolean;
+          telegram_webhook_error?: string | null;
+        };
+        if (body.telegram_webhook_registered === false && body.telegram_webhook_error) {
+          toast.warning('Refresh saved', {
+            description: `Webhook not updated: ${body.telegram_webhook_error}`,
+          });
+        } else {
+          toast.success('Telegram connection refreshed', {
+            description: 'Verification link rotated and webhook synced.',
+          });
+        }
       }
       await mutate('/api/external/connections');
     } catch (err) {
@@ -234,9 +243,41 @@ function ConnectionDetails({ conn }: { conn: ExternalConnection }) {
     <div className="mt-3 space-y-3 rounded-md border border-border bg-bg p-3 text-xs">
       <SigningModeEditor conn={conn} />
 
-      {conn.status === 'pending' && conn.verification_token && conn.bot_username ? (
-        <PairLinkBlock
+      {conn.channel === 'telegram' && conn.telegram_webhook_url ? (
+        <details className="rounded-md border border-border bg-bg-elev px-2.5 py-2">
+          <summary className="cursor-pointer text-fg select-none text-[11px] font-medium uppercase tracking-wide">
+            Webhook URL
+          </summary>
+          <p className="mt-2 text-[10.5px] text-fg-muted leading-snug">
+            Telegram delivers bot updates to this HTTPS endpoint. It is registered automatically
+            when you add or refresh the connection — you do not need curl or BotFather.
+          </p>
+          <div className="mt-2 flex items-center gap-1">
+            <code className="flex-1 wrap-break-word rounded border border-border bg-bg px-2 py-1.5 font-mono text-[10px] text-fg-muted">
+              {conn.telegram_webhook_url}
+            </code>
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard?.writeText(conn.telegram_webhook_url!);
+                toast.success('Copied');
+              }}
+              className="shrink-0 rounded p-1 text-fg-subtle hover:bg-bg hover:text-fg"
+              aria-label="Copy webhook URL"
+            >
+              <CopyIcon className="size-3" />
+            </button>
+          </div>
+        </details>
+      ) : null}
+
+      {conn.channel === 'telegram' &&
+      conn.status === 'pending' &&
+      conn.verification_token &&
+      conn.bot_username ? (
+        <TelegramFinishLinkBlock
           deepLink={`https://t.me/${conn.bot_username}?start=${conn.verification_token}`}
+          botUsername={conn.bot_username}
         />
       ) : null}
 
@@ -479,18 +520,29 @@ function ModeOption({
   );
 }
 
-function PairLinkBlock({ deepLink }: { deepLink: string }) {
+function TelegramFinishLinkBlock({
+  deepLink,
+  botUsername,
+}: {
+  deepLink: string;
+  botUsername: string;
+}) {
   return (
-    <div className="rounded-md border border-border bg-bg-elev px-2.5 py-2">
-      <div className="text-[11px] font-medium uppercase tracking-wide text-fg-subtle">
-        Pair link
+    <div className="rounded-md border border-sky-500/25 bg-sky-500/5 px-2.5 py-2">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-sky-400">
+        Authorize your chat
       </div>
-      <div className="mt-1 flex items-center gap-1">
+      <p className="mt-1 text-[10.5px] text-fg-muted leading-snug">
+        Webhook is live, but Leash only runs your agent for chats that complete this step. Open the
+        link and tap <strong>Start</strong> once (<span className="font-mono">@{botUsername}</span>)
+        — then you can message normally.
+      </p>
+      <div className="mt-2 flex items-center gap-1">
         <a
           href={deepLink}
           target="_blank"
           rel="noreferrer"
-          className="flex-1 break-all font-mono text-[11px] text-brand hover:underline"
+          className="flex-1 wrap-break-word font-mono text-[11px] text-brand hover:underline"
         >
           {deepLink}
         </a>
@@ -501,15 +553,11 @@ function PairLinkBlock({ deepLink }: { deepLink: string }) {
             toast.success('Copied');
           }}
           className="shrink-0 rounded p-1 text-fg-subtle hover:bg-bg hover:text-fg"
-          aria-label="Copy pair link"
+          aria-label="Copy open-in-Telegram link"
         >
           <CopyIcon className="size-3" />
         </button>
       </div>
-      <p className="mt-1 text-[10.5px] text-fg-muted">
-        Open this from your phone or paste it in Telegram. The bot will detect the bind
-        automatically.
-      </p>
     </div>
   );
 }
@@ -683,15 +731,24 @@ function ChannelIcon({ channel }: { channel: 'telegram' | 'whatsapp' }) {
   );
 }
 
-function StatusBadge({ status }: { status: ExternalConnection['status'] }) {
+function StatusBadge({
+  status,
+  channel,
+}: {
+  status: ExternalConnection['status'];
+  channel: ExternalConnection['channel'];
+}) {
   const map: Record<
     ExternalConnection['status'],
     { label: string; cls: string; Icon: React.ComponentType<{ className?: string }> }
   > = {
     pending: {
-      label: 'Pending',
-      cls: 'bg-amber-500/15 text-amber-300',
-      Icon: ClockIcon,
+      label: channel === 'telegram' ? 'Live' : 'Pending',
+      cls:
+        channel === 'telegram'
+          ? 'bg-emerald-500/15 text-emerald-300'
+          : 'bg-amber-500/15 text-amber-300',
+      Icon: channel === 'telegram' ? CheckCircle2Icon : ClockIcon,
     },
     connected: {
       label: 'Connected',

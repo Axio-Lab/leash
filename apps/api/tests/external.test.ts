@@ -143,6 +143,9 @@ describe('external connections — CRUD', () => {
     );
     expect(body.telegram_webhook_registered).toBe(true);
     expect(body.telegram_webhook_error).toBeNull();
+    expect(body.connection.telegram_webhook_url).toBe(
+      `http://test.local/v1/external/telegram/webhook/${body.connection.routing_id}`,
+    );
 
     const dbRow = await rig.db.execute({
       sql: 'SELECT encrypted_credential FROM external_connections WHERE id = ?',

@@ -108,6 +108,10 @@ const ConnectionPublicSchema = z
     error: z.string().nullable(),
     created_at: z.string(),
     updated_at: z.string(),
+    telegram_webhook_url: z.string().nullable().optional().openapi({
+      description:
+        'Telegram Bot API webhook URL on this API host (channel=telegram only). Set automatically on create/refresh.',
+    }),
   })
   .openapi('ExternalConnection');
 
@@ -248,7 +252,7 @@ function getEncryptionKey(config: LeashApiConfig): string {
   return config.encryptionKey;
 }
 
-function connectionToWire(row: ExternalConnectionRow) {
+function connectionToWire(row: ExternalConnectionRow, config: LeashApiConfig) {
   return {
     id: row.id,
     owner_privy_id: row.ownerPrivyId,
@@ -270,6 +274,10 @@ function connectionToWire(row: ExternalConnectionRow) {
     error: row.error,
     created_at: row.createdAt,
     updated_at: row.updatedAt,
+    telegram_webhook_url:
+      row.channel === 'telegram' && row.routingId
+        ? webhookUrlForRouting(config, row.routingId)
+        : null,
   };
 }
 
@@ -439,7 +447,7 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
 
       return c.json(
         {
-          connection: connectionToWire(created),
+          connection: connectionToWire(created, deps.config),
           webhook_url: webhookUrl,
           deep_link: deepLink,
           ...(body.channel === 'telegram'
@@ -476,7 +484,7 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
     async (c) => {
       const { owner_privy_id } = c.req.valid('query');
       const rows = await listExternalConnectionsForOwner(deps.db, owner_privy_id);
-      return c.json({ items: rows.map(connectionToWire) }, 200);
+      return c.json({ items: rows.map((r) => connectionToWire(r, deps.config)) }, 200);
     },
   );
 
@@ -500,7 +508,7 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
       const { id } = c.req.valid('param');
       const row = await getExternalConnection(deps.db, id);
       if (!row) throw notFound('connection not found');
-      return c.json(connectionToWire(row), 200);
+      return c.json(connectionToWire(row, deps.config), 200);
     },
   );
 
@@ -579,7 +587,7 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
       }
       const after = await getExternalConnection(deps.db, id);
       if (!after) throw notFound('connection not found');
-      return c.json(connectionToWire(after), 200);
+      return c.json(connectionToWire(after, deps.config), 200);
     },
   );
 
@@ -643,7 +651,7 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
 
       return c.json(
         {
-          connection: connectionToWire(after),
+          connection: connectionToWire(after, deps.config),
           deep_link: deepLink,
           webhook_url: webhookUrl,
           ...(after.channel === 'telegram'

@@ -3,42 +3,19 @@
 /**
  * Add-Telegram-connection modal.
  *
- * Two-step flow inside one dialog:
+ * Single step: user pastes a BYO bot token + username (from @BotFather),
+ * we POST `/api/external/connections`. apps/api encrypts the token, calls
+ * Telegram `setWebhook`, and returns the new row.
  *
- *   1. **Form** — user pastes their BYO bot token + username (created
- *      via @BotFather). We POST `/api/external/connections` with
- *      `channel='telegram'`. apps/api encrypts the token at rest, mints
- *      a verification token, and returns `{connection, deep_link,
- *      webhook_url}`.
- *
- *   2. **Pair** — we show a click-able `t.me/<bot>?start=<token>` link
- *      (no QR — that is only used for WhatsApp linked-device pairing). The
- *      API calls Telegram `setWebhook` automatically; users only open the
- *      deep link and send `/start`. If auto-registration fails (e.g. wrong
- *      public origin), the UI still shows manual curl / BotFather steps.
- *      The page polls `GET /api/external/connections/{id}` once a
- *      second; the dot-status flips to "connected" the moment Telegram
- *      delivers the user's `/start <token>` message.
- *
- * The connection row is cancellable at any time — closing the modal
- * before pairing leaves it in `status='pending'`, and the user can
- * resume from the table or refresh the verification token.
+ * The modal closes immediately on success — pair link, webhook URL, and
+ * **Refresh** live in the expandable row on the External settings table.
  */
 
 import * as React from 'react';
-import {
-  CheckCircle2Icon,
-  CopyIcon,
-  ExternalLinkIcon,
-  Loader2,
-  PencilIcon,
-  ShieldCheckIcon,
-  X,
-} from 'lucide-react';
+import { CheckCircle2Icon, Loader2, PencilIcon, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 
 export type ExternalConnection = {
   id: string;
@@ -56,17 +33,9 @@ export type ExternalConnection = {
   created_at: string;
   updated_at: string;
   error: string | null;
+  /** Present for channel=telegram — public webhook URL on the API host. */
+  telegram_webhook_url?: string | null;
 };
-
-type CreateResponse = {
-  connection: ExternalConnection;
-  webhook_url: string | null;
-  deep_link: string | null;
-  telegram_webhook_registered?: boolean;
-  telegram_webhook_error?: string | null;
-};
-
-type Phase = { kind: 'form' } | { kind: 'pair'; created: CreateResponse };
 
 /**
  * BotFather tokens are `<bot_id>:<35-char-secret>` — we keep the regex
@@ -87,16 +56,12 @@ export function AddTelegramModal({
   onClose: () => void;
   onPaired: () => void;
 }) {
-  const [phase, setPhase] = React.useState<Phase>({ kind: 'form' });
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const [displayName, setDisplayName] = React.useState('My Telegram');
   const [botToken, setBotToken] = React.useState('');
   const [botUsername, setBotUsername] = React.useState('');
-  // Auto-lookup: when the token looks well-formed, hit Telegram's getMe
-  // and pre-fill the bot username. Locked = pulled from getMe and read-only;
-  // user can flip to manual edit if they want to override.
   const [usernameLocked, setUsernameLocked] = React.useState(false);
   const [tokenLookup, setTokenLookup] = React.useState<{
     state: 'idle' | 'verifying' | 'ok' | 'fail';
@@ -105,7 +70,6 @@ export function AddTelegramModal({
 
   React.useEffect(() => {
     if (!open) return;
-    setPhase({ kind: 'form' });
     setSubmitting(false);
     setError(null);
     setDisplayName('My Telegram');
@@ -115,12 +79,8 @@ export function AddTelegramModal({
     setTokenLookup({ state: 'idle' });
   }, [open]);
 
-  // Debounced getMe lookup — fires ~400ms after the user stops typing
-  // a well-formed token. We don't surface the raw network call as a
-  // hard error; if it fails, the username field stays editable and the
-  // server will validate again on submit.
   React.useEffect(() => {
-    if (phase.kind !== 'form') return;
+    if (!open) return;
     const trimmed = botToken.trim();
     if (!isLikelyTelegramToken(trimmed)) {
       setTokenLookup({ state: 'idle' });
@@ -160,51 +120,8 @@ export function AddTelegramModal({
       clearTimeout(handle);
       ctrl.abort();
     };
-    // displayName intentionally omitted — we only seed it once from
-    // getMe; later edits shouldn't re-trigger the lookup.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [botToken, phase.kind]);
-
-  // Poll the connection while we're on the pair screen so the dialog
-  // can flip to "Connected — you're done" without the user reloading.
-  React.useEffect(() => {
-    if (!open || phase.kind !== 'pair') return;
-    let cancelled = false;
-    const id = phase.created.connection.id;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    async function tick() {
-      try {
-        const res = await fetch(`/api/external/connections/${encodeURIComponent(id)}`, {
-          credentials: 'include',
-        });
-        if (!cancelled && res.ok) {
-          const conn = (await res.json()) as ExternalConnection;
-          if (conn.status === 'connected') {
-            toast.success('Telegram connected', {
-              description: `Bot ${conn.bot_username ? '@' + conn.bot_username : ''} is bound to your chat.`,
-            });
-            onPaired();
-            onClose();
-            return;
-          }
-          if (conn.status === 'error' && conn.error) {
-            setError(conn.error);
-          }
-        }
-      } catch {
-        // Network blip — just retry next tick.
-      }
-      if (!cancelled) {
-        timer = setTimeout(tick, 2_000);
-      }
-    }
-    tick();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [open, phase, onPaired, onClose]);
+  }, [botToken, open]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -233,8 +150,25 @@ export function AddTelegramModal({
         }
         throw new Error(message);
       }
-      const created = JSON.parse(text) as CreateResponse;
-      setPhase({ kind: 'pair', created });
+      const payload = JSON.parse(text) as {
+        connection: ExternalConnection;
+        telegram_webhook_registered?: boolean;
+        telegram_webhook_error?: string | null;
+      };
+
+      if (payload.telegram_webhook_registered === false && payload.telegram_webhook_error) {
+        toast.warning('Telegram connection saved', {
+          description: `Webhook was not set: ${payload.telegram_webhook_error}. Fix LEASH_API_PUBLIC_ORIGIN or set the webhook from the connection details.`,
+        });
+      } else {
+        toast.success('Telegram connection added', {
+          description:
+            'Webhook is configured. Expand the row to open your bot or copy the inbound URL.',
+        });
+      }
+
+      onPaired();
+      onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'unknown error');
     } finally {
@@ -248,13 +182,9 @@ export function AddTelegramModal({
       <div className="w-full max-w-md rounded-lg border border-border bg-bg-elev shadow-2xl">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div>
-            <h2 className="text-base font-medium">
-              {phase.kind === 'form' ? 'Connect Telegram' : 'Bind your chat'}
-            </h2>
+            <h2 className="text-base font-medium">Add Telegram</h2>
             <p className="text-xs text-fg-muted mt-0.5">
-              {phase.kind === 'form'
-                ? 'Bring your own bot token from @BotFather.'
-                : 'Open the link in Telegram and tap Start — we link the first chat that does.'}
+              Paste your bot token from @BotFather. We register the webhook for you — no curl.
             </p>
           </div>
           <button
@@ -267,129 +197,122 @@ export function AddTelegramModal({
           </button>
         </div>
 
-        {phase.kind === 'form' ? (
-          <form onSubmit={submit} className="space-y-4 px-4 py-4">
-            <BotFatherHelp />
+        <form onSubmit={submit} className="space-y-4 px-4 py-4">
+          <BotFatherHelp />
 
-            <label className="block text-sm">
-              <span className="text-fg-muted text-xs">Display name</span>
+          <label className="block text-sm">
+            <span className="text-fg-muted text-xs">Display name</span>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="My Telegram"
+              maxLength={120}
+              required
+              className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm"
+            />
+            <span className="mt-1 block text-[11px] text-fg-subtle">
+              Shown in your settings list. Pick whatever you&apos;ll recognise later.
+            </span>
+          </label>
+
+          <label className="block text-sm">
+            <span className="text-fg-muted text-xs">Bot token</span>
+            <div className="relative mt-1">
+              <input
+                type="password"
+                value={botToken}
+                onChange={(e) => {
+                  setBotToken(e.target.value);
+                  if (usernameLocked) {
+                    setUsernameLocked(false);
+                    setBotUsername('');
+                  }
+                }}
+                placeholder="123456789:ABCdef-ghi_jklmnopqrstuvwxyz12345678"
+                required
+                minLength={20}
+                className="w-full rounded-md border border-border bg-bg px-3 py-2 pr-9 text-sm font-mono"
+              />
+              {tokenLookup.state === 'verifying' ? (
+                <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 size-3.5 animate-spin text-fg-subtle" />
+              ) : tokenLookup.state === 'ok' ? (
+                <CheckCircle2Icon className="absolute right-2 top-1/2 -translate-y-1/2 size-3.5 text-success" />
+              ) : null}
+            </div>
+            <span className="mt-1 block text-[11px] text-fg-subtle">
+              Encrypted at rest. Never shown again — delete and re-add if you lose it.
+            </span>
+          </label>
+
+          <label className="block text-sm">
+            <span className="text-fg-muted text-xs">Bot username</span>
+            <div
+              className={`mt-1 flex items-center gap-1 rounded-md border px-3 ${
+                usernameLocked ? 'border-success/30 bg-success/5' : 'border-border bg-bg'
+              }`}
+            >
+              <span className="text-fg-subtle text-sm">@</span>
               <input
                 type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="My Telegram"
-                maxLength={120}
+                value={botUsername}
+                onChange={(e) => setBotUsername(e.target.value.replace(/^@/, ''))}
+                placeholder={tokenLookup.state === 'verifying' ? 'Looking up bot…' : 'my_leash_bot'}
+                pattern="^[A-Za-z0-9_]{4,32}$"
                 required
-                className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm"
-              />
-              <span className="mt-1 block text-[11px] text-fg-subtle">
-                Shown in your settings list. Pick whatever you'll recognise later.
-              </span>
-            </label>
-
-            <label className="block text-sm">
-              <span className="text-fg-muted text-xs">Bot token</span>
-              <div className="relative mt-1">
-                <input
-                  type="password"
-                  value={botToken}
-                  onChange={(e) => {
-                    setBotToken(e.target.value);
-                    if (usernameLocked) {
-                      setUsernameLocked(false);
-                      setBotUsername('');
-                    }
-                  }}
-                  placeholder="123456789:ABCdef-ghi_jklmnopqrstuvwxyz12345678"
-                  required
-                  minLength={20}
-                  className="w-full rounded-md border border-border bg-bg px-3 py-2 pr-9 text-sm font-mono"
-                />
-                {tokenLookup.state === 'verifying' ? (
-                  <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 size-3.5 animate-spin text-fg-subtle" />
-                ) : tokenLookup.state === 'ok' ? (
-                  <CheckCircle2Icon className="absolute right-2 top-1/2 -translate-y-1/2 size-3.5 text-success" />
-                ) : null}
-              </div>
-              <span className="mt-1 block text-[11px] text-fg-subtle">
-                Encrypted at rest with AES-GCM. Never shown again — refresh the connection if you
-                lose it.
-              </span>
-            </label>
-
-            <label className="block text-sm">
-              <span className="text-fg-muted text-xs">Bot username</span>
-              <div
-                className={`mt-1 flex items-center gap-1 rounded-md border px-3 ${
-                  usernameLocked ? 'border-success/30 bg-success/5' : 'border-border bg-bg'
+                readOnly={usernameLocked}
+                className={`w-full bg-transparent py-2 text-sm focus:outline-none ${
+                  usernameLocked ? 'text-success' : ''
                 }`}
-              >
-                <span className="text-fg-subtle text-sm">@</span>
-                <input
-                  type="text"
-                  value={botUsername}
-                  onChange={(e) => setBotUsername(e.target.value.replace(/^@/, ''))}
-                  placeholder={
-                    tokenLookup.state === 'verifying' ? 'Looking up bot…' : 'my_leash_bot'
-                  }
-                  pattern="^[A-Za-z0-9_]{4,32}$"
-                  required
-                  readOnly={usernameLocked}
-                  className={`w-full bg-transparent py-2 text-sm focus:outline-none ${
-                    usernameLocked ? 'text-success' : ''
-                  }`}
-                />
-                {usernameLocked ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUsernameLocked(false);
-                      setTokenLookup({ state: 'idle' });
-                    }}
-                    className="shrink-0 rounded p-1 text-fg-subtle hover:bg-bg hover:text-fg"
-                    aria-label="Edit username manually"
-                    title="Edit manually"
-                  >
-                    <PencilIcon className="size-3" />
-                  </button>
-                ) : null}
-              </div>
-              <span className="mt-1 block text-[11px] text-fg-subtle">
-                {usernameLocked ? (
-                  <span className="text-success/80">Auto-detected from your token.</span>
-                ) : tokenLookup.state === 'fail' ? (
-                  <span className="text-warning">{tokenLookup.message}</span>
-                ) : (
-                  <>Without the leading @. We'll auto-fill this from your token.</>
-                )}
-              </span>
-            </label>
-
-            {error ? (
-              <div className="rounded-md border border-danger/40 bg-danger/8 px-3 py-2 text-xs text-danger break-words">
-                {error}
-              </div>
-            ) : null}
-
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit" size="sm" disabled={submitting}>
-                {submitting ? (
-                  <>
-                    <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-                    Creating
-                  </>
-                ) : (
-                  'Continue'
-                )}
-              </Button>
+              />
+              {usernameLocked ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUsernameLocked(false);
+                    setTokenLookup({ state: 'idle' });
+                  }}
+                  className="shrink-0 rounded p-1 text-fg-subtle hover:bg-bg hover:text-fg"
+                  aria-label="Edit username manually"
+                  title="Edit manually"
+                >
+                  <PencilIcon className="size-3" />
+                </button>
+              ) : null}
             </div>
-          </form>
-        ) : (
-          <PairPhase created={phase.created} submitError={error} />
-        )}
+            <span className="mt-1 block text-[11px] text-fg-subtle">
+              {usernameLocked ? (
+                <span className="text-success/80">Auto-detected from your token.</span>
+              ) : tokenLookup.state === 'fail' ? (
+                <span className="text-warning">{tokenLookup.message}</span>
+              ) : (
+                <>Without the leading @. We&apos;ll auto-fill from your token when possible.</>
+              )}
+            </span>
+          </label>
+
+          {error ? (
+            <div className="rounded-md border border-danger/40 bg-danger/8 px-3 py-2 text-xs text-danger wrap-break-word">
+              {error}
+            </div>
+          ) : null}
+
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" disabled={submitting}>
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                  Adding
+                </>
+              ) : (
+                'Add connection'
+              )}
+            </Button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -420,132 +343,5 @@ function BotFatherHelp() {
         </li>
       </ol>
     </details>
-  );
-}
-
-function PairPhase({
-  created,
-  submitError,
-}: {
-  created: CreateResponse;
-  submitError: string | null;
-}) {
-  const deepLink = created.deep_link;
-  const webhook = created.webhook_url;
-  const conn = created.connection;
-  const hookOk = created.telegram_webhook_registered === true;
-  const hookErr = created.telegram_webhook_error;
-
-  return (
-    <div className="space-y-4 px-4 py-4">
-      <div className="rounded-md border border-brand/30 bg-brand/8 p-3 text-xs text-fg">
-        <div className="flex items-start gap-2">
-          <ShieldCheckIcon className="mt-0.5 size-3.5 shrink-0 text-brand" />
-          <div className="space-y-1.5">
-            <p>
-              Your bot token is saved. Leash still needs one <strong>/start</strong> from{' '}
-              <em>your</em> Telegram account so we know which chat is yours — otherwise anyone with
-              the bot could drive your agent.
-            </p>
-            <p className="text-fg-muted">
-              Open the link below (one-time token) and tap <strong>Start</strong>. Status switches
-              to connected right after.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {hookOk ? (
-        <div className="rounded-md border border-success/30 bg-success/8 px-3 py-2 text-xs text-fg">
-          Webhook registered with Telegram — no manual curl or BotFather step needed.
-        </div>
-      ) : null}
-
-      {hookErr ? (
-        <div className="rounded-md border border-warning/40 bg-warning/8 px-3 py-2 text-xs">
-          <p className="font-medium text-fg">Could not set the webhook automatically</p>
-          <p className="mt-1 text-fg-muted">{hookErr}</p>
-          <p className="mt-1 text-fg-muted">
-            Fix <code className="text-[10px]">LEASH_API_PUBLIC_ORIGIN</code> so it matches this API
-            on the public internet, or set the webhook manually below.
-          </p>
-        </div>
-      ) : null}
-
-      {deepLink ? (
-        <a
-          href={deepLink}
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg px-3 py-2 text-xs text-brand hover:underline"
-        >
-          <ExternalLinkIcon className="size-3.5 shrink-0" />
-          <span className="font-mono break-all text-center">{deepLink}</span>
-        </a>
-      ) : null}
-
-      {webhook ? (
-        <details
-          className="rounded-md border border-border bg-bg/50 px-3 py-2 text-xs"
-          open={!hookOk}
-        >
-          <summary className="cursor-pointer text-fg select-none">
-            {hookOk ? 'Advanced: webhook URL & manual setWebhook' : 'Set the bot webhook manually'}
-          </summary>
-          <div className="mt-2 space-y-2 text-fg-muted">
-            <p>Telegram delivers updates to this URL (already used if auto-setup succeeded):</p>
-            <CopyableLine text={webhook} />
-            <p>
-              Or run once from a shell (replace <code>&lt;token&gt;</code> with your bot token):
-            </p>
-            <CopyableLine
-              text={`curl -s 'https://api.telegram.org/bot<token>/setWebhook' -d url='${webhook}'`}
-            />
-            <p>
-              BotFather → <em>Bot Settings</em> → <em>Webhook</em> also works.
-            </p>
-          </div>
-        </details>
-      ) : null}
-
-      <div className="flex items-center gap-2 rounded-md border border-border bg-bg p-3 text-xs">
-        <Spinner size="sm" />
-        <span className="text-fg-muted">
-          Waiting for your <code>/start</code> message
-          {conn.bot_username ? (
-            <>
-              {' '}
-              in <code>@{conn.bot_username}</code>
-            </>
-          ) : null}
-          …
-        </span>
-      </div>
-
-      {submitError ? (
-        <div className="rounded-md border border-danger/40 bg-danger/8 px-3 py-2 text-xs text-danger break-words">
-          {submitError}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function CopyableLine({ text }: { text: string }) {
-  return (
-    <div className="flex items-center gap-1 rounded border border-border bg-bg px-2 py-1.5">
-      <code className="flex-1 break-all font-mono text-[10.5px]">{text}</code>
-      <button
-        type="button"
-        onClick={() => {
-          void navigator.clipboard?.writeText(text);
-          toast.success('Copied');
-        }}
-        className="shrink-0 rounded p-1 text-fg-subtle hover:bg-bg-elev hover:text-fg"
-        aria-label="Copy"
-      >
-        <CopyIcon className="size-3" />
-      </button>
-    </div>
   );
 }
