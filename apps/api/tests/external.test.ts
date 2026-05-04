@@ -14,7 +14,7 @@
  * messages and `dropped: ...` otherwise.
  */
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { decryptSecret } from '@leash/platform-auth/encryption';
 
@@ -29,8 +29,24 @@ const BOT_TOKEN = '123456789:ABCdef-ghi_jklmnopqrstuvwxyz12345678';
 const BOT_USERNAME = 'leash_test_bot';
 const TELEGRAM_FROM_ID = '999111222';
 
+const nativeFetch = globalThis.fetch;
+
 beforeAll(() => {
   process.env.ENCRYPTION_KEY = ENC_KEY;
+  globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (url.includes('api.telegram.org')) {
+      return new Response(JSON.stringify({ ok: true, result: true, description: 'OK' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return nativeFetch(input, init);
+  }) as typeof fetch;
+});
+
+afterAll(() => {
+  globalThis.fetch = nativeFetch;
 });
 
 function authHeaders() {
@@ -65,6 +81,8 @@ async function createConnection(rig: Awaited<ReturnType<typeof createTestRig>>) 
     };
     deep_link: string | null;
     webhook_url: string | null;
+    telegram_webhook_registered?: boolean;
+    telegram_webhook_error?: string | null;
   };
   return body;
 }
@@ -123,6 +141,8 @@ describe('external connections — CRUD', () => {
     expect(body.webhook_url).toContain(
       `/v1/external/telegram/webhook/${body.connection.routing_id}`,
     );
+    expect(body.telegram_webhook_registered).toBe(true);
+    expect(body.telegram_webhook_error).toBeNull();
 
     const dbRow = await rig.db.execute({
       sql: 'SELECT encrypted_credential FROM external_connections WHERE id = ?',
@@ -156,10 +176,14 @@ describe('external connections — CRUD', () => {
     const refreshed = (await refresh.json()) as {
       connection: { verification_token: string; bound_chat_id: string | null };
       deep_link: string | null;
+      telegram_webhook_registered?: boolean;
+      telegram_webhook_error?: string | null;
     };
     expect(refreshed.connection.verification_token).not.toBe(body.connection.verification_token);
     expect(refreshed.connection.bound_chat_id).toBeNull();
     expect(refreshed.deep_link).toContain(refreshed.connection.verification_token);
+    expect(refreshed.telegram_webhook_registered).toBe(true);
+    expect(refreshed.telegram_webhook_error).toBeNull();
   });
 
   it('PATCH switches to delegated signing with caps and encrypts the secret key', async () => {

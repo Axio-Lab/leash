@@ -12,9 +12,10 @@
  *      webhook_url}`.
  *
  *   2. **Pair** — we show a click-able `t.me/<bot>?start=<token>` link
- *      (no QR — that is only used for WhatsApp linked-device pairing), plus
- *      the webhook URL the user pastes into BotFather's `setWebhook` (or curls
- *      themselves).
+ *      (no QR — that is only used for WhatsApp linked-device pairing). The
+ *      API calls Telegram `setWebhook` automatically; users only open the
+ *      deep link and send `/start`. If auto-registration fails (e.g. wrong
+ *      public origin), the UI still shows manual curl / BotFather steps.
  *      The page polls `GET /api/external/connections/{id}` once a
  *      second; the dot-status flips to "connected" the moment Telegram
  *      delivers the user's `/start <token>` message.
@@ -61,6 +62,8 @@ type CreateResponse = {
   connection: ExternalConnection;
   webhook_url: string | null;
   deep_link: string | null;
+  telegram_webhook_registered?: boolean;
+  telegram_webhook_error?: string | null;
 };
 
 type Phase = { kind: 'form' } | { kind: 'pair'; created: CreateResponse };
@@ -385,7 +388,7 @@ export function AddTelegramModal({
             </div>
           </form>
         ) : (
-          <PairPhase created={phase.created} error={error} />
+          <PairPhase created={phase.created} submitError={error} />
         )}
       </div>
     </div>
@@ -420,22 +423,54 @@ function BotFatherHelp() {
   );
 }
 
-function PairPhase({ created, error }: { created: CreateResponse; error: string | null }) {
+function PairPhase({
+  created,
+  submitError,
+}: {
+  created: CreateResponse;
+  submitError: string | null;
+}) {
   const deepLink = created.deep_link;
   const webhook = created.webhook_url;
   const conn = created.connection;
+  const hookOk = created.telegram_webhook_registered === true;
+  const hookErr = created.telegram_webhook_error;
 
   return (
     <div className="space-y-4 px-4 py-4">
       <div className="rounded-md border border-brand/30 bg-brand/8 p-3 text-xs text-fg">
         <div className="flex items-start gap-2">
           <ShieldCheckIcon className="mt-0.5 size-3.5 shrink-0 text-brand" />
-          <span>
-            Your bot is registered. Now bind it to <em>your</em> Telegram chat so only you can talk
-            to it. The link below is one-time and only works for the first chat that opens it.
-          </span>
+          <div className="space-y-1.5">
+            <p>
+              Your bot token is saved. Leash still needs one <strong>/start</strong> from{' '}
+              <em>your</em> Telegram account so we know which chat is yours — otherwise anyone with
+              the bot could drive your agent.
+            </p>
+            <p className="text-fg-muted">
+              Open the link below (one-time token) and tap <strong>Start</strong>. Status switches
+              to connected right after.
+            </p>
+          </div>
         </div>
       </div>
+
+      {hookOk ? (
+        <div className="rounded-md border border-success/30 bg-success/8 px-3 py-2 text-xs text-fg">
+          Webhook registered with Telegram — no manual curl or BotFather step needed.
+        </div>
+      ) : null}
+
+      {hookErr ? (
+        <div className="rounded-md border border-warning/40 bg-warning/8 px-3 py-2 text-xs">
+          <p className="font-medium text-fg">Could not set the webhook automatically</p>
+          <p className="mt-1 text-fg-muted">{hookErr}</p>
+          <p className="mt-1 text-fg-muted">
+            Fix <code className="text-[10px]">LEASH_API_PUBLIC_ORIGIN</code> so it matches this API
+            on the public internet, or set the webhook manually below.
+          </p>
+        </div>
+      ) : null}
 
       {deepLink ? (
         <a
@@ -450,19 +485,24 @@ function PairPhase({ created, error }: { created: CreateResponse; error: string 
       ) : null}
 
       {webhook ? (
-        <details className="rounded-md border border-border bg-bg/50 px-3 py-2 text-xs">
+        <details
+          className="rounded-md border border-border bg-bg/50 px-3 py-2 text-xs"
+          open={!hookOk}
+        >
           <summary className="cursor-pointer text-fg select-none">
-            Set the bot webhook (one-time)
+            {hookOk ? 'Advanced: webhook URL & manual setWebhook' : 'Set the bot webhook manually'}
           </summary>
           <div className="mt-2 space-y-2 text-fg-muted">
+            <p>Telegram delivers updates to this URL (already used if auto-setup succeeded):</p>
+            <CopyableLine text={webhook} />
             <p>
-              Telegram needs to know where to deliver updates. Either run this once from any shell:
+              Or run once from a shell (replace <code>&lt;token&gt;</code> with your bot token):
             </p>
             <CopyableLine
               text={`curl -s 'https://api.telegram.org/bot<token>/setWebhook' -d url='${webhook}'`}
             />
             <p>
-              or paste the URL into BotFather → <em>Bot Settings</em> → <em>Webhook</em>.
+              BotFather → <em>Bot Settings</em> → <em>Webhook</em> also works.
             </p>
           </div>
         </details>
@@ -482,9 +522,9 @@ function PairPhase({ created, error }: { created: CreateResponse; error: string 
         </span>
       </div>
 
-      {error ? (
+      {submitError ? (
         <div className="rounded-md border border-danger/40 bg-danger/8 px-3 py-2 text-xs text-danger break-words">
-          {error}
+          {submitError}
         </div>
       ) : null}
     </div>

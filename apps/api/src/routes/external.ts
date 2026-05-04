@@ -19,7 +19,7 @@
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { encryptSecret } from '@leash/platform-auth/encryption';
+import { decryptSecret, encryptSecret } from '@leash/platform-auth/encryption';
 
 import { adminAuth } from '../auth/admin.js';
 import type { LeashApiConfig } from '../config.js';
@@ -290,12 +290,40 @@ function approvalToWire(row: ExternalApprovalRow) {
 }
 
 /**
- * Compose the public webhook URL the BFF / user pastes into Telegram's
- * `setWebhook` (or BotFather). Lives at the API's `publicOrigin` so it
- * works in dev without DNS gymnastics.
+ * Compose the public webhook URL Telegram forwards updates to.
+ * `LEASH_API_PUBLIC_ORIGIN` must match where this API is reachable from
+ * the public internet (tunnel / prod host) or delivery will fail.
  */
 function webhookUrlForRouting(config: LeashApiConfig, routingId: string): string {
   return `${config.publicOrigin}/v1/external/telegram/webhook/${routingId}`;
+}
+
+/**
+ * Tells Telegram to POST updates to our webhook. Called automatically on
+ * create / refresh so operators are not forced through manual curl.
+ */
+async function registerTelegramWebhook(
+  botToken: string,
+  webhookUrl: string,
+): Promise<{ ok: true } | { ok: false; description: string }> {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ url: webhookUrl }),
+    });
+    const json = (await res.json()) as { ok?: boolean; description?: string };
+    if (json.ok) return { ok: true };
+    return {
+      ok: false,
+      description: json.description ?? `Telegram setWebhook failed (HTTP ${res.status})`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      description: err instanceof Error ? err.message : 'setWebhook network error',
+    };
+  }
 }
 
 /** URL-safe verification token for the `/start <token>` deep link. */
@@ -347,11 +375,19 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
                 connection: ConnectionPublicSchema,
                 webhook_url: z.string().nullable().openapi({
                   description:
-                    'Public URL the BFF / user wires into Telegram setWebhook (channel=telegram).',
+                    'Public URL Telegram posts to (channel=telegram). Usually registered automatically via setWebhook.',
                 }),
                 deep_link: z.string().nullable().openapi({
                   description:
                     'Telegram `https://t.me/{bot}?start={token}` link (channel=telegram).',
+                }),
+                telegram_webhook_registered: z.boolean().optional().openapi({
+                  description:
+                    'True when setWebhook succeeded (telegram only). If false, use telegram_webhook_error + manual steps.',
+                }),
+                telegram_webhook_error: z.string().nullable().optional().openapi({
+                  description:
+                    'Telegram API error when automatic setWebhook failed (telegram only).',
                 }),
               }),
             },
@@ -392,8 +428,27 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
       if (body.channel === 'whatsapp') {
         await ensureWhatsAppStateRow(deps.db, created.id);
       }
+
+      let telegramWebhookRegistered: boolean | undefined;
+      let telegramWebhookError: string | null | undefined;
+      if (body.channel === 'telegram' && webhookUrl && body.bot_token) {
+        const reg = await registerTelegramWebhook(body.bot_token, webhookUrl);
+        telegramWebhookRegistered = reg.ok;
+        telegramWebhookError = reg.ok ? null : reg.description;
+      }
+
       return c.json(
-        { connection: connectionToWire(created), webhook_url: webhookUrl, deep_link: deepLink },
+        {
+          connection: connectionToWire(created),
+          webhook_url: webhookUrl,
+          deep_link: deepLink,
+          ...(body.channel === 'telegram'
+            ? {
+                telegram_webhook_registered: telegramWebhookRegistered,
+                telegram_webhook_error: telegramWebhookError ?? null,
+              }
+            : {}),
+        },
         200,
       );
     },
@@ -545,6 +600,8 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
                 connection: ConnectionPublicSchema,
                 deep_link: z.string().nullable(),
                 webhook_url: z.string().nullable(),
+                telegram_webhook_registered: z.boolean().optional(),
+                telegram_webhook_error: z.string().nullable().optional(),
               }),
             },
           },
@@ -568,8 +625,34 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
         after.channel === 'telegram' && after.routingId
           ? webhookUrlForRouting(deps.config, after.routingId)
           : null;
+
+      let telegramWebhookRegistered: boolean | undefined;
+      let telegramWebhookError: string | null | undefined;
+      if (after.channel === 'telegram' && webhookUrl && after.encryptedCredential) {
+        try {
+          const encKey = getEncryptionKey(deps.config);
+          const botTok = decryptSecret(after.encryptedCredential, encKey);
+          const reg = await registerTelegramWebhook(botTok, webhookUrl);
+          telegramWebhookRegistered = reg.ok;
+          telegramWebhookError = reg.ok ? null : reg.description;
+        } catch {
+          telegramWebhookRegistered = false;
+          telegramWebhookError = 'Could not decrypt credential to register webhook.';
+        }
+      }
+
       return c.json(
-        { connection: connectionToWire(after), deep_link: deepLink, webhook_url: webhookUrl },
+        {
+          connection: connectionToWire(after),
+          deep_link: deepLink,
+          webhook_url: webhookUrl,
+          ...(after.channel === 'telegram'
+            ? {
+                telegram_webhook_registered: telegramWebhookRegistered,
+                telegram_webhook_error: telegramWebhookError ?? null,
+              }
+            : {}),
+        },
         200,
       );
     },
