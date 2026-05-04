@@ -233,7 +233,7 @@ describe('external connections — CRUD', () => {
     expect(res.status).toBe(422);
   });
 
-  it('DELETE revokes the connection and clears secrets', async () => {
+  it('DELETE removes the connection (hard delete)', async () => {
     const rig = await createTestRig({ adminSecret: ADMIN_SECRET, encryptionKey: ENC_KEY });
     const body = await createConnection(rig);
     const del = await rig.app.fetch(
@@ -244,13 +244,10 @@ describe('external connections — CRUD', () => {
     );
     expect(del.status).toBe(200);
     const after = await rig.db.execute({
-      sql: 'SELECT status, encrypted_credential, verification_token FROM external_connections WHERE id = ?',
+      sql: 'SELECT id FROM external_connections WHERE id = ?',
       args: [body.connection.id],
     });
-    const row = after.rows[0]!;
-    expect(String(row.status)).toBe('revoked');
-    expect(row.encrypted_credential).toBeNull();
-    expect(row.verification_token).toBeNull();
+    expect(after.rows.length).toBe(0);
   });
 });
 

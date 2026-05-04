@@ -15,9 +15,11 @@ import {
   Trash2Icon,
   XCircleIcon,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import type { ExternalConnection } from '@/components/external-add-telegram-modal';
 
 type ListResponse = { items: ExternalConnection[] };
@@ -49,11 +51,17 @@ export function ExternalConnectionsTable({
           <div className="font-medium text-sm">External connections</div>
           <div className="mt-0.5 text-xs text-fg-muted">
             Talk to your agent from Telegram or WhatsApp. One device per connection, bound to your
-            own chat — DMs from anyone else are ignored.
+            own chat.
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" size="sm" variant="ghost" onClick={onAddTelegram}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onAddTelegram}
+            className="border-brand/60 bg-transparent text-brand hover:bg-brand/8 hover:border-brand hover:text-brand"
+          >
             + Add Telegram
           </Button>
           <Button type="button" size="sm" onClick={onAddWhatsApp}>
@@ -71,10 +79,6 @@ export function ExternalConnectionsTable({
       ) : items.length === 0 ? (
         <div className="space-y-1 px-4 py-10 text-center text-sm text-fg-muted">
           <p>No external chat connections yet.</p>
-          <p className="text-xs">
-            Add Telegram to get a one-to-one bot for your agent — same tools as the chat UI,
-            surfaced in Telegram.
-          </p>
         </div>
       ) : (
         <ul className="divide-y divide-border">
@@ -133,18 +137,63 @@ function ConnectionRow({ conn }: { conn: ExternalConnection }) {
 function ConnectionDetails({ conn }: { conn: ExternalConnection }) {
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = React.useState<'refresh' | 'delete' | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
+  // Latched after a WhatsApp refresh so we keep polling the QR endpoint
+  // and rendering the inline pair pane until the connection flips back
+  // to 'connected'. Without this, the QR widget would only show while
+  // the row was already in 'pending' status, hiding it during the brief
+  // window where Baileys re-issues the QR but the DB still says
+  // 'connected'.
+  const [waPolling, setWaPolling] = React.useState(false);
 
   async function refresh() {
     setBusy('refresh');
     try {
-      const res = await fetch(`/api/external/connections/${encodeURIComponent(conn.id)}/refresh`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toast.success('Verification token rotated', {
-        description: 'Open the new pair link from your bot settings.',
-      });
+      if (conn.channel === 'whatsapp') {
+        // For WhatsApp, "Refresh" means: bring the Baileys socket back
+        // online. The manager re-uses saved creds (passive login) and
+        // only emits a fresh QR if WhatsApp's server rejects them. We
+        // never rotate any token here — that was the wrong action for
+        // WA and the source of the "asks me to re-pair" complaint.
+        const res = await fetch(`/api/external/whatsapp/${encodeURIComponent(conn.id)}/start`, {
+          method: 'POST',
+          credentials: 'include',
+        });
+        const text = await res.text();
+        if (!res.ok) {
+          throw new Error(parseError(text) || `HTTP ${res.status}`);
+        }
+        const result = JSON.parse(text) as {
+          status: 'pairing' | 'connecting' | 'connected' | 'error';
+          reason?: string;
+        };
+        if (result.status === 'connected') {
+          toast.success('WhatsApp reconnected', {
+            description: 'Saved session was still valid — no re-pair needed.',
+          });
+        } else if (result.status === 'error') {
+          toast.error('Reconnect failed', {
+            description: result.reason ?? 'unknown error',
+          });
+        } else {
+          toast.message('Re-pairing your WhatsApp', {
+            description: 'Saved session was rejected. Scan the new QR below.',
+          });
+          // Latch the inline poller so the QR pane shows up even though
+          // the row's status is still 'connected' for a few seconds.
+          setWaPolling(true);
+        }
+      } else {
+        // Telegram: rotate the verification token / pair link.
+        const res = await fetch(
+          `/api/external/connections/${encodeURIComponent(conn.id)}/refresh`,
+          { method: 'POST', credentials: 'include' },
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        toast.success('Pair link refreshed', {
+          description: 'Open the new pair link to re-bind your chat.',
+        });
+      }
       await mutate('/api/external/connections');
     } catch (err) {
       toast.error('Refresh failed', {
@@ -156,7 +205,6 @@ function ConnectionDetails({ conn }: { conn: ExternalConnection }) {
   }
 
   async function remove() {
-    if (!confirm('Revoke this connection? The bot will stop working immediately.')) return;
     setBusy('delete');
     try {
       const res = await fetch(`/api/external/connections/${encodeURIComponent(conn.id)}`, {
@@ -164,16 +212,23 @@ function ConnectionDetails({ conn }: { conn: ExternalConnection }) {
         credentials: 'include',
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toast.success('Connection revoked');
+      toast.success('Connection deleted');
       await mutate('/api/external/connections');
     } catch (err) {
-      toast.error('Revoke failed', {
+      toast.error('Delete failed', {
         description: err instanceof Error ? err.message : 'unknown error',
       });
+      throw err;
     } finally {
       setBusy(null);
     }
   }
+
+  // For WhatsApp connections we show an inline QR re-pair pane whenever:
+  //   - the row is in 'pending' status (fresh re-pair flow), OR
+  //   - the user just clicked Refresh and we latched `waPolling` until
+  //     the manager confirms the saved session was reusable.
+  const showInlineWaPair = conn.channel === 'whatsapp' && (conn.status === 'pending' || waPolling);
 
   return (
     <div className="mt-3 space-y-3 rounded-md border border-border bg-bg p-3 text-xs">
@@ -182,6 +237,19 @@ function ConnectionDetails({ conn }: { conn: ExternalConnection }) {
       {conn.status === 'pending' && conn.verification_token && conn.bot_username ? (
         <PairLinkBlock
           deepLink={`https://t.me/${conn.bot_username}?start=${conn.verification_token}`}
+        />
+      ) : null}
+
+      {showInlineWaPair ? (
+        <WhatsAppPairBlock
+          connectionId={conn.id}
+          onConnected={() => {
+            setWaPolling(false);
+            toast.success('WhatsApp connected', {
+              description: 'You can keep messaging the bot.',
+            });
+            void mutate('/api/external/connections');
+          }}
         />
       ) : null}
 
@@ -205,14 +273,14 @@ function ConnectionDetails({ conn }: { conn: ExternalConnection }) {
           ) : (
             <RefreshCwIcon className="mr-1 size-3" />
           )}
-          Rotate pair link
+          Refresh
         </Button>
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          onClick={remove}
-          disabled={busy != null || conn.status === 'revoked'}
+          onClick={() => setConfirmDeleteOpen(true)}
+          disabled={busy != null}
           className="h-7 px-2 text-[11px] text-danger hover:bg-danger/10"
         >
           {busy === 'delete' ? (
@@ -220,9 +288,40 @@ function ConnectionDetails({ conn }: { conn: ExternalConnection }) {
           ) : (
             <Trash2Icon className="mr-1 size-3" />
           )}
-          Revoke
+          Delete connection
         </Button>
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        title="Delete this connection?"
+        description={
+          <div className="space-y-2">
+            <p>
+              This permanently removes{' '}
+              <strong>{conn.display_name || prettyChannel(conn.channel)}</strong> and all of its
+              message history.
+            </p>
+            {conn.channel === 'whatsapp' ? (
+              <p className="text-[11px] text-fg-subtle">
+                Your linked-device session will be logged out from WhatsApp. You can re-pair anytime
+                with a new connection.
+              </p>
+            ) : (
+              <p className="text-[11px] text-fg-subtle">
+                The bot token stays valid in BotFather — re-add it any time to reconnect.
+              </p>
+            )}
+          </div>
+        }
+        confirmLabel="Delete connection"
+        destructive
+        onConfirm={async () => {
+          await remove();
+          setConfirmDeleteOpen(false);
+        }}
+      />
     </div>
   );
 }
@@ -413,6 +512,160 @@ function PairLinkBlock({ deepLink }: { deepLink: string }) {
       </p>
     </div>
   );
+}
+
+type WaQrPoll = {
+  qr: string | null;
+  qr_at: string | null;
+  status: ExternalConnection['status'];
+  me_jid: string | null;
+};
+
+/**
+ * Inline QR pane shown directly inside the connection row.
+ *
+ * Used in two situations:
+ *   1. The row is in `pending` (fresh re-pair flow — manager has
+ *      issued a QR but the user hasn't scanned yet).
+ *   2. The user clicked "Refresh" and the manager couldn't reuse the
+ *      saved Baileys session, so a fresh QR was generated. The
+ *      parent `ConnectionDetails` keeps `waPolling=true` until the
+ *      connection flips back to `connected`, at which point we call
+ *      `onConnected` and the parent un-latches.
+ *
+ * Polling cadence mirrors the Add-WhatsApp modal: 500ms while waiting
+ * for the first QR to appear, 2s once a QR is on screen (since
+ * WhatsApp rotates them every ~60s, hammering the API more often is
+ * wasted bandwidth).
+ *
+ * IMPORTANT: we must POST `/start` before polling `/qr`, same as the
+ * modal. Polling alone never spins up Baileys — without `start` the
+ * `last_qr` column stays empty and the UI shows a spinner forever.
+ */
+function WhatsAppPairBlock({
+  connectionId,
+  onConnected,
+}: {
+  connectionId: string;
+  onConnected: () => void;
+}) {
+  const [poll, setPoll] = React.useState<WaQrPoll | null>(null);
+  const [err, setErr] = React.useState<string | null>(null);
+  const [sessionStarting, setSessionStarting] = React.useState(true);
+  const onConnectedRef = React.useRef(onConnected);
+  onConnectedRef.current = onConnected;
+
+  React.useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    async function bootAndPoll() {
+      setSessionStarting(true);
+      setErr(null);
+      try {
+        const startRes = await fetch(
+          `/api/external/whatsapp/${encodeURIComponent(connectionId)}/start`,
+          { method: 'POST', credentials: 'include' },
+        );
+        const startText = await startRes.text();
+        if (!startRes.ok) {
+          if (!cancelled) {
+            setErr(parseError(startText) || `Start failed (HTTP ${startRes.status})`);
+            setSessionStarting(false);
+          }
+          return;
+        }
+        try {
+          const parsed = JSON.parse(startText) as { status?: string; reason?: string };
+          if (parsed.status === 'error' && parsed.reason && !cancelled) {
+            setErr(parsed.reason);
+            setSessionStarting(false);
+            return;
+          }
+        } catch {
+          /* ignore malformed success body */
+        }
+      } catch {
+        if (!cancelled) {
+          setErr('Could not reach the WhatsApp bridge');
+          setSessionStarting(false);
+        }
+        return;
+      }
+      if (!cancelled) setSessionStarting(false);
+
+      async function tick() {
+        let nextDelayMs = 500;
+        try {
+          const res = await fetch(`/api/external/whatsapp/${encodeURIComponent(connectionId)}/qr`, {
+            credentials: 'include',
+          });
+          if (!cancelled && res.ok) {
+            const next = (await res.json()) as WaQrPoll;
+            setPoll(next);
+            if (next.status === 'connected') {
+              onConnectedRef.current();
+              return;
+            }
+            nextDelayMs = next.qr ? 2_000 : 500;
+          } else if (!cancelled) {
+            setErr(`HTTP ${res.status}`);
+          }
+        } catch {
+          // Treat as transient — retry next tick.
+        }
+        if (!cancelled) {
+          timer = setTimeout(tick, nextDelayMs);
+        }
+      }
+      void tick();
+    }
+
+    void bootAndPoll();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [connectionId]);
+
+  return (
+    <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-emerald-400">
+        Re-pair WhatsApp
+      </div>
+      <p className="mt-1 text-[11px] text-fg-muted">
+        Open WhatsApp → <em>Settings → Linked devices → Link a device</em> and scan the QR. The bot
+        re-binds automatically the moment your phone confirms the pair.
+      </p>
+      <div className="mt-2 flex aspect-square w-full max-w-[200px] mx-auto items-center justify-center rounded-md border border-border bg-white p-2">
+        {poll?.qr ? (
+          <QRCodeSVG value={poll.qr} size={180} marginSize={2} />
+        ) : (
+          <div className="flex flex-col items-center gap-1.5 py-6 text-fg-muted">
+            <Spinner size="sm" />
+            <span className="text-[10.5px] text-center px-1">
+              {sessionStarting ? 'Starting WhatsApp session…' : 'Connecting to WhatsApp Web…'}
+            </span>
+          </div>
+        )}
+      </div>
+      <p className="mt-2 text-[10.5px] text-fg-subtle">
+        QR codes auto-rotate every ~60s — that&rsquo;s WhatsApp&rsquo;s design. We swap the next one
+        in for you.
+      </p>
+      {err ? <p className="mt-1 text-[10.5px] text-danger">{err}</p> : null}
+    </div>
+  );
+}
+
+/** Parse the JSON `{ message }` shape apps/api error responses use. */
+function parseError(text: string): string | null {
+  try {
+    const j = JSON.parse(text) as { message?: string; error?: string };
+    return j.message ?? j.error ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function ChannelIcon({ channel }: { channel: 'telegram' | 'whatsapp' }) {

@@ -21,8 +21,7 @@ export default function ExternalSettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">External chat</h1>
         <p className="mt-1 text-sm text-fg-muted">
-          Connect Telegram or WhatsApp so your agent reaches you where you already chat — same
-          tools, channel-native formatting.
+          Connect Telegram or WhatsApp so your agent reaches you where you already chat.
         </p>
       </div>
 

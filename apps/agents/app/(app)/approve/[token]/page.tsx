@@ -15,8 +15,10 @@
  *      component fires `onSettled` with the receipt hash + tx sig once
  *      the on-chain transaction confirms.
  *   4. We POST `/api/external/approvals/{token}/consume` with the
- *      receipt; the dispatcher's audit row in apps/api closes out and
- *      the bot can render a "paid" message back in the chat.
+ *      receipt; apps/api marks the row consumed, pushes a confirmation
+ *      message to Telegram/WhatsApp (receipt + tx), and appends that
+ *      line to the external-channel transcript so the next chat turn
+ *      has context.
  *
  * If the user is not signed in we show a soft prompt to log in (the
  * artifact components require Privy anyway). If the token is unknown
@@ -28,9 +30,8 @@
 import * as React from 'react';
 import { use } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { usePrivy } from '@privy-io/react-auth';
-import { AlertTriangleIcon, ArrowLeftIcon, CheckCircle2Icon, Loader2 } from 'lucide-react';
+import { AlertTriangleIcon, CheckCircle2Icon, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import useSWR from 'swr';
 
@@ -87,7 +88,7 @@ export default function ApprovePage({ params }: { params: Promise<{ token: strin
       }
       setConsumed(true);
       toast.success('Approval recorded', {
-        description: 'You can close this tab — the bot will pick it up.',
+        description: 'A confirmation was sent to your chat.',
       });
       await mutate();
     } catch (err) {
@@ -102,13 +103,6 @@ export default function ApprovePage({ params }: { params: Promise<{ token: strin
   return (
     <div className="flex min-h-[calc(100vh-3rem)] items-start justify-center px-4 py-8 sm:py-12">
       <div className="w-full max-w-md space-y-4">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1 text-xs text-fg-muted hover:text-fg"
-        >
-          <ArrowLeftIcon className="size-3.5" /> Back to chat
-        </Link>
-
         <div className="space-y-1">
           <h1 className="text-xl font-semibold tracking-tight">Approval needed</h1>
           <p className="text-xs text-fg-muted">

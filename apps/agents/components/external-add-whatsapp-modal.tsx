@@ -74,6 +74,12 @@ export function AddWhatsAppModal({
   }, [open]);
 
   // QR + status polling once we're on the pair phase.
+  //
+  // Cadence:
+  //   - 500ms while we have no QR yet (Baileys can take 2–6s to issue
+  //     the first one — we want to render it the instant it lands).
+  //   - 2s once a QR is on screen (it only rotates every ~60s, so
+  //     hammering the API more often is pure waste).
   React.useEffect(() => {
     if (!open || phase.kind !== 'pair') return;
     const id = phase.created.connection.id;
@@ -81,6 +87,7 @@ export function AddWhatsAppModal({
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     async function tick() {
+      let nextDelayMs = 500;
       try {
         const res = await fetch(`/api/external/whatsapp/${encodeURIComponent(id)}/qr`, {
           credentials: 'include',
@@ -120,13 +127,14 @@ export function AddWhatsAppModal({
                 meJid: poll.me_jid,
               };
             });
+            nextDelayMs = poll.qr ? 2_000 : 500;
           }
         }
       } catch {
         /* network blip — retry next tick */
       }
       if (!cancelled) {
-        timer = setTimeout(tick, 2_000);
+        timer = setTimeout(tick, nextDelayMs);
       }
     }
     tick();
@@ -316,13 +324,16 @@ function PairPhase({
       </div>
 
       <div className="space-y-2">
-        <div className="flex items-center justify-center rounded-md border border-border bg-white p-3">
+        <div className="flex aspect-square items-center justify-center rounded-md border border-border bg-white p-3">
           {qr ? (
             <QRCodeSVG value={qr} size={220} marginSize={2} />
           ) : (
             <div className="flex flex-col items-center gap-2 py-12 text-fg-muted">
               <Spinner size="sm" />
-              <span className="text-xs">Waiting for WhatsApp Web to issue a QR\u2026</span>
+              <span className="text-xs">Connecting to WhatsApp Web…</span>
+              <span className="text-[10.5px] text-fg-subtle">
+                Usually takes 5–10 seconds on first pair
+              </span>
             </div>
           )}
         </div>
@@ -338,11 +349,15 @@ function PairPhase({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 rounded-md border border-border bg-bg p-3 text-xs">
+      <div className="flex items-start gap-2 rounded-md border border-border bg-bg p-3 text-xs">
         <Spinner size="sm" />
-        <span className="text-fg-muted">
-          Waiting for your phone to pair. WhatsApp QR codes rotate every ~60s.
-        </span>
+        <div className="text-fg-muted leading-snug">
+          Waiting for your phone to pair.
+          <span className="block text-[10.5px] text-fg-subtle">
+            QR codes auto-rotate every ~60s — that's WhatsApp's design, not us. We swap in the next
+            one automatically.
+          </span>
+        </div>
       </div>
 
       {error ? (

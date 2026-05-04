@@ -7,6 +7,8 @@
  * misconfigurations die at startup, not on the first request.
  */
 
+import { LEASH_EXPLORER_DEFAULT } from '@leash/core';
+
 import type { SvmNetwork } from './util/network.js';
 
 /** Public, advertised semver of the API surface. Bumped by hand on contract changes. */
@@ -75,6 +77,25 @@ export type LeashApiConfig = {
    */
   publicOrigin: string;
   /**
+   * Browser-facing origin for the Next.js agents app (`/approve/{token}`,
+   * Privy sign-in). Must not be the JSON API host — that surface requires
+   * an API key and will return "missing api key" for normal browser visits.
+   *
+   * Defaults to the origin of `LEASH_AGENTS_BFF_URL`, then `publicOrigin`.
+   * When the API is on a tunnel (e.g. Cloudflare) but agents run elsewhere,
+   * set `LEASH_AGENTS_PUBLIC_ORIGIN` to the tunnel/base URL of apps/agents.
+   */
+  agentsPublicOrigin: string;
+  /**
+   * Public base URL of the Leash protocol explorer (`/receipt/{hash}`,
+   * `/tx/{sig}`, etc.). Used for user-facing links (e.g. WhatsApp/Telegram
+   * settlement messages). Not the JSON API — do not set this to
+   * `LEASH_API_PUBLIC_ORIGIN`.
+   *
+   * Override with `LEASH_EXPLORER_URL`. Defaults to `explorer.leash.market`.
+   */
+  explorerPublicOrigin: string;
+  /**
    * 32-byte hex AES-GCM key used by the API to seal recoverable secrets
    * at rest:
    *   - `api_keys.encrypted_plaintext` (lets the BFF reveal a key later)
@@ -119,6 +140,24 @@ function readBool(value: string | undefined, fallback: boolean): boolean {
   return fallback;
 }
 
+function deriveAgentsPublicOrigin(args: {
+  explicit: string | undefined;
+  agentsBffUrl: string | undefined;
+  apiPublicOrigin: string;
+}): string {
+  const raw = args.explicit?.trim().replace(/\/+$/, '');
+  if (raw && raw.length > 0) return raw;
+  const bff = args.agentsBffUrl?.trim().replace(/\/+$/, '');
+  if (bff && bff.length > 0) {
+    try {
+      return new URL(bff).origin;
+    } catch {
+      /* fall through */
+    }
+  }
+  return args.apiPublicOrigin;
+}
+
 const MIN_ADMIN_SECRET_LEN = 24;
 
 export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConfig {
@@ -145,6 +184,16 @@ export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConf
   const publicOrigin = (
     env.LEASH_API_PUBLIC_ORIGIN?.trim() || `http://${publicHost}:${port}`
   ).replace(/\/+$/, '');
+  const agentsBffTrimmed = env.LEASH_AGENTS_BFF_URL?.trim().replace(/\/+$/, '');
+  const agentsPublicOrigin = deriveAgentsPublicOrigin({
+    explicit: env.LEASH_AGENTS_PUBLIC_ORIGIN,
+    agentsBffUrl: agentsBffTrimmed,
+    apiPublicOrigin: publicOrigin,
+  });
+  const explorerPublicOrigin = (env.LEASH_EXPLORER_URL?.trim() || LEASH_EXPLORER_DEFAULT).replace(
+    /\/+$/,
+    '',
+  );
   return {
     host,
     port,
@@ -172,11 +221,11 @@ export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConf
       ? { facilitatorUrlMainnet: env.LEASH_API_FACILITATOR_URL_MAINNET.trim() }
       : {}),
     publicOrigin,
+    agentsPublicOrigin,
+    explorerPublicOrigin,
     ...(encryptionKey ? { encryptionKey } : {}),
     ...(adminSecretRaw ? { adminSecret: adminSecretRaw } : {}),
-    ...(env.LEASH_AGENTS_BFF_URL?.trim()
-      ? { agentsBffUrl: env.LEASH_AGENTS_BFF_URL.trim().replace(/\/+$/, '') }
-      : {}),
+    ...(agentsBffTrimmed ? { agentsBffUrl: agentsBffTrimmed } : {}),
     ...(env.LEASH_AGENTS_BFF_SECRET?.trim()
       ? { agentsBffSecret: env.LEASH_AGENTS_BFF_SECRET.trim() }
       : {}),

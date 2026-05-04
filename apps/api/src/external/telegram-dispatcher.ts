@@ -26,10 +26,11 @@ import {
   type ExternalConnectionRow,
 } from '../storage/external-connections.js';
 import type { DbClient } from '../storage/turso.js';
+import type { CacheClient } from '../storage/redis.js';
 import {
   formatArtifactForTelegram,
+  stripEchoedPaymentRequestCardFromAssistantText,
   toTelegramMarkdownV2,
-  type ArtifactSummary,
 } from './formatter.js';
 import { runAgentForExternalChannel } from './dispatcher-shared.js';
 import { createTelegramClient, type TelegramClient } from './telegram-client.js';
@@ -37,6 +38,7 @@ import { createTelegramClient, type TelegramClient } from './telegram-client.js'
 export type DispatcherDeps = {
   config: LeashApiConfig;
   db: DbClient;
+  cache: CacheClient;
   /**
    * Override for tests — both fields default to `globalThis.fetch`.
    * The dispatcher never imports `node:fetch` directly so injecting a
@@ -82,7 +84,7 @@ export async function dispatchTelegramMessage(
   const replyChatId = conn.boundChatId ?? args.fromId;
 
   const shared = await runAgentForExternalChannel(
-    { config, db, ...(deps.bffFetch ? { bffFetch: deps.bffFetch } : {}) },
+    { config, db, cache: deps.cache, ...(deps.bffFetch ? { bffFetch: deps.bffFetch } : {}) },
     { connection: conn, message: args.message },
   );
   if (!shared.ok) {
@@ -93,11 +95,16 @@ export async function dispatchTelegramMessage(
   // Compose the message body. Assistant text first, then one
   // formatted block per artifact, then warnings/errors.
   const sections: string[] = [];
-  if (shared.bffResult.text && shared.bffResult.text.length > 0) {
-    sections.push(toTelegramMarkdownV2(shared.bffResult.text));
+  const prose = stripEchoedPaymentRequestCardFromAssistantText(
+    shared.bffResult.text ?? '',
+    shared.summaries,
+  );
+  if (prose.length > 0) {
+    sections.push(toTelegramMarkdownV2(prose));
   }
   for (const s of shared.summaries) {
-    sections.push(formatArtifactForTelegram(s));
+    const chunk = formatArtifactForTelegram(s);
+    if (chunk.length > 0) sections.push(chunk);
   }
   if (shared.bffResult.errors && shared.bffResult.errors.length > 0) {
     const joined = shared.bffResult.errors.slice(0, 2).join('; ');
@@ -157,4 +164,4 @@ function stripMarkdownV2Escapes(text: string): string {
   return text.replace(/\\([_*[\]()~>#+\-=|{}.!\\])/g, '$1');
 }
 
-export type { ArtifactSummary };
+export type { ArtifactSummary } from './formatter.js';

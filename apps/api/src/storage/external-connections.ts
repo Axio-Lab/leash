@@ -183,6 +183,24 @@ export async function listExternalConnectionsForOwner(
 }
 
 /**
+ * WhatsApp rows that should have a live Baileys socket after an API
+ * process restart. Without calling `start(id)` for each, the bridge
+ * never receives `messages.upsert` — so no inbound logs and no agent
+ * replies until the user hits Refresh / opens the pair UI.
+ */
+export async function listWhatsAppConnectionIdsForSessionResume(db: DbClient): Promise<string[]> {
+  const res = await execute(
+    db,
+    `SELECT id FROM external_connections
+       WHERE channel = 'whatsapp'
+         AND status IN ('connected', 'pending')
+       ORDER BY updated_at DESC`,
+    [],
+  );
+  return res.rows.map((r) => String((r as Record<string, unknown>).id));
+}
+
+/**
  * Look up a connection by `(channel, routing_id)` skipping revoked rows.
  * The Telegram webhook handler calls this on every inbound update to
  * find out which user the message belongs to.
@@ -384,6 +402,33 @@ export async function revokeExternalConnection(db: DbClient, id: string): Promis
       WHERE id = ?`,
     [id],
   );
+}
+
+/**
+ * Hard-delete a connection and every row that depends on it.
+ *
+ * Why hard-delete (vs. `revoke` above): the user-facing "Delete
+ * connection" button promises the row goes away. Soft-revoke leaves
+ * audit rows + a tombstone in the connections list, which is fine for
+ * a security event (revoke) but confusing for a user who just wants to
+ * remove a bot they don't use.
+ *
+ * Order matters because `external_messages`, `external_approvals`, and
+ * `external_whatsapp_state` all carry `FOREIGN KEY (connection_id)
+ * REFERENCES external_connections(id)`. SQLite enforces FKs only when
+ * `PRAGMA foreign_keys=ON`; we don't rely on it but delete in the
+ * dependency-safe order anyway so the same code works whether FK
+ * enforcement is on or off.
+ *
+ * The Baileys socket teardown lives in the route handler — the
+ * storage layer can't know whether the WhatsApp manager is loaded on
+ * this replica.
+ */
+export async function deleteExternalConnection(db: DbClient, id: string): Promise<void> {
+  await execute(db, `DELETE FROM external_messages WHERE connection_id = ?`, [id]);
+  await execute(db, `DELETE FROM external_approvals WHERE connection_id = ?`, [id]);
+  await execute(db, `DELETE FROM external_whatsapp_state WHERE connection_id = ?`, [id]);
+  await execute(db, `DELETE FROM external_connections WHERE id = ?`, [id]);
 }
 
 // ── messages (audit ledger) ──────────────────────────────────────────

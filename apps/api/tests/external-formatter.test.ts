@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   escapeTelegramText,
   formatArtifactForTelegram,
+  formatArtifactForWhatsApp,
+  stripEchoedPaymentRequestCardFromAssistantText,
   toTelegramMarkdownV2,
 } from '../src/external/formatter.js';
 
@@ -50,6 +52,33 @@ describe('toTelegramMarkdownV2', () => {
   });
 });
 
+describe('stripEchoedPaymentRequestCardFromAssistantText', () => {
+  const summaries = [
+    {
+      kind: 'payment_request' as const,
+      payload: { url: 'https://api.example/x/jkl' },
+      approveUrl: 'https://agents.example/approve/tok',
+    },
+  ];
+
+  it('removes echoed Pay request / URL / Approve lines', () => {
+    const prose = [
+      'Please review the Pay card.',
+      '',
+      '**Pay request**',
+      'URL: https://api.example/x/jkl',
+      'Approve: https://agents.example/approve/tok',
+    ].join('\n');
+    const out = stripEchoedPaymentRequestCardFromAssistantText(prose, summaries);
+    expect(out).toBe('Please review the Pay card.');
+  });
+
+  it('is a no-op when there is no payment_request summary', () => {
+    const text = 'Pay request\nURL: https://x.test/y';
+    expect(stripEchoedPaymentRequestCardFromAssistantText(text, [])).toBe(text);
+  });
+});
+
 describe('formatArtifactForTelegram', () => {
   it('renders a withdraw card with an approve link', () => {
     const out = formatArtifactForTelegram({
@@ -66,6 +95,18 @@ describe('formatArtifactForTelegram', () => {
     expect(out).toContain('https://agents.leash.market/approve/abc');
   });
 
+  it('renders payment_request as the approve URL only', () => {
+    const out = formatArtifactForTelegram({
+      kind: 'payment_request',
+      payload: { url: 'https://api.example/x/abc', preview: { amount: '10', currency: 'USDC' } },
+      approveUrl: 'https://agents.example/approve/token123',
+    });
+    expect(out).not.toContain('Pay request');
+    expect(out).not.toContain('api.example');
+    expect(out).toContain('agents.example');
+    expect(out).toContain('approve/token123');
+  });
+
   it('renders a payment_link card with a clickable URL', () => {
     const out = formatArtifactForTelegram({
       kind: 'payment_link',
@@ -74,5 +115,17 @@ describe('formatArtifactForTelegram', () => {
     expect(out).toContain('*Payment link created*');
     expect(out).toContain('API access');
     expect(out).toContain('(https://api.leash.market/x/abc)');
+  });
+});
+
+describe('formatArtifactForWhatsApp', () => {
+  it('renders payment_request as the approve URL only', () => {
+    expect(
+      formatArtifactForWhatsApp({
+        kind: 'payment_request',
+        payload: { url: 'https://api.example/x/abc' },
+        approveUrl: 'https://agents.example/approve/token123',
+      }),
+    ).toBe('https://agents.example/approve/token123');
   });
 });

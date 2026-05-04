@@ -51,6 +51,7 @@ import {
 } from './routes/external.js';
 import { getWhatsAppManager } from './external/whatsapp-manager.js';
 import { dispatchWhatsAppMessage } from './external/whatsapp-dispatcher.js';
+import { listWhatsAppConnectionIdsForSessionResume } from './storage/external-connections.js';
 
 export type CreateLeashApiArgs = AuthDeps & {
   /**
@@ -110,18 +111,33 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
     whatsappManager = getWhatsAppManager({
       config: deps.config,
       db: deps.db,
-      onInboundMessage: async ({ connection, message, fromId, socket }) => {
+      onInboundMessage: async ({ connection, message, fromId, socket, traceId }) => {
         await dispatchWhatsAppMessage(
-          { config: deps.config, db: deps.db, socket },
-          { connection, message, fromId },
-        ).catch((err) => {
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[whatsapp] dispatcher failed for connection=${connection.id}: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        });
+          { config: deps.config, db: deps.db, cache: deps.cache, socket },
+          { connection, message, fromId, traceId },
+        ).catch(() => {});
       },
     });
+  }
+
+  if (whatsappManager && !deps.externalWhatsAppManager) {
+    const wm = whatsappManager;
+    void (async () => {
+      try {
+        const ids = await listWhatsAppConnectionIdsForSessionResume(deps.db);
+        if (ids.length === 0) return;
+        for (const id of ids) {
+          try {
+            await wm.start(id);
+          } catch {
+            /* ignore */
+          }
+          await new Promise((r) => setTimeout(r, 400));
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
   }
 
   const externalDeps: ExternalRoutesDeps = {

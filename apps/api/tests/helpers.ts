@@ -106,7 +106,7 @@ export async function createTestRig(overrides: CreateTestRigOverrides = {}): Pro
     externalWhatsAppManager,
     ...configOverrides
   } = overrides;
-  const config: LeashApiConfig = {
+  const merged: Partial<LeashApiConfig> & Pick<LeashApiConfig, 'host' | 'port' | 'rpc' | 'db'> = {
     host: '127.0.0.1',
     port: 0,
     rpc: {
@@ -119,7 +119,16 @@ export async function createTestRig(overrides: CreateTestRigOverrides = {}): Pro
     docsEnabled: false,
     facilitatorUrlDevnet: 'https://facilitator.test.invalid',
     publicOrigin: 'http://test.local',
+    explorerPublicOrigin: 'https://explorer.test.invalid',
     ...configOverrides,
+  };
+  const config: LeashApiConfig = {
+    ...(merged as LeashApiConfig),
+    agentsPublicOrigin:
+      merged.agentsPublicOrigin ??
+      (merged.agentsBffUrl
+        ? new URL(merged.agentsBffUrl.replace(/\/+$/, '')).origin
+        : (merged.publicOrigin ?? 'http://test.local')),
   };
   const cache = getCache(config);
   // Tests exercise the same fanout path production uses, so pub/sub

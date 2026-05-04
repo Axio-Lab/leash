@@ -29,6 +29,7 @@ import {
   consumeApproval,
   createApproval,
   createExternalConnection,
+  deleteExternalConnection,
   getApproval,
   getConnectionByRoutingId,
   getConnectionByVerificationToken,
@@ -37,7 +38,6 @@ import {
   newApprovalToken,
   recordExternalMessage,
   refreshVerificationToken,
-  revokeExternalConnection,
   routingIdForBotToken,
   updateConnectionAllowlist,
   updateConnectionSigning,
@@ -47,14 +47,11 @@ import {
 import type { CacheClient } from '../storage/redis.js';
 import type { DbClient } from '../storage/turso.js';
 import { conflict, invalidRequest, notFound, unavailable } from '../util/errors.js';
+import { notifyApprovalSettled } from '../external/approval-settlement-notify.js';
 import { dispatchTelegramMessage, type DispatcherDeps } from '../external/telegram-dispatcher.js';
 import type { TelegramClient } from '../external/telegram-client.js';
 import type { WhatsAppManager } from '../external/whatsapp-manager.js';
-import {
-  deleteWhatsAppState,
-  ensureWhatsAppStateRow,
-  getWhatsAppState,
-} from '../storage/external-whatsapp.js';
+import { ensureWhatsAppStateRow, getWhatsAppState } from '../storage/external-whatsapp.js';
 
 export type ExternalRoutesDeps = {
   config: LeashApiConfig;
@@ -583,7 +580,7 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
       method: 'delete',
       path: '/v1/external/connections/{id}',
       tags: ['external'],
-      summary: 'Revoke a connection (clears secrets, marks revoked)',
+      summary: 'Permanently delete a connection (cascades to messages, approvals, WA state)',
       security: [{ AdminSecret: [] }],
       request: { params: z.object({ id: z.string().min(1) }) },
       responses: {
@@ -598,18 +595,32 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
       const { id } = c.req.valid('param');
       const existing = await getExternalConnection(deps.db, id);
       if (!existing) throw notFound('connection not found');
-      await revokeExternalConnection(deps.db, id);
-      // Stop the WhatsApp socket if one is running for this connection.
-      // We use `logout: true` so the device is unlinked from the user's
-      // WhatsApp app — they don't end up with a stale "Leash Agents"
-      // session in their linked-devices list. The state row is wiped
-      // so a future re-pair starts from a clean slate.
-      if (existing.channel === 'whatsapp') {
-        if (deps.whatsapp) {
-          await deps.whatsapp.stop(id, { logout: true }).catch(() => {});
-        }
-        await deleteWhatsAppState(deps.db, id).catch(() => {});
+      // Tear down the live Baileys socket BEFORE deleting the row so
+      // the manager doesn't try to write back creds/keys against a
+      // missing connection_id mid-shutdown. `logout: true` unlinks the
+      // device from the user's WhatsApp app — without this they'd
+      // accumulate stale "Leash Agents" sessions in their linked-devices
+      // list every time they delete + re-add. Telegram has no socket,
+      // so this is a no-op for that channel.
+      if (existing.channel === 'whatsapp' && deps.whatsapp) {
+        await deps.whatsapp.stop(id, { logout: true }).catch(() => {});
       }
+      // Best-effort: also clear the Telegram webhook so the user's bot
+      // stops hitting our /webhook endpoint after the row is gone.
+      // Failures are swallowed because BotFather may have already
+      // rotated the token, the bot may be deleted, or Telegram's API
+      // may be unreachable — none of which should block the delete.
+      if (existing.channel === 'telegram' && existing.encryptedCredential) {
+        try {
+          const encKey = getEncryptionKey(deps.config);
+          const { decryptSecret } = await import('@leash/platform-auth/encryption');
+          const token = decryptSecret(existing.encryptedCredential, encKey);
+          await fetch(`https://api.telegram.org/bot${token}/deleteWebhook`).catch(() => {});
+        } catch {
+          /* ignore */
+        }
+      }
+      await deleteExternalConnection(deps.db, id);
       return c.json({ ok: true as const }, 200);
     },
   );
@@ -752,7 +763,7 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
       return c.json(
         {
           approval: approvalToWire(approval),
-          approve_url: `${deps.config.publicOrigin}/approve/${approval.token}`,
+          approve_url: `${deps.config.agentsPublicOrigin}/approve/${approval.token}`,
         },
         200,
       );
@@ -807,6 +818,23 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
       });
       const after = await getApproval(deps.db, token);
       if (!after) throw notFound('approval not found');
+      await notifyApprovalSettled(
+        {
+          config: deps.config,
+          db: deps.db,
+          cache: deps.cache,
+          ...(deps.whatsapp ? { whatsapp: deps.whatsapp } : {}),
+          ...(deps.dispatcherTelegramClientFactory
+            ? { telegramClientFactory: deps.dispatcherTelegramClientFactory }
+            : {}),
+        },
+        { approval: after, newlyConsumed: consumed },
+      ).catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[external] approval_settle_notify failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
       return c.json({ approval: approvalToWire(after), consumed }, 200);
     },
   );
@@ -940,6 +968,7 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
       const dispatcherDeps: DispatcherDeps = {
         config: deps.config,
         db: deps.db,
+        cache: deps.cache,
         ...(deps.dispatcherBffFetch ? { bffFetch: deps.dispatcherBffFetch } : {}),
         ...(deps.dispatcherTelegramClientFactory
           ? { telegramClientFactory: deps.dispatcherTelegramClientFactory }

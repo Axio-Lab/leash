@@ -166,8 +166,8 @@ export function toWhatsApp(markdown: string): string {
  * the user knows what's pending without having to leave the chat.
  *
  * For Pattern A (deep_link) signing tools, `approveUrl` is the
- * one-time confirm URL; we render it as a clickable link in the
- * channel's flavour.
+ * one-time confirm URL. For `payment_request` we only append that link
+ * so it sits under the assistant prose without duplicating the paywall URL.
  */
 export type ArtifactSummary = {
   kind: 'payment_request' | 'withdraw_request' | 'payment_link' | 'receipt' | 'tool_call';
@@ -175,28 +175,60 @@ export type ArtifactSummary = {
   approveUrl?: string | null;
 };
 
+/**
+ * The agent often echoes "Pay request / URL / Approve" in `bffResult.text`
+ * even though external dispatchers append that via `formatArtifactFor*`.
+ * Drop those lines so WhatsApp/Telegram match the intended shape
+ * (prose + single approve URL).
+ */
+export function stripEchoedPaymentRequestCardFromAssistantText(
+  text: string,
+  summaries: ArtifactSummary[],
+): string {
+  const pays = summaries.filter((s) => s.kind === 'payment_request' && s.approveUrl?.trim());
+  if (pays.length === 0 || !text.trim()) return text;
+
+  const payloadUrls = new Set<string>();
+  const approveUrls = new Set<string>();
+  for (const s of pays) {
+    const u = String(s.payload.url ?? '').trim();
+    if (u) payloadUrls.add(u);
+    approveUrls.add(s.approveUrl!.trim());
+  }
+
+  const lines = text.split(/\r?\n/);
+  const kept: string[] = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (/^\**\s*URL:\s*/i.test(line)) continue;
+    if (/^\**\s*Approve:\s*/i.test(line)) continue;
+    const deStarred = line.replace(/\*+/g, '').trim();
+    if (deStarred.toLowerCase() === 'pay request') continue;
+    if (payloadUrls.has(line) || approveUrls.has(line)) continue;
+    if (payloadUrls.has(deStarred) || approveUrls.has(deStarred)) continue;
+
+    const mdLink = /^\[([^\]]*)\]\(([^)]+)\)\s*$/.exec(line);
+    if (mdLink) {
+      const href = (mdLink[2] ?? '').trim();
+      if (payloadUrls.has(href) || approveUrls.has(href)) continue;
+    }
+    kept.push(raw);
+  }
+  return kept
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function formatArtifactForTelegram(art: ArtifactSummary): string {
   const lines: string[] = [];
   switch (art.kind) {
     case 'payment_request': {
-      const url = String(art.payload.url ?? '');
-      const preview = (art.payload.preview ?? {}) as {
-        amount?: string;
-        currency?: string;
-        recipient?: string;
-      };
-      lines.push(`*Pay request*`);
-      if (preview.amount && preview.currency) {
-        lines.push(escapeTelegramText(`Amount: ${preview.amount} ${preview.currency}`));
-      }
-      if (preview.recipient) {
-        lines.push(escapeTelegramText(`Recipient: ${String(preview.recipient)}`));
-      }
-      if (url) lines.push(escapeTelegramText(`URL: ${url}`));
       if (art.approveUrl) {
-        lines.push(telegramLink({ label: 'Approve in browser', url: art.approveUrl }));
+        return telegramLink({ label: art.approveUrl, url: art.approveUrl });
       }
-      break;
+      const url = String(art.payload.url ?? '');
+      return url ? escapeTelegramText(url) : '';
     }
     case 'withdraw_request': {
       const token = String(art.payload.token ?? '');
@@ -238,11 +270,8 @@ export function formatArtifactForTelegram(art: ArtifactSummary): string {
 export function formatArtifactForWhatsApp(art: ArtifactSummary): string {
   switch (art.kind) {
     case 'payment_request': {
-      const url = String(art.payload.url ?? '');
-      const lines = [`*Pay request*`];
-      if (url) lines.push(`URL: ${url}`);
-      if (art.approveUrl) lines.push(`Approve: ${art.approveUrl}`);
-      return lines.join('\n');
+      if (art.approveUrl?.trim()) return art.approveUrl.trim();
+      return String(art.payload.url ?? '');
     }
     case 'withdraw_request': {
       const lines = [

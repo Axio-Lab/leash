@@ -56,6 +56,7 @@ function makeManagerStub(overrides: Partial<WhatsAppManager> = {}): WhatsAppMana
     start: vi.fn(async () => ({ status: 'pairing' as const })),
     stop: vi.fn(async () => {}),
     getStatus: () => 'idle',
+    sendOutboundText: vi.fn(async () => true),
     events: { emit: () => false } as unknown as WhatsAppManager['events'],
     ...overrides,
   };

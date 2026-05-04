@@ -212,8 +212,8 @@ describe('telegram dispatcher — phase 3 happy paths', () => {
     const reply = tg.sent[0]!.text;
     expect(reply).toContain('Withdraw');
     // The reply should contain a Markdown link to /approve/<token> on
-    // the API's publicOrigin.
-    expect(reply).toMatch(/\(http:\/\/test\.local\/approve\//);
+    // the agents app's public origin (defaults to LEASH_AGENTS_BFF_URL origin).
+    expect(reply).toMatch(/\(http:\/\/agents-bff\.test\.invalid\/approve\//);
 
     // An approvals row should now exist for this connection.
     const rows = await rig.db.execute({
