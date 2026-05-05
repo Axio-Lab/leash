@@ -49,7 +49,6 @@ import type { DbClient } from '../storage/turso.js';
 import { conflict, invalidRequest, notFound, unavailable } from '../util/errors.js';
 import { notifyApprovalSettled } from '../external/approval-settlement-notify.js';
 import { dispatchTelegramMessage, type DispatcherDeps } from '../external/telegram-dispatcher.js';
-import { tgClip, tgLog } from '../external/telegram-trace.js';
 import { createTelegramClient, type TelegramClient } from '../external/telegram-client.js';
 import type { WhatsAppManager } from '../external/whatsapp-manager.js';
 import { ensureWhatsAppStateRow, getWhatsAppState } from '../storage/external-whatsapp.js';
@@ -351,41 +350,33 @@ const TELEGRAM_MSG_WELCOME_BACK = "You're all set. What would you like to do?";
 
 /**
  * Fire-and-forget Bot API sendMessage (plain text). Used for /start UX so the
- * user always gets immediate feedback without running the LLM.
+ * user always gets immediate feedback without running the LLM. Errors are
+ * swallowed — Telegram outages must not corrupt webhook handling.
  */
 function sendTelegramPlainBestEffort(
   config: LeashApiConfig,
   conn: ExternalConnectionRow,
   chatId: string,
   text: string,
-  logLabel: string,
 ): void {
   void (async () => {
     try {
-      if (!conn.encryptedCredential) {
-        tgLog(`send plain skipped (${logLabel})`, { reason: 'no_credential', chatId });
-        return;
-      }
+      if (!conn.encryptedCredential) return;
       let encKey: string;
       try {
         encKey = getEncryptionKey(config);
       } catch {
-        tgLog(`send plain skipped (${logLabel})`, { reason: 'no_encryption_key', chatId });
         return;
       }
       const botToken = decryptSecret(conn.encryptedCredential, encKey);
       const tg = createTelegramClient({ botToken });
-      const res = await tg.sendMessage({
+      await tg.sendMessage({
         chatId,
         text,
         disableWebPagePreview: true,
       });
-      tgLog(`send plain done (${logLabel})`, { chatId, ok: res.ok, status: res.status });
-    } catch (err) {
-      tgLog(`send plain failed (${logLabel})`, {
-        chatId,
-        err: err instanceof Error ? err.message : String(err),
-      });
+    } catch {
+      // best-effort — never throw out of webhook handlers.
     }
   })();
 }
@@ -1046,34 +1037,17 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
       const update = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
       const conn = await getConnectionByRoutingId(deps.db, 'telegram', routing_id);
       if (!conn) {
-        tgLog('webhook dropped unknown_routing_id', { routing_id: tgClip(routing_id, 24) });
         return c.json({ ok: true, dropped: 'unknown_routing_id' }, 200);
       }
       const message = (update.message ?? update.edited_message) as
         | Record<string, unknown>
         | undefined;
       if (!message) {
-        tgLog('webhook dropped no_message', {
-          update_id: update.update_id,
-          connection_id: conn.id,
-          update_keys: Object.keys(update).join(','),
-        });
         return c.json({ ok: true, dropped: 'no_message' }, 200);
       }
       const from = message.from as { id?: number | string } | undefined;
       const fromId = from?.id != null ? String(from.id) : null;
       const text = typeof message.text === 'string' ? message.text : '';
-      const updateId = update.update_id;
-
-      tgLog('webhook inbound', {
-        update_id: updateId,
-        routing_id: tgClip(routing_id, 20),
-        connection_id: conn.id,
-        status: conn.status,
-        bound_chat_id: conn.boundChatId,
-        from_id: fromId,
-        text_preview: tgClip(text),
-      });
 
       // Try `/start <token>` binding first — this is the only path that
       // accepts a from-id we don't already know about. Telegram private
@@ -1094,55 +1068,46 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
               direction: 'inbound',
               payload: { kind: 'bind', from_id: fromId },
             });
-            tgLog('webhook chat bound via /start', {
-              connection_id: pending.id,
-              from_id: fromId,
-            });
             sendTelegramPlainBestEffort(
               deps.config,
               pending,
               fromId,
               TELEGRAM_MSG_WELCOME_CONNECTED,
-              'after_bind',
             );
             return c.json({ ok: true, bound: true }, 200);
           }
         }
-        tgLog('webhook /start not applied', {
-          connection_id: conn.id,
-          token_match: !!token,
-          pending_match: !!(pending && pending.id === conn.id),
-        });
         return c.json({ ok: true, bound: false }, 200);
       }
 
-      // Bare `/start` or `/start@BotName` with no payload — common when
-      // the user opens the bot without the Leash deep link.
+      // Bare `/start` or `/start@BotName` with no payload — Telegram clients
+      // strip the deep-link payload in many flows (e.g. desktop "Open" button,
+      // re-entering the chat). For a *pending* connection that has no
+      // bound chat yet, the only plausible sender is the legitimate owner
+      // who got the bot username from inside their authenticated Leash
+      // session — auto-bind on first contact rather than trapping them.
       const bareStart = /^\/start(?:@[A-Za-z0-9_]+)?\s*$/i.test(text.trim());
       if (bareStart && fromId) {
-        if (conn.status === 'pending') {
-          tgLog('webhook bare /start pending', { connection_id: conn.id, from_id: fromId });
-          sendTelegramPlainBestEffort(
-            deps.config,
-            conn,
-            fromId,
-            TELEGRAM_MSG_SETUP_HINT,
-            'bare_start_pending',
-          );
-          return c.json({ ok: true, bare_start: 'setup_hint' }, 200);
+        if (conn.status === 'pending' && !conn.boundChatId) {
+          const bound = await bindExternalConnection(deps.db, {
+            id: conn.id,
+            boundChatId: fromId,
+          });
+          if (bound) {
+            await recordExternalMessage(deps.db, {
+              connectionId: conn.id,
+              direction: 'inbound',
+              payload: { kind: 'bind', from_id: fromId, via: 'bare_start' },
+            });
+            sendTelegramPlainBestEffort(deps.config, conn, fromId, TELEGRAM_MSG_WELCOME_CONNECTED);
+            return c.json({ ok: true, bound: true, via: 'bare_start' }, 200);
+          }
         }
         if (
           conn.status === 'connected' &&
           (fromId === conn.boundChatId || conn.allowlist.includes(fromId))
         ) {
-          tgLog('webhook bare /start connected', { connection_id: conn.id, from_id: fromId });
-          sendTelegramPlainBestEffort(
-            deps.config,
-            conn,
-            fromId,
-            TELEGRAM_MSG_WELCOME_BACK,
-            'bare_start_connected',
-          );
+          sendTelegramPlainBestEffort(deps.config, conn, fromId, TELEGRAM_MSG_WELCOME_BACK);
           return c.json({ ok: true, bare_start: 'welcome_back' }, 200);
         }
       }
@@ -1152,12 +1117,6 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
       const allowed =
         fromId != null && (fromId === conn.boundChatId || conn.allowlist.includes(fromId));
       if (!allowed) {
-        tgLog('webhook dropped unauthorized_sender', {
-          connection_id: conn.id,
-          from_id: fromId,
-          bound_chat_id: conn.boundChatId,
-          allowlist_len: conn.allowlist.length,
-        });
         return c.json({ ok: true, dropped: 'unauthorized_sender' }, 200);
       }
 
@@ -1173,17 +1132,11 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
         },
       });
 
-      tgLog('webhook queue dispatch', {
-        connection_id: conn.id,
-        from_id: fromId,
-        update_id: updateId,
-      });
-
       // Fire-and-forget: run the agent + reply asynchronously so
       // Telegram gets its 200 inside its 60s window even when the LLM
-      // takes longer. Errors inside the dispatcher are logged but
-      // never propagate — Telegram only retries non-2xx responses, and
-      // we'd rather drop a turn than re-process the same update twice.
+      // takes longer. Errors inside the dispatcher are swallowed —
+      // Telegram only retries non-2xx responses, and we'd rather drop a
+      // turn than re-process the same update twice.
       const dispatcherDeps: DispatcherDeps = {
         config: deps.config,
         db: deps.db,
@@ -1197,21 +1150,10 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
         connection: conn,
         message: text,
         fromId: fromId ?? '',
-      })
-        .then((result) => {
-          tgLog('webhook dispatch finished', {
-            connection_id: conn.id,
-            ok: result.ok,
-            reason: result.reason,
-            replied: result.replied,
-          });
-        })
-        .catch((err) => {
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[external:tg] dispatcher failed for connection=${conn.id}: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        });
+      }).catch(() => {
+        // best-effort dispatch; surfacing errors here would force
+        // Telegram to retry the same update. Silent drop is preferred.
+      });
       // In tests we await the dispatcher so assertions can observe
       // outbound side-effects (sendMessage call, approvals row). In
       // production we let it run after the 200 returns.
