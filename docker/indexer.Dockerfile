@@ -9,6 +9,10 @@
 
 FROM node:22-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm PATH="/pnpm:$PATH" CI=1
+# git is required so pnpm can resolve the GitHub-hosted libsignal-node
+# sub-dependency that baileys carries in its lockfile entry.
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
 
