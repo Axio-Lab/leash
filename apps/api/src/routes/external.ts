@@ -50,7 +50,7 @@ import { conflict, invalidRequest, notFound, unavailable } from '../util/errors.
 import { notifyApprovalSettled } from '../external/approval-settlement-notify.js';
 import { dispatchTelegramMessage, type DispatcherDeps } from '../external/telegram-dispatcher.js';
 import { tgClip, tgLog } from '../external/telegram-trace.js';
-import type { TelegramClient } from '../external/telegram-client.js';
+import { createTelegramClient, type TelegramClient } from '../external/telegram-client.js';
 import type { WhatsAppManager } from '../external/whatsapp-manager.js';
 import { ensureWhatsAppStateRow, getWhatsAppState } from '../storage/external-whatsapp.js';
 
@@ -338,6 +338,56 @@ async function registerTelegramWebhook(
 /** URL-safe verification token for the `/start <token>` deep link. */
 function newVerificationToken(): string {
   return newApprovalToken();
+}
+
+/** Plain-text replies from the webhook (no Markdown — avoids parse errors). */
+const TELEGRAM_MSG_WELCOME_CONNECTED =
+  "You're connected to Leash.\n\nAsk me anything — I can help with payments, receipts, and your agents.";
+
+const TELEGRAM_MSG_SETUP_HINT =
+  'Welcome. To link this chat to your Leash account, open Leash → Settings → External connections, expand this bot, and tap the Authorize link once (then tap Start in Telegram).';
+
+const TELEGRAM_MSG_WELCOME_BACK = "You're all set. What would you like to do?";
+
+/**
+ * Fire-and-forget Bot API sendMessage (plain text). Used for /start UX so the
+ * user always gets immediate feedback without running the LLM.
+ */
+function sendTelegramPlainBestEffort(
+  config: LeashApiConfig,
+  conn: ExternalConnectionRow,
+  chatId: string,
+  text: string,
+  logLabel: string,
+): void {
+  void (async () => {
+    try {
+      if (!conn.encryptedCredential) {
+        tgLog(`send plain skipped (${logLabel})`, { reason: 'no_credential', chatId });
+        return;
+      }
+      let encKey: string;
+      try {
+        encKey = getEncryptionKey(config);
+      } catch {
+        tgLog(`send plain skipped (${logLabel})`, { reason: 'no_encryption_key', chatId });
+        return;
+      }
+      const botToken = decryptSecret(conn.encryptedCredential, encKey);
+      const tg = createTelegramClient({ botToken });
+      const res = await tg.sendMessage({
+        chatId,
+        text,
+        disableWebPagePreview: true,
+      });
+      tgLog(`send plain done (${logLabel})`, { chatId, ok: res.ok, status: res.status });
+    } catch (err) {
+      tgLog(`send plain failed (${logLabel})`, {
+        chatId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+  })();
 }
 
 // ── routes ───────────────────────────────────────────────────────────
@@ -1026,8 +1076,10 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
       });
 
       // Try `/start <token>` binding first — this is the only path that
-      // accepts a from-id we don't already know about.
-      const startMatch = /^\/start\s+([\w-]+)/.exec(text.trim());
+      // accepts a from-id we don't already know about. Telegram private
+      // chats often send `/start@BotName payload` (deep link), not only
+      // `/start payload`.
+      const startMatch = /^\/start(?:@[A-Za-z0-9_]+)?\s+([\w-]+)/i.exec(text.trim());
       if (startMatch && fromId) {
         const token = startMatch[1];
         const pending = token ? await getConnectionByVerificationToken(deps.db, token) : null;
@@ -1046,6 +1098,13 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
               connection_id: pending.id,
               from_id: fromId,
             });
+            sendTelegramPlainBestEffort(
+              deps.config,
+              pending,
+              fromId,
+              TELEGRAM_MSG_WELCOME_CONNECTED,
+              'after_bind',
+            );
             return c.json({ ok: true, bound: true }, 200);
           }
         }
@@ -1055,6 +1114,37 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
           pending_match: !!(pending && pending.id === conn.id),
         });
         return c.json({ ok: true, bound: false }, 200);
+      }
+
+      // Bare `/start` or `/start@BotName` with no payload — common when
+      // the user opens the bot without the Leash deep link.
+      const bareStart = /^\/start(?:@[A-Za-z0-9_]+)?\s*$/i.test(text.trim());
+      if (bareStart && fromId) {
+        if (conn.status === 'pending') {
+          tgLog('webhook bare /start pending', { connection_id: conn.id, from_id: fromId });
+          sendTelegramPlainBestEffort(
+            deps.config,
+            conn,
+            fromId,
+            TELEGRAM_MSG_SETUP_HINT,
+            'bare_start_pending',
+          );
+          return c.json({ ok: true, bare_start: 'setup_hint' }, 200);
+        }
+        if (
+          conn.status === 'connected' &&
+          (fromId === conn.boundChatId || conn.allowlist.includes(fromId))
+        ) {
+          tgLog('webhook bare /start connected', { connection_id: conn.id, from_id: fromId });
+          sendTelegramPlainBestEffort(
+            deps.config,
+            conn,
+            fromId,
+            TELEGRAM_MSG_WELCOME_BACK,
+            'bare_start_connected',
+          );
+          return c.json({ ok: true, bare_start: 'welcome_back' }, 200);
+        }
       }
 
       // From here on, only the bound chat-id (or allowlisted ids) are

@@ -340,6 +340,23 @@ describe('external telegram webhook — phase 1', () => {
     expect(ownerBody.queued).toBe(true);
   });
 
+  it('binds on Telegram deep-link style /start@bot payload', async () => {
+    const rig = await createTestRig({ adminSecret: ADMIN_SECRET, encryptionKey: ENC_KEY });
+    const created = await createConnection(rig);
+    const routingId = created.connection.routing_id;
+    const verifyToken = created.connection.verification_token;
+
+    const bind = await postUpdate(rig, routingId, {
+      message: {
+        from: { id: TELEGRAM_FROM_ID },
+        text: `/start@${BOT_USERNAME} ${verifyToken}`,
+      },
+    });
+    expect(bind.status).toBe(200);
+    const bindBody = (await bind.json()) as { bound: boolean };
+    expect(bindBody.bound).toBe(true);
+  });
+
   it('replay of /start with a stale token is a no-op', async () => {
     const rig = await createTestRig({ adminSecret: ADMIN_SECRET, encryptionKey: ENC_KEY });
     const created = await createConnection(rig);
