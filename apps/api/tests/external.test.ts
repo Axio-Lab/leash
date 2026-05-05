@@ -78,6 +78,7 @@ async function createConnection(rig: Awaited<ReturnType<typeof createTestRig>>) 
       verification_token: string;
       bot_username: string;
       routing_id: string;
+      telegram_webhook_url?: string | null;
     };
     deep_link: string | null;
     webhook_url: string | null;

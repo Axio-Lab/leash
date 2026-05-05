@@ -34,6 +34,7 @@ import {
 } from './formatter.js';
 import { runAgentForExternalChannel } from './dispatcher-shared.js';
 import { createTelegramClient, type TelegramClient } from './telegram-client.js';
+import { tgClip, tgLog } from './telegram-trace.js';
 
 export type DispatcherDeps = {
   config: LeashApiConfig;
@@ -64,9 +65,11 @@ export async function dispatchTelegramMessage(
   const conn = args.connection;
 
   if (!conn.encryptedCredential) {
+    tgLog('dispatch aborted', { connection_id: conn.id, reason: 'connection_missing_credential' });
     return { ok: false, reason: 'connection_missing_credential' };
   }
   if (!config.encryptionKey) {
+    tgLog('dispatch aborted', { connection_id: conn.id, reason: 'encryption_key_not_configured' });
     return { ok: false, reason: 'encryption_key_not_configured' };
   }
 
@@ -74,6 +77,11 @@ export async function dispatchTelegramMessage(
   try {
     botToken = decryptSecret(conn.encryptedCredential, config.encryptionKey);
   } catch (err) {
+    tgLog('dispatch aborted', {
+      connection_id: conn.id,
+      reason: 'decrypt_credential_failed',
+      detail: err instanceof Error ? err.message : 'unknown',
+    });
     return {
       ok: false,
       reason: `decrypt_credential_failed: ${err instanceof Error ? err.message : 'unknown'}`,
@@ -83,14 +91,30 @@ export async function dispatchTelegramMessage(
   const telegram = deps.telegramClientFactory?.(botToken) ?? createTelegramClient({ botToken });
   const replyChatId = conn.boundChatId ?? args.fromId;
 
+  tgLog('dispatch start', {
+    connection_id: conn.id,
+    owner_privy_id: conn.ownerPrivyId,
+    reply_chat: replyChatId,
+    text_len: args.message.length,
+    preview: tgClip(args.message),
+  });
+
   const shared = await runAgentForExternalChannel(
     { config, db, cache: deps.cache, ...(deps.bffFetch ? { bffFetch: deps.bffFetch } : {}) },
     { connection: conn, message: args.message },
   );
   if (!shared.ok) {
+    tgLog('dispatch bff/run failed', { connection_id: conn.id, reason: shared.reason });
     await safeReply(telegram, replyChatId, shared.userFacingError, false);
     return { ok: false, reason: shared.reason, replied: true };
   }
+
+  tgLog('dispatch bff/run ok', {
+    connection_id: conn.id,
+    assistant_chars: (shared.bffResult.text ?? '').length,
+    artifacts: shared.summaries.length,
+    model: shared.bffResult.model ?? '—',
+  });
 
   // Compose the message body. Assistant text first, then one
   // formatted block per artifact, then warnings/errors.
@@ -121,8 +145,24 @@ export async function dispatchTelegramMessage(
     disableWebPagePreview: false,
   });
   if (!reply.ok) {
-    // MarkdownV2 parse errors are the most common — fall back to plain.
+    tgLog('dispatch sendMessage MarkdownV2 failed', {
+      connection_id: conn.id,
+      chat: replyChatId,
+      http_status: reply.status,
+      body_preview: tgClip(reply.body, 200),
+    });
     await safeReply(telegram, replyChatId, stripMarkdownV2Escapes(final), false);
+    tgLog('dispatch sendMessage plain fallback sent', {
+      connection_id: conn.id,
+      chat: replyChatId,
+    });
+  } else {
+    tgLog('dispatch sendMessage ok', {
+      connection_id: conn.id,
+      chat: replyChatId,
+      parse_mode: 'MarkdownV2',
+      out_chars: final.length,
+    });
   }
 
   await recordExternalMessage(db, {

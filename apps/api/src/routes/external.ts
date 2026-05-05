@@ -49,6 +49,7 @@ import type { DbClient } from '../storage/turso.js';
 import { conflict, invalidRequest, notFound, unavailable } from '../util/errors.js';
 import { notifyApprovalSettled } from '../external/approval-settlement-notify.js';
 import { dispatchTelegramMessage, type DispatcherDeps } from '../external/telegram-dispatcher.js';
+import { tgClip, tgLog } from '../external/telegram-trace.js';
 import type { TelegramClient } from '../external/telegram-client.js';
 import type { WhatsAppManager } from '../external/whatsapp-manager.js';
 import { ensureWhatsAppStateRow, getWhatsAppState } from '../storage/external-whatsapp.js';
@@ -995,18 +996,34 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
       const update = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
       const conn = await getConnectionByRoutingId(deps.db, 'telegram', routing_id);
       if (!conn) {
-        // Unknown bot — silently 200 and drop.
+        tgLog('webhook dropped unknown_routing_id', { routing_id: tgClip(routing_id, 24) });
         return c.json({ ok: true, dropped: 'unknown_routing_id' }, 200);
       }
       const message = (update.message ?? update.edited_message) as
         | Record<string, unknown>
         | undefined;
       if (!message) {
+        tgLog('webhook dropped no_message', {
+          update_id: update.update_id,
+          connection_id: conn.id,
+          update_keys: Object.keys(update).join(','),
+        });
         return c.json({ ok: true, dropped: 'no_message' }, 200);
       }
       const from = message.from as { id?: number | string } | undefined;
       const fromId = from?.id != null ? String(from.id) : null;
       const text = typeof message.text === 'string' ? message.text : '';
+      const updateId = update.update_id;
+
+      tgLog('webhook inbound', {
+        update_id: updateId,
+        routing_id: tgClip(routing_id, 20),
+        connection_id: conn.id,
+        status: conn.status,
+        bound_chat_id: conn.boundChatId,
+        from_id: fromId,
+        text_preview: tgClip(text),
+      });
 
       // Try `/start <token>` binding first — this is the only path that
       // accepts a from-id we don't already know about.
@@ -1025,9 +1042,18 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
               direction: 'inbound',
               payload: { kind: 'bind', from_id: fromId },
             });
+            tgLog('webhook chat bound via /start', {
+              connection_id: pending.id,
+              from_id: fromId,
+            });
             return c.json({ ok: true, bound: true }, 200);
           }
         }
+        tgLog('webhook /start not applied', {
+          connection_id: conn.id,
+          token_match: !!token,
+          pending_match: !!(pending && pending.id === conn.id),
+        });
         return c.json({ ok: true, bound: false }, 200);
       }
 
@@ -1036,6 +1062,12 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
       const allowed =
         fromId != null && (fromId === conn.boundChatId || conn.allowlist.includes(fromId));
       if (!allowed) {
+        tgLog('webhook dropped unauthorized_sender', {
+          connection_id: conn.id,
+          from_id: fromId,
+          bound_chat_id: conn.boundChatId,
+          allowlist_len: conn.allowlist.length,
+        });
         return c.json({ ok: true, dropped: 'unauthorized_sender' }, 200);
       }
 
@@ -1049,6 +1081,12 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
           // outbound row carries the hash + length pair.
           text_len: text.length,
         },
+      });
+
+      tgLog('webhook queue dispatch', {
+        connection_id: conn.id,
+        from_id: fromId,
+        update_id: updateId,
       });
 
       // Fire-and-forget: run the agent + reply asynchronously so
@@ -1069,12 +1107,21 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
         connection: conn,
         message: text,
         fromId: fromId ?? '',
-      }).catch((err) => {
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[external] dispatcher failed for connection=${conn.id}: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      });
+      })
+        .then((result) => {
+          tgLog('webhook dispatch finished', {
+            connection_id: conn.id,
+            ok: result.ok,
+            reason: result.reason,
+            replied: result.replied,
+          });
+        })
+        .catch((err) => {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[external:tg] dispatcher failed for connection=${conn.id}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
       // In tests we await the dispatcher so assertions can observe
       // outbound side-effects (sendMessage call, approvals row). In
       // production we let it run after the 200 returns.
