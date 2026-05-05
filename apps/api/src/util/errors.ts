@@ -15,6 +15,7 @@ export type ApiErrorCode =
   | 'network_mismatch'
   | 'idempotency_conflict'
   | 'rpc_error'
+  | 'unavailable'
   | 'internal';
 
 export type ApiErrorBody = {
@@ -74,4 +75,8 @@ export function rpcError(message: string, detail?: unknown): ApiError {
 
 export function internal(message: string, detail?: unknown): ApiError {
   return new ApiError({ code: 'internal', status: 500, message, detail });
+}
+
+export function unavailable(message: string, detail?: unknown): ApiError {
+  return new ApiError({ code: 'unavailable', status: 503, message, detail });
 }

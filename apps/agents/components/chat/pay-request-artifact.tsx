@@ -28,6 +28,8 @@ import {
   deriveAgentTreasuryAta,
   KNOWN_STABLE_SYMBOLS,
   parseLeashHeaders,
+  TOKEN_2022_PROGRAM_ADDRESS,
+  tokenProgramForMint,
   type LeashX402Network,
   type KnownStableSymbol,
 } from '@leash/core';
@@ -85,9 +87,18 @@ const agentsFetcher = async (url: string) => {
 export function PayRequestArtifact({
   payload,
   threadId,
+  onSettled,
 }: {
   payload: PayRequestPayload;
   threadId?: string;
+  /**
+   * Called once after a successful payment with the receipt + tx
+   * signature. Used by the external chat `/approve/[token]` page to
+   * forward the receipt to the consume endpoint so the dispatcher can
+   * mark the approval consumed. Optional — no-ops in the normal chat
+   * flow which uses `markPayRequestPaid` instead.
+   */
+  onSettled?: (settled: { tx_sig: string | null; receipt_hash: string }) => void;
 }) {
   const url = payload.url ?? '';
   const agentMint = payload.agent_mint ?? '';
@@ -179,10 +190,18 @@ export function PayRequestArtifact({
     setState({ kind: 'paying' });
     try {
       // Derive the treasury ATA for the asset the seller demanded so we
-      // pay from the right token bucket (USDC vs USDG vs USDT).
+      // pay from the right token bucket (USDC vs USDG vs USDT). USDG
+      // lives under Token-2022 — passing the matching program is what
+      // gets us the correct PDA; the legacy default would land us on a
+      // non-existent legacy-program ATA and surface as `ata_missing`.
+      const program =
+        tokenProgramForMint(preview.asset) === 'spl-token-2022'
+          ? TOKEN_2022_PROGRAM_ADDRESS
+          : undefined;
       const { ata } = await deriveAgentTreasuryAta({
         asset: agent.mint,
         mint: preview.asset,
+        ...(program ? { tokenProgram: program } : {}),
       });
       const sourceTokenAccount = String(ata);
 
@@ -264,6 +283,12 @@ export function PayRequestArtifact({
       } catch {
         // Storage failures shouldn't break the success toast — the
         // user already paid, this is just persistence polish.
+      }
+      try {
+        onSettled?.({ tx_sig: txSig, receipt_hash: receiptHash });
+      } catch {
+        // Same logic — once the on-chain side has settled, callback
+        // failures must not surface as "payment failed".
       }
       toast.success('Paid', { description: `Tx ${shortHash(txSig)}` });
     } catch (err) {

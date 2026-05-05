@@ -11,6 +11,8 @@
  *     shape, even for unexpected exceptions
  */
 
+import './util/suppress-libsignal-console.js';
+
 import { OpenAPIHono } from '@hono/zod-openapi';
 
 import { apiKeyAuth, type AuthDeps } from './auth/api-key.js';
@@ -44,8 +46,30 @@ import { buildPaywallRoutes } from './routes/paywall.js';
 import { buildSellerUtilsRoutes } from './routes/seller-utils.js';
 import { buildBuyerRoutes } from './routes/buyer.js';
 import { buildPublicUploadRoutes, buildUploadRoutes } from './routes/uploads.js';
+import {
+  buildExternalPublicRoutes,
+  buildExternalRoutes,
+  type ExternalRoutesDeps,
+} from './routes/external.js';
+import { getWhatsAppManager } from './external/whatsapp-manager.js';
+import { dispatchWhatsAppMessage } from './external/whatsapp-dispatcher.js';
+import { listWhatsAppConnectionIdsForSessionResume } from './storage/external-connections.js';
 
-export type CreateLeashApiArgs = AuthDeps;
+export type CreateLeashApiArgs = AuthDeps & {
+  /**
+   * Optional Telegram-dispatcher overrides for tests. Not exposed via
+   * any public env / config — production callers leave both unset.
+   */
+  externalDispatcherBffFetch?: ExternalRoutesDeps['dispatcherBffFetch'];
+  externalDispatcherTelegramClientFactory?: ExternalRoutesDeps['dispatcherTelegramClientFactory'];
+  /**
+   * Optional pre-built WhatsApp manager — used by tests to inject a
+   * stubbed Baileys session. Production callers leave this undefined
+   * and rely on `LEASH_WHATSAPP_ENABLED=1` to lazily build the
+   * default manager.
+   */
+  externalWhatsAppManager?: ExternalRoutesDeps['whatsapp'];
+};
 
 export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   const app = new OpenAPIHono();
@@ -73,6 +97,65 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   app.route('/', buildAdminRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   app.route('/', buildPlatformAgentRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   app.route('/', buildPlatformTaskRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
+  // External chat bridges (Telegram + WhatsApp). The admin-gated CRUD
+  // sub-app is mounted alongside the other platform routes; the public
+  // sub-app (approval read + Telegram webhook) is mounted before the
+  // authed sub-app for the same reason as the paywall — third-party
+  // services and unauthenticated browsers must reach those endpoints.
+  // The WhatsApp manager is opt-in (single replica only). Operators
+  // set LEASH_WHATSAPP_ENABLED=1 on exactly one apps/api replica;
+  // every other replica leaves the manager unset and the
+  // `/v1/external/whatsapp/*` routes return 503. Tests can pass a
+  // pre-built manager via `externalWhatsAppManager` to bypass the env
+  // gate without instantiating Baileys.
+  let whatsappManager: ExternalRoutesDeps['whatsapp'] = deps.externalWhatsAppManager;
+  if (!whatsappManager && process.env.LEASH_WHATSAPP_ENABLED === '1') {
+    whatsappManager = getWhatsAppManager({
+      config: deps.config,
+      db: deps.db,
+      onInboundMessage: async ({ connection, message, fromId, socket, traceId }) => {
+        await dispatchWhatsAppMessage(
+          { config: deps.config, db: deps.db, cache: deps.cache, socket },
+          { connection, message, fromId, traceId },
+        ).catch(() => {});
+      },
+    });
+  }
+
+  if (whatsappManager && !deps.externalWhatsAppManager) {
+    const wm = whatsappManager;
+    void (async () => {
+      try {
+        const ids = await listWhatsAppConnectionIdsForSessionResume(deps.db);
+        if (ids.length === 0) return;
+        for (const id of ids) {
+          try {
+            await wm.start(id);
+          } catch {
+            /* ignore */
+          }
+          await new Promise((r) => setTimeout(r, 400));
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+  }
+
+  const externalDeps: ExternalRoutesDeps = {
+    config: deps.config,
+    db: deps.db,
+    cache: deps.cache,
+    ...(deps.externalDispatcherBffFetch
+      ? { dispatcherBffFetch: deps.externalDispatcherBffFetch }
+      : {}),
+    ...(deps.externalDispatcherTelegramClientFactory
+      ? { dispatcherTelegramClientFactory: deps.externalDispatcherTelegramClientFactory }
+      : {}),
+    ...(whatsappManager ? { whatsapp: whatsappManager } : {}),
+  };
+  app.route('/', buildExternalRoutes(externalDeps));
+  app.route('/', buildExternalPublicRoutes(externalDeps));
   // Public agent-onboarding routes — `/v1/agents/self-register`,
   // `/v1/sandbox/agent`, `/v1/agents/self-register/info`. Mounted before
   // the authed sub-app so the faucet doesn't sit behind an API key.

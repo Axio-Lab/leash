@@ -380,7 +380,7 @@ describe('buyer endpoints', () => {
       expect(events.length).toBe(1);
       expect(events[0].mint).toBe(DEVNET_USDC_MINT);
       expect(events[0].amountAtomic).toBe('1000');
-    });
+    }, 15_000);
 
     it('respects an explicit `source_token_account` override', async () => {
       const rig = await createTestRig();

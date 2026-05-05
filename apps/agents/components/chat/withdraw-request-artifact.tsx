@@ -97,9 +97,17 @@ type DestProbe = { state: 'fresh' | 'known' | 'unknown' };
 export function WithdrawRequestArtifact({
   payload,
   threadId,
+  onSettled,
 }: {
   payload: WithdrawRequestPayload;
   threadId?: string;
+  /**
+   * Called once after a successful withdrawal with the tx signature.
+   * The `/approve/[token]` page uses this to forward the result to
+   * the external-bridge consume endpoint. No-ops in the normal chat
+   * surface which persists via `markWithdrawCompleted`.
+   */
+  onSettled?: (settled: { tx_sig: string }) => void;
 }) {
   const { umi, ready } = usePrivyUmi();
   const { user } = usePrivy();
@@ -240,6 +248,11 @@ export function WithdrawRequestArtifact({
       } catch {
         // Persistence is best-effort; the on-chain tx already
         // succeeded, so don't surface storage errors as failures.
+      }
+      try {
+        onSettled?.({ tx_sig: txSig });
+      } catch {
+        // Same — withdrawal already settled on-chain.
       }
       toast.success('Withdraw confirmed', { description: `Tx ${shortHash(txSig)}` });
     } catch (err) {

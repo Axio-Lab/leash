@@ -15,6 +15,8 @@ import {
   parseLeashFeeExtra,
   paymentRequirementsHash,
   requestHash,
+  TOKEN_2022_PROGRAM_ADDRESS,
+  tokenProgramForMint,
   type ClientSvmSigner,
   type KnownStableSymbol,
   type LeashFetch,
@@ -314,9 +316,19 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
         let sourceAta: string | null = cfg.sourceTokenAccount ?? null;
         if (!sourceAta && quote.price.asset && cfg.agent) {
           try {
+            // Pick the SPL token program from the catalogued mint so
+            // Token-2022 stables (USDG today; future Token-2022 issuers
+            // tomorrow) derive the correct ATA. Without this the preflight
+            // checked the legacy-program ATA and reported `ata_missing`
+            // even when the treasury did hold USDG.
+            const program =
+              tokenProgramForMint(quote.price.asset) === 'spl-token-2022'
+                ? TOKEN_2022_PROGRAM_ADDRESS
+                : undefined;
             const { ata } = await deriveAgentTreasuryAta({
               asset: cfg.agent,
               mint: quote.price.asset,
+              ...(program ? { tokenProgram: program } : {}),
             });
             sourceAta = String(ata);
           } catch {

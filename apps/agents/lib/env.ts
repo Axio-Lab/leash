@@ -101,6 +101,13 @@ export type ServerEnv = {
   anthropicApiKey: string | undefined;
   composioApiKey: string | undefined;
   leashAgentModel: string;
+  /**
+   * Shared secret the apps/api Telegram dispatcher (and any other
+   * server-to-server caller) uses to invoke the run-on-behalf BFF
+   * endpoint at `POST /api/agents/run`. Required when external chat
+   * bridges are enabled; an empty value disables the endpoint.
+   */
+  agentsAdminSecret: string | undefined;
 };
 
 export function getServerEnv(): ServerEnv {
@@ -126,5 +133,6 @@ export function getServerEnv(): ServerEnv {
     anthropicApiKey: optional('ANTHROPIC_API_KEY'),
     composioApiKey: optional('COMPOSIO_API_KEY'),
     leashAgentModel: optional('LEASH_AGENT_MODEL') ?? LEASH_AGENT_MODEL,
+    agentsAdminSecret: optional('LEASH_AGENTS_ADMIN_SECRET'),
   };
 }

@@ -174,3 +174,23 @@ export function defaultUsdcMint(network: TokenNetwork): KnownToken {
   }
   return usdc;
 }
+
+/**
+ * Look up the SPL token program a known mint lives under (`spl-token` for
+ * legacy or `spl-token-2022` for Token-2022). Tries both networks since
+ * known stable mints are disjoint, so callers don't have to thread the
+ * x402 envelope's CAIP-2 network down through every layer.
+ *
+ * Returns `null` when the mint isn't catalogued — callers should default
+ * to legacy SPL token for back-compat, but this lets surfaces that DO
+ * understand Token-2022 (Pay card, buyer-kit preflight, withdraw flow)
+ * pick the right ATA without hard-coding mints.
+ */
+export function tokenProgramForMint(mint: string): TokenProgram | null {
+  const trimmed = mint.trim();
+  for (const net of ['mainnet', 'devnet'] as const) {
+    const hit = KNOWN_TOKENS[net].find((t) => t.mint === trimmed);
+    if (hit) return hit.program;
+  }
+  return null;
+}

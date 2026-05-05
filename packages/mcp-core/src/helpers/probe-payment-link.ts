@@ -12,6 +12,7 @@
  */
 
 import { decodeBase64Json } from './base64-json.js';
+import { symbolForMintSafe } from './token-catalog.js';
 
 export type PaymentRequirementPreview = {
   network: string;
@@ -21,6 +22,18 @@ export type PaymentRequirementPreview = {
   currency: string;
   description?: string;
 };
+
+/**
+ * Reverse-lookup a ticker by mint trying *both* network buckets. The
+ * x402 envelope's `network` field is often a CAIP-2 chain reference
+ * like `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1` (the genesis hash of
+ * Solana devnet), not the friendly `solana-devnet` slug — so a literal
+ * `/devnet/i` heuristic misses every CAIP-2 quote. Stable mints are
+ * disjoint across mainnet/devnet so this is safe.
+ */
+function symbolForMintAnyNetwork(mint: string): string | null {
+  return symbolForMintSafe(mint, 'devnet') ?? symbolForMintSafe(mint, 'mainnet') ?? null;
+}
 
 export async function probePaymentLink(url: string): Promise<PaymentRequirementPreview> {
   const res = await fetch(url, { method: 'GET' });
@@ -70,12 +83,24 @@ export async function probePaymentLink(url: string): Promise<PaymentRequirementP
     throw new Error('payment-required entry missing required fields');
   }
 
+  // Currency resolution order:
+  //   1. explicit `currency` on the chosen accept (extension surface;
+  //      vanilla x402 envelopes don't carry it, but we look anyway),
+  //   2. catalog reverse-lookup keyed by the asset mint (covers every
+  //      Leash-self-hosted x402 link since the API shapes 402 quotes
+  //      from the catalogued USDC/USDG/USDT mint),
+  //   3. last-resort 'USDC' so the model never sees an empty ticker.
+  // The previous unconditional `?? 'USDC'` mis-labelled USDG/USDT links
+  // and caused buyer-kit to ask for the wrong asset → `preferred_asset_unavailable`.
+  const fromRegistry = symbolForMintAnyNetwork(chosen.asset);
+  const currency = chosen.currency ?? fromRegistry ?? 'USDC';
+
   const out: PaymentRequirementPreview = {
     network: chosen.network,
     pay_to: chosen.payTo,
     asset: chosen.asset,
     amount_atomic: chosen.amount,
-    currency: chosen.currency ?? 'USDC',
+    currency,
   };
   if (chosen.description) out.description = chosen.description;
   return out;

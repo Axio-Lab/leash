@@ -20,12 +20,14 @@
 
 import {
   LEASH_EXPLORER_DEFAULT,
+  TOKEN_2022_PROGRAM_ADDRESS,
   TOKEN_2022_PROGRAM_ID,
   deriveAgentTreasuryAddress,
   deriveAgentTreasuryAta,
   leashReceiptUrl,
   listSplBalances,
   parseLeashHeaders,
+  tokenProgramForMint,
 } from '@leash/core';
 import {
   fetchDiscover,
@@ -177,9 +179,13 @@ class StdioHost implements LeashHost {
       // isn't actually an x402 link.
       const preview = await probePaymentLink(args.url);
 
+      const tokenProgramKind = tokenProgramForMint(preview.asset);
       const sourceAta = await deriveAgentTreasuryAta({
         asset: this.agentMint,
         mint: preview.asset,
+        ...(tokenProgramKind === 'spl-token-2022'
+          ? { tokenProgram: TOKEN_2022_PROGRAM_ADDRESS }
+          : {}),
       });
 
       const kitSigner = await this.signer.getKitSigner();
