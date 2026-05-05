@@ -174,7 +174,7 @@ export type RecordAgentResponse = {
 // gives you typed CRUD; to *pay* one programmatically you need
 // `@leash/buyer-kit` (Solana signing) or `@leash/mcp`'s host.
 
-export type StableSymbol = 'USDC' | 'USDG';
+export type StableSymbol = 'USDC' | 'USDT' | 'USDG';
 export type EndpointMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
 
 export type PaymentLinkResponseTemplate = {
