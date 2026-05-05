@@ -164,7 +164,6 @@ export async function POST(req: NextRequest) {
   const auth = checkAdminAuth(req);
   if (!auth.ok) {
     const status = auth.reason === 'agents_admin_secret_not_configured' ? 503 : 401;
-    // eslint-disable-next-line no-console
     console.warn(`[agents:run] trace=${trace} auth_failed reason=${auth.reason}`);
     return new Response(JSON.stringify({ error: 'unauthorized', reason: auth.reason }), {
       status,
@@ -175,7 +174,6 @@ export async function POST(req: NextRequest) {
   const raw = await req.json().catch(() => null);
   const parsed = RunBodySchema.safeParse(raw);
   if (!parsed.success) {
-    // eslint-disable-next-line no-console
     console.warn(`[agents:run] trace=${trace} invalid_request`);
     return new Response(
       JSON.stringify({ error: 'invalid_request', details: parsed.error.flatten() }),
@@ -184,7 +182,6 @@ export async function POST(req: NextRequest) {
   }
   const body = parsed.data;
 
-  // eslint-disable-next-line no-console
   console.log(
     `[agents:run] trace=${trace} start owner=${body.owner_privy_id} channel=${body.channel} msgLen=${body.message.length}`,
   );
@@ -194,7 +191,6 @@ export async function POST(req: NextRequest) {
   // host. Same code path as `app/api/agents/chat/route.ts`.
   const agentMint = body.agent_mint ?? (await resolvePrimaryAgentMint(body.owner_privy_id));
   if (!agentMint) {
-    // eslint-disable-next-line no-console
     console.warn(
       `[agents:run] trace=${trace} no_agent_mint owner=${body.owner_privy_id} — create an agent in Leash first`,
     );
@@ -255,7 +251,6 @@ export async function POST(req: NextRequest) {
     errors.push(err instanceof Error ? err.message : String(err));
   }
 
-  // eslint-disable-next-line no-console
   console.log(
     `[agents:run] trace=${trace} done agent_mint=${agentMint ?? 'null'} model=${effectiveModel} textLen=${text.trim().length} artifacts=${artifacts.length} errors=${errors.length} warnings=${warnings.length}`,
   );

@@ -120,7 +120,6 @@ export function AddTelegramModal({
       clearTimeout(handle);
       ctrl.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [botToken, open]);
 
   async function submit(e: React.FormEvent) {
