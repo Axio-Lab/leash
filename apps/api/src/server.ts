@@ -11,6 +11,8 @@
  *     shape, even for unexpected exceptions
  */
 
+import './util/suppress-libsignal-console.js';
+
 import { OpenAPIHono } from '@hono/zod-openapi';
 
 import { apiKeyAuth, type AuthDeps } from './auth/api-key.js';
