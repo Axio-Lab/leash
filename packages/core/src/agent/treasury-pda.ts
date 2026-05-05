@@ -41,9 +41,17 @@ export async function deriveAgentTreasuryAddress(asset: string | Address): Promi
 }
 
 /**
- * Derive the treasury's Associated Token Account for `mint`. Pass
- * `tokenProgram = TOKEN_2022_PROGRAM_ADDRESS` for Token-2022 mints; defaults
- * to legacy SPL Token (USDC, USDT, USDG on Solana mainnet & devnet).
+ * Derive the treasury's Associated Token Account for `mint`.
+ *
+ * `tokenProgram` is the SPL token program that owns this mint. **Pass it
+ * explicitly whenever the mint may be Token-2022** (e.g. USDG); the legacy
+ * default below is only correct for USDC + USDT. Helpers like
+ * {@link tokenProgramForMint} resolve this from the static stable catalog so
+ * callers don't have to spell out program addresses.
+ *
+ * Defaulting to the legacy program is intentional: an unknown mint is far
+ * more likely to be a vanilla SPL token than Token-2022, and a wrong default
+ * here surfaces as a clean `ata_missing` rather than a malformed transfer.
  */
 export async function deriveAgentTreasuryAta(args: {
   asset: string | Address;
