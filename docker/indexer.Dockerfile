@@ -9,9 +9,13 @@
 
 FROM node:22-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm PATH="/pnpm:$PATH" CI=1
-# git is required so pnpm can resolve the GitHub-hosted libsignal-node
-# sub-dependency that baileys carries in its lockfile entry.
-RUN apt-get update && apt-get install -y --no-install-recommends git \
+# git + ca-certificates are required so pnpm can resolve the GitHub-hosted
+# libsignal-node sub-dependency that baileys carries in its lockfile entry.
+# The slim image ships without a CA bundle, so without ca-certificates
+# `git ls-remote https://github.com/...` fails TLS verification.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+        ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
