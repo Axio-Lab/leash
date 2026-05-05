@@ -172,7 +172,7 @@ of:
 | `insufficient_allowance`      | Delegate cap is below the demanded price.                                 | Re-run `setSpendDelegation` with a higher cap for that mint.      |
 | `no_delegate`                 | The treasury ATA exists but no SPL delegate is set.                       | Run `setSpendDelegation` from `@leash/registry-utils`.            |
 | `wrong_delegate`              | The set delegate is not the executive that signed.                        | Re-approve with the current executive.                            |
-| `ata_missing`                 | The agent has never held this mint.                                       | Send any amount of the mint to mint the ATA.                      |
+| `ata_missing`                 | The agent has never held this mint (the buyer-kit pre-flight derives the ATA under the right program — `spl-token` for USDC/USDT, `spl-token-2022` for USDG — so this is a real "treasury empty for this mint" signal, not a Token-2022 mismatch). | Send any amount of the mint to mint the ATA.                      |
 
 The full receipt reason takes the form `<classified>: <seller breadcrumb>`
 (e.g. `insufficient_balance: transaction_simulation`). UI panels match on the

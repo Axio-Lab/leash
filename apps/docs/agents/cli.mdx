@@ -88,11 +88,14 @@ leash reputation AGENT_MINT_PUBKEY
 leash pay https://example.com/x/abc123
 
 # 8. Inspect or change the SPL spend authority. By default the agent
-#    is minted with unlimited USDC delegation; tighten / revoke as needed.
+#    is minted with unlimited USDC delegation; tighten, revoke, or
+#    extend to USDT / USDG (each token has an independent cap).
 leash treasury limit --token USDC
 leash treasury set-limit --token USDC --amount 100   # cap at $100 USDC
 leash treasury set-limit --token USDC --revoke       # pause autonomous spending
 leash treasury set-limit --token USDC --unlimited    # restore default
+leash treasury set-limit --token USDG --unlimited    # also accept USDG (Token-2022)
+leash treasury set-limit --token USDT --amount 50    # cap at $50 USDT
 
 # 9. Inspect activity.
 leash receipts                                # latest receipts (newest first)

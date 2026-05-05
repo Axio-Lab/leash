@@ -58,19 +58,36 @@ curl -sS "https://api.leash.market/v1/events/<event_id>" \
 
 ```ts
 import { findAssetSignerPda, prepareSetSpendDelegation } from '@leash/registry-utils';
+import { tokenProgramForMint, TOKEN_2022_PROGRAM_ID } from '@leash/core';
 
 const [treasury] = findAssetSignerPda(umi, { asset: agentAsset });
-// USDC on devnet
-const usdcMint = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
 
-// Approve up to 10 USDC for the executive keypair to spend.
-const tx = await prepareSetSpendDelegation(umi, {
+// USDC (legacy SPL Token) on devnet.
+const usdcMint = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+const usdcTx = await prepareSetSpendDelegation(umi, {
   agentAsset,
   mint: usdcMint,
   delegate: executivePubkey,
-  amount: 10_000_000n, // atomic units (USDC has 6 decimals)
+  amount: 10_000_000n, // 10 USDC, 6 decimals
 });
-await tx.sendAndConfirm(umi);
+await usdcTx.sendAndConfirm(umi);
+
+// USDG (SPL Token-2022) on devnet — pass the token program explicitly so the
+// helper writes the Approve under the right program and the buyer-kit's
+// pre-flight (which uses `tokenProgramForMint` internally) finds the matching
+// ATA. Without this you'd silently approve a legacy-program ATA that doesn't
+// exist and the next pay would fail with `ata_missing`.
+const usdgMint = '4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7';
+const usdgProgram =
+  tokenProgramForMint(usdgMint) === 'spl-token-2022' ? TOKEN_2022_PROGRAM_ID : undefined;
+const usdgTx = await prepareSetSpendDelegation(umi, {
+  agentAsset,
+  mint: usdgMint,
+  delegate: executivePubkey,
+  amount: 10_000_000n, // 10 USDG, 6 decimals
+  ...(usdgProgram ? { tokenProgram: usdgProgram } : {}),
+});
+await usdgTx.sendAndConfirm(umi);
 ```
 
 ## 3. Build a paying buyer (SDK)

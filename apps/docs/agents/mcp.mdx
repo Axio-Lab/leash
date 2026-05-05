@@ -31,11 +31,13 @@ in **two steps**:
    `~/.config/leash/agent.json`, and tell you to send ~0.01 SOL to
    the printed address — this is the agent's owner / executive.
 2. After you fund it, call `leash_register_agent` again. The MCP
-   mints the MPL Core agent asset, sets unlimited USDC delegation
-   from the treasury PDA to the executive, records the asset on the
-   Leash API, and **hot-swaps** the in-memory host so subsequent
-   tool calls (`leash_pay_payment_link`, `leash_check_treasury_balance`,
-   etc.) work without a restart.
+   mints the MPL Core agent asset, sets an unlimited USDC delegation
+   from the treasury PDA to the executive (the default; tighten,
+   revoke, or extend to USDT / USDG via `leash_set_spend_limit`),
+   records the asset on the Leash API, and **hot-swaps** the
+   in-memory host so subsequent tool calls
+   (`leash_pay_payment_link`, `leash_check_treasury_balance`, etc.)
+   work without a restart.
 
 The cluster (devnet vs mainnet) comes from `LEASH_NETWORK` — same
 flow either way, since rent + gas are paid by the user's executive
@@ -228,7 +230,9 @@ the MCP:
 3. Mint the MPL Core agent asset (`createAgent`).
 4. Set unlimited USDC spend delegation from the treasury PDA to the
    executive (`setSpendDelegation` / SPL `Approve` capped at
-   `u64::MAX`).
+   `u64::MAX`). Add USDT / USDG delegations later with
+   `leash_set_spend_limit({ symbol: 'USDT' | 'USDG', mode: 'unlimited' | 'amount', amount? })` —
+   the cap is per-mint.
 5. POST `/v1/agents/record` so the Leash API has a row for receipts
    - discovery + reputation.
 6. Promote the pending block to a full `agent.json` and hot-swap

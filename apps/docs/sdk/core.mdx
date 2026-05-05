@@ -49,8 +49,14 @@ seller kits. It contains:
 - **Token registry** — `KNOWN_TOKENS`, `lookupToken(mint, network)`,
   `lookupTokenBySymbol(symbol, network)`, `KNOWN_STABLE_SYMBOLS`,
   `currencyForAsset(mint, network)`, `pinnedMints(network)`,
-  `defaultUsdcMint(network)`. Stables on mainnet + devnet plus a few
-  bluechips, indexed for UI surfaces.
+  `defaultUsdcMint(network)`, `tokenProgramForMint(mint)`. Stables on
+  mainnet + devnet (USDC, USDT, USDG) plus a few bluechips, indexed for
+  UI surfaces. `tokenProgramForMint` resolves the SPL token program
+  (`spl-token` for legacy USDC/USDT, `spl-token-2022` for USDG) across
+  both networks so callers don't have to thread CAIP-2 down through
+  every layer — the buyer-kit pre-flight, Pay card, MCP `pay`, and
+  withdraw flow all use it to derive the correct ATA without
+  hard-coding mints.
 - **Format helpers** — `atomicToDecimal`, `decimalToAtomic`,
   `formatTokenBalance`, `formatReceiptPrice`, `formatReceiptPriceUsd`. Use
   these instead of hand-rolled `*1_000_000` math; they pull decimals from
@@ -75,7 +81,12 @@ auto-preflight and for any caller that needs to sign on behalf of an agent
 with `@solana/kit` only.
 
 ```ts
-import { deriveAgentTreasuryAddress, deriveAgentTreasuryAta } from '@leash/core';
+import {
+  TOKEN_2022_PROGRAM_ADDRESS,
+  deriveAgentTreasuryAddress,
+  deriveAgentTreasuryAta,
+  tokenProgramForMint,
+} from '@leash/core';
 
 const treasury = await deriveAgentTreasuryAddress('33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR');
 
@@ -84,13 +95,29 @@ const { treasury: t, ata } = await deriveAgentTreasuryAta({
   asset: '33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR',
   mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', // USDC devnet
 });
+
+// USDG is Token-2022 — pass the program explicitly. `tokenProgramForMint`
+// looks the mint up in the catalog so callers don't have to know about
+// every issuer's program upfront.
+const usdgMint = '4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7'; // USDG devnet
+const { ata: usdgAta } = await deriveAgentTreasuryAta({
+  asset: '33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR',
+  mint: usdgMint,
+  ...(tokenProgramForMint(usdgMint) === 'spl-token-2022'
+    ? { tokenProgram: TOKEN_2022_PROGRAM_ADDRESS }
+    : {}),
+});
 ```
 
 The seeds (`["mpl-core-execute", asset]`) and program id
 (`CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d`) match Metaplex Core's
-`findAssetSignerPda` exactly. Pass
-`{ tokenProgram: TOKEN_2022_PROGRAM_ADDRESS }` for Token-2022 mints; the
-default is the legacy SPL Token program.
+`findAssetSignerPda` exactly. The default is the legacy SPL Token
+program; pass `{ tokenProgram: TOKEN_2022_PROGRAM_ADDRESS }` for
+Token-2022 mints (USDG today, future Token-2022 issuers tomorrow).
+**Always thread the `tokenProgramForMint(mint)` lookup** through this
+helper unless you already know the program — otherwise USDG payments
+land on a non-existent legacy-program ATA and surface as
+`ata_missing`.
 
 ## Why a separate adapter?
 
