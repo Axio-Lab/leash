@@ -7,6 +7,7 @@ import {
   jsonResult,
   lookupTokenBySymbolSafe,
   noAgentResult,
+  symbolForMintSafe,
   type LeashHost,
 } from '../src/index.js';
 
@@ -124,6 +125,19 @@ describe('helpers', () => {
     expect(usdg?.program).toBe('spl-token-2022');
 
     expect(lookupTokenBySymbolSafe('XXX', 'devnet')).toBeNull();
+  });
+
+  it('symbolForMintSafe reverse-resolves catalogued mints', () => {
+    expect(symbolForMintSafe('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU', 'devnet')).toBe(
+      'USDC',
+    );
+    expect(symbolForMintSafe('4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7', 'devnet')).toBe(
+      'USDG',
+    );
+    expect(symbolForMintSafe('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', 'mainnet')).toBe(
+      'USDC',
+    );
+    expect(symbolForMintSafe('not-a-mint', 'devnet')).toBeNull();
   });
 
   it('decodeBase64Json round-trips a payload (with + without padding)', () => {

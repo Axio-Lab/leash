@@ -125,9 +125,44 @@ export function toTelegramMarkdownV2(markdown: string): string {
         continue;
       }
     }
-    // Underscore italic `_..._` → MarkdownV2 italic. Same bounded
-    // search; we explicitly *don't* try to detect `*foo*` italic
-    // because asterisks in the wild often mean bullets, not emphasis.
+    // Single-asterisk `*WORD*` → MarkdownV2 bold. The LLM frequently
+    // emphasises stable phrases this way (`*IDEA*`, `*BUILD*`,
+    // `*USDC*`) and historically we escaped both asterisks, leaving
+    // literal `\*WORD\*` on the wire. Apply only when:
+    //   - the marker pair is on a single line, ≤ 64 chars,
+    //   - inner has no whitespace at either end (rules out bullets
+    //     like `* item`, where the next char is a space),
+    //   - the marker is at start-of-text, follows a non-word boundary,
+    //     and the closing `*` is followed by a non-word boundary
+    //     (preserves cases like `2*3=6` and `**a***`).
+    if (markdown[i] === '*' && markdown[i + 1] !== '*') {
+      const prev = i === 0 ? '' : (markdown[i - 1] ?? '');
+      const prevIsBoundary = prev === '' || /[\s([{<>"'`,;:.!?\-—–]/.test(prev);
+      const innerStartChar = markdown[i + 1] ?? '';
+      if (prevIsBoundary && innerStartChar && innerStartChar !== ' ' && innerStartChar !== '*') {
+        const end = markdown.indexOf('*', i + 1);
+        if (
+          end > i + 1 &&
+          end - (i + 1) <= 64 &&
+          markdown[end - 1] !== ' ' &&
+          markdown[end + 1] !== '*'
+        ) {
+          const inner = markdown.slice(i + 1, end);
+          if (!inner.includes('\n')) {
+            const next = markdown[end + 1] ?? '';
+            const nextIsBoundary = next === '' || /[\s)\]}>"'`,;:.!?\-—–]/.test(next);
+            if (nextIsBoundary) {
+              out.push('*');
+              out.push(escapeTelegramText(inner));
+              out.push('*');
+              i = end + 1;
+              continue;
+            }
+          }
+        }
+      }
+    }
+    // Underscore italic `_..._` → MarkdownV2 italic.
     if (markdown[i] === '_') {
       const end = markdown.indexOf('_', i + 1);
       if (end > i + 1 && end - (i + 1) < 256 && markdown[end - 1] !== ' ') {

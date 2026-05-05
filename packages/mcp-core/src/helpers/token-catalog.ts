@@ -77,3 +77,22 @@ export function lookupTokenBySymbolSafe(
   if (!hit) return null;
   return hit;
 }
+
+/**
+ * Reverse-lookup: given an SPL mint, return the catalogued ticker
+ * (`USDC` | `USDG` | `USDT`) or `null` when the mint is unknown. Used
+ * by `probePaymentLink` to label an x402 quote correctly when the
+ * seller omits the optional `currency` field — without this we were
+ * mis-labelling USDG/USDT links as USDC, then asking buyer-kit to
+ * pay in the wrong asset (`preferred_asset_unavailable`).
+ */
+export function symbolForMintSafe(
+  mint: string,
+  network: 'mainnet' | 'devnet',
+): TokenMeta['symbol'] | null {
+  const trimmed = mint.trim();
+  for (const meta of Object.values(CATALOG[network])) {
+    if (meta.mint === trimmed) return meta.symbol;
+  }
+  return null;
+}

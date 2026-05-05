@@ -44,6 +44,27 @@ describe('toTelegramMarkdownV2', () => {
     expect(out).toContain('_ital_');
   });
 
+  it('renders single-asterisk emphasis as bold', () => {
+    const md = '26 skills across *IDEA*, *BUILD*, and *LAUNCH*.';
+    const out = toTelegramMarkdownV2(md);
+    expect(out).toContain('*IDEA*');
+    expect(out).toContain('*BUILD*');
+    expect(out).toContain('*LAUNCH*');
+    expect(out).not.toContain('\\*IDEA');
+  });
+
+  it('does not turn bullet markers or arithmetic into bold', () => {
+    const bulletMd = '* item one\n* item two';
+    const bulletOut = toTelegramMarkdownV2(bulletMd);
+    // Each leading `*` followed by a space stays escaped — there is no
+    // closing marker on the same line so the heuristic must skip it.
+    expect(bulletOut).toContain('\\* item one');
+    expect(bulletOut).toContain('\\* item two');
+
+    const arithOut = toTelegramMarkdownV2('2*3=6');
+    expect(arithOut.includes('*3*')).toBe(false);
+  });
+
   it('rewrites markdown links into MarkdownV2 with escaped labels', () => {
     const md = 'See [my agent](https://explorer.leash.market/agent/abc) here.';
     const out = toTelegramMarkdownV2(md);

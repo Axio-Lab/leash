@@ -65,6 +65,7 @@ export {
 export {
   isLikelyBase58Address,
   lookupTokenBySymbolSafe,
+  symbolForMintSafe,
   decodeBase64Json,
   probePaymentLink,
   fetchDiscover,
