@@ -283,7 +283,7 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
       // (the legacy 303-redirect hook was removed), but the URL fallback
       // stays in place as defensive code in case a buyer-side proxy ever
       // re-attaches them after eating the X-Leash-* headers.
-      let settlement = parseSettlement(response) ?? parseRedirectSettlement(response);
+      const settlement = parseSettlement(response) ?? parseRedirectSettlement(response);
 
       // MPP fallback: x402's `wrapFetchWithPayment` only auto-pays 402s that
       // carry a `payment-required` header. An MPP 402 (problem+json body, no
@@ -752,7 +752,6 @@ export function resolveReceiptSink(
         // Best-effort: log to console for local dev diagnostics, but
         // never propagate. Runner/API outages must not poison a buyer
         // call that already debited USDC.
-        // eslint-disable-next-line no-console
         console.warn('[buyer-kit] receipt forward failed:', (r.reason as Error).message);
       }
     }
