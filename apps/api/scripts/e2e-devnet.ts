@@ -63,10 +63,16 @@
  *                              allowance. Default: 5_000_000.
  *   LEASH_E2E_KEEP_LINK        "1" to skip cleanup at the end so you can
  *                              poke the link in the explorer manually.
+ *   LEASH_E2E_MPP              "1" to additionally run a hosted **MPP** payment
+ *                              link (`protocol: "mpp"`) through the same API:
+ *                              create link → 402 `problem+json` probe → real
+ *                              `buyer.fetch` settlement on devnet (requires a
+ *                              facilitator that supports `POST /mpp/settle`).
  *
  * Usage
  * -----
  *   pnpm --filter @leashmarket/api e2e:devnet
+ *   pnpm --filter @leashmarket/api e2e:devnet:mpp   # same as above + MPP link (LEASH_E2E_MPP=1)
  * or:
  *   cd apps/api && node --env-file=.env.e2e --import tsx ./scripts/e2e-devnet.ts
  */
@@ -96,6 +102,8 @@ import {
   provisionTreasuryAtas,
   TOKEN_2022_PROGRAM_ID,
 } from '@leashmarket/registry-utils';
+
+import { isReceiptV02 } from '@leashmarket/schemas';
 
 import {
   isNoOp,
@@ -213,6 +221,7 @@ async function api<T = unknown>(path: string, init: ApiInit = {}): Promise<T> {
 // ────────────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  let mppLinkId: string | undefined;
   console.log('============================================================');
   console.log('Leash API end-to-end devnet test');
   console.log('============================================================');
@@ -222,6 +231,7 @@ async function main(): Promise<void> {
   console.log(`usdc mint: ${USDC_MINT}`);
   console.log(`usdg mint: ${USDG_MINT}`);
   console.log(`price    : ${PRICE}`);
+  console.log(`mpp pass : ${process.env.LEASH_E2E_MPP === '1' ? 'yes (LEASH_E2E_MPP=1)' : 'no'}`);
 
   // ───── 1. health ─────
   step('GET /v1/health');
@@ -933,6 +943,94 @@ async function main(): Promise<void> {
   assert(byHash.receipt_hash === earnReceipt.receipt_hash, 'by-hash lookup mismatch');
   ok(`by-hash lookup OK (kind=${byHash.kind}, tx=${byHash.tx_sig})`);
 
+  // ───── 19b. optional hosted MPP paywall (same buyer + delegation) ─────
+  if (process.env.LEASH_E2E_MPP === '1') {
+    step('POST /v1/payment-links — create MPP hosted paywall');
+    const mppLink = await api<{
+      id: string;
+      share_url: string;
+      protocol?: string;
+    }>('/v1/payment-links', {
+      method: 'POST',
+      body: {
+        label: `e2e-mpp-${Date.now()}`,
+        owner_agent: sellerAgent,
+        method: 'GET',
+        price: PRICE,
+        currency: 'USDC',
+        protocol: 'mpp',
+        response: {
+          status: 200,
+          mimeType: 'application/json',
+          body: { ok: true, message: 'paid via mpp e2e' },
+        },
+        metadata: { source: 'apps/api/scripts/e2e-devnet.ts', suite: 'mpp' },
+      },
+    });
+    mppLinkId = mppLink.id;
+    ok(`MPP payment link id: ${mppLink.id}`);
+
+    step('GET /x/{mppId} — anonymous probe returns 402 problem+json');
+    const mppShareUrl = mppLink.share_url;
+    const mppProbe = await fetch(`${mppShareUrl}?network=solana-devnet`, {
+      method: 'GET',
+      headers: { accept: 'application/json' },
+    });
+    assert(
+      mppProbe.status === 402,
+      `MPP paywall should 402 for unpaid probe, got ${mppProbe.status}`,
+    );
+    const mppCt = mppProbe.headers.get('content-type') ?? '';
+    assert(
+      mppCt.toLowerCase().includes('problem+json'),
+      `MPP 402 should be application/problem+json, got ${mppCt}`,
+    );
+    const mppProbeJson = (await mppProbe.json()) as { type?: string; challengeId?: string };
+    assert(
+      typeof mppProbeJson.type === 'string' && mppProbeJson.type.length > 0,
+      'MPP body missing type',
+    );
+    assert(
+      typeof mppProbeJson.challengeId === 'string' && mppProbeJson.challengeId.length > 4,
+      'MPP body missing challengeId',
+    );
+    ok(`MPP 402 challenge id: ${mppProbeJson.challengeId.slice(0, 12)}…`);
+
+    step('createBuyer.fetch(mpp share_url) — real MPP settlement on devnet');
+    const mppResult = await buyer.fetch(`${mppShareUrl}?network=solana-devnet`, {
+      method: 'GET',
+    });
+    if (!isReceiptV02(mppResult.receipt) || mppResult.receipt.protocol !== 'mpp') {
+      const got = isReceiptV02(mppResult.receipt) ? mppResult.receipt.protocol : 'not ReceiptV02';
+      fatal(`expected ReceiptV02 with protocol mpp, got: ${got}`);
+    }
+    const mppSpend = mppResult.receipt;
+    const mppSig = mppSpend.mpp_settlement_tx || mppSpend.tx_sig;
+    if (!mppSig || mppSig.length < 8) {
+      fatal(
+        `MPP settlement failed; failureReason=${mppResult.failureReason ?? '(none)'} decision=${mppSpend.decision}`,
+      );
+    }
+    assert(
+      mppResult.response.status === 200,
+      `MPP retry should 200, got ${mppResult.response.status}`,
+    );
+    ok(`MPP settled — tx_sig: ${mppSig}`);
+
+    await sleep(2_000);
+    step('GET /v1/receipts/{buyer} — MPP spend receipt visible');
+    let mppSpendRow: { kind: string; tx_sig: string | null; receipt_hash: string } | undefined;
+    for (let i = 0; i < 10 && mppSpendRow === undefined; i += 1) {
+      const feed = await api<{
+        items: Array<{ kind: string; tx_sig: string | null; receipt_hash: string }>;
+      }>(`/v1/receipts/${buyerAgent}?limit=8`);
+      mppSpendRow = feed.items.find((r) => r.kind === 'spend' && r.tx_sig === mppSig);
+      if (!mppSpendRow) await sleep(500);
+    }
+    assert(mppSpendRow !== undefined, 'no spend receipt row for MPP settlement sig');
+    ok(`MPP spend receipt hash: ${mppSpendRow.receipt_hash.slice(0, 16)}…`);
+  }
+
   // ───── 20. indexer status is healthy ─────
   step('GET /v1/indexer/status — explorer power source');
   const status = await api<{
@@ -958,6 +1056,9 @@ async function main(): Promise<void> {
     step('PATCH /v1/payment-links/{id} — soft-disable for cleanup');
     await api(`/v1/payment-links/${linkId}`, { method: 'PATCH', body: { disabled: true } });
     await api(`/v1/payment-links/${failLink.id}`, { method: 'PATCH', body: { disabled: true } });
+    if (mppLinkId) {
+      await api(`/v1/payment-links/${mppLinkId}`, { method: 'PATCH', body: { disabled: true } });
+    }
     ok('payment links disabled (set LEASH_E2E_KEEP_LINK=1 to skip)');
   }
 

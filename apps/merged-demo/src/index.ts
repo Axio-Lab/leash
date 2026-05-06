@@ -5,7 +5,7 @@ import { mplCore } from '@metaplex-foundation/mpl-core';
 import { createKeyPairSignerFromBytes } from '@solana/kit';
 import { createSeller } from '@leashmarket/seller-kit';
 import { createBuyer } from '@leashmarket/buyer-kit';
-import type { ReceiptV1 } from '@leashmarket/schemas';
+import type { ReceiptAny } from '@leashmarket/schemas';
 
 const port = Number(process.env.PORT ?? 3003);
 const rpc = process.env.SOLANA_RPC ?? 'https://api.devnet.solana.com';
@@ -32,7 +32,7 @@ createSeller(app, {
 
 app.post('/echo', (c) => c.json({ echo: true }));
 
-async function postReceipt(r: ReceiptV1): Promise<void> {
+async function postReceipt(r: ReceiptAny): Promise<void> {
   await fetch(`${runnerUrl}/a/${r.agent}/receipts`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

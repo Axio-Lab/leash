@@ -1,8 +1,11 @@
 {
   "name": "@leashmarket/platform-auth",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": false,
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
