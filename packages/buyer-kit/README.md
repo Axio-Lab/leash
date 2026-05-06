@@ -1,5 +1,15 @@
 # @leashmarket/buyer-kit
 
+## Install
+
+```bash
+npm install @leashmarket/buyer-kit
+# or
+pnpm add @leashmarket/buyer-kit
+```
+
+---
+
 `createBuyer` — policy gate from `@leashmarket/schemas`, real x402 SPL-USDC
 settlement on Solana via `@leashmarket/core`, chained `ReceiptV1` per call.
 
@@ -36,5 +46,8 @@ On a `402 Payment Required`, the wrapped `paidFetch` (`@x402/fetch` +
 `PAYMENT-SIGNATURE`. The resulting `tx_sig` and
 `payment_requirements_hash` end up on the receipt.
 
-See the [`Real x402 on Solana`](../../apps/docs/standards/x402-on-solana.mdx)
-doc for the protocol-level walkthrough.
+## Docs
+
+[docs.leash.market/sdk/buyer-kit](https://docs.leash.market/sdk/buyer-kit)
+
+See also: [Real x402 on Solana](https://docs.leash.market/standards/x402-on-solana)

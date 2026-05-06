@@ -101,6 +101,7 @@
               "sdk/seller-kit",
               "sdk/buyer-kit",
               "sdk/registry-utils",
+              "sdk/mcp-core",
               "sdk/runner",
               "sdk/testing"
             ]

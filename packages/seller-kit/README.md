@@ -1,5 +1,15 @@
 # @leashmarket/seller-kit
 
+## Install
+
+```bash
+npm install @leashmarket/seller-kit
+# or
+pnpm add @leashmarket/seller-kit
+```
+
+---
+
 Hono integration for Leash sellers. Three responsibilities:
 
 1. **Real x402 middleware on Solana.** `createSeller` mounts
@@ -69,5 +79,8 @@ const server = createSvmResourceServer({
 });
 ```
 
-See the [`Real x402 on Solana`](../../apps/docs/standards/x402-on-solana.mdx)
-doc for the protocol-level walkthrough.
+## Docs
+
+[docs.leash.market/sdk/seller-kit](https://docs.leash.market/sdk/seller-kit)
+
+See also: [Real x402 on Solana](https://docs.leash.market/standards/x402-on-solana)
