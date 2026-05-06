@@ -1,10 +1,10 @@
-# @leash/buyer-kit
+# @leashmarket/buyer-kit
 
-`createBuyer` — policy gate from `@leash/schemas`, real x402 SPL-USDC
-settlement on Solana via `@leash/core`, chained `ReceiptV1` per call.
+`createBuyer` — policy gate from `@leashmarket/schemas`, real x402 SPL-USDC
+settlement on Solana via `@leashmarket/core`, chained `ReceiptV1` per call.
 
 ```ts
-import { createBuyer } from '@leash/buyer-kit';
+import { createBuyer } from '@leashmarket/buyer-kit';
 import { createKeyPairSignerFromBytes } from '@solana/kit';
 
 const signer = await createKeyPairSignerFromBytes(secretKeyBytes);

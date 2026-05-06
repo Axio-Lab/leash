@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createAgent } from '@leash/registry-utils';
+import { createAgent } from '@leashmarket/registry-utils';
 import { getServerUmi } from '@/lib/umi';
 
 export const runtime = 'nodejs';

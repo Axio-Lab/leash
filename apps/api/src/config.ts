@@ -1,5 +1,5 @@
 /**
- * Server-side configuration for `@leash/api`.
+ * Server-side configuration for `@leashmarket/api`.
  *
  * Everything that varies between local dev / staging / prod lives here so
  * the rest of the app can stay environment-agnostic. We intentionally
@@ -7,7 +7,7 @@
  * misconfigurations die at startup, not on the first request.
  */
 
-import { LEASH_EXPLORER_DEFAULT } from '@leash/core';
+import { LEASH_EXPLORER_DEFAULT } from '@leashmarket/core';
 
 import type { SvmNetwork } from './util/network.js';
 

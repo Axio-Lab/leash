@@ -5,7 +5,7 @@ import {
 import { findAssetSignerPda } from '@metaplex-foundation/mpl-core';
 import type { Context, PublicKey, Umi } from '@metaplex-foundation/umi';
 import { publicKey } from '@metaplex-foundation/umi';
-import { RegistrationV1Schema, type RegistrationV1 } from '@leash/schemas';
+import { RegistrationV1Schema, type RegistrationV1 } from '@leashmarket/schemas';
 import { FetchError, InvalidSchemaError } from './errors.js';
 
 export type AgentIdentityStatus =

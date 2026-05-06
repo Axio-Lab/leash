@@ -21,7 +21,7 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { BufferJSON, initAuthCreds } from 'baileys';
-import { decryptSecret } from '@leash/platform-auth/encryption';
+import { decryptSecret } from '@leashmarket/platform-auth/encryption';
 
 import {
   ensureWhatsAppStateRow,

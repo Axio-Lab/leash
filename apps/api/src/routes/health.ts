@@ -4,7 +4,7 @@
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 
-import { resolveLeashFeeAuthority, resolveLeashFeeBps } from '@leash/core';
+import { resolveLeashFeeAuthority, resolveLeashFeeBps } from '@leashmarket/core';
 
 import { LEASH_API_VERSION } from '../config.js';
 
@@ -25,7 +25,7 @@ const HealthResponseSchema = z
     ts: z.string(),
     /**
      * Snapshot of the API server's resolved Leash protocol fee config.
-     * Mirrors the `/health` block on `@leash/facilitator`. Buyer SDKs
+     * Mirrors the `/health` block on `@leashmarket/facilitator`. Buyer SDKs
      * surface this so users can verify the rate before signing.
      */
     protocol_fee: ProtocolFeeBlockSchema,

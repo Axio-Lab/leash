@@ -7,7 +7,7 @@ description: 'Owner-driven withdraw of stablecoins (USDC / USDT / USDG) and nati
 > delegation entirely — the owner signs one
 > `mpl-core::Execute(...)` that CPI-signs the transfer on behalf of the
 > agent's Asset Signer PDA. v0.2 ships the SPL stable path in
-> `@leash/registry-utils`; v0.2.1 adds the native-SOL path so creator
+> `@leashmarket/registry-utils`; v0.2.1 adds the native-SOL path so creator
 > fees from a Genesis token launch can be drained the same way.
 
 ## What withdrawing actually does
@@ -49,7 +49,7 @@ helper bundles a `CreateIdempotent` in front (the executive pays the
 ## SDK usage
 
 ```ts
-import { withdrawTreasury, withdrawTreasuryAll } from '@leash/registry-utils';
+import { withdrawTreasury, withdrawTreasuryAll } from '@leashmarket/registry-utils';
 
 // Specific amount (atomic units — USDC has 6 decimals)
 const res = await withdrawTreasury(umi, {
@@ -87,7 +87,7 @@ that's the connected Privy embedded wallet — pass `authority` /
 ### Reading the balance first (UI gating)
 
 ```ts
-import { getTreasuryBalance } from '@leash/registry-utils';
+import { getTreasuryBalance } from '@leashmarket/registry-utils';
 
 const balance = await getTreasuryBalance(umi, {
   agentAsset: asset,
@@ -110,7 +110,7 @@ import {
   withdrawTreasurySol,
   withdrawTreasurySolAll,
   getTreasurySolBalance,
-} from '@leash/registry-utils';
+} from '@leashmarket/registry-utils';
 
 // Specific lamport amount
 await withdrawTreasurySol(umi, {
@@ -197,9 +197,9 @@ the matching `agent.treasury.*` event kinds) is documented in the API
 reference at [Treasury endpoints](/api/treasury). Two reference scripts
 live at `apps/api/scripts/`:
 
-- `pnpm --filter @leash/api e2e:devnet` — drives the full payment-link
+- `pnpm --filter @leashmarket/api e2e:devnet` — drives the full payment-link
   flow plus a real `agent.treasury.provision` round-trip.
-- `pnpm --filter @leash/api withdraw` — withdraws a configurable amount
+- `pnpm --filter @leashmarket/api withdraw` — withdraws a configurable amount
   of USDG from a target agent through the API; defaults exactly match
   this guide's `99 USDG` example.
 

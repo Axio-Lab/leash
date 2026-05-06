@@ -1,4 +1,4 @@
-# @leash/mcp
+# @leashmarket/mcp
 
 Standalone Leash MCP server. Lets any AI agent in any MCP host
 (Cursor, Claude Desktop, Cline, Continue, ChatGPT-MCP, …) sign
@@ -13,7 +13,7 @@ treasury balance — without a browser in the loop.
   "mcpServers": {
     "leash": {
       "command": "npx",
-      "args": ["-y", "@leash/mcp"],
+      "args": ["-y", "@leashmarket/mcp"],
     },
   },
 }
@@ -27,7 +27,7 @@ the default public RPC (slow / rate-limited). Swap in your own URL:
   "mcpServers": {
     "leash": {
       "command": "npx",
-      "args": ["-y", "@leash/mcp"],
+      "args": ["-y", "@leashmarket/mcp"],
       "env": {
         "LEASH_RPC_URL": "https://devnet.helius-rpc.com/?api-key=YOUR_KEY",
         // optional — match mainnet if your agent + links are on mainnet:
@@ -139,7 +139,7 @@ poke balances through the MCP protocol directly:
 LEASH_AGENT_MINT=<mint> \
 LEASH_EXECUTIVE_KEY=<base58 secret> \
 LEASH_NETWORK=solana-mainnet \
-pnpm --filter @leash/mcp dev:demo-balance
+pnpm --filter @leashmarket/mcp dev:demo-balance
 ```
 
 That bypasses STDIO and uses an in-memory transport — fastest way
@@ -148,10 +148,10 @@ to verify the path before recording a real demo.
 ## Develop
 
 ```bash
-pnpm --filter @leash/mcp typecheck
-pnpm --filter @leash/mcp test
-pnpm --filter @leash/mcp build
+pnpm --filter @leashmarket/mcp typecheck
+pnpm --filter @leashmarket/mcp test
+pnpm --filter @leashmarket/mcp build
 ```
 
 The compiled `dist/cli.js` is set executable (`chmod +x`) by the
-build script so `npx -y @leash/mcp` works without an extra step.
+build script so `npx -y @leashmarket/mcp` works without an extra step.

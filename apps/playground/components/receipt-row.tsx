@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import type { ReceiptV1 } from '@leash/schemas';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 import { formatReceiptPriceUsd, formatReceiptPriceWithCurrency } from '@/lib/format-receipt-price';
 import { Badge } from '@/components/ui/badge';
 import { JsonViewer } from '@/components/json-viewer';

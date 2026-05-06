@@ -1,4 +1,4 @@
-import { RegistrationV1Schema, type RegistrationV1 } from '@leash/schemas';
+import { RegistrationV1Schema, type RegistrationV1 } from '@leashmarket/schemas';
 import { FetchError, InvalidSchemaError } from './errors.js';
 
 export async function loadRegistrationDocument(uri: string): Promise<RegistrationV1> {

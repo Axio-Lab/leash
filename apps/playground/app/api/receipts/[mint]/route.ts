@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ReceiptV1Schema, type ReceiptV1 } from '@leash/schemas';
+import { ReceiptV1Schema, type ReceiptV1 } from '@leashmarket/schemas';
 import { getReceiptsJsonl } from '@/lib/runner';
 import { RUNNER_URL } from '@/lib/env';
 

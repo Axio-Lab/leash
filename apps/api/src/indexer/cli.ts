@@ -7,7 +7,7 @@
  * logs a one-line summary per network per tick.
  *
  * Usage:
- *   pnpm -F @leash/api indexer
+ *   pnpm -F @leashmarket/api indexer
  *
  * Env (all optional, sensible defaults):
  *   LEASH_API_DB_URL              - libsql url, defaults to file:./.leash-api.db

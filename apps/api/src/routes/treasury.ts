@@ -1,7 +1,7 @@
 /**
  * Treasury prepare routes — provision ATAs, withdraw SPL, withdraw SOL.
  * Mirrors `prepareProvisionTreasuryAtas`, `prepareWithdrawTreasury(All)`,
- * and `prepareWithdrawTreasurySol(All)` from `@leash/registry-utils`.
+ * and `prepareWithdrawTreasurySol(All)` from `@leashmarket/registry-utils`.
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
@@ -13,7 +13,7 @@ import {
   prepareWithdrawTreasurySolAll,
   SPL_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
-} from '@leash/registry-utils';
+} from '@leashmarket/registry-utils';
 import { publicKey } from '@metaplex-foundation/umi';
 
 import type { AuthVariables } from '../auth/types.js';

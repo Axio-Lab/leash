@@ -1,4 +1,4 @@
-# @leash/seller-kit
+# @leashmarket/seller-kit
 
 Hono integration for Leash sellers. Three responsibilities:
 
@@ -16,10 +16,10 @@ Hono integration for Leash sellers. Three responsibilities:
    `payment_requirements_hash` from the facilitator's
    `PAYMENT-RESPONSE`) to the user-supplied `onReceipt` callback. Receipts
    are nonce-ordered and hash-chained per seller agent, mirroring
-   `@leash/buyer-kit` so explorers can verify both sides of the trade.
+   `@leashmarket/buyer-kit` so explorers can verify both sides of the trade.
 
 ```ts
-import { createSeller } from '@leash/seller-kit';
+import { createSeller } from '@leashmarket/seller-kit';
 
 createSeller(app, {
   umi,
@@ -59,7 +59,7 @@ parsePrice('0.01'); // { amount: '0.01',  currency: 'USDC' }
 ## Configuring the facilitator
 
 ```ts
-import { createSvmResourceServer } from '@leash/seller-kit/x402';
+import { createSvmResourceServer } from '@leashmarket/seller-kit/x402';
 
 const server = createSvmResourceServer({
   network: 'solana-devnet',

@@ -2,7 +2,7 @@
  * STDIO-transport Leash MCP server.
  *
  * Builds an `@modelcontextprotocol/sdk` server, registers each
- * `LeashTool` from `@leash/mcp-core` against the standalone host,
+ * `LeashTool` from `@leashmarket/mcp-core` against the standalone host,
  * and returns the configured `McpServer` ready for the caller to
  * connect to a transport (STDIO, HTTP, in-memory).
  *
@@ -63,7 +63,7 @@ import {
   type SvmNetwork,
   type TransactionHistoryArgs,
   type WithdrawArgs,
-} from '@leash/mcp-core';
+} from '@leashmarket/mcp-core';
 
 import {
   defaultConfigPath,

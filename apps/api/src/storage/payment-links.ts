@@ -17,8 +17,8 @@
  *     resolves only by `(network, id)` so anonymous buyers can pay.
  */
 
-import type { KnownStableSymbol } from '@leash/core';
-import type { EndpointMethod } from '@leash/schemas';
+import type { KnownStableSymbol } from '@leashmarket/core';
+import type { EndpointMethod } from '@leashmarket/schemas';
 
 import type { DbClient } from './turso.js';
 import { execute } from './turso.js';
@@ -27,7 +27,7 @@ import type { SvmNetwork } from '../util/network.js';
 /**
  * Verbatim response template returned to the buyer after a successful
  * x402 settlement. Mirrors `EndpointResponseTemplate` from
- * `@leash/schemas` but kept JSON-friendly (record vs Zod record).
+ * `@leashmarket/schemas` but kept JSON-friendly (record vs Zod record).
  */
 export type PaymentLinkResponse = {
   status: number;

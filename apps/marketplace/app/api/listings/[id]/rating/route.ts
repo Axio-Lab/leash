@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { getOrCreateUser } from '@leash/platform-auth';
+import { getOrCreateUser } from '@leashmarket/platform-auth';
 
 import { getDb } from '@/lib/db';
 import { leashMarketplace } from '@/lib/leash';

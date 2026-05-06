@@ -2,7 +2,7 @@
 /**
  * `leash` — human-driven Leash CLI.
  *
- * Wraps the same `LeashHost` that `@leash/mcp` exposes to AI agents,
+ * Wraps the same `LeashHost` that `@leashmarket/mcp` exposes to AI agents,
  * but skips the MCP wire protocol and renders results as plain text
  * (or `--json` when machine-readable output is wanted). Designed to
  * be the "git/gh/aws" of the Leash agent economy: a small, fast tool
@@ -41,8 +41,8 @@
  * return) for piping into `jq`, scripts, etc.
  */
 
-import { HostRef, buildServerFromEnv } from '@leash/mcp';
-import type { LeashHost, LeashToolResult } from '@leash/mcp-core';
+import { HostRef, buildServerFromEnv } from '@leashmarket/mcp';
+import type { LeashHost, LeashToolResult } from '@leashmarket/mcp-core';
 
 const VERSION = '0.1.0';
 

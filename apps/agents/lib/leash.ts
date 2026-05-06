@@ -1,4 +1,7 @@
-import { createLeashAdminClient, type LeashAdminClient } from '@leash/platform-auth/leash-client';
+import {
+  createLeashAdminClient,
+  type LeashAdminClient,
+} from '@leashmarket/platform-auth/leash-client';
 
 import { getServerEnv } from './env';
 

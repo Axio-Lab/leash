@@ -89,7 +89,7 @@ process.stdout.write(`  API_REMOTE=${API_REMOTE}\n\n`);
   if (pay.length === 0) {
     fail(
       `${url} returned 0 pay-skills rows — restart apps/api so it loads the merged discover route:\n` +
-        `  pnpm --filter @leash/api dev`,
+        `  pnpm --filter @leashmarket/api dev`,
     );
   }
   ok(`local /v1/discover (email): ${items.length} rows, ${pay.length} pay-skills`);

@@ -4,7 +4,7 @@ import {
   verifyPrivyJwtDetailed,
   type PrivySession,
   type PrivyVerifyResult,
-} from '@leash/platform-auth';
+} from '@leashmarket/platform-auth';
 
 import { getServerEnv } from './env';
 

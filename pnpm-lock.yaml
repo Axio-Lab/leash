@@ -44,7 +44,7 @@ importers:
 
   apps/agent-runtime:
     dependencies:
-      '@leash/platform-auth':
+      '@leashmarket/platform-auth':
         specifier: workspace:*
         version: link:../../packages/platform-auth
       '@libsql/client':
@@ -72,7 +72,7 @@ importers:
 
   apps/agent-token-demo:
     dependencies:
-      '@leash/registry-utils':
+      '@leashmarket/registry-utils':
         specifier: workspace:*
         version: link:../../packages/registry-utils
       '@metaplex-foundation/mpl-core':
@@ -100,22 +100,22 @@ importers:
       '@composio/core':
         specifier: ^0.8.1
         version: 0.8.1(ws@8.20.0(bufferutil@4.1.0)(utf-8-validate@6.0.6))(zod@3.25.76)
-      '@leash/buyer-kit':
+      '@leashmarket/buyer-kit':
         specifier: workspace:*
         version: link:../../packages/buyer-kit
-      '@leash/core':
+      '@leashmarket/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@leash/mcp-core':
+      '@leashmarket/mcp-core':
         specifier: workspace:*
         version: link:../../packages/mcp-core
-      '@leash/platform-auth':
+      '@leashmarket/platform-auth':
         specifier: workspace:*
         version: link:../../packages/platform-auth
-      '@leash/registry-utils':
+      '@leashmarket/registry-utils':
         specifier: workspace:*
         version: link:../../packages/registry-utils
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
       '@libsql/client':
@@ -236,22 +236,22 @@ importers:
       '@hono/zod-openapi':
         specifier: ^0.18.0
         version: 0.18.4(hono@4.12.14)(zod@3.25.76)
-      '@leash/buyer-kit':
+      '@leashmarket/buyer-kit':
         specifier: workspace:*
         version: link:../../packages/buyer-kit
-      '@leash/core':
+      '@leashmarket/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@leash/platform-auth':
+      '@leashmarket/platform-auth':
         specifier: workspace:*
         version: link:../../packages/platform-auth
-      '@leash/registry-utils':
+      '@leashmarket/registry-utils':
         specifier: workspace:*
         version: link:../../packages/registry-utils
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
-      '@leash/seller-kit':
+      '@leashmarket/seller-kit':
         specifier: workspace:*
         version: link:../../packages/seller-kit
       '@libsql/client':
@@ -306,13 +306,13 @@ importers:
 
   apps/buyer-demo:
     dependencies:
-      '@leash/buyer-kit':
+      '@leashmarket/buyer-kit':
         specifier: workspace:*
         version: link:../../packages/buyer-kit
-      '@leash/core':
+      '@leashmarket/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
       '@solana/kit':
@@ -328,7 +328,7 @@ importers:
 
   apps/docs:
     dependencies:
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
     devDependencies:
@@ -338,16 +338,16 @@ importers:
 
   apps/explorer:
     dependencies:
-      '@leash/api':
+      '@leashmarket/api':
         specifier: workspace:*
         version: link:../api
-      '@leash/core':
+      '@leashmarket/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@leash/registry-utils':
+      '@leashmarket/registry-utils':
         specifier: workspace:*
         version: link:../../packages/registry-utils
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
       '@libsql/client':
@@ -417,7 +417,7 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.12.14)
-      '@leash/facilitator':
+      '@leashmarket/facilitator':
         specifier: workspace:*
         version: link:../../packages/facilitator
     devDependencies:
@@ -430,7 +430,7 @@ importers:
 
   apps/marketplace:
     dependencies:
-      '@leash/platform-auth':
+      '@leashmarket/platform-auth':
         specifier: workspace:*
         version: link:../../packages/platform-auth
       '@libsql/client':
@@ -515,16 +515,16 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.12.14)
-      '@leash/buyer-kit':
+      '@leashmarket/buyer-kit':
         specifier: workspace:*
         version: link:../../packages/buyer-kit
-      '@leash/core':
+      '@leashmarket/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
-      '@leash/seller-kit':
+      '@leashmarket/seller-kit':
         specifier: workspace:*
         version: link:../../packages/seller-kit
       '@metaplex-foundation/mpl-core':
@@ -552,22 +552,22 @@ importers:
       '@hookform/resolvers':
         specifier: ^3.9.1
         version: 3.10.0(react-hook-form@7.73.1(react@19.2.5))
-      '@leash/buyer-kit':
+      '@leashmarket/buyer-kit':
         specifier: workspace:*
         version: link:../../packages/buyer-kit
-      '@leash/core':
+      '@leashmarket/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@leash/registry-utils':
+      '@leashmarket/registry-utils':
         specifier: workspace:*
         version: link:../../packages/registry-utils
-      '@leash/runner':
+      '@leashmarket/runner':
         specifier: workspace:*
         version: link:../../packages/runner
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
-      '@leash/seller-kit':
+      '@leashmarket/seller-kit':
         specifier: workspace:*
         version: link:../../packages/seller-kit
       '@metaplex-foundation/mpl-agent-registry':
@@ -688,10 +688,10 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.12.14)
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
-      '@leash/seller-kit':
+      '@leashmarket/seller-kit':
         specifier: workspace:*
         version: link:../../packages/seller-kit
       '@metaplex-foundation/mpl-core':
@@ -713,10 +713,10 @@ importers:
 
   packages/buyer-kit:
     dependencies:
-      '@leash/core':
+      '@leashmarket/core':
         specifier: workspace:*
         version: link:../core
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../schemas
       '@solana/kit':
@@ -741,10 +741,10 @@ importers:
 
   packages/cli:
     dependencies:
-      '@leash/mcp':
+      '@leashmarket/mcp':
         specifier: workspace:*
         version: link:../mcp
-      '@leash/mcp-core':
+      '@leashmarket/mcp-core':
         specifier: workspace:*
         version: link:../mcp-core
     devDependencies:
@@ -763,7 +763,7 @@ importers:
 
   packages/core:
     dependencies:
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../schemas
       '@metaplex-foundation/mpl-agent-registry':
@@ -818,7 +818,7 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.12.14)
-      '@leash/core':
+      '@leashmarket/core':
         specifier: workspace:*
         version: link:../core
       '@solana-program/compute-budget':
@@ -855,19 +855,19 @@ importers:
 
   packages/mcp:
     dependencies:
-      '@leash/buyer-kit':
+      '@leashmarket/buyer-kit':
         specifier: workspace:*
         version: link:../buyer-kit
-      '@leash/core':
+      '@leashmarket/core':
         specifier: workspace:*
         version: link:../core
-      '@leash/mcp-core':
+      '@leashmarket/mcp-core':
         specifier: workspace:*
         version: link:../mcp-core
-      '@leash/registry-utils':
+      '@leashmarket/registry-utils':
         specifier: workspace:*
         version: link:../registry-utils
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../schemas
       '@metaplex-foundation/mpl-core':
@@ -936,7 +936,7 @@ importers:
 
   packages/registry-utils:
     dependencies:
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../schemas
       '@metaplex-foundation/genesis':
@@ -979,13 +979,13 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.12.14)
-      '@leash/buyer-kit':
+      '@leashmarket/buyer-kit':
         specifier: workspace:*
         version: link:../buyer-kit
-      '@leash/core':
+      '@leashmarket/core':
         specifier: workspace:*
         version: link:../core
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../schemas
       hono:
@@ -1039,10 +1039,10 @@ importers:
 
   packages/seller-kit:
     dependencies:
-      '@leash/core':
+      '@leashmarket/core':
         specifier: workspace:*
         version: link:../core
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../schemas
       '@metaplex-foundation/mpl-core':
@@ -1079,10 +1079,10 @@ importers:
 
   packages/testing:
     dependencies:
-      '@leash/core':
+      '@leashmarket/core':
         specifier: workspace:*
         version: link:../core
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../schemas
       hono:
@@ -1101,16 +1101,16 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.12.14)
-      '@leash/buyer-kit':
+      '@leashmarket/buyer-kit':
         specifier: workspace:*
         version: link:../packages/buyer-kit
-      '@leash/registry-utils':
+      '@leashmarket/registry-utils':
         specifier: workspace:*
         version: link:../packages/registry-utils
-      '@leash/schemas':
+      '@leashmarket/schemas':
         specifier: workspace:*
         version: link:../packages/schemas
-      '@leash/seller-kit':
+      '@leashmarket/seller-kit':
         specifier: workspace:*
         version: link:../packages/seller-kit
       '@metaplex-foundation/mpl-core':

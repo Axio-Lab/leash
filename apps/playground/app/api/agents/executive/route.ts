@@ -5,7 +5,7 @@ import {
   hasExecutiveProfile,
   isExecutionDelegated,
   registerExecutive,
-} from '@leash/registry-utils';
+} from '@leashmarket/registry-utils';
 import { getReadOnlyUmi, getServerUmi } from '@/lib/umi';
 
 export const runtime = 'nodejs';

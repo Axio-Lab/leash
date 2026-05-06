@@ -5,7 +5,7 @@
  * Mirrors the existing `platform-agents` / `platform-tasks` modules: typed
  * CRUD over libsql, no business logic, no auth. Encrypting `bot_token`
  * before it lands in `encrypted_credential` is the caller's job (uses the
- * same `@leash/platform-auth` AES-GCM envelope as `agents.encrypted_llm_key`).
+ * same `@leashmarket/platform-auth` AES-GCM envelope as `agents.encrypted_llm_key`).
  *
  * The `signing_mode` decision tree is enforced by the route handlers, not
  * the storage layer: this module accepts whatever shape the routes pass.

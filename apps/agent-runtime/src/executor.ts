@@ -23,7 +23,7 @@
  */
 
 import type { Client } from '@libsql/client';
-import { decryptSecret } from '@leash/platform-auth/encryption';
+import { decryptSecret } from '@leashmarket/platform-auth/encryption';
 
 import type { Publisher } from './publisher.js';
 import { recordActivity, setTaskFinal } from './storage.js';

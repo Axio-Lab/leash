@@ -59,7 +59,7 @@ export const EndpointV1Schema = z.object({
   /** HTTP method clients must use. */
   method: EndpointMethodSchema,
   /**
-   * Display price string, parsed by `@leash/seller-kit`'s `parsePrice`.
+   * Display price string, parsed by `@leashmarket/seller-kit`'s `parsePrice`.
    * Examples: `"$0.001"`, `"0.01 USDC"`, `"0.5"`. Denominated in `currency`
    * (defaults to `'USDC'`).
    */
@@ -68,7 +68,7 @@ export const EndpointV1Schema = z.object({
   network: z.enum(['solana-mainnet', 'solana-devnet', 'solana-testnet']).default('solana-devnet'),
   /**
    * Primary settlement currency. Must be a Leash-known stablecoin so the
-   * runner can resolve a real SPL mint via `@leash/core/tokens`. Defaults
+   * runner can resolve a real SPL mint via `@leashmarket/core/tokens`. Defaults
    * to `'USDC'` for backwards compatibility with pre-multi-currency links.
    */
   currency: z.enum(['USDC', 'USDT', 'USDG']).default('USDC'),

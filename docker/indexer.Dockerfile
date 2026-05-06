@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# `@leash/api` — standalone indexer worker (`dist/indexer/cli.js`).
+# `@leashmarket/api` — standalone indexer worker (`dist/indexer/cli.js`).
 #
 # Same image layers as api.Dockerfile; only the CMD differs.
 # Build context MUST be the monorepo root. On Railway:
@@ -22,11 +22,11 @@ WORKDIR /app
 
 FROM base AS build
 COPY . .
-RUN pnpm install --frozen-lockfile --filter "@leash/api..."
-RUN pnpm turbo run build --filter=@leash/api
+RUN pnpm install --frozen-lockfile --filter "@leashmarket/api..."
+RUN pnpm turbo run build --filter=@leashmarket/api
 
 FROM build AS prune
-RUN pnpm --filter @leash/api deploy --prod /out
+RUN pnpm --filter @leashmarket/api deploy --prod /out
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app

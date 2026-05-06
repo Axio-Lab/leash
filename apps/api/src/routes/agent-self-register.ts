@@ -42,7 +42,7 @@ import {
   type AssetV1,
 } from '@metaplex-foundation/mpl-core';
 import { publicKey } from '@metaplex-foundation/umi';
-import { encryptSecret } from '@leash/platform-auth/encryption';
+import { encryptSecret } from '@leashmarket/platform-auth/encryption';
 
 import type { LeashApiConfig } from '../config.js';
 import { ApiErrorSchema, NetworkSchema, PubkeySchema } from '../openapi/common.js';

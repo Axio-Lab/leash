@@ -25,7 +25,7 @@ import {
   resolveLeashFeeAuthority,
   resolveLeashFeeBps,
   resolveLeashFeeEnforcement,
-} from '@leash/core';
+} from '@leashmarket/core';
 import type { Hono } from 'hono';
 
 import { createFacilitatorHttpServer } from './http/server.js';

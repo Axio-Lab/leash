@@ -11,7 +11,7 @@
  *
  * Usage
  * -----
- *   pnpm --filter @leash/mcp fix-delegation
+ *   pnpm --filter @leashmarket/mcp fix-delegation
  *
  * Env / config
  * ------------
@@ -34,7 +34,11 @@ import { keypairIdentity } from '@metaplex-foundation/umi';
 import { mplCore } from '@metaplex-foundation/mpl-core';
 import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
 import { base58 } from '@metaplex-foundation/umi/serializers';
-import { KNOWN_STABLES, SPL_TOKEN_PROGRAM_ID, setSpendDelegation } from '@leash/registry-utils';
+import {
+  KNOWN_STABLES,
+  SPL_TOKEN_PROGRAM_ID,
+  setSpendDelegation,
+} from '@leashmarket/registry-utils';
 
 import { loadAgentConfig } from '../src/config.js';
 

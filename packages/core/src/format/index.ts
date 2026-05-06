@@ -10,7 +10,7 @@
  * always pass the right `decimals` here.
  */
 
-import type { ReceiptV1 } from '@leash/schemas';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 import { lookupToken, type TokenNetwork } from '../tokens/index.js';
 
 /** USD-pegged stablecoin tickers shown with `$` prefix in {@link formatAmountUsd}. */

@@ -93,7 +93,7 @@ curl "https://api.leash.market/v1/receipts/$MINT?limit=50" \
 Filters supported via query string: `?kind=spend|earn`,
 `?decision=allow|deny|rejected`, `?since=<ISO8601>`,
 `?cursor=<opaque>`. The receipt chain is fully verifiable; load all
-items and call `verifyReceiptChain` from `@leash/core` to confirm
+items and call `verifyReceiptChain` from `@leashmarket/core` to confirm
 linkage.
 
 ## Read: `GET /v1/receipts/by-hash/{hash}`

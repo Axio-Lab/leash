@@ -4,8 +4,8 @@
  * message on Telegram/WhatsApp plus an assistant line in the external
  * transcript so the next agent turn has continuity.
  */
-import { decryptSecret } from '@leash/platform-auth/encryption';
-import { leashReceiptUrl } from '@leash/core';
+import { decryptSecret } from '@leashmarket/platform-auth/encryption';
+import { leashReceiptUrl } from '@leashmarket/core';
 
 import type { LeashApiConfig } from '../config.js';
 import {

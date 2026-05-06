@@ -35,19 +35,19 @@ pnpm turbo run test typecheck lint
 
 ```bash
 # 1. spin up Postgres-equivalent (Turso file DB, pre-seeded)
-pnpm --filter @leash/api db:migrate
-pnpm --filter @leash/api seed:demo       # 1 agent + 3 pending tasks
+pnpm --filter @leashmarket/api db:migrate
+pnpm --filter @leashmarket/api seed:demo       # 1 agent + 3 pending tasks
 # (Marketplace listings populate organically once sellers register —
 #  Favorites also surfaces the Solana Foundation pay-skills catalogue.)
 
 # 2. backend
-pnpm --filter @leash/api dev                       # :8787
-pnpm --filter @leash/agent-runtime dev             # picks up the demo tasks
+pnpm --filter @leashmarket/api dev                       # :8787
+pnpm --filter @leashmarket/agent-runtime dev             # picks up the demo tasks
 
 # 3. surfaces
-pnpm --filter @leash/agents dev                    # agent.leash.market on :4100
-pnpm --filter @leash/marketplace dev               # leash.market         on :4200
-pnpm --filter @leash/explorer dev                  # receipts explorer    on :3000
+pnpm --filter @leashmarket/agents dev                    # agent.leash.market on :4100
+pnpm --filter @leashmarket/marketplace dev               # leash.market         on :4200
+pnpm --filter @leashmarket/explorer dev                  # receipts explorer    on :3000
 ```
 
 Sign in with Privy, watch the seeded agent run on `/agents/<mint>`, see
@@ -55,10 +55,10 @@ each tool call leave a receipt on the explorer.
 
 ### x402 demo (no platform)
 
-1. **Seller** — `pnpm --filter @leash/seller-demo start` (port `3001`).
-2. **Buyer** — `SELLER_URL=http://localhost:3001 pnpm --filter @leash/buyer-demo start` (polls seller).
-3. **Runner** — `pnpm --filter @leash/runner start` (JSONL feed on `:8787`).
-4. **Playground** — `pnpm --filter @leash/playground dev` (interactive UI; proxies receipts to `LEASH_RUNNER_URL`).
+1. **Seller** — `pnpm --filter @leashmarket/seller-demo start` (port `3001`).
+2. **Buyer** — `SELLER_URL=http://localhost:3001 pnpm --filter @leashmarket/buyer-demo start` (polls seller).
+3. **Runner** — `pnpm --filter @leashmarket/runner start` (JSONL feed on `:8787`).
+4. **Playground** — `pnpm --filter @leashmarket/playground dev` (interactive UI; proxies receipts to `LEASH_RUNNER_URL`).
 
 Scripted outline: `pnpm exec tsx scripts/e2e-demo.ts` (expects seller on `SELLER_URL`).
 
@@ -66,7 +66,7 @@ Scripted outline: `pnpm exec tsx scripts/e2e-demo.ts` (expects seller on `SELLER
 
 ```bash
 pnpm gen:docs
-pnpm --filter @leash/docs dev
+pnpm --filter @leashmarket/docs dev
 ```
 
 ## Environment

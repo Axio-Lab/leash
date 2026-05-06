@@ -1,4 +1,4 @@
-import { ReceiptV1Schema } from '@leash/schemas';
+import { ReceiptV1Schema } from '@leashmarket/schemas';
 import { computeReceiptHash } from './build.js';
 
 export type VerifyResult =

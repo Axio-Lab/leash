@@ -1,14 +1,14 @@
 # syntax=docker/dockerfile:1.7
 #
-# `@leash/agent-runtime` — task-loop worker that polls the shared Turso DB,
+# `@leashmarket/agent-runtime` — task-loop worker that polls the shared Turso DB,
 # claims pending tasks, runs the LLM tool loop, and publishes activity
 # events to Redis. Same shape as `indexer.Dockerfile` (worker, no HTTP
 # port).
 #
 # Deploy order: this worker is a pure DB consumer. The schema (`agents`,
-# `tasks`, `task_activities`, …) is owned by `@leash/api` and applied by
+# `tasks`, `task_activities`, …) is owned by `@leashmarket/api` and applied by
 # `runMigrations` on every API/indexer container start. Always deploy
-# `@leash/api` (or run `pnpm -F @leash/api db:migrate`) first against a
+# `@leashmarket/api` (or run `pnpm -F @leashmarket/api db:migrate`) first against a
 # fresh `LEASH_DB_URL` before this worker starts, otherwise it will
 # crash with `no such table: tasks`.
 #
@@ -31,11 +31,11 @@ WORKDIR /app
 
 FROM base AS build
 COPY . .
-RUN pnpm install --frozen-lockfile --filter "@leash/agent-runtime..."
-RUN pnpm turbo run build --filter=@leash/agent-runtime
+RUN pnpm install --frozen-lockfile --filter "@leashmarket/agent-runtime..."
+RUN pnpm turbo run build --filter=@leashmarket/agent-runtime
 
 FROM build AS prune
-RUN pnpm --filter @leash/agent-runtime deploy --prod /out
+RUN pnpm --filter @leashmarket/agent-runtime deploy --prod /out
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app

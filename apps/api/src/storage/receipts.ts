@@ -1,8 +1,8 @@
 /**
  * Receipts repository.
  *
- * Receipts are the off-chain audit trail produced by `@leash/buyer-kit`
- * and `@leash/seller-kit` on every paid call (or denied attempt). The
+ * Receipts are the off-chain audit trail produced by `@leashmarket/buyer-kit`
+ * and `@leashmarket/seller-kit` on every paid call (or denied attempt). The
  * Leash runner stores them in-memory; the API mirrors them into Turso so
  * they survive restarts, become queryable across agents, and feed the
  * explorer's per-agent receipt feed.
@@ -20,7 +20,7 @@
  *     that by returning JSON errors with detail rather than throwing.
  */
 
-import type { ReceiptV1 } from '@leash/schemas';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 
 import type { DbClient } from './turso.js';
 import { execute } from './turso.js';

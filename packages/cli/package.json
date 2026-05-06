@@ -2,7 +2,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "name": "@leash/cli",
+  "name": "@leashmarket/cli",
   "version": "0.1.0",
   "description": "Human-driven Leash CLI. Mint agents, check balances, pay paywalls, discover services, and inspect reputation from your terminal.",
   "private": false,
@@ -30,8 +30,8 @@
     "dev": "node --import tsx ./src/cli.ts"
   },
   "dependencies": {
-    "@leash/mcp": "^0.1.0",
-    "@leash/mcp-core": "^0.1.0"
+    "@leashmarket/mcp": "workspace:*",
+    "@leashmarket/mcp-core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

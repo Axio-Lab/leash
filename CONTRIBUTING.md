@@ -20,4 +20,4 @@ pnpm ci   # format:check → typecheck → lint → test → build (same as GitH
 ## PR checklist
 
 - [ ] `pnpm ci`
-- [ ] JSON Schema exports: change Zod in `@leash/schemas`, then `pnpm gen:docs` if docs should stay in sync.
+- [ ] JSON Schema exports: change Zod in `@leashmarket/schemas`, then `pnpm gen:docs` if docs should stay in sync.

@@ -12,7 +12,7 @@
  *
  * That makes the catalogue a clean second source for `/v1/discover`:
  * any URL it surfaces is, by construction, payable from a Leash agent
- * via `@leash/buyer-kit` once the agent's treasury holds USDC/USDT.
+ * via `@leashmarket/buyer-kit` once the agent's treasury holds USDC/USDT.
  *
  * This module is server-side only — it owns one in-memory cache so
  * every API instance refreshes the 55KB index at most once per

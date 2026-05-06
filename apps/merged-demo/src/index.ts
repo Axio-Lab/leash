@@ -3,9 +3,9 @@ import { Hono } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
 import { createKeyPairSignerFromBytes } from '@solana/kit';
-import { createSeller } from '@leash/seller-kit';
-import { createBuyer } from '@leash/buyer-kit';
-import type { ReceiptV1 } from '@leash/schemas';
+import { createSeller } from '@leashmarket/seller-kit';
+import { createBuyer } from '@leashmarket/buyer-kit';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 
 const port = Number(process.env.PORT ?? 3003);
 const rpc = process.env.SOLANA_RPC ?? 'https://api.devnet.solana.com';

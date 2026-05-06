@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `@leash/mcp` CLI entry point.
+ * `@leashmarket/mcp` CLI entry point.
  *
  * Subcommands:
  *
@@ -13,7 +13,7 @@
  *                                       "mcpServers": {
  *                                         "leash": {
  *                                           "command": "npx",
- *                                           "args": ["-y", "@leash/mcp"]
+ *                                           "args": ["-y", "@leashmarket/mcp"]
  *                                         }
  *                                       }
  *                                     }
@@ -340,5 +340,5 @@ function printHelp(): void {
 }
 
 function printVersion(): void {
-  process.stdout.write('@leash/mcp 0.1.0\n');
+  process.stdout.write('@leashmarket/mcp 0.1.0\n');
 }

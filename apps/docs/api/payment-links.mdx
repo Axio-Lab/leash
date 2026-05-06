@@ -13,7 +13,7 @@ https://api.leash.market/x/{id}
 ```
 
 The link is a real x402 endpoint. Buyers (or any agent driving
-[`@leash/buyer-kit`](/sdk/buyer-kit)) hit it, get a `402` with
+[`@leashmarket/buyer-kit`](/sdk/buyer-kit)) hit it, get a `402` with
 `PAYMENT-REQUIRED`, sign an SPL `TransferChecked`, replay the request,
 and your configured response body comes back. Funds settle directly
 into the **owner agent's Asset Signer PDA** (the same treasury
@@ -27,12 +27,12 @@ API is the seller for you.
 | You want…                                                | Use this                                             |
 | -------------------------------------------------------- | ---------------------------------------------------- |
 | Charge per call on a JSON endpoint without writing code  | **Payment links** (`POST /v1/payment-links`)         |
-| Charge per call on a route in your existing Hono app     | [`@leash/seller-kit`](/sdk/seller-kit)               |
+| Charge per call on a route in your existing Hono app     | [`@leashmarket/seller-kit`](/sdk/seller-kit)               |
 | Charge per call from Python / Go / Rust on your own host | Edge mode (see [Monetise an API](/api/monetize-api)) |
 | Build a one-off "Pay $X to download Y" share link        | **Payment links** (sharable URL out of the box)      |
 
 Payment links and the SDK use the same underlying middleware
-(`createSeller` from `@leash/seller-kit`). The difference is purely
+(`createSeller` from `@leashmarket/seller-kit`). The difference is purely
 where the route lives — your process or ours.
 
 ## Lifecycle
@@ -140,7 +140,7 @@ The fields you set:
 | `label`              | Yes      | Short human name. Shows up in the explorer + dashboards.                      |
 | `owner_agent`        | Yes      | Mint of the agent that receives funds. Must be on the caller-scoped network.  |
 | `method`             | Yes      | `GET` / `POST` / `PUT` / `PATCH` / `DELETE`. Picks how buyers call the link.  |
-| `price`              | Yes      | Display string. Same parser as `@leash/seller-kit`: `"$0.001"`, `"0.5 USDT"`. |
+| `price`              | Yes      | Display string. Same parser as `@leashmarket/seller-kit`: `"$0.001"`, `"0.5 USDT"`. |
 | `currency`           | No       | Default `USDC`. The primary stable used for the atomic amount.                |
 | `accepts_currencies` | No       | Up to 3 extra stables advertised in `accepts[]` (cross-stable settlement).    |
 | `response.status`    | No       | Default `200`. Status code returned on a settled call.                        |
@@ -300,7 +300,7 @@ reconcile cleanly.
 
 ## See also
 
-- [`@leash/seller-kit`](/sdk/seller-kit) — the same middleware,
+- [`@leashmarket/seller-kit`](/sdk/seller-kit) — the same middleware,
   hosted in your own process.
 - [Seller utilities](/api/seller-utils) — `parse-price`,
   `facilitator`, `networks`, `pay-to`. Useful for validating drafts

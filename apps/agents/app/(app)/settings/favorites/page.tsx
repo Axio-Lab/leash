@@ -224,7 +224,7 @@ export default function FavoritesSettingsPage() {
             Point <code className="font-mono">LEASH_API_URL</code> in{' '}
             <code className="font-mono">apps/agents/.env</code> at your running API (e.g.{' '}
             <code className="font-mono">http://localhost:8801</code>) and restart{' '}
-            <code className="font-mono">pnpm --filter @leash/agents dev</code>.
+            <code className="font-mono">pnpm --filter @leashmarket/agents dev</code>.
           </p>
           {data.discover_error.detail ? (
             <pre className="mt-2 text-[10px] whitespace-pre-wrap break-all opacity-80">

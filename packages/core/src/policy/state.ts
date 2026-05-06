@@ -1,4 +1,4 @@
-import type { RulesV1 } from '@leash/schemas';
+import type { RulesV1 } from '@leashmarket/schemas';
 
 export type PolicyState = {
   rules: RulesV1;

@@ -26,12 +26,12 @@
  *     binding is one-way** — once set you cannot replace, unset, or
  *     reassign the agent's token.
  *
- * Why this lives in `@leash/registry-utils` (and not `@leash/core` or
- * a new `@leash/genesis` package)?
+ * Why this lives in `@leashmarket/registry-utils` (and not `@leashmarket/core` or
+ * a new `@leashmarket/genesis` package)?
  *
  *   It uses the same `mpl-core` + `mpl-agent-registry` Umi surface as
  *   `./create-agent.ts`, `./executive.ts`, and `./withdraw.ts`. Pulling
- *   Genesis into `@leash/core` would balloon its browser bundle
+ *   Genesis into `@leashmarket/core` would balloon its browser bundle
  *   (Genesis depends on `mpl-token-metadata`); keeping it next to
  *   `createAgent` keeps the dependency graph honest.
  */

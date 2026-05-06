@@ -1,9 +1,9 @@
 ---
-title: '@leash/sdk'
+title: '@leashmarket/sdk'
 description: Typed Leash API client. Browser, Bun, Deno, Node, edge — anywhere fetch runs.
 ---
 
-`@leash/sdk` is the thin TypeScript HTTP client for the public Leash
+`@leashmarket/sdk` is the thin TypeScript HTTP client for the public Leash
 API. It is the **remote control** for a deployed Leash server — not a
 buyer or seller in itself.
 
@@ -21,15 +21,15 @@ kits instead:
 
 | Need                                        | Reach for                                                                     |
 | ------------------------------------------- | ----------------------------------------------------------------------------- |
-| Pay an x402 link                            | [`@leash/buyer-kit`](/sdk/buyer-kit) or [`@leash/mcp`](/agents/mcp)'s `pay()` |
-| Monetise an HTTP endpoint                   | [`@leash/seller-kit`](/sdk/seller-kit)                                        |
-| Mint / register / withdraw from agents      | [`@leash/registry-utils`](/sdk/registry-utils)                                |
-| Discover, vet, manage receipts and webhooks | **`@leash/sdk` (this page)**                                                  |
+| Pay an x402 link                            | [`@leashmarket/buyer-kit`](/sdk/buyer-kit) or [`@leashmarket/mcp`](/agents/mcp)'s `pay()` |
+| Monetise an HTTP endpoint                   | [`@leashmarket/seller-kit`](/sdk/seller-kit)                                        |
+| Mint / register / withdraw from agents      | [`@leashmarket/registry-utils`](/sdk/registry-utils)                                |
+| Discover, vet, manage receipts and webhooks | **`@leashmarket/sdk` (this page)**                                                  |
 
 ## Install
 
 ```bash
-pnpm add @leash/sdk
+pnpm add @leashmarket/sdk
 ```
 
 The package is **ESM-only**. Zero runtime deps beyond Umi (only used
@@ -38,7 +38,7 @@ to sign the `X-Leash-Sig` header).
 ## Three auth modes
 
 ```ts
-import { LeashClient } from '@leash/sdk';
+import { LeashClient } from '@leashmarket/sdk';
 
 // 1. Anonymous — public reads only.
 const pub = new LeashClient({ baseUrl: 'https://api.leash.market' });
@@ -75,7 +75,7 @@ You can pass more than one — the client picks the right mode per call.
   [`pay-skills`](https://github.com/solana-foundation/pay-skills) registry — the
   same catalogue the pay.sh CLI reads. These have `seller_wallet: null`,
   `tools: []`, and `rating: null`, but every entry is x402-payable today via
-  `@leash/buyer-kit` (and `@leash/mcp`'s `leash_pay_payment_link`).
+  `@leashmarket/buyer-kit` (and `@leashmarket/mcp`'s `leash_pay_payment_link`).
 
 Pass `source: 'leash'` or `source: 'pay-skills'` to scope to a single catalogue;
 `'all'` (the default) merges both.
@@ -86,7 +86,7 @@ provider into its individual paid endpoints — the second hop in pay.sh's
 `search_skills → get_skill_endpoints → curl` agent flow. The response is a
 `PaySkillsProvider` with `endpoints[]`, each carrying an absolute `url`,
 `method`, `pricing`, `protocol`, `supported_usd`, and `probe_status`. Hand
-`endpoint.url` straight to `@leash/buyer-kit` (or `@leash/mcp`'s
+`endpoint.url` straight to `@leashmarket/buyer-kit` (or `@leashmarket/mcp`'s
 `leash_pay_payment_link`) to settle.
 
 ```ts
@@ -94,7 +94,7 @@ const search = await leash.discover({ capability: 'email', source: 'pay-skills',
 for (const item of search.items) {
   const provider = await leash.paySkillsProvider(item.slug); // e.g. 'agentmail/email'
   console.log(`${provider.title}: ${provider.endpoints.length} endpoints`);
-  // provider.endpoints[0].url is a paid x402 URL; pay it with @leash/buyer-kit.
+  // provider.endpoints[0].url is a paid x402 URL; pay it with @leashmarket/buyer-kit.
 }
 ```
 
@@ -147,7 +147,7 @@ console.log('share', link.share_url);
 Every non-2xx response throws `LeashError`:
 
 ```ts
-import { LeashError } from '@leash/sdk';
+import { LeashError } from '@leashmarket/sdk';
 
 try {
   await keyed.createPaymentLink({
@@ -166,7 +166,7 @@ The signing helpers are exported for callers who want to build their
 own transport (workers, gRPC bridge, Postman):
 
 ```ts
-import { signRequest, buildEnvelope } from '@leash/sdk';
+import { signRequest, buildEnvelope } from '@leashmarket/sdk';
 ```
 
 The envelope is `SHA-256(method\npath\ntimestamp\nsha256(body)\nagent)`,

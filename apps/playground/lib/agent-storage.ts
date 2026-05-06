@@ -23,7 +23,7 @@
  */
 
 import { z } from 'zod';
-import { RulesV1Schema, type RulesV1 } from '@leash/schemas';
+import { RulesV1Schema, type RulesV1 } from '@leashmarket/schemas';
 
 const KEY_PREFIX = 'leash:agent:';
 const REGISTRY_KEY = 'leash:agents:index';
@@ -79,7 +79,7 @@ const StoredAgentSchema = z.object({
 /**
  * Persisted shape. We re-export `rules` as the canonical `RulesV1 | null`
  * (instead of the zod-inferred clone) so consumers reusing
- * `@leash/schemas` don't get the "two different types with the same name"
+ * `@leashmarket/schemas` don't get the "two different types with the same name"
  * structural-mismatch error.
  */
 export type StoredAgent = Omit<z.infer<typeof StoredAgentSchema>, 'rules'> & {

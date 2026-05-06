@@ -8,7 +8,7 @@ import {
   createAgent,
   registrationToDataUrl,
   type RegistrationService,
-} from '@leash/registry-utils';
+} from '@leashmarket/registry-utils';
 
 import { SOLANA_NETWORK, type SolanaNetwork } from './env';
 

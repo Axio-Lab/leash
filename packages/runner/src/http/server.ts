@@ -1,11 +1,11 @@
-import { createPauseResolver, readPauseFromEnv, type PauseState } from '@leash/core';
+import { createPauseResolver, readPauseFromEnv, type PauseState } from '@leashmarket/core';
 import {
   EndpointCreateInputSchema,
   EndpointIdSchema,
   EndpointV1Schema,
   ReceiptV1Schema,
   type EndpointV1,
-} from '@leash/schemas';
+} from '@leashmarket/schemas';
 import { Hono } from 'hono';
 import type { ReceiptStore } from '../storage/memory.js';
 import { appendLine, listLines } from '../storage/memory.js';

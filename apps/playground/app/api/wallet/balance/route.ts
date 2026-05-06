@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { listSplBalances, networkFromRpc } from '@leash/core';
+import { listSplBalances, networkFromRpc } from '@leashmarket/core';
 import { SOLANA_RPC } from '@/lib/env';
 
 export const runtime = 'nodejs';
@@ -12,7 +12,7 @@ export const runtime = 'nodejs';
  * playground so users immediately see whether they can afford the next
  * x402 spend.
  *
- * The actual enumeration logic lives in `@leash/core`'s `listSplBalances`
+ * The actual enumeration logic lives in `@leashmarket/core`'s `listSplBalances`
  * so the SDK and the playground share one canonical balance shape.
  */
 export async function GET(req: Request): Promise<Response> {

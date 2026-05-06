@@ -1,17 +1,17 @@
 /**
- * Live devnet sanity check for the standalone `@leash/mcp` server.
+ * Live devnet sanity check for the standalone `@leashmarket/mcp` server.
  *
  * Boots the in-memory MCP transport, calls `leash_check_treasury_balance`
  * via the protocol, and prints the raw JSON result. Use this when you
  * want to confirm the path
  *
  *   `cli.ts -> server.ts -> StdioHost.checkTreasuryBalance ->
- *      @leash/core::listSplBalances -> RPC`
+ *      @leashmarket/core::listSplBalances -> RPC`
  *
  * works against a real agent before recording the YC demo. Requires:
  *
  *   LEASH_AGENT_MINT       — a real on-chain agent (from `pnpm --filter
- *                            @leash/api test:self-register-devnet` for
+ *                            @leashmarket/api test:self-register-devnet` for
  *                            example)
  *   LEASH_EXECUTIVE_KEY    — that agent's owner secret (base58 OR JSON
  *                            array). The check itself doesn't need the
@@ -23,7 +23,7 @@
  * Usage:
  *
  *   LEASH_AGENT_MINT=<mint> LEASH_EXECUTIVE_KEY=<base58|json> \
- *     pnpm --filter @leash/mcp dev:demo-balance
+ *     pnpm --filter @leashmarket/mcp dev:demo-balance
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';

@@ -1,5 +1,5 @@
 {
-  "name": "@leash/buyer-demo",
+  "name": "@leashmarket/buyer-demo",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,9 +10,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@leash/buyer-kit": "workspace:*",
-    "@leash/core": "workspace:*",
-    "@leash/schemas": "workspace:*",
+    "@leashmarket/buyer-kit": "workspace:*",
+    "@leashmarket/core": "workspace:*",
+    "@leashmarket/schemas": "workspace:*",
     "@solana/kit": "^5.5.0"
   },
   "devDependencies": {

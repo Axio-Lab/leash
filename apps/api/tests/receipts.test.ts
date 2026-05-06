@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { finalizeReceipt } from '@leash/core';
+import { finalizeReceipt } from '@leashmarket/core';
 
 import { createTestRig, authedFetch } from './helpers.js';
 import { createApiKey } from '../src/storage/api-keys.js';

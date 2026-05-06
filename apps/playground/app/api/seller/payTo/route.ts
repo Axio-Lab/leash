@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
-import { resolveSellerPayTo } from '@leash/seller-kit';
+import { resolveSellerPayTo } from '@leashmarket/seller-kit';
 import { SOLANA_RPC } from '@/lib/env';
 
 export const dynamic = 'force-dynamic';

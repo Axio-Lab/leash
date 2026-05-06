@@ -1,4 +1,4 @@
-import { decryptSecret } from '@leash/platform-auth/encryption';
+import { decryptSecret } from '@leashmarket/platform-auth/encryption';
 
 import { getDb } from '@/lib/db';
 import { getServerEnv } from '@/lib/env';

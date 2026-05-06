@@ -1,7 +1,7 @@
 /**
- * `@leash/sdk` — typed Leash API client.
+ * `@leashmarket/sdk` — typed Leash API client.
  *
- *   import { LeashClient } from '@leash/sdk';
+ *   import { LeashClient } from '@leashmarket/sdk';
  *
  *   const leash = new LeashClient({ baseUrl: 'https://api.leash.market' });
  *   const services = await leash.discover({ capability: 'ocr' });

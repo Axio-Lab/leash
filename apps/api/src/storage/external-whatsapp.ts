@@ -21,7 +21,7 @@
  * `/v1/external/whatsapp/qr/{id}` while the user pairs.
  */
 
-import { encryptSecret, decryptSecret } from '@leash/platform-auth/encryption';
+import { encryptSecret, decryptSecret } from '@leashmarket/platform-auth/encryption';
 
 import type { DbClient } from './turso.js';
 

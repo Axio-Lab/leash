@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getAgentTreasury } from '@leash/registry-utils';
-import { listSplBalances, networkFromRpc } from '@leash/core';
+import { getAgentTreasury } from '@leashmarket/registry-utils';
+import { listSplBalances, networkFromRpc } from '@leashmarket/core';
 import { getReadOnlyUmi } from '@/lib/umi';
 import { SOLANA_RPC } from '@/lib/env';
 
@@ -14,7 +14,7 @@ export const runtime = 'nodejs';
  * with zero balance when the agent doesn't hold them yet, so the UI can
  * always render them.
  *
- * The enumeration logic lives in `@leash/core`'s `listSplBalances` so the
+ * The enumeration logic lives in `@leashmarket/core`'s `listSplBalances` so the
  * agent treasury endpoint and the wallet balance endpoint share one
  * canonical implementation.
  */

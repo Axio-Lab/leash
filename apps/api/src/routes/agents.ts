@@ -12,7 +12,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { findAssetSignerPda } from '@metaplex-foundation/mpl-core';
 import { publicKey } from '@metaplex-foundation/umi';
-import { prepareAgentMint } from '@leash/registry-utils';
+import { prepareAgentMint } from '@leashmarket/registry-utils';
 
 import type { AuthVariables } from '../auth/types.js';
 import type { LeashApiConfig } from '../config.js';
@@ -51,7 +51,7 @@ const AgentSummarySchema = z.object({
 // ─────────────────────────────────────────────────────────────────────────────
 // Mint a brand-new agent (POST /v1/agents/prepare).
 //
-// This is the HTTP twin of `prepareAgentMint` from `@leash/registry-utils`,
+// This is the HTTP twin of `prepareAgentMint` from `@leashmarket/registry-utils`,
 // which itself wraps Metaplex's `POST https://api.metaplex.com/v1/agents/mint`.
 // We hand back the unsigned transaction the caller signs locally and submits
 // via `POST /v1/submit`, exactly like every other prepare endpoint. Because

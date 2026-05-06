@@ -1,9 +1,9 @@
 ---
-title: '@leash/core'
+title: '@leashmarket/core'
 description: Policy evaluation, receipt hashing, x402 client adapter, treasury, kill-switch.
 ---
 
-`@leash/core` is the dependency-light primitive used by both the buyer and
+`@leashmarket/core` is the dependency-light primitive used by both the buyer and
 seller kits. It contains:
 
 - **Agent + treasury** — `treasuryPda(asset)` derives the Asset Signer PDA
@@ -29,7 +29,7 @@ seller kits. It contains:
   `ClientSvmSigner`. Optional **`preferredAsset`** (SPL mint string) selects
   which `accepts[]` row to pay when the seller lists several stables; if set
   and no row matches, the client **throws** (`preferred_asset_unavailable`)
-  instead of silently paying a different mint. `@leash/buyer-kit` wires this
+  instead of silently paying a different mint. `@leashmarket/buyer-kit` wires this
   via `preferredCurrency` (`USDC` / `USDT` / `USDG`).
 - **Payment-link discovery** — `fetchPaymentLinkMeta()` fetches and type-checks
   the browser-friendly `GET /x/<id>` metadata payload exposed by the web app;
@@ -76,7 +76,7 @@ seller kits. It contains:
 ## Agent treasury PDA
 
 Resolve an agent's on-chain treasury (Asset Signer PDA) and its token ATA
-without dragging in the Umi runtime. Useful inside `@leash/buyer-kit`'s
+without dragging in the Umi runtime. Useful inside `@leashmarket/buyer-kit`'s
 auto-preflight and for any caller that needs to sign on behalf of an agent
 with `@solana/kit` only.
 
@@ -86,7 +86,7 @@ import {
   deriveAgentTreasuryAddress,
   deriveAgentTreasuryAta,
   tokenProgramForMint,
-} from '@leash/core';
+} from '@leashmarket/core';
 
 const treasury = await deriveAgentTreasuryAddress('33QvAYjEiK8UMrmpy3LW6W8v2wpPMahnw7Jvr7JpeQrR');
 
@@ -128,7 +128,7 @@ adapter is also where we set the default network list (`solana-devnet`,
 `solana-mainnet`).
 
 ```ts
-import { createSvmBuyerFetch } from '@leash/core/x402';
+import { createSvmBuyerFetch } from '@leashmarket/core/x402';
 
 const paidFetch = createSvmBuyerFetch({
   signer, // @solana/kit TransactionPartialSigner
@@ -143,7 +143,7 @@ const res = await paidFetch('https://api.example.com/quote');
 ```
 
 ```ts
-import { fetchPaymentLinkMeta } from '@leash/core';
+import { fetchPaymentLinkMeta } from '@leashmarket/core';
 
 // Variant 1: full shareable URL
 const metaA = await fetchPaymentLinkMeta('https://yourapp.com/x/uhnb6e1zm');
@@ -175,7 +175,7 @@ import {
   parseWebhookPayload,
   LEASH_HEADERS,
   LEASH_CALLBACK_HEADER,
-} from '@leash/core';
+} from '@leashmarket/core';
 
 // SELLER side: stamp envelope onto response headers + ship a webhook.
 const envelope = buildLeashEnvelope(earnReceipt, { origin: 'https://app.example.com' });
@@ -203,7 +203,7 @@ import {
   lookupToken,
   listSplBalances,
   transactionExplorerUrl,
-} from '@leash/core';
+} from '@leashmarket/core';
 
 const usdc = defaultUsdcMint('devnet'); // canonical mint
 const meta = lookupToken(usdc.mint, 'devnet'); // { decimals: 6, ... }

@@ -14,7 +14,7 @@
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { ReceiptV1Schema, type ReceiptV1 } from '@leash/schemas';
+import { ReceiptV1Schema, type ReceiptV1 } from '@leashmarket/schemas';
 
 import type { AuthVariables } from '../auth/types.js';
 import type { LeashApiConfig } from '../config.js';

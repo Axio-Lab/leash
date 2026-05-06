@@ -2,7 +2,7 @@
  * Per-request Umi factory.
  *
  * The API never holds signing material — every prepare endpoint installs
- * `noopSigner(payer)` and `noopSigner(authority)` so `@leash/registry-utils`
+ * `noopSigner(payer)` and `noopSigner(authority)` so `@leashmarket/registry-utils`
  * builders compose without needing a real key. The caller signs the
  * resulting bytes locally.
  *

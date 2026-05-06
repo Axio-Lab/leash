@@ -102,7 +102,7 @@ export default function DashboardPage() {
         <Card>
           <CardContent className="pt-5 grid gap-4 md:grid-cols-3">
             <Step n="1" title="Run the runner">
-              <code className="text-xs">pnpm --filter @leash/runner start</code>
+              <code className="text-xs">pnpm --filter @leashmarket/runner start</code>
               <p className="text-xs text-fg-subtle mt-1">
                 Exposes <span className="font-mono">/health</span>,{' '}
                 <span className="font-mono">/pause</span>, and{' '}
@@ -111,7 +111,7 @@ export default function DashboardPage() {
               </p>
             </Step>
             <Step n="2" title="Run a seller">
-              <code className="text-xs">pnpm --filter @leash/seller-demo start</code>
+              <code className="text-xs">pnpm --filter @leashmarket/seller-demo start</code>
               <p className="text-xs text-fg-subtle mt-1">
                 Or use the built-in{' '}
                 <Link href="/seller" className="text-brand hover:underline">

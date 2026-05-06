@@ -19,7 +19,7 @@
  * `INSERT OR IGNORE` guarantees no duplicate work.
  */
 
-import { KNOWN_TOKENS, getLeashFeeAtaFor, resolveLeashFeeAuthority } from '@leash/core';
+import { KNOWN_TOKENS, getLeashFeeAtaFor, resolveLeashFeeAuthority } from '@leashmarket/core';
 
 import type { DbClient } from '../storage/turso.js';
 import type { SvmNetwork } from '../util/network.js';
@@ -38,7 +38,7 @@ export type SeedFeeWatchlistResult = {
  * for logging / `/v1/health` introspection.
  *
  * Networks map cleanly: API uses CAIP-2 (`solana-mainnet`) but the
- * `@leash/core` token registry uses the short form (`mainnet`). We
+ * `@leashmarket/core` token registry uses the short form (`mainnet`). We
  * convert in a single place.
  */
 export async function seedLeashFeeWatchlist(

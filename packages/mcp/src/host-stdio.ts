@@ -28,7 +28,7 @@ import {
   listSplBalances,
   parseLeashHeaders,
   tokenProgramForMint,
-} from '@leash/core';
+} from '@leashmarket/core';
 import {
   fetchDiscover,
   fetchPaySkillsProvider,
@@ -57,7 +57,7 @@ import {
   type SvmNetwork,
   type TransactionHistoryArgs,
   type WithdrawArgs,
-} from '@leash/mcp-core';
+} from '@leashmarket/mcp-core';
 import {
   SPL_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID as UMI_TOKEN_2022_PROGRAM_ID,
@@ -66,9 +66,9 @@ import {
   setSpendDelegation,
   withdrawTreasury,
   withdrawTreasurySol,
-} from '@leash/registry-utils';
-import { createBuyer } from '@leash/buyer-kit';
-import type { RulesV1 } from '@leash/schemas';
+} from '@leashmarket/registry-utils';
+import { createBuyer } from '@leashmarket/buyer-kit';
+import type { RulesV1 } from '@leashmarket/schemas';
 
 import type { LeashAgentConfig } from './config.js';
 import { loadSigner, type LeashSigner } from './signer.js';

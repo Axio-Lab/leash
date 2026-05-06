@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { listPlatformKeys } from '@leash/platform-auth';
-import { LeashAdminError } from '@leash/platform-auth/leash-client';
+import { listPlatformKeys } from '@leashmarket/platform-auth';
+import { LeashAdminError } from '@leashmarket/platform-auth/leash-client';
 
 import { getDb } from '@/lib/db';
 import { getLeash } from '@/lib/leash';

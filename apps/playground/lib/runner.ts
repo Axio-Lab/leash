@@ -1,13 +1,13 @@
 /**
- * Server-side helpers for talking to the local `@leash/runner`.
+ * Server-side helpers for talking to the local `@leashmarket/runner`.
  *
- * Thin re-export of `createRunnerClient` from `@leash/runner` so every
+ * Thin re-export of `createRunnerClient` from `@leashmarket/runner` so every
  * Next API route shares the same typed client. Importers that want the
  * legacy `getHealth/getPause/getReceiptsJsonl` shape can keep using the
  * helper functions below; new code should prefer `runnerClient` directly.
  */
 
-import { createRunnerClient, type RunnerHealth, type RunnerPause } from '@leash/runner';
+import { createRunnerClient, type RunnerHealth, type RunnerPause } from '@leashmarket/runner';
 import { RUNNER_URL } from './env';
 
 export const runnerClient = createRunnerClient({ url: RUNNER_URL });

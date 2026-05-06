@@ -4,7 +4,7 @@ import {
   listPlatformKeys,
   recordPlatformKey,
   type ApiScope,
-} from '@leash/platform-auth';
+} from '@leashmarket/platform-auth';
 
 import { getDb } from '@/lib/db';
 import { getLeash } from '@/lib/leash';

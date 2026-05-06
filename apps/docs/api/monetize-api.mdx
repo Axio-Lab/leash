@@ -15,7 +15,7 @@ writes a chained `ReceiptV1` for every call — all visible on
 | Shape                             | Best when                                                             | You ship                                         |
 | --------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------ |
 | **Hosted payment link**           | Fixed or templated JSON response, zero new infra, sharable URL        | `POST /v1/payment-links` → share `share_url`     |
-| **Sidecar (`@leash/seller-kit`)** | Your API is TypeScript / Hono; you want the route inside your process | `createSeller` + env for receipt fan-out         |
+| **Sidecar (`@leashmarket/seller-kit`)** | Your API is TypeScript / Hono; you want the route inside your process | `createSeller` + env for receipt fan-out         |
 | **Edge (any language)**           | Python / Go / Rust / Worker in front of your route                    | Buyer + seller HTTP utilities, or link + webhook |
 
 All three settle the same way on-chain and emit the same explorer /
@@ -37,7 +37,7 @@ the same mint.
 - **TypeScript:** [`createAgent`](/sdk/registry-utils) or
   [`prepareAgentMint`](/sdk/registry-utils) +
   [`sendPreparedAgentMint`](/sdk/registry-utils) from
-  `@leash/registry-utils` — same on-chain result as the API.
+  `@leashmarket/registry-utils` — same on-chain result as the API.
 
 **Seller-only checklist (receive USDC / USDT / USDG — payment links,
 seller-kit, or any earn flow)**
@@ -138,18 +138,18 @@ hosted paywall.
 
 ## Sidecar mode (TypeScript / Hono)
 
-[`@leash/seller-kit`](/sdk/seller-kit) exposes `createSeller(app,
+[`@leashmarket/seller-kit`](/sdk/seller-kit) exposes `createSeller(app,
 options)` — real `@x402/hono` middleware, Asset Signer PDA as `payTo`,
 and **implicit** receipt fan-out to the Leash API when both env vars are
 set and you **omit** a custom `onReceipt` callback (same rules as
-[`@leash/buyer-kit`](/sdk/buyer-kit): a function passed as `onReceipt`
+[`@leashmarket/buyer-kit`](/sdk/buyer-kit): a function passed as `onReceipt`
 replaces the default sink entirely).
 
 ```ts
 import { Hono } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
-import { createSeller } from '@leash/seller-kit';
+import { createSeller } from '@leashmarket/seller-kit';
 
 const umi = createUmi(process.env.SOLANA_RPC_URL!).use(mplCore());
 const app = new Hono();
@@ -194,7 +194,7 @@ first.
 ### Option B — buyer HTTP utilities
 
 For a true 402 dance on a URL you control, the
-[buyer endpoints](/api/buyer) mirror `@leash/buyer-kit` **but execute on
+[buyer endpoints](/api/buyer) mirror `@leashmarket/buyer-kit` **but execute on
 Leash’s servers**: your server calls `api.leash.market` with your API key,
 and **`POST /v1/buyer/payment/execute`** finalises the spend receipt **inside
 the API** — so explorer / `receipt.published` do **not** depend on
@@ -225,7 +225,7 @@ For seller-side helpers without Node (`networks`, `facilitator`,
 - **Pay-per-call settlement** — real SPL transfer, explorer `tx/` link.
 - **Hosted paywalls** — `/x/{id}` with counters and idempotent creates.
 - **Receipt feed** — `GET /v1/receipts/{agent}`; verify with
-  `@leash/core` or [`POST /v1/buyer/receipt/verify`](/api/buyer).
+  `@leashmarket/core` or [`POST /v1/buyer/receipt/verify`](/api/buyer).
 - **Treasury control** — owner-driven withdraw via
   [`/v1/agents/{mint}/treasury/.../prepare`](/api/treasury).
 
@@ -235,7 +235,7 @@ shipped yet). Until then, use owner withdraw to move stables manually.
 ## What you owe — the 1% Leash protocol fee
 
 Every settlement routed through a Leash facilitator (devnet or mainnet
-hosted, or any self-hosted facilitator running `@leash/facilitator`)
+hosted, or any self-hosted facilitator running `@leashmarket/facilitator`)
 adds a **second `TransferChecked`** for the same mint to the Leash fee
 treasury. The math is unconditional and visible in the buyer's signed
 transaction:

@@ -5,7 +5,7 @@
  *   - POST creates the record + emits a `payment_link.created` event +
  *     enrolls the owner agent in the indexer watchlist.
  *   - The discovery view (`pay_to`, `accepts[]`, `share_url`,
- *     `facilitator`) matches what `@leash/seller-kit` would advertise
+ *     `facilitator`) matches what `@leashmarket/seller-kit` would advertise
  *     for the same `(asset, price, currency)` tuple.
  *   - GET list / get respect api-key scoping (no cross-tenant reads).
  *   - PATCH updates fields, re-validates price/currency, and emits

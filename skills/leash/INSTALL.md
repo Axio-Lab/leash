@@ -79,7 +79,7 @@ include the leash repo, vendor the folder:
 
 ```bash
 mkdir -p skills && cp -R ~/leash/skills/leash skills/leash
-git add skills/leash && git commit -m "skill: vendor @leash"
+git add skills/leash && git commit -m "skill: vendor @leashmarket"
 ```
 
 ## Windsurf / Cascade

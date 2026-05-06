@@ -5,7 +5,7 @@
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { prepareDelegateExecution, prepareRegisterExecutive } from '@leash/registry-utils';
+import { prepareDelegateExecution, prepareRegisterExecutive } from '@leashmarket/registry-utils';
 import { publicKey } from '@metaplex-foundation/umi';
 
 import type { AuthVariables } from '../auth/types.js';

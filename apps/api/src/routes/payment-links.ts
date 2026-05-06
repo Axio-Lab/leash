@@ -1,7 +1,7 @@
 /**
  * Payment-link CRUD + paywall preview.
  *
- * Mirrors `@leash/seller-kit`'s `createSeller(...)` shape: an agent
+ * Mirrors `@leashmarket/seller-kit`'s `createSeller(...)` shape: an agent
  * owner declares (`method` + `price` + `currency` + `response`) and
  * the API hosts the paywall on `/x/{id}` (see `routes/paywall.ts`).
  *
@@ -32,9 +32,9 @@ import {
   type KnownStableSymbol,
   type LeashFeeExtra,
   type TokenNetwork,
-} from '@leash/core';
-import { EndpointIdSchema, EndpointMethodSchema } from '@leash/schemas';
-import { parsePrice } from '@leash/seller-kit';
+} from '@leashmarket/core';
+import { EndpointIdSchema, EndpointMethodSchema } from '@leashmarket/schemas';
+import { parsePrice } from '@leashmarket/seller-kit';
 
 import type { AuthVariables } from '../auth/types.js';
 import { type LeashApiConfig, facilitatorForNetwork } from '../config.js';
@@ -123,7 +123,7 @@ const PaymentLinkCreateBody = z
         description:
           'Display price string (e.g. `"$0.001"`, `"0.01 USDC"`, `"0.5"`). ' +
           'Parsed at advertise/settle time via the same `parsePrice` rules ' +
-          '`@leash/seller-kit` uses, so atomic units always match.',
+          '`@leashmarket/seller-kit` uses, so atomic units always match.',
       }),
     currency: StableSchema.default('USDC'),
     accepts_currencies: z.array(StableSchema).max(3).default([]),
@@ -628,7 +628,7 @@ export function buildPaymentLinkRoutes(
 /**
  * Throw `invalidRequest` if `parsePrice(...)` returns null for the
  * primary currency or any extra accepted currency. Mirrors what
- * `@leash/seller-kit` does at `createSeller` time so the paywall
+ * `@leashmarket/seller-kit` does at `createSeller` time so the paywall
  * never has to deal with an un-renderable price at runtime.
  */
 function validatePriceForCurrencies(
@@ -666,7 +666,7 @@ export function buildDiscoveryView(
 ): DiscoveryView {
   const tokenNetwork: TokenNetwork = network === 'solana-devnet' ? 'devnet' : 'mainnet';
   // Resolve `pay_to` against a read-only Umi (no signer needed). This
-  // always matches what `@leash/seller-kit`'s `resolveSellerPayTo`
+  // always matches what `@leashmarket/seller-kit`'s `resolveSellerPayTo`
   // returns for the same asset.
   const umi = umiReadOnly(config, network);
   const [signer] = findAssetSignerPda(umi, { asset: publicKey(args.ownerAgent) });

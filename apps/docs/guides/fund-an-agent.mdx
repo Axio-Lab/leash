@@ -63,7 +63,7 @@ allowance or the treasury balance.
 
 ## Programmatically
 
-Use `@leash/registry-utils` from any Node program:
+Use `@leashmarket/registry-utils` from any Node program:
 
 ```ts
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
@@ -73,7 +73,7 @@ import {
   setSpendDelegation,
   getSpendDelegation,
   revokeSpendDelegation,
-} from '@leash/registry-utils';
+} from '@leashmarket/registry-utils';
 
 const umi = createUmi('https://api.devnet.solana.com').use(mplCore());
 umi.use(keypairIdentity(myKeypair)); // owner of the agent
@@ -110,7 +110,7 @@ failures), call [`provisionTreasuryAtas`](../sdk/registry-utils#provisiontreasur
 once after minting:
 
 ```ts
-import { provisionTreasuryAtas } from '@leash/registry-utils';
+import { provisionTreasuryAtas } from '@leashmarket/registry-utils';
 
 const { treasury, atas } = await provisionTreasuryAtas(umi, {
   agentAsset: 'CoreAss…Asset',
@@ -129,7 +129,7 @@ The `sourceTokenAccount` returned by `setSpendDelegation` is what the buyer
 must pass when constructing the client:
 
 ```ts
-import { createBuyer } from '@leash/buyer-kit';
+import { createBuyer } from '@leashmarket/buyer-kit';
 
 const buyer = createBuyer({
   agent: agentAsset,
@@ -167,7 +167,7 @@ up needed" or "raise allowance" without guessing.
 
 ## See also
 
-- [`@leash/registry-utils` →](../sdk/registry-utils) — full delegation API.
-- [`@leash/buyer-kit` →](../sdk/buyer-kit) — wiring `sourceTokenAccount`.
+- [`@leashmarket/registry-utils` →](../sdk/registry-utils) — full delegation API.
+- [`@leashmarket/buyer-kit` →](../sdk/buyer-kit) — wiring `sourceTokenAccount`.
 - [x402 on Solana →](../standards/x402-on-solana) — why a delegate transfer
   remains wire-compatible with every facilitator.

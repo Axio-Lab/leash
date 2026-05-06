@@ -334,17 +334,17 @@ curl -sG https://api.leash.market/v1/events \
 The repository ships three end-to-end scripts that drive these endpoints
 against real devnet:
 
-- `pnpm --filter @leash/api e2e:devnet` — full payment-link / paywall /
+- `pnpm --filter @leashmarket/api e2e:devnet` — full payment-link / paywall /
   receipt flow, including a real `agent.treasury.provision` round-trip
   that exercises prepare → sign → submit → confirm. Note that this
   script is focused on x402 surfaces; it does not by itself generate
   withdraw or fund events on the explorer (see the dedicated scripts
   below).
-- `pnpm --filter @leash/api withdraw` — one-shot script that withdraws
+- `pnpm --filter @leashmarket/api withdraw` — one-shot script that withdraws
   a configurable amount of USDG from a target agent treasury through
   the public API. See [`apps/api/scripts/withdraw.ts`](https://github.com/leash-market/leash/blob/main/apps/api/scripts/withdraw.ts)
   for the `LEASH_WITHDRAW_*` env knobs.
-- `pnpm --filter @leash/api fund` — one-shot script that deposits SPL
+- `pnpm --filter @leashmarket/api fund` — one-shot script that deposits SPL
   (USDG by default) into a target agent treasury, then polls for the
   matching `agent.treasury.fund` event so you can verify indexer
   visibility end-to-end. See [`apps/api/scripts/fund.ts`](https://github.com/leash-market/leash/blob/main/apps/api/scripts/fund.ts)
@@ -363,6 +363,6 @@ matrix, see [Explorer tracking](/api/explorer-tracking).
   and why withdraws bypass the executive delegation.
 - [Withdraw treasury funds (guide)](/guides/withdraw-funds) — SDK-side
   walkthrough plus the playground UI flow.
-- [`@leash/registry-utils`](/sdk/registry-utils) — the same primitives
+- [`@leashmarket/registry-utils`](/sdk/registry-utils) — the same primitives
   the API wraps; useful when you want client-side custody with no
   remote dependency.

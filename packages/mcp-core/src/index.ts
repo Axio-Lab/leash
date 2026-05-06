@@ -1,5 +1,5 @@
 /**
- * `@leash/mcp-core` — host-agnostic core for every Leash MCP surface.
+ * `@leashmarket/mcp-core` — host-agnostic core for every Leash MCP surface.
  *
  * What lives here
  * ---------------

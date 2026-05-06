@@ -1,4 +1,4 @@
-# `@leash/buyer-demo`
+# `@leashmarket/buyer-demo`
 
 > **Headless path.** This CLI is for unattended runners (TEEs, server
 > workers, GitHub-Actions cron). The hosted browser playground at
@@ -12,13 +12,13 @@ A small Node CLI that loops a real x402 buyer against a seller endpoint
 
 - a seller base URL (`http://localhost:3001`) → calls `POST /tag`
 - a direct Leash payment link (`http://localhost:3000/x/<id>`) → first
-  resolves metadata with `fetchPaymentLinkMeta()` from `@leash/core`, then
+  resolves metadata with `fetchPaymentLinkMeta()` from `@leashmarket/core`, then
   calls the discovered method/url
 
 Each tick:
 
 1. Loads a devnet keypair from `LEASH_BUYER_SECRET_KEY`.
-2. Constructs a `@leash/buyer-kit` client (`createBuyer`) with that signer
+2. Constructs a `@leashmarket/buyer-kit` client (`createBuyer`) with that signer
    and a `RulesV1` policy.
 3. Calls `buyer.fetch(...)`. The first response is `402` with a
    `PAYMENT-REQUIRED` header; `@x402/fetch` builds and signs an SPL-USDC
@@ -60,8 +60,8 @@ export RUNNER_URL=http://localhost:8787
 export AGENT_ASSET=11111111111111111111111111111111  # replace with a Core asset mint
 export SOLANA_RPC=https://api.devnet.solana.com
 
-pnpm --filter @leash/buyer-demo build
-pnpm --filter @leash/buyer-demo start
+pnpm --filter @leashmarket/buyer-demo build
+pnpm --filter @leashmarket/buyer-demo start
 ```
 
 You should see ticks like:
@@ -81,7 +81,7 @@ app) to see it on Solscan.
 | `LEASH_BUYER_SECRET_KEY`           | _required_                      | JSON byte array of a devnet keypair. Acts as the agent's **executive** signer.                                                                                                                                                                                                                                                                                                                                                                   |
 | `LEASH_BUYER_SOURCE_TOKEN_ACCOUNT` | _unset_                         | Optional. Agent treasury USDC ATA — funds debit from here when set, executive must already hold an SPL `Approve` delegation.                                                                                                                                                                                                                                                                                                                     |
 | `SELLER_URL`                       | `http://localhost:3001`         | Seller base URL or direct Leash payment-link URL (`.../x/<id>`).                                                                                                                                                                                                                                                                                                                                                                                 |
-| `RUNNER_URL`                       | `http://localhost:8787`         | `@leash/runner` base URL.                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `RUNNER_URL`                       | `http://localhost:8787`         | `@leashmarket/runner` base URL.                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `AGENT_ASSET`                      | `1111…1111`                     | Core asset mint to attribute receipts to.                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `SOLANA_RPC`                       | `https://api.devnet.solana.com` | RPC the buyer signs against.                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `POLL_MS`                          | `30000`                         | Interval between buyer ticks.                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -95,10 +95,10 @@ export LEASH_FACILITATOR_URL=https://facilitator.leash.market
 
 # Or run one locally and point everything at it
 export LEASH_FACILITATOR_URL=http://localhost:8787
-pnpm --filter @leash/facilitator-app dev   # in another terminal
+pnpm --filter @leashmarket/facilitator-app dev   # in another terminal
 ```
 
-`@leash/buyer-kit` records the resolved facilitator URL on every
+`@leashmarket/buyer-kit` records the resolved facilitator URL on every
 `ReceiptV1`, so you can confirm settlements went through the expected
 infrastructure by inspecting `receipt.facilitator_url`.
 
@@ -106,9 +106,9 @@ infrastructure by inspecting `receipt.facilitator_url`.
 
 For the production "client funds the agent, the agent makes them money" flow:
 
-1. Mint an agent (web playground or `createAgent` from `@leash/registry-utils`).
+1. Mint an agent (web playground or `createAgent` from `@leashmarket/registry-utils`).
 2. Approve the executive (this CLI's keypair) as the SPL delegate of the
-   agent's USDC ATA via `setSpendDelegation` from `@leash/registry-utils`.
+   agent's USDC ATA via `setSpendDelegation` from `@leashmarket/registry-utils`.
 3. Fund the agent treasury PDA with USDC on devnet.
 4. Set `LEASH_BUYER_SOURCE_TOKEN_ACCOUNT` to the printed
    `sourceTokenAccount` and run as usual. Every settled call now debits the

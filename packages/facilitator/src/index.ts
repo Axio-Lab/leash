@@ -1,5 +1,5 @@
 /**
- * `@leash/facilitator` — programmatic API for the Leash-operated x402
+ * `@leashmarket/facilitator` — programmatic API for the Leash-operated x402
  * facilitator.
  *
  * Most deployers should run `apps/facilitator` (which thin-wraps the

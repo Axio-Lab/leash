@@ -1,6 +1,10 @@
 'use client';
 
-import { KNOWN_STABLES, provisionTreasuryAtas, setSpendDelegation } from '@leash/registry-utils';
+import {
+  KNOWN_STABLES,
+  provisionTreasuryAtas,
+  setSpendDelegation,
+} from '@leashmarket/registry-utils';
 import { publicKey } from '@metaplex-foundation/umi';
 import type { Umi } from '@metaplex-foundation/umi';
 

@@ -33,7 +33,7 @@
  *
  * Usage
  * -----
- *   pnpm --filter @leash/api fund
+ *   pnpm --filter @leashmarket/api fund
  * or:
  *   cd apps/api && node \
  *     --env-file-if-exists=.env --env-file-if-exists=.env.e2e \
@@ -63,7 +63,7 @@ import {
   getTreasuryBalance,
   TOKEN_2022_PROGRAM_ID,
   SPL_TOKEN_PROGRAM_ID,
-} from '@leash/registry-utils';
+} from '@leashmarket/registry-utils';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Token catalog
@@ -355,7 +355,7 @@ async function main(): Promise<void> {
   if (!fund) {
     fatal(
       `indexer did not surface a fund event for signature ${signature} within 90s — ` +
-        `is the indexer worker running? (pnpm --filter @leash/api indexer:dev)`,
+        `is the indexer worker running? (pnpm --filter @leashmarket/api indexer:dev)`,
     );
   }
   ok(`event_id : ${fund.id}`);

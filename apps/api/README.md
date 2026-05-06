@@ -1,9 +1,9 @@
-# `@leash/api` (internal)
+# `@leashmarket/api` (internal)
 
 This package is the source code for the **deployed** Leash API service
 at `api.leash.market`. It is **not** open-source software you spin up
 yourself — customers integrate via the hosted API and the
-language-specific SDKs that ship with `@leash/*`.
+language-specific SDKs that ship with `@leashmarket/*`.
 
 This README is a developer-facing summary for the team operating that
 hosted service. The user-facing contract lives in the docs at
@@ -11,20 +11,20 @@ hosted service. The user-facing contract lives in the docs at
 
 ## What it is
 
-A Hono app that mirrors `@leash/registry-utils` over HTTP so any
+A Hono app that mirrors `@leashmarket/registry-utils` over HTTP so any
 language can drive the protocol without reaching for a TypeScript SDK.
 The same package also publishes:
 
 - the **chain indexer** (`bin/leash-indexer`) — dual-network watcher
   that decodes `Execute` and registry instructions into `events` rows
 - the **webhook worker** — fanout for outbound HTTP deliveries
-- internal helpers consumed in-process by `@leash/explorer`
+- internal helpers consumed in-process by `@leashmarket/explorer`
   (the Solscan-style read view on the same DB / RPC)
 
 ## Design highlights
 
 - **Prepare/Send split.** Every mutating endpoint maps 1:1 to a
-  `prepare*` function in `@leash/registry-utils`. The server returns an
+  `prepare*` function in `@leashmarket/registry-utils`. The server returns an
   unsigned, base64-encoded transaction; the caller signs locally with
   whatever key material they own (Privy, hardware wallet, server env
   var, generated keypair) and POSTs the signed bytes back to
@@ -70,19 +70,19 @@ and returns:
 }
 ```
 
-| Endpoint                                                   | Wraps `@leash/registry-utils`   |
-| ---------------------------------------------------------- | ------------------------------- |
-| `POST /v1/agents/{mint}/identity/prepare`                  | `prepareRegisterAgentIdentity`  |
-| `POST /v1/agents/{mint}/executive/register/prepare`        | `prepareRegisterExecutive`      |
-| `POST /v1/agents/{mint}/executive/delegate/prepare`        | `prepareDelegateExecution`      |
-| `POST /v1/agents/{mint}/delegation/prepare`                | `prepareSetSpendDelegation`     |
-| `POST /v1/agents/{mint}/delegation/revoke/prepare`         | `prepareRevokeSpendDelegation`  |
-| `POST /v1/agents/{mint}/treasury/provision/prepare`        | `prepareProvisionTreasuryAtas`  |
-| `POST /v1/agents/{mint}/treasury/withdraw/prepare`         | `prepareWithdrawTreasury`       |
-| `POST /v1/agents/{mint}/treasury/withdraw-all/prepare`     | `prepareWithdrawTreasuryAll`    |
-| `POST /v1/agents/{mint}/treasury/withdraw-sol/prepare`     | `prepareWithdrawTreasurySol`    |
-| `POST /v1/agents/{mint}/treasury/withdraw-sol-all/prepare` | `prepareWithdrawTreasurySolAll` |
-| `POST /v1/agents/{mint}/token/set/prepare`                 | `prepareSetAgentToken`          |
+| Endpoint                                                   | Wraps `@leashmarket/registry-utils` |
+| ---------------------------------------------------------- | ----------------------------------- |
+| `POST /v1/agents/{mint}/identity/prepare`                  | `prepareRegisterAgentIdentity`      |
+| `POST /v1/agents/{mint}/executive/register/prepare`        | `prepareRegisterExecutive`          |
+| `POST /v1/agents/{mint}/executive/delegate/prepare`        | `prepareDelegateExecution`          |
+| `POST /v1/agents/{mint}/delegation/prepare`                | `prepareSetSpendDelegation`         |
+| `POST /v1/agents/{mint}/delegation/revoke/prepare`         | `prepareRevokeSpendDelegation`      |
+| `POST /v1/agents/{mint}/treasury/provision/prepare`        | `prepareProvisionTreasuryAtas`      |
+| `POST /v1/agents/{mint}/treasury/withdraw/prepare`         | `prepareWithdrawTreasury`           |
+| `POST /v1/agents/{mint}/treasury/withdraw-all/prepare`     | `prepareWithdrawTreasuryAll`        |
+| `POST /v1/agents/{mint}/treasury/withdraw-sol/prepare`     | `prepareWithdrawTreasurySol`        |
+| `POST /v1/agents/{mint}/treasury/withdraw-sol-all/prepare` | `prepareWithdrawTreasurySolAll`     |
+| `POST /v1/agents/{mint}/token/set/prepare`                 | `prepareSetAgentToken`              |
 
 Read endpoints:
 
@@ -90,7 +90,7 @@ Read endpoints:
 - `GET /v1/agents/{mint}/treasury/balances` — SOL + SPL token balances
 
 The implementation of these reads lives in `src/util/agent-snapshot.ts`
-and is also exported for in-process use by `@leash/explorer`.
+and is also exported for in-process use by `@leashmarket/explorer`.
 
 Submit + events:
 
@@ -116,17 +116,17 @@ Payment links + public paywall (the "Stripe Payment Links" of x402):
 - `DELETE /v1/payment-links/{id}` — soft-delete
 - `POST /v1/payment-links/preview` — render `accepts[]` for a draft
 - `GET|POST /x/{id}` — **public** paywall (anonymous; no API key)
-  — runs `createSeller` from `@leash/seller-kit` per request and
+  — runs `createSeller` from `@leashmarket/seller-kit` per request and
   ingests the resulting `earn` receipt + `payment_link.settled` event
 
-Seller utilities (HTTP parity with `@leash/seller-kit` helpers):
+Seller utilities (HTTP parity with `@leashmarket/seller-kit` helpers):
 
 - `GET /v1/seller/networks` — full per-network token + facilitator catalog
 - `GET /v1/seller/facilitator` — resolved facilitator for the caller network
 - `POST /v1/seller/parse-price` — display string → atomic + equivalents
 - `GET /v1/agents/{mint}/pay-to` — Asset Signer PDA derivation
 
-Buyer endpoints (HTTP parity with `@leash/buyer-kit`):
+Buyer endpoints (HTTP parity with `@leashmarket/buyer-kit`):
 
 - `POST /v1/buyer/quote` — probe a URL, decode `payment-required`
 - `POST /v1/buyer/policy/evaluate` — pure `RulesV1` policy gate
@@ -172,8 +172,8 @@ explorer) so nobody reads `file:./…` from a different working directory.
    LEASH_DB_URL=file:/Users/you/leash-data/leash-dev.db
    ```
 
-4. Build the API package once (`pnpm --filter @leash/api build`) so the
-   explorer can import `@leash/api`.
+4. Build the API package once (`pnpm --filter @leashmarket/api build`) so the
+   explorer can import `@leashmarket/api`.
 
 5. Start the API from `apps/api` with env loaded (Node 20.6+):
 
@@ -191,15 +191,15 @@ The explorer also runs migrations on first connect if the file is new.
 
 ### Starting the chain indexer
 
-The indexer is **`@leash/api`**’s standalone loop: same DB + RPC as the
+The indexer is **`@leashmarket/api`**’s standalone loop: same DB + RPC as the
 API, writes decoded rows into `events` / indexer tables and runs the
 receipt-pull pass. It does **not** go through HTTP.
 
 From the **monorepo root**:
 
 ```bash
-pnpm --filter @leash/api build
-pnpm --filter @leash/api indexer
+pnpm --filter @leashmarket/api build
+pnpm --filter @leashmarket/api indexer
 ```
 
 That runs `node dist/indexer/cli.js` with your current shell env. From
@@ -233,7 +233,7 @@ Useful env vars (all optional; see `src/indexer/cli.ts`):
 | `LEASH_INDEXER_DISABLE_PULL`                     | Set to `1` to skip receipt-pull      |
 
 Typical local layout: **terminal 1** API, **terminal 2** indexer,
-**terminal 3** `pnpm --filter @leash/explorer dev` — all three share
+**terminal 3** `pnpm --filter @leashmarket/explorer dev` — all three share
 `LEASH_API_DB_URL` / `LEASH_DB_URL` to the same file.
 
 ### Authentication: how customers get an API key

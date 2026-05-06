@@ -30,7 +30,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import type { SvmNetwork } from '@leash/mcp-core';
+import type { SvmNetwork } from '@leashmarket/mcp-core';
 
 /** Always-available host defaults. Resolvable without any agent state. */
 export type LeashHostDefaults = {

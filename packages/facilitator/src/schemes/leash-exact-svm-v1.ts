@@ -38,7 +38,7 @@ import {
   resolveLeashFeeEnforcement,
   type LeashFeeEnforcement,
   type LeashFeeExtra,
-} from '@leash/core';
+} from '@leashmarket/core';
 import {
   decodeTransactionFromPayload,
   LIGHTHOUSE_PROGRAM_ADDRESS,

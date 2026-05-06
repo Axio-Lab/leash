@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
-import { createSeller } from '@leash/seller-kit';
-import { stubFacilitator } from '@leash/seller-kit/test-utils';
-import { createBuyer } from '@leash/buyer-kit';
-import type { ClientSvmSigner, LeashFetch } from '@leash/core';
-import type { ReceiptV1, RulesV1 } from '@leash/schemas';
-import { ReceiptV1Schema } from '@leash/schemas';
+import { createSeller } from '@leashmarket/seller-kit';
+import { stubFacilitator } from '@leashmarket/seller-kit/test-utils';
+import { createBuyer } from '@leashmarket/buyer-kit';
+import type { ClientSvmSigner, LeashFetch } from '@leashmarket/core';
+import type { ReceiptV1, RulesV1 } from '@leashmarket/schemas';
+import { ReceiptV1Schema } from '@leashmarket/schemas';
 
 const AGENT = '11111111111111111111111111111111';
 

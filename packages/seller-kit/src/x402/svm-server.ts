@@ -3,7 +3,7 @@ import type { FacilitatorClient } from '@x402/core/server';
 import type { Network } from '@x402/core/types';
 import { ExactSvmScheme } from '@x402/svm/exact/server';
 import { SOLANA_DEVNET_CAIP2, SOLANA_MAINNET_CAIP2, SOLANA_TESTNET_CAIP2 } from '@x402/svm';
-import { defaultFacilitatorFor, FALLBACK_FACILITATOR_URL } from '@leash/core';
+import { defaultFacilitatorFor, FALLBACK_FACILITATOR_URL } from '@leashmarket/core';
 
 export type LeashSellerNetwork = 'solana-mainnet' | 'solana-devnet' | 'solana-testnet';
 
@@ -31,7 +31,7 @@ export function networkAlias(network: LeashSellerNetwork): 'solana-mainnet' | 's
 
 /**
  * Backwards-compatible alias. New code should prefer
- * {@link defaultFacilitatorFor} from `@leash/core` so devnet and mainnet pick
+ * {@link defaultFacilitatorFor} from `@leashmarket/core` so devnet and mainnet pick
  * appropriate hosts and `LEASH_FACILITATOR_URL` overrides flow uniformly.
  */
 export const DEFAULT_FACILITATOR_URL = FALLBACK_FACILITATOR_URL;

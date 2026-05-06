@@ -20,7 +20,7 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 import Link from 'next/link';
-import type { ReceiptV1 } from '@leash/schemas';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -47,9 +47,9 @@ import {
   TOKEN_2022_PROGRAM_ID,
   type ProvisionTreasuryAtasResult,
   type SpendDelegationStatus,
-} from '@leash/registry-utils';
+} from '@leashmarket/registry-utils';
 import { publicKey as toPubkey } from '@metaplex-foundation/umi';
-import { KNOWN_TOKENS, KNOWN_STABLE_SYMBOLS, type KnownStableSymbol } from '@leash/core';
+import { KNOWN_TOKENS, KNOWN_STABLE_SYMBOLS, type KnownStableSymbol } from '@leashmarket/core';
 import { transactionExplorerUrl } from '@/lib/solscan';
 import { LaunchTokenCard } from '@/components/launch-token-card';
 import { loadAgent, saveAgent, type StoredAgent } from '@/lib/agent-storage';
@@ -1636,14 +1636,14 @@ export default function AgentPage() {
               )}
               <p className="text-xs text-fg-subtle leading-relaxed">
                 <strong>SDK status</strong> —{' '}
-                <code className="font-mono">@leash/registry-utils</code> mirrors the Metaplex
+                <code className="font-mono">@leashmarket/registry-utils</code> mirrors the Metaplex
                 guide's `registerExecutiveV1`, `delegateExecutionV1`, and{' '}
                 <code className="font-mono">verifyDelegation</code> snippets one-for-one. Once
                 delegation lands, the executive can sign Core{' '}
                 <code className="font-mono">Execute</code> ixs on the agent's behalf. The owner-side{' '}
                 <code className="font-mono">mpl-core Execute</code> composition (SPL{' '}
                 <code className="font-mono">transferChecked</code> from the treasury) ships in{' '}
-                <code className="font-mono">@leash/registry-utils</code> as{' '}
+                <code className="font-mono">@leashmarket/registry-utils</code> as{' '}
                 <code className="font-mono">withdrawTreasury</code> — see the{' '}
                 <strong>Withdraw treasury</strong> card above.
               </p>

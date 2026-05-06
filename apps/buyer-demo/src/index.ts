@@ -1,6 +1,6 @@
-import { createBuyer } from '@leash/buyer-kit';
-import { fetchPaymentLinkMeta } from '@leash/core';
-import type { ReceiptV1 } from '@leash/schemas';
+import { createBuyer } from '@leashmarket/buyer-kit';
+import { fetchPaymentLinkMeta } from '@leashmarket/core';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 import { createKeyPairSignerFromBytes } from '@solana/kit';
 
 const sellerUrl = process.env.SELLER_URL ?? 'http://localhost:3001';
@@ -15,7 +15,7 @@ const buyerSecret = process.env.LEASH_BUYER_SECRET_KEY;
  * When set, the buyer signs transfers as the SPL **delegate** of this account
  * and funds debit from the agent treasury — matching the playground's
  * "agent funds itself" model. Set up the delegation once with
- * `setSpendDelegation` from `@leash/registry-utils` (the web app does this
+ * `setSpendDelegation` from `@leashmarket/registry-utils` (the web app does this
  * automatically at agent creation time).
  *
  * When unset, the buyer-kit falls back to spending from the signer wallet's

@@ -24,7 +24,7 @@ import { listEvents } from '../src/storage/events.js';
 import { getPaymentLink } from '../src/storage/payment-links.js';
 import { getReceiptByHash } from '../src/storage/receipts.js';
 import { ingestPaywallReceipt } from '../src/routes/paywall.js';
-import type { ReceiptV1 } from '@leash/schemas';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 import { getCache } from '../src/storage/redis.js';
 
 const AGENT = 'BcN4ToBs8jE3dbYNhYqDJqGnKPjH3zRX8gsDUDH72JQp';

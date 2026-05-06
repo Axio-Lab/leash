@@ -114,9 +114,9 @@ export default function SchemasPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="@leash/schemas"
+        eyebrow="@leashmarket/schemas"
         title="Schemas"
-        description="Paste any JSON, pick a schema, and validate against the live Zod schemas shipped from `@leash/schemas`."
+        description="Paste any JSON, pick a schema, and validate against the live Zod schemas shipped from `@leashmarket/schemas`."
       />
 
       <Card>

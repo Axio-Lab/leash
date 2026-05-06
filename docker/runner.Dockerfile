@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# `@leash/runner` — receipt runner HTTP server (`dist/cli.js`).
+# `@leashmarket/runner` — receipt runner HTTP server (`dist/cli.js`).
 #
 # Build context MUST be the monorepo root. On Railway: Root Directory = `/`,
 # Config as code = `docker/runner.railway.json`.
@@ -14,11 +14,11 @@ WORKDIR /app
 
 FROM base AS build
 COPY . .
-RUN pnpm install --frozen-lockfile --filter "@leash/runner..."
-RUN pnpm turbo run build --filter=@leash/runner
+RUN pnpm install --frozen-lockfile --filter "@leashmarket/runner..."
+RUN pnpm turbo run build --filter=@leashmarket/runner
 
 FROM build AS prune
-RUN pnpm --filter @leash/runner deploy --prod /out
+RUN pnpm --filter @leashmarket/runner deploy --prod /out
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app

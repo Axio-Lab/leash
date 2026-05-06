@@ -36,7 +36,7 @@ The wallet that signed `mintAgent`. On-chain, this is the MPL Core asset's updat
 - Pays for the mint tx (rent, network fee).
 - Pays rent for the per-mint ATAs created by `provisionTreasuryAtas`.
 - Is the only key that can call `setSpendDelegation`, `revokeSpendDelegation`, `withdrawTreasury`, `withdrawTreasurySol`, `setAgentToken`, and `delegateExecution`.
-- In `@leash/registry-utils`, "owner" simply means **whoever `umi.identity` resolves to** when you call those functions.
+- In `@leashmarket/registry-utils`, "owner" simply means **whoever `umi.identity` resolves to** when you call those functions.
 
 In the web playground, the owner is your connected Privy embedded wallet. For non-Privy paths see [Bring your own keypair](/guides/bring-your-own-keypair).
 
@@ -57,7 +57,7 @@ If the executive is compromised, the blast radius is bounded by the SPL allowanc
 
 ## Operator
 
-A pure Ed25519 keypair generated locally by `generateOperatorKeypair()` in `@leash/registry-utils`. It has **no on-chain authority** by itself — its purpose is to be the agent's own off-chain signing identity:
+A pure Ed25519 keypair generated locally by `generateOperatorKeypair()` in `@leashmarket/registry-utils`. It has **no on-chain authority** by itself — its purpose is to be the agent's own off-chain signing identity:
 
 - Signs x402 `ReceiptV1` envelopes the agent emits.
 - Signs application-level attestations ("agent X did Y at time Z").
@@ -71,7 +71,7 @@ import {
   generateOperatorKeypair,
   exportOperatorJson,
   operatorRegistration,
-} from '@leash/registry-utils';
+} from '@leashmarket/registry-utils';
 
 const op = generateOperatorKeypair();
 fs.writeFileSync('operator.json', exportOperatorJson(op));

@@ -1,5 +1,5 @@
 /**
- * Compatibility wrapper around `@leash/core`'s `transactionExplorerUrl`.
+ * Compatibility wrapper around `@leashmarket/core`'s `transactionExplorerUrl`.
  *
  * The SDK's helper takes a `TokenNetwork` (`'mainnet' | 'devnet'`) and an
  * `ExplorerProvider`. The web playground historically passed the raw network
@@ -7,14 +7,14 @@
  * so this shim translates that input shape to the SDK's API.
  *
  * New code in the playground should import `transactionExplorerUrl` from
- * `@leash/core` directly. This file exists purely to avoid a sweeping
+ * `@leashmarket/core` directly. This file exists purely to avoid a sweeping
  * call-site refactor of pages that already work.
  */
 
 import {
   addressExplorerUrl as sdkAddressExplorerUrl,
   transactionExplorerUrl as sdkTransactionExplorerUrl,
-} from '@leash/core';
+} from '@leashmarket/core';
 
 const SOLANA_MAINNET_CAIP2 = 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp';
 

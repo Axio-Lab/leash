@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ReceiptV1 } from '@leash/schemas';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 import { finalizeReceipt, computeReceiptHash } from '../src/receipt/build.js';
 import { verifyReceiptChain } from '../src/receipt/verify.js';
 

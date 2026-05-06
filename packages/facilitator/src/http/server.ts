@@ -1,7 +1,7 @@
 /**
  * Hono app implementing the x402 facilitator HTTP API. Compatible
  * wire-shape with `HTTPFacilitatorClient` from `@x402/core`, so any
- * existing `@leash/seller-kit` / `@leash/buyer-kit` deployment can point
+ * existing `@leashmarket/seller-kit` / `@leashmarket/buyer-kit` deployment can point
  * at this URL via the `LEASH_FACILITATOR_URL` env var with no other
  * code changes.
  *

@@ -1,4 +1,4 @@
-# @leash/cli
+# @leashmarket/cli
 
 Human-driven CLI for the Leash agent economy. Mint agents, check
 balances, pay paywalls, discover services, and inspect reputation —
@@ -7,18 +7,18 @@ straight from your terminal, no chat product or MCP host required.
 ## Install
 
 ```bash
-npm install -g @leash/cli
+npm install -g @leashmarket/cli
 # or
-pnpm add -g @leash/cli
+pnpm add -g @leashmarket/cli
 ```
 
 The binary is named `leash`. Pair it with `leash-mcp` (from
-`@leash/mcp`) when you want to expose the same identity to an
+`@leashmarket/mcp`) when you want to expose the same identity to an
 AI agent through STDIO.
 
 ## Configure
 
-Same configuration model as `@leash/mcp` — both binaries read the
+Same configuration model as `@leashmarket/mcp` — both binaries read the
 same `~/.config/leash/agent.json` (chmod 600) and respect the same
 environment variable overrides:
 
@@ -144,10 +144,10 @@ by exporting the file there and importing it on the new machine.
 ## Develop
 
 ```bash
-pnpm --filter @leash/cli typecheck
-pnpm --filter @leash/cli test
-pnpm --filter @leash/cli build
+pnpm --filter @leashmarket/cli typecheck
+pnpm --filter @leashmarket/cli test
+pnpm --filter @leashmarket/cli build
 ```
 
-The compiled `dist/cli.js` is set executable so `npx -y @leash/cli`
+The compiled `dist/cli.js` is set executable so `npx -y @leashmarket/cli`
 works without an extra step.

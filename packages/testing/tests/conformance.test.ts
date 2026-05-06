@@ -1,4 +1,4 @@
-import { finalizeReceipt } from '@leash/core';
+import { finalizeReceipt } from '@leashmarket/core';
 import { describe, expect, it } from 'vitest';
 import { validateReceiptFeed } from '../src/conformance/receipt-feed.js';
 

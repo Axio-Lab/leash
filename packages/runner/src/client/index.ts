@@ -8,7 +8,7 @@
  * normalisation, cache headers, swallowed errors), so we expose a single
  * client that always:
  *   - sends `cache: 'no-store'`
- *   - validates response shape against `@leash/schemas` where applicable
+ *   - validates response shape against `@leashmarket/schemas` where applicable
  *   - returns `null` for 404s, throws for everything else
  */
 
@@ -19,7 +19,7 @@ import {
   type EndpointCreateInput,
   type EndpointV1,
   type ReceiptV1,
-} from '@leash/schemas';
+} from '@leashmarket/schemas';
 
 export type RunnerHealth = {
   ok: boolean;

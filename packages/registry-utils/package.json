@@ -2,7 +2,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "name": "@leash/registry-utils",
+  "name": "@leashmarket/registry-utils",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -25,7 +25,7 @@
     "test:devnet": "RUN_DEVNET=1 vitest run"
   },
   "dependencies": {
-    "@leash/schemas": "^0.1.0",
+    "@leashmarket/schemas": "workspace:*",
     "@metaplex-foundation/genesis": "^0.35.0",
     "@metaplex-foundation/mpl-agent-registry": "^0.2.5",
     "@metaplex-foundation/mpl-core": "^1.10.0",

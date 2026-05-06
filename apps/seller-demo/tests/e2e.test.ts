@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
-import { createSeller } from '@leash/seller-kit';
-import { stubFacilitator } from '@leash/seller-kit/test-utils';
+import { createSeller } from '@leashmarket/seller-kit';
+import { stubFacilitator } from '@leashmarket/seller-kit/test-utils';
 
 describe('seller-demo shape', () => {
   it('returns 402 + a base64 PAYMENT-REQUIRED header on an unpaid request', async () => {

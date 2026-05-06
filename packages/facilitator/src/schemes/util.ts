@@ -3,12 +3,12 @@
  */
 
 import { SOLANA_DEVNET_CAIP2, SOLANA_MAINNET_CAIP2, SOLANA_TESTNET_CAIP2 } from '@x402/svm';
-import type { TokenNetwork } from '@leash/core';
+import type { TokenNetwork } from '@leashmarket/core';
 
 /**
  * Translate the raw `paymentRequirements.network` (CAIP-2 form on v2,
  * legacy `'solana-devnet'` slug on v1) into the {@link TokenNetwork}
- * enum we use everywhere else in `@leash/core`. Returns `null` for
+ * enum we use everywhere else in `@leashmarket/core`. Returns `null` for
  * networks the fee module doesn't manage (e.g. testnet, custom CAIP-2
  * chains) so the caller can fall back to upstream behaviour.
  */

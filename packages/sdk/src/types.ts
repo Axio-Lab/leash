@@ -199,7 +199,7 @@ export type AgentWebhookWithSecret = AgentWebhook & { secret: string };
  *
  * Agent provisioning is fully client-side — generate (or import) an
  * executive keypair, fund it with SOL, then mint the MPL Core asset
- * locally with `@leash/mcp::mintAgentLocally` (or your own Umi setup).
+ * locally with `@leashmarket/mcp::mintAgentLocally` (or your own Umi setup).
  * Once the asset is on-chain, call `recordAgent` to write the
  * platform row + receipts feed metadata.
  */
@@ -229,7 +229,7 @@ export type RecordAgentResponse = {
 // a hosted x402 paywall — the API serves `/x/{id}` for buyers, and
 // the agent's Asset Signer PDA is the on-chain `pay_to`. The SDK
 // gives you typed CRUD; to *pay* one programmatically you need
-// `@leash/buyer-kit` (Solana signing) or `@leash/mcp`'s host.
+// `@leashmarket/buyer-kit` (Solana signing) or `@leashmarket/mcp`'s host.
 
 export type StableSymbol = 'USDC' | 'USDT' | 'USDG';
 export type EndpointMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';

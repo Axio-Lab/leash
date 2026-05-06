@@ -20,7 +20,7 @@ For Railway, point each service at its `*.railway.json`:
 
 ---
 
-## `@leash/agents` — agents.leash.market (port 4100)
+## `@leashmarket/agents` — agents.leash.market (port 4100)
 
 ### Build-time vars (`NEXT_PUBLIC_*`, baked into client bundle)
 
@@ -54,7 +54,7 @@ a "not configured" warning.
 
 ---
 
-## `@leash/marketplace` — leash.market (port 4200)
+## `@leashmarket/marketplace` — leash.market (port 4200)
 
 ### Build-time vars (`NEXT_PUBLIC_*`)
 

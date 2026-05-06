@@ -9,7 +9,7 @@ Every snippet here is the smallest thing that actually works. Pair with
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { keypairIdentity } from '@metaplex-foundation/umi';
 import { mplCore } from '@metaplex-foundation/mpl-core';
-import { createAgent } from '@leash/registry-utils';
+import { createAgent } from '@leashmarket/registry-utils';
 
 const umi = createUmi('https://api.devnet.solana.com').use(mplCore());
 umi.use(keypairIdentity(/* ownerKeypair: Keypair */));
@@ -57,8 +57,8 @@ curl -sS "https://api.leash.market/v1/events/<event_id>" \
 ## 2. Provision a treasury ATA + delegate spend (SDK)
 
 ```ts
-import { findAssetSignerPda, prepareSetSpendDelegation } from '@leash/registry-utils';
-import { tokenProgramForMint, TOKEN_2022_PROGRAM_ID } from '@leash/core';
+import { findAssetSignerPda, prepareSetSpendDelegation } from '@leashmarket/registry-utils';
+import { tokenProgramForMint, TOKEN_2022_PROGRAM_ID } from '@leashmarket/core';
 
 const [treasury] = findAssetSignerPda(umi, { asset: agentAsset });
 
@@ -93,8 +93,8 @@ await usdgTx.sendAndConfirm(umi);
 ## 3. Build a paying buyer (SDK)
 
 ```ts
-import { createBuyer } from '@leash/buyer-kit';
-import { getSpendDelegation } from '@leash/registry-utils';
+import { createBuyer } from '@leashmarket/buyer-kit';
+import { getSpendDelegation } from '@leashmarket/registry-utils';
 import { createKeyPairSignerFromBytes } from '@solana/kit';
 
 const signer = await createKeyPairSignerFromBytes(executiveSecretBytes);
@@ -149,7 +149,7 @@ For a SaaS endpoint you already host, set `response.proxy: { url: 'https://your-
 import { Hono } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
-import { createSeller } from '@leash/seller-kit';
+import { createSeller } from '@leashmarket/seller-kit';
 
 const umi = createUmi(process.env.SOLANA_RPC_URL!).use(mplCore());
 const app = new Hono();
@@ -201,7 +201,7 @@ solana airdrop 1 -k .leash-fee-payer.json --url https://api.devnet.solana.com
 
 # 2. Boot
 export LEASH_FACILITATOR_SECRET_KEY="$(cat .leash-fee-payer.json)"
-pnpm --filter @leash/facilitator-app dev
+pnpm --filter @leashmarket/facilitator-app dev
 # → listens on http://127.0.0.1:8787
 
 # 3. Point an SDK / API integration at it
@@ -212,7 +212,7 @@ Smoke-test it end-to-end:
 
 ```bash
 LEASH_FACILITATOR_URL=http://localhost:8787 \
-  pnpm --filter @leash/api facilitator:smoke
+  pnpm --filter @leashmarket/api facilitator:smoke
 ```
 
 ## 8. Subscribe to lifecycle events with a webhook
@@ -231,8 +231,8 @@ curl -sS https://api.leash.market/v1/webhooks \
 ## 9. Verify a receipt offline (SDK)
 
 ```ts
-import { ReceiptV1Schema } from '@leash/schemas';
-import { hashReceipt, chainReceipt } from '@leash/core';
+import { ReceiptV1Schema } from '@leashmarket/schemas';
+import { hashReceipt, chainReceipt } from '@leashmarket/core';
 
 const parsed = ReceiptV1Schema.parse(receiptJson);
 const recomputed = hashReceipt(parsed); // strips receipt_hash, recomputes
@@ -249,7 +249,7 @@ items, `slug` is the provider FQN (e.g. `agentmail/email`); use it to expand
 the provider into its individual paid endpoints.
 
 ```ts
-import { LeashClient } from '@leash/sdk';
+import { LeashClient } from '@leashmarket/sdk';
 
 const leash = new LeashClient({ baseUrl: 'https://api.leash.market' });
 
@@ -260,7 +260,7 @@ const search = await leash.discover({ capability: 'email', source: 'pay-skills',
 const item = search.items[0]!; // source === 'pay-skills'
 const provider = await leash.paySkillsProvider(item.slug);
 
-// 3. Pick the right endpoint and pay it with @leash/buyer-kit (omitted).
+// 3. Pick the right endpoint and pay it with @leashmarket/buyer-kit (omitted).
 const ep = provider.endpoints.find((e) => e.probe_status === 'ok' && e.protocol?.includes('x402'));
 console.log(`${ep!.method} ${ep!.url} — accepts ${(ep!.supported_usd ?? []).join(', ')}`);
 ```

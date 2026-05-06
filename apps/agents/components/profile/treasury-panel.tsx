@@ -5,8 +5,8 @@ import useSWR from 'swr';
 import { toast } from 'sonner';
 import { publicKey } from '@metaplex-foundation/umi';
 import { ArrowDownToLineIcon, ExternalLinkIcon, RefreshCwIcon, XIcon } from 'lucide-react';
-import { withdrawTreasury, withdrawTreasurySol } from '@leash/registry-utils';
-import { TOKEN_2022_PROGRAM_ID, lookupToken } from '@leash/core';
+import { withdrawTreasury, withdrawTreasurySol } from '@leashmarket/registry-utils';
+import { TOKEN_2022_PROGRAM_ID, lookupToken } from '@leashmarket/core';
 
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';

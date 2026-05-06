@@ -18,7 +18,7 @@
  * format MarkdownV2, sendMessage with parse-mode fallback).
  */
 
-import { decryptSecret } from '@leash/platform-auth/encryption';
+import { decryptSecret } from '@leashmarket/platform-auth/encryption';
 
 import type { LeashApiConfig } from '../config.js';
 import {

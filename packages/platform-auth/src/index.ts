@@ -1,5 +1,5 @@
 /**
- * `@leash/platform-auth`
+ * `@leashmarket/platform-auth`
  *
  * Shared helpers for the two Next.js surfaces (`apps/agents`,
  * `apps/marketplace`):

@@ -1,4 +1,4 @@
-# `@leash/merged-demo`
+# `@leashmarket/merged-demo`
 
 The full `buyer ↔ seller ↔ runner` loop in a single process. Useful for
 dev, smoke tests, and as the simplest possible example of how the three
@@ -6,10 +6,10 @@ Leash kits fit together against real x402 on Solana devnet.
 
 What it does on boot:
 
-1. Spins up a Hono app with `@leash/seller-kit` mounted on `POST /echo`
+1. Spins up a Hono app with `@leashmarket/seller-kit` mounted on `POST /echo`
    (real x402 middleware → `facilitator.svmacc.tech`).
 2. If `LEASH_BUYER_SECRET_KEY` is set, also constructs a
-   `@leash/buyer-kit` instance with that signer and tickles the seller every
+   `@leashmarket/buyer-kit` instance with that signer and tickles the seller every
    20 s. Each tick pays 0.001 USDC on devnet and emits both a `spend`
    (buyer) and `earn` (seller) receipt to the runner.
 3. If the secret is not set, only the seller runs — the demo will still
@@ -18,7 +18,7 @@ What it does on boot:
 
 ## Prerequisites
 
-Same as `@leash/buyer-demo` for the buyer half:
+Same as `@leashmarket/buyer-demo` for the buyer half:
 
 1. A devnet keypair (`solana-keygen new`) funded with devnet SOL
    (<https://faucet.solana.com>) and devnet USDC
@@ -35,8 +35,8 @@ export AGENT_ASSET=<your Core asset mint>
 export RUNNER_URL=http://localhost:8787
 export PORT=3003
 
-pnpm --filter @leash/merged-demo build
-pnpm --filter @leash/merged-demo start
+pnpm --filter @leashmarket/merged-demo build
+pnpm --filter @leashmarket/merged-demo start
 ```
 
 You should see:

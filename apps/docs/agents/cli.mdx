@@ -3,7 +3,7 @@ title: 'Human CLI — leash'
 description: 'Operate your Leash agent from the terminal. Same identity as the MCP, no chat product required.'
 ---
 
-`@leash/cli` ships a `leash` binary for human operators. It wraps
+`@leashmarket/cli` ships a `leash` binary for human operators. It wraps
 the same `LeashHost` the standalone MCP exposes to AI agents, but
 skips the MCP wire protocol and renders results as plain text (or
 `--json` for piping into `jq` / scripts).
@@ -11,12 +11,12 @@ skips the MCP wire protocol and renders results as plain text (or
 ## Install
 
 ```bash
-npm install -g @leash/cli
+npm install -g @leashmarket/cli
 # or
-pnpm add -g @leash/cli
+pnpm add -g @leashmarket/cli
 ```
 
-Pair with `@leash/mcp` to expose the same identity to an AI agent.
+Pair with `@leashmarket/mcp` to expose the same identity to an AI agent.
 Both binaries read the same `~/.config/leash/agent.json`.
 
 ## Bring your own RPC (strongly recommended)

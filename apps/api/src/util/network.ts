@@ -1,7 +1,7 @@
 /**
  * Network identifiers used everywhere in the API server. We use the
  * Metaplex `SvmNetwork` slugs (`solana-devnet`, `solana-mainnet`) as the
- * canonical form because that's what `@leash/registry-utils` and the
+ * canonical form because that's what `@leashmarket/registry-utils` and the
  * Metaplex Genesis SDK already accept; CAIP-2 forms are reserved for
  * x402 receipts.
  */
@@ -19,7 +19,7 @@ export function networkLabel(n: SvmNetwork): string {
   return n === 'solana-devnet' ? 'devnet' : 'mainnet';
 }
 
-/** CAIP-2 chain identifier mirrors `@leash/schemas/networks.ts`. */
+/** CAIP-2 chain identifier mirrors `@leashmarket/schemas/networks.ts`. */
 export function networkToCaip2(n: SvmNetwork): string {
   return n === 'solana-devnet'
     ? 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1'

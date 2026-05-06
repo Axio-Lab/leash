@@ -32,17 +32,17 @@ This is the only economic hook in the entire stack. There is **no**
 per-call subscription, **no** facilitator markup, **no** per-agent
 infra fee, and **no** spread on simulation. The 1% fee leg is the
 revenue model for the hosted Leash facilitators, and the same primitive
-anyone running `@leash/facilitator` can opt into.
+anyone running `@leashmarket/facilitator` can opt into.
 
 ## The numbers
 
 | Field             | Value                                          | Where it lives                                                                     |
 | ----------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Rate              | `100` bps (`1.00%`)                            | `LEASH_FEE_BPS` env on facilitator + API                                           |
-| Rounding          | Ceiling, in atomic units                       | `computeFeeAtoms` in `@leash/core/fees`                                            |
+| Rounding          | Ceiling, in atomic units                       | `computeFeeAtoms` in `@leashmarket/core/fees`                                            |
 | Mainnet authority | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W` | `LEASH_FEE_AUTHORITY_MAINNET` (override only if self-hosting your own facilitator) |
 | Devnet authority  | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W` | `LEASH_FEE_AUTHORITY_DEVNET`                                                       |
-| Live snapshot     | `GET /v1/health` `.protocol_fee` block         | API + `@leash/facilitator` `/health`                                               |
+| Live snapshot     | `GET /v1/health` `.protocol_fee` block         | API + `@leashmarket/facilitator` `/health`                                               |
 
 The hosted Leash mainnet and devnet facilitators always serve the
 defaults. Override the env only if you are **operating your own
@@ -114,7 +114,7 @@ having to coordinate ahead of time.
 }
 ```
 
-Buyers parse it with `parseLeashFeeExtra` from `@leash/core` and resolve
+Buyers parse it with `parseLeashFeeExtra` from `@leashmarket/core` and resolve
 the per-request triple `(bps, feeAtomic, feeDestination)` via
 `computeLeashFeeForRequirements`. Facilitators run the **same**
 function over the **same** inputs to verify the buyer's transaction
@@ -159,7 +159,7 @@ common foot-guns:
   buys `~4.95 USDC` of seller-quoted endpoints — the last fee leg
   pushes you over the cap and the settlement fails with
   `insufficient_allowance`. Either gross-up yourself with
-  `applyFeeGrossUp` from `@leash/core`, or pass
+  `applyFeeGrossUp` from `@leashmarket/core`, or pass
   `pad_for_protocol_fee: true` on
   [`POST /v1/agents/{mint}/delegation/prepare`](/api/agents) — the
   response echoes `fee_padding_atoms` so you can audit.
@@ -172,7 +172,7 @@ common foot-guns:
 Code path:
 
 ```ts
-import { applyFeeGrossUp, resolveLeashFeeBps } from '@leash/core';
+import { applyFeeGrossUp, resolveLeashFeeBps } from '@leashmarket/core';
 
 const sellerNetAtoms = 5_000_000n; // 5 USDC
 const { fee, gross } = applyFeeGrossUp(sellerNetAtoms, resolveLeashFeeBps());
@@ -182,7 +182,7 @@ const { fee, gross } = applyFeeGrossUp(sellerNetAtoms, resolveLeashFeeBps());
 
 ## What the facilitator does
 
-`@leash/facilitator` registers two custom schemes —
+`@leashmarket/facilitator` registers two custom schemes —
 `LeashExactSvmFacilitator` (x402 v2) and `LeashExactSvmFacilitatorV1`
 (legacy v1) — instead of the upstream `@x402/svm` defaults. On every
 `POST /verify` call they:
@@ -232,7 +232,7 @@ The explorer's "Protocol fees collected" panel sums these by mint per
 network, and the receipt detail page renders `Net (seller) / Protocol
 fee / Gross (buyer) / Fee authority`.
 
-## Self-hosting `@leash/facilitator` with your own fee
+## Self-hosting `@leashmarket/facilitator` with your own fee
 
 The fee primitive is generic — anyone running their own facilitator can
 charge their own protocol fee against their own treasury, or disable
@@ -246,7 +246,7 @@ verification stack:
 | `LEASH_FEE_AUTHORITY_MAINNET` | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W` | Pubkey that receives the mainnet fee leg.                                           |
 | `LEASH_FEE_AUTHORITY_DEVNET`  | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W` | Same, for devnet.                                                                   |
 
-Run [`@leash/facilitator`](/guides/run-a-facilitator) with the env you
+Run [`@leashmarket/facilitator`](/guides/run-a-facilitator) with the env you
 want, point sellers at `LEASH_FACILITATOR_URL=https://your-host`, and
 the chain of effects above (sellers stamp your `feeAuthority` →
 buyers verify against your `/health` → indexer watchlists your ATAs
@@ -265,7 +265,7 @@ import {
   resolveLeashFeeBps,
   type LeashFeeExtra,
   type ResolvedLeashFee,
-} from '@leash/core';
+} from '@leashmarket/core';
 ```
 
 - `resolveLeashFeeBps()` — current fee rate (env-overridable).

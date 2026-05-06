@@ -156,7 +156,7 @@ export class LeashClient {
   // ── agent recording (public) ──────────────────────────────────────
   //
   // Agent provisioning is fully client-side now: the caller mints +
-  // delegates locally (see `@leash/mcp::mintAgentLocally`), then
+  // delegates locally (see `@leashmarket/mcp::mintAgentLocally`), then
   // POSTs the resulting asset here for the API to write the platform
   // row. Idempotent on `mint`. Works on both devnet and mainnet.
 
@@ -407,8 +407,8 @@ export class LeashClient {
   // them via the bearer-token API key, so callers must construct
   // `LeashClient` with `{ apiKey }`. We expose them here because they
   // are pure HTTP — no Solana signing — so they belong in the thin
-  // client. To *pay* one programmatically, see `@leash/buyer-kit` or
-  // `@leash/mcp`'s `pay()` host method (both sign locally).
+  // client. To *pay* one programmatically, see `@leashmarket/buyer-kit` or
+  // `@leashmarket/mcp`'s `pay()` host method (both sign locally).
 
   async createPaymentLink(input: PaymentLinkCreateInput): Promise<PaymentLink> {
     this.requireApiKey('createPaymentLink');

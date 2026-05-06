@@ -1,4 +1,4 @@
-import type { ReceiptV1, RulesV1 } from '@leash/schemas';
+import type { ReceiptV1, RulesV1 } from '@leashmarket/schemas';
 import {
   computeFeeAtoms,
   createSvmBuyerFetch,
@@ -24,7 +24,7 @@ import {
   type PaymentRequirements,
   type PolicyState,
   type TokenNetwork,
-} from '@leash/core';
+} from '@leashmarket/core';
 
 export type BuyerConfig = {
   agent: string;
@@ -52,7 +52,7 @@ export type BuyerConfig = {
    * treasury PDA's USDC ATA) and `signer` signs as the SPL **delegate** of
    * that account. The owner of the account must have previously approved
    * `signer.address` for at least the per-call price (see
-   * `setSpendDelegation` in `@leash/registry-utils`).
+   * `setSpendDelegation` in `@leashmarket/registry-utils`).
    *
    * Leave undefined for vanilla "signer pays from their own ATA" flow.
    */
@@ -61,7 +61,7 @@ export type BuyerConfig = {
    * Facilitator label/URL written to receipts. The buyer never talks to the
    * facilitator directly — the seller does — but recording it on the receipt
    * lets explorers double-check settlement out-of-band. Defaults to
-   * `'https://facilitator.svmacc.tech'` to match `@leash/seller-kit`'s default.
+   * `'https://facilitator.svmacc.tech'` to match `@leashmarket/seller-kit`'s default.
    */
   facilitator?: string;
   /**
@@ -154,7 +154,7 @@ export type ReceiptForwardConfig = {
   fetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 };
 
-// Imported from @leash/core. Re-resolved on every createBuyer call so the
+// Imported from @leashmarket/core. Re-resolved on every createBuyer call so the
 // LEASH_FACILITATOR_URL env override applies even when buyer-kit is bundled
 // without process polyfills (the helper guards `typeof process`).
 
@@ -650,7 +650,7 @@ void KNOWN_STABLE_SYMBOLS;
 /**
  * Resolve the effective `(receipt) => void` sink given the
  * buyer/seller's `onReceipt` field and any explicit `ReceiptForwardConfig`.
- * Lives here (not in `@leash/core`) so the buyer/seller kits can drop
+ * Lives here (not in `@leashmarket/core`) so the buyer/seller kits can drop
  * the env fallback at bundle time when targeted at the browser.
  *
  * The returned function:

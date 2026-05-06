@@ -1,5 +1,5 @@
 /**
- * Wrapper that turns a `prepare*` call from `@leash/registry-utils` into
+ * Wrapper that turns a `prepare*` call from `@leashmarket/registry-utils` into
  * an HTTP-shaped response: an event row in Turso (`phase=prepared`), a
  * base64-encoded transaction the caller signs, and any echo fields the
  * underlying helper returned.

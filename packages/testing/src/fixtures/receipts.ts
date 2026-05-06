@@ -1,5 +1,5 @@
-import { finalizeReceipt } from '@leash/core';
-import type { ReceiptV1 } from '@leash/schemas';
+import { finalizeReceipt } from '@leashmarket/core';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 
 export const fixtureReceiptSpend: ReceiptV1 = finalizeReceipt({
   v: '0.1',

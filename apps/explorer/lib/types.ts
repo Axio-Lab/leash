@@ -7,7 +7,7 @@
  * is what we actually do here) is a no-op for the views.
  */
 
-import type { ReceiptV1 } from '@leash/schemas';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 
 export type EventRow = {
   id: string;

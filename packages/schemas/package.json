@@ -2,7 +2,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "name": "@leash/schemas",
+  "name": "@leashmarket/schemas",
   "version": "0.1.0",
   "private": false,
   "type": "module",

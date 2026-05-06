@@ -3,7 +3,7 @@
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { prepareRegisterAgentIdentity } from '@leash/registry-utils';
+import { prepareRegisterAgentIdentity } from '@leashmarket/registry-utils';
 import { publicKey } from '@metaplex-foundation/umi';
 
 import type { AuthVariables } from '../auth/types.js';

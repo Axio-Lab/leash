@@ -9,7 +9,7 @@
  * which any wallet, indexer, or explorer can resolve and parse.
  *
  * Every Leash surface that creates an agent (chat product
- * `apps/agents`, standalone `@leash/mcp`, the human-driven `@leash/cli`)
+ * `apps/agents`, standalone `@leashmarket/mcp`, the human-driven `@leashmarket/cli`)
  * builds the URI through this module so the on-chain shape stays in
  * lockstep across hosts. EIP-8004 consumers `safeParse` the document
  * and bail on partial shapes, so we always emit the full schema with

@@ -65,7 +65,7 @@ export function snippet(language: SnippetLanguage, params: SnippetParams): strin
 function honoSnippet(p: Required<SnippetParams>): string {
   return `// Hono — drop in front of any tool route
 import { Hono } from 'hono';
-import { x402Middleware } from '@leash/seller-kit/hono';
+import { x402Middleware } from '@leashmarket/seller-kit/hono';
 
 const app = new Hono();
 
@@ -91,7 +91,7 @@ export default app;`;
 function expressSnippet(p: Required<SnippetParams>): string {
   return `// Express — drop in front of any tool route
 import express from 'express';
-import { x402Express } from '@leash/seller-kit/express';
+import { x402Express } from '@leashmarket/seller-kit/express';
 
 const app = express();
 
@@ -139,7 +139,7 @@ function mcpSnippet(p: Required<SnippetParams>): string {
   return `// MCP server — every tool call gated by x402
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { withX402 } from '@leash/seller-kit/mcp';
+import { withX402 } from '@leashmarket/seller-kit/mcp';
 
 const server = new McpServer({ name: '${p.slug}', version: '0.1.0' });
 
@@ -203,7 +203,7 @@ curl -X POST https://your-domain.com/${p.slug}/${p.toolName} \\
   -d '{"query":"hello"}'
 
 # Then sign + retry with the leash buyer-kit:
-npx @leash/buyer-kit pay \\
+npx @leashmarket/buyer-kit pay \\
   --url https://your-domain.com/${p.slug}/${p.toolName} \\
   --key lsh_live_… \\
   --body '{"query":"hello"}'`;

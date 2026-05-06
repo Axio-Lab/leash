@@ -3,13 +3,13 @@
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { applyFeeGrossUp, resolveLeashFeeBps } from '@leash/core';
+import { applyFeeGrossUp, resolveLeashFeeBps } from '@leashmarket/core';
 import {
   prepareRevokeSpendDelegation,
   prepareSetSpendDelegation,
   SPL_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
-} from '@leash/registry-utils';
+} from '@leashmarket/registry-utils';
 import { publicKey } from '@metaplex-foundation/umi';
 
 import type { AuthVariables } from '../auth/types.js';

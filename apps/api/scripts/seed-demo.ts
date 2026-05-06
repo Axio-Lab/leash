@@ -13,13 +13,13 @@
  * Idempotent: skips anything already present.
  *
  * Usage:
- *   pnpm --filter @leash/api db:migrate
- *   pnpm --filter @leash/api seed:demo
+ *   pnpm --filter @leashmarket/api db:migrate
+ *   pnpm --filter @leashmarket/api seed:demo
  */
 
 import { createClient } from '@libsql/client';
 
-import { encryptSecret } from '@leash/platform-auth/encryption';
+import { encryptSecret } from '@leashmarket/platform-auth/encryption';
 
 import {
   createPlatformAgent,

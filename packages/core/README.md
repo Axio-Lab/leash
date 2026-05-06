@@ -1,4 +1,4 @@
-# @leash/core
+# @leashmarket/core
 
 Policy evaluation, receipt hashing / chain verification, real x402 client
 adapter for Solana, treasury helpers, and an env-based kill-switch.
@@ -10,8 +10,8 @@ import {
   verifyReceiptChain,
   treasuryPda,
   readPauseFromEnv,
-} from '@leash/core';
-import { createSvmBuyerFetch } from '@leash/core/x402';
+} from '@leashmarket/core';
+import { createSvmBuyerFetch } from '@leashmarket/core/x402';
 ```
 
 `createSvmBuyerFetch({ signer, networks, rpcUrl })` registers
@@ -25,7 +25,7 @@ the browser, and edge runtimes.
 ## Test
 
 ```bash
-pnpm --filter @leash/core test
+pnpm --filter @leashmarket/core test
 ```
 
 See the [`Real x402 on Solana`](../../apps/docs/standards/x402-on-solana.mdx)

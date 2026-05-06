@@ -647,7 +647,7 @@ describe('indexer', () => {
       args: [ASSET, url],
     });
 
-    const { finalizeReceipt } = await import('@leash/core');
+    const { finalizeReceipt } = await import('@leashmarket/core');
     const r1 = finalizeReceipt({
       v: '0.1',
       kind: 'spend',
