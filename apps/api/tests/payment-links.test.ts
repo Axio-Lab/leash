@@ -38,6 +38,7 @@ type PaymentLink = {
   path: string;
   price: string;
   currency: 'USDC' | 'USDT' | 'USDG';
+  protocol: 'x402' | 'mpp';
   accepts_currencies: string[];
   response: { status: number; mimeType: string; body: unknown };
   webhook_url: string | null;
@@ -108,6 +109,7 @@ describe('POST /v1/payment-links', () => {
       // $0.001 USDC → 1000 atomic (6 decimals)
       amount: '1000',
     });
+    expect(link.protocol).toBe('x402');
     expect(link.counters).toMatchObject({ call_count: 0, settled_count: 0 });
     expect(link.disabled_at).toBeNull();
 
@@ -177,6 +179,18 @@ describe('POST /v1/payment-links', () => {
     const body = (await dupe.json()) as { error: string; message: string };
     expect(body.error).toBe('idempotency_conflict');
     expect(body.message).toMatch(/fixed-slug-1/);
+  });
+
+  it('persists protocol mpp when requested', async () => {
+    const rig = await createTestRig();
+    const res = await authedFetch(rig, '/v1/payment-links', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(defaultBody({ protocol: 'mpp', id: 'mpp-stored' })),
+    });
+    expect(res.status).toBe(200);
+    const link = (await res.json()) as PaymentLink;
+    expect(link.protocol).toBe('mpp');
   });
 });
 

@@ -24,6 +24,8 @@ import type { DbClient } from './turso.js';
 import { execute } from './turso.js';
 import type { SvmNetwork } from '../util/network.js';
 
+export type PaymentLinkProtocol = 'x402' | 'mpp';
+
 /**
  * Verbatim response template returned to the buyer after a successful
  * x402 settlement. Mirrors `EndpointResponseTemplate` from
@@ -54,6 +56,8 @@ export type PaymentLinkRow = {
   webhookUrl: string | null;
   wrapReceipt: boolean;
   metadata: Record<string, unknown>;
+  /** Hosted paywall protocol: x402 (`payment-required`) or MPP (`problem+json`). */
+  protocol: PaymentLinkProtocol;
   /** Number of times the paywall was hit (any outcome). */
   callCount: number;
   /** Number of times the call settled successfully. */
@@ -86,6 +90,7 @@ export type CreatePaymentLinkInput = {
   webhookUrl?: string | null;
   wrapReceipt?: boolean;
   metadata?: Record<string, unknown>;
+  protocol?: PaymentLinkProtocol;
 };
 
 export class PaymentLinkConflictError extends Error {
@@ -102,14 +107,15 @@ export async function createPaymentLink(
   const accepts = JSON.stringify(input.acceptsCurrencies ?? []);
   const responseJson = JSON.stringify(input.response);
   const metadataJson = JSON.stringify(input.metadata ?? {});
+  const proto = normalizePaymentProtocol(input.protocol ?? 'x402');
   try {
     await execute(
       db,
       `INSERT INTO payment_links (
          id, network, api_key_id, label, description, owner_agent, owner_wallet,
          method, path, price, currency, accepts_currencies_json,
-         response_json, webhook_url, wrap_receipt, metadata_json
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         response_json, webhook_url, wrap_receipt, metadata_json, payment_protocol
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.id,
         input.network,
@@ -127,6 +133,7 @@ export async function createPaymentLink(
         input.webhookUrl ?? null,
         input.wrapReceipt ? 1 : 0,
         metadataJson,
+        proto,
       ],
     );
   } catch (err) {
@@ -229,6 +236,7 @@ export type UpdatePaymentLinkPatch = Partial<{
   wrapReceipt: boolean;
   metadata: Record<string, unknown>;
   disabled: boolean;
+  protocol: PaymentLinkProtocol;
 }>;
 
 export async function updatePaymentLink(
@@ -282,6 +290,10 @@ export async function updatePaymentLink(
     sets.push(
       p.disabled ? `disabled_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')` : `disabled_at = NULL`,
     );
+  }
+  if (p.protocol !== undefined) {
+    sets.push('payment_protocol = ?');
+    values.push(normalizePaymentProtocol(p.protocol));
   }
   if (sets.length === 0) {
     // No-op patch: return the row unchanged so callers don't have to
@@ -414,6 +426,9 @@ function rowToPaymentLink(row: Record<string, unknown>): PaymentLinkRow {
     webhookUrl: row.webhook_url != null ? String(row.webhook_url) : null,
     wrapReceipt: Number(row.wrap_receipt ?? 0) === 1,
     metadata,
+    protocol: normalizePaymentProtocol(
+      row.payment_protocol != null ? String(row.payment_protocol) : 'x402',
+    ),
     callCount: Number(row.call_count ?? 0),
     settledCount: Number(row.settled_count ?? 0),
     lastCalledAt: row.last_called_at != null ? String(row.last_called_at) : null,
@@ -431,4 +446,11 @@ function rowToPaymentLink(row: Record<string, unknown>): PaymentLinkRow {
 
 function isStable(s: unknown): s is KnownStableSymbol {
   return s === 'USDC' || s === 'USDT' || s === 'USDG';
+}
+
+function normalizePaymentProtocol(raw: string | undefined): PaymentLinkProtocol {
+  if (raw == null || raw.trim() === '') return 'x402';
+  const s = raw.trim().toLowerCase();
+  if (s === 'mpp') return 'mpp';
+  return 'x402';
 }

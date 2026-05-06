@@ -68,12 +68,22 @@ import {
   withdrawTreasurySol,
 } from '@leashmarket/registry-utils';
 import { createBuyer } from '@leashmarket/buyer-kit';
-import type { RulesV1 } from '@leashmarket/schemas';
+import { isReceiptV02, type ReceiptAny, type RulesV1 } from '@leashmarket/schemas';
 
 import type { LeashAgentConfig } from './config.js';
 import { loadSigner, type LeashSigner } from './signer.js';
 
 const LAMPORTS_PER_SOL = 1_000_000_000n;
+
+/** On-chain signature attached to a receipt (x402 `tx_sig` or MPP settlement). */
+function settlementTxSigFromReceipt(receipt: ReceiptAny): string | null {
+  if (isReceiptV02(receipt) && receipt.protocol === 'mpp') {
+    const s = receipt.tx_sig ?? receipt.mpp_settlement_tx;
+    return s != null && s.length > 0 ? s : null;
+  }
+  const t = receipt.tx_sig;
+  return t != null && t.length > 0 ? t : null;
+}
 
 /**
  * Default spend rules baked into every standalone-MCP buyer-kit
@@ -178,7 +188,7 @@ class StdioHost implements LeashHost {
       // SPL mint for the buyer-kit's `sourceTokenAccount` (the
       // treasury's ATA for the demanded asset). The probe is cheap
       // (one HTTP GET) and lets us surface a clean error if the URL
-      // isn't actually an x402 link.
+      // isn't actually an x402 / MPP paywall.
       const preview = await probePaymentLink(args.url);
 
       const tokenProgramKind = tokenProgramForMint(preview.asset);
@@ -208,7 +218,8 @@ class StdioHost implements LeashHost {
         .text()
         .catch(() => '');
 
-      if (receipt.tx_sig && response.ok) {
+      const settlementSig = settlementTxSigFromReceipt(receipt as ReceiptAny);
+      if (settlementSig && response.ok) {
         // Prefer the seller-stamped `X-Leash-*` headers over the
         // buyer-kit's locally-computed receipt. The buyer-side hash is
         // computed against the buyer's view of the request (its own
@@ -219,7 +230,7 @@ class StdioHost implements LeashHost {
         // working. Same precedence as the chat product applies in
         // `apps/agents/components/chat/pay-request-artifact.tsx`.
         const stamped = parseLeashHeaders(response);
-        const txSignature = stamped.txSig ?? receipt.tx_sig;
+        const txSignature = stamped.txSig ?? settlementSig;
         const receiptHash = stamped.receiptHash ?? receipt.receipt_hash ?? null;
         return jsonResult({
           kind: 'payment_receipt',

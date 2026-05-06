@@ -163,6 +163,27 @@ describe('GET /x/{id} 402 discovery', () => {
   });
 });
 
+describe('GET /x/{id} MPP protocol', () => {
+  it('returns 402 with application/problem+json challenge', async () => {
+    const rig = await createTestRig();
+    const created = await createLink(rig, defaultLinkBody({ id: 'mpp-probe', protocol: 'mpp' }));
+
+    const res = await publicFetch(rig, `/x/${created.id}?network=solana-devnet`);
+    expect(res.status).toBe(402);
+    expect((res.headers.get('content-type') ?? '').toLowerCase()).toContain(
+      'application/problem+json',
+    );
+    const json = (await res.json()) as {
+      type: string;
+      challengeId: string;
+      request: { feePayer?: string };
+    };
+    expect(json.type).toBe('https://paymentauth.org/problems/payment-required');
+    expect(json.challengeId.length).toBeGreaterThan(4);
+    expect(json.request.feePayer).toBe('11111111111111111111111111111111');
+  });
+});
+
 describe('ingestPaywallReceipt() — settled receipt sink', () => {
   it('persists the receipt, bumps settled_count, and emits 3 events', async () => {
     const rig = await createTestRig();

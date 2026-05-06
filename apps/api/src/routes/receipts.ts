@@ -1,7 +1,7 @@
 /**
  * Receipts ingestion + read routes.
  *
- * Buyer/seller kits POST `ReceiptV1` blobs here; the explorer + monitor
+ * Buyer/seller kits POST receipt blobs here (`ReceiptV1` or `v: "0.2"` MPP/x402);
  * UIs read them back. Every endpoint is network-scoped through the API
  * key so a devnet key cannot read a mainnet receipt and vice versa.
  *
@@ -52,7 +52,11 @@ const ReceiptListItemSchema = z
     tx_sig: z.string().nullable(),
     payment_requirements_hash: z.string().nullable(),
     ingested_at: z.string(),
-    raw: ReceiptBodySchema,
+    raw: z
+      .any()
+      .openapi({
+        description: 'Canonical receipt JSON (`v: "0.1"` x402 or `v: "0.2"` dual-protocol).',
+      }),
   })
   .openapi('Receipt');
 

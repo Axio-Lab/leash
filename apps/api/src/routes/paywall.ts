@@ -16,16 +16,15 @@
  *   3. Spin up a per-request `Hono` sub-app and register exactly one
  *      route at `link.method link.path` whose handler returns the
  *      configured response template (status / mimeType / body).
- *   4. Wrap that sub-app with `createSeller(...)` so every request
- *      goes through the real x402 middleware: 402 + paymentRequirements
- *      on first hit, settle + invoke on second hit with `X-PAYMENT`.
+ *   4. Wrap that sub-app with `createSeller` (x402) or `createMppSeller`
+ *      (MPP) so probes return the right 402 shape, then settle on the
+ *      matching credential (`X-PAYMENT` vs `Authorization: PaymentScheme`).
  *   5. Forward the original `Request` into the sub-app and return the
  *      sub-app's `Response` verbatim.
  *
  * The seller-kit's `onReceipt` callback fires only on successful
  * settlement. We use it to:
- *   - persist the `ReceiptV1` in our `receipts` table (idempotent on
- *     `receipt_hash`)
+ *   - persist the receipt (`ReceiptV1` or `ReceiptV02`) in our `receipts` table
  *   - bump `payment_links.settled_count` + record the latest tx sig
  *   - emit `payment_link.served` + `payment_link.settled` events so the
  *     explorer's activity feed and any subscribed webhooks light up.
@@ -42,12 +41,13 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { findAssetSignerPda } from '@metaplex-foundation/mpl-core';
 import { publicKey } from '@metaplex-foundation/umi';
-import { createSeller } from '@leashmarket/seller-kit';
+import { createSeller, createMppSeller } from '@leashmarket/seller-kit';
 import { buildLeashEnvelope, buildLeashHeaders } from '@leashmarket/core';
-import type { ReceiptV1 } from '@leashmarket/schemas';
+import type { ReceiptAny } from '@leashmarket/schemas';
+import { isReceiptV02 } from '@leashmarket/schemas';
 
+import { resolveMppFeePayer } from '../util/mpp-fee-payer.js';
 import { type LeashApiConfig, facilitatorForNetwork } from '../config.js';
-import type { CacheClient } from '../storage/redis.js';
 import type { DbClient } from '../storage/turso.js';
 import {
   getPaymentLink,
@@ -61,6 +61,7 @@ import { emitProtocolFeeEvent } from '../storage/fee-events.js';
 import { ensureWatched } from '../indexer/watchlist.js';
 import { umiReadOnly } from '../util/umi.js';
 import { isSvmNetwork, type SvmNetwork } from '../util/network.js';
+import type { CacheClient } from '../storage/redis.js';
 
 export type PaywallRoutesDeps = {
   config: LeashApiConfig;
@@ -97,6 +98,7 @@ export function buildPaywallRoutes(deps: PaywallRoutesDeps): Hono {
         'PAYMENT-RESPONSE',
         'X-PAYMENT-RESPONSE',
         'payment-required',
+        'x-payment-receipt',
         'X-Leash-Tx-Sig',
         'X-Leash-Receipt-Hash',
         'X-Leash-Agent',
@@ -166,7 +168,22 @@ export function buildPaywallRoutes(deps: PaywallRoutesDeps): Hono {
     // settled count.
     await recordCall(deps.db, { network, id });
 
-    const sellerApp = buildSellerSubApp(deps, link);
+    let mppFeePayer: string | undefined;
+    if (link.protocol === 'mpp') {
+      try {
+        mppFeePayer = await resolveMppFeePayer(deps.config, network);
+      } catch (e) {
+        return c.json(
+          {
+            error: 'mpp_config',
+            message: e instanceof Error ? e.message : 'could not resolve MPP fee payer',
+          },
+          503,
+        );
+      }
+    }
+
+    const sellerApp = buildSellerSubApp(deps, link, mppFeePayer);
     // AsyncLocalStorage scope so the seller's `onReceipt` callback can
     // stash the canonical receipt where this outer handler can read it
     // and stamp `X-Leash-*` headers on the settled response. Without
@@ -181,8 +198,17 @@ export function buildPaywallRoutes(deps: PaywallRoutesDeps): Hono {
   return app;
 }
 
-type ReceiptHolder = { receipt: ReceiptV1 | null };
+type ReceiptHolder = { receipt: ReceiptAny | null };
 const receiptStore = new AsyncLocalStorage<ReceiptHolder>();
+
+function settlementTxFromReceipt(r: ReceiptAny): string | null {
+  if (isReceiptV02(r) && r.protocol === 'mpp') {
+    const s = r.tx_sig ?? r.mpp_settlement_tx;
+    return s != null && s.length > 0 ? s : null;
+  }
+  const t = r.tx_sig;
+  return t != null && t.length > 0 ? t : null;
+}
 
 /**
  * Stamp `X-Leash-*` headers on a settled response so cross-origin
@@ -193,7 +219,7 @@ const receiptStore = new AsyncLocalStorage<ReceiptHolder>();
  */
 function finalizeResponse(
   res: Response,
-  receipt: ReceiptV1 | null,
+  receipt: ReceiptAny | null,
   link: PaymentLinkRow,
   publicOrigin: string,
 ): Response {
@@ -213,39 +239,64 @@ function finalizeResponse(
 
 /**
  * Build a single-route Hono app whose only handler returns the
- * configured response template, fronted by the real x402 seller-kit
- * middleware. Order matters: Hono `app.use(...)` without a path only
- * runs against routes registered AFTER it, so we install the seller
- * middleware first via `createSeller(...)`, then register our 200
- * response handler.
+ * configured response template, fronted by x402 (`createSeller`) or MPP
+ * (`createMppSeller`) middleware.
  */
-function buildSellerSubApp(deps: PaywallRoutesDeps, link: PaymentLinkRow): Hono {
+function buildSellerSubApp(
+  deps: PaywallRoutesDeps,
+  link: PaymentLinkRow,
+  mppFeePayer?: string,
+): Hono {
   const sub = new Hono();
   const umi = umiReadOnly(deps.config, link.network);
-  createSeller(sub, {
-    umi,
-    sellerAgent: { asset: link.ownerAgent },
-    routes: {
-      [`${link.method} ${link.path}`]: {
-        description: link.label,
-        price: link.price,
-        currency: link.currency,
-        acceptsCurrencies: link.acceptsCurrencies,
-        mimeType: link.response.mimeType,
+
+  if (link.protocol === 'mpp') {
+    if (!mppFeePayer) {
+      throw new Error('MPP paywall requires fee payer pubkey');
+    }
+    createMppSeller(sub, {
+      umi,
+      sellerAgent: { asset: link.ownerAgent },
+      routes: {
+        [`${link.method} ${link.path}`]: {
+          description: link.label,
+          price: link.price,
+          currency: link.currency,
+          mimeType: link.response.mimeType,
+        },
       },
-    },
-    network: link.network,
-    facilitator: facilitatorForNetwork(deps.config, link.network),
-    onReceipt: async (receipt) => {
-      // Stash the canonical receipt for the outer handler to stamp
-      // onto the response as `X-Leash-Receipt-Hash` (etc) before
-      // continuing to persist it server-side. The store is set up
-      // by the outer `app.all('/x/:id', …)` via AsyncLocalStorage.
-      const holder = receiptStore.getStore();
-      if (holder) holder.receipt = receipt;
-      await ingestPaywallReceipt(deps, link, receipt);
-    },
-  });
+      network: link.network,
+      facilitator: facilitatorForNetwork(deps.config, link.network),
+      feePayerAddress: mppFeePayer,
+      onReceipt: async (receipt) => {
+        const holder = receiptStore.getStore();
+        if (holder) holder.receipt = receipt;
+        await ingestPaywallReceipt(deps, link, receipt);
+      },
+    });
+  } else {
+    createSeller(sub, {
+      umi,
+      sellerAgent: { asset: link.ownerAgent },
+      routes: {
+        [`${link.method} ${link.path}`]: {
+          description: link.label,
+          price: link.price,
+          currency: link.currency,
+          acceptsCurrencies: link.acceptsCurrencies,
+          mimeType: link.response.mimeType,
+        },
+      },
+      network: link.network,
+      facilitator: facilitatorForNetwork(deps.config, link.network),
+      onReceipt: async (receipt) => {
+        const holder = receiptStore.getStore();
+        if (holder) holder.receipt = receipt;
+        await ingestPaywallReceipt(deps, link, receipt);
+      },
+    });
+  }
+
   sub.on(link.method, link.path, () => {
     const r = link.response;
     const body = typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
@@ -258,7 +309,7 @@ function buildSellerSubApp(deps: PaywallRoutesDeps, link: PaymentLinkRow): Hono 
 }
 
 /**
- * Persist a settled `ReceiptV1` and emit the matching event timeline:
+ * Persist a settled receipt (v0.1 or v0.2) and emit the matching event timeline:
  *   1. `ingestReceipt` (idempotent on receipt_hash)
  *   2. `recordSettlement` bumps `settled_count` + last_tx_sig
  *   3. `receipt.published` event for the explorer's receipt feed
@@ -273,15 +324,16 @@ function buildSellerSubApp(deps: PaywallRoutesDeps, link: PaymentLinkRow): Hono 
 export async function ingestPaywallReceipt(
   deps: PaywallRoutesDeps,
   link: PaymentLinkRow,
-  receipt: ReceiptV1,
+  receipt: ReceiptAny,
 ): Promise<void> {
   const network = link.network;
+  const txSig = settlementTxFromReceipt(receipt);
   const ingested = await ingestReceipt(deps.db, { network, receipt });
 
   await recordSettlement(deps.db, {
     network,
     id: link.id,
-    txSig: receipt.tx_sig,
+    txSig,
     amountAtomic: receipt.price?.amount ?? null,
     currency: receipt.price?.currency ?? null,
   });
@@ -309,10 +361,10 @@ export async function ingestPaywallReceipt(
       agentAsset: link.ownerAgent,
       metadata: {
         receipt_hash: receipt.receipt_hash,
-        ...(receipt.tx_sig ? { tx_sig: receipt.tx_sig } : {}),
+        ...(txSig ? { tx_sig: txSig } : {}),
       },
     });
-    if (receipt.tx_sig) await markSubmitted(deps.db, receiptEventId, receipt.tx_sig);
+    if (txSig) await markSubmitted(deps.db, receiptEventId, txSig);
     await markConfirmed(deps.db, receiptEventId);
   }
 
@@ -321,9 +373,9 @@ export async function ingestPaywallReceipt(
     network,
     apiKeyId: link.apiKeyId,
     agentAsset: link.ownerAgent,
-    metadata: { payment_link_id: link.id, tx_sig: receipt.tx_sig },
+    metadata: { payment_link_id: link.id, tx_sig: txSig },
   });
-  if (receipt.tx_sig) await markSubmitted(deps.db, servedId, receipt.tx_sig);
+  if (txSig) await markSubmitted(deps.db, servedId, txSig);
   await markConfirmed(deps.db, servedId);
 
   const settledId = await createPreparedEvent(deps.db, {
@@ -335,7 +387,7 @@ export async function ingestPaywallReceipt(
     amountAtomic: receipt.price?.amount ?? null,
     metadata: {
       payment_link_id: link.id,
-      tx_sig: receipt.tx_sig,
+      tx_sig: txSig,
       currency: receipt.price?.currency ?? null,
       receipt_hash: receipt.receipt_hash,
       // Fee context lets revenue dashboards split gross vs. net without
@@ -347,7 +399,7 @@ export async function ingestPaywallReceipt(
       ...(receipt.price?.feeAuthority ? { fee_authority: receipt.price.feeAuthority } : {}),
     },
   });
-  if (receipt.tx_sig) await markSubmitted(deps.db, settledId, receipt.tx_sig);
+  if (txSig) await markSubmitted(deps.db, settledId, txSig);
   await markConfirmed(deps.db, settledId);
 
   // Mirror the receipt-level fee event so the explorer's "Protocol

@@ -46,6 +46,12 @@ function installFacilitatorTestFetchShimOnce(): void {
   ): Promise<Response> => {
     const href = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (href.includes('facilitator.test.invalid')) {
+      if (href.includes('/health')) {
+        return new Response(JSON.stringify({ signers: ['11111111111111111111111111111111'] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       // Mimic an x402 facilitator's `/supported` endpoint with both
       // v1 (legacy network slug) and v2 (CAIP-2) entries for SVM so
       // the seller-kit middleware passes its
