@@ -1,4 +1,4 @@
-import { x402Client } from '@x402/core/client';
+import { x402Client, x402HTTPClient } from '@x402/core/client';
 import type { Network } from '@x402/core/types';
 import { wrapFetchWithPayment } from '@x402/fetch';
 import { ExactSvmScheme } from '@x402/svm';
@@ -6,8 +6,85 @@ import { SOLANA_DEVNET_CAIP2, SOLANA_MAINNET_CAIP2, SOLANA_TESTNET_CAIP2 } from 
 import type { ClientSvmSigner } from '@x402/svm';
 import { LeashDelegateExactSvmScheme, LeashExactSvmScheme } from './delegate-scheme.js';
 import type { Address } from '@solana/kit';
+import { detectProtocol } from '../payments/detect.js';
 
 export type LeashFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+/**
+ * Like `@x402/fetch` `wrapFetchWithPayment`, but returns MPP `402` responses
+ * unchanged so the body stays valid for {@link detectProtocol} /
+ * buyer-kit `tryMppRoute`. Upstream `wrapFetchWithPayment` reads
+ * `response.text()` for every 402, which consumes MPP `problem+json`
+ * before Leash can act on it.
+ */
+export function wrapFetchWithMppAwarePayment(
+  fetchImpl: typeof globalThis.fetch,
+  client: x402Client,
+): LeashFetch {
+  const httpClient = client instanceof x402HTTPClient ? client : new x402HTTPClient(client);
+  return async (input, init) => {
+    const request = new Request(input, init);
+    const clonedRequest = request.clone();
+    const response = await fetchImpl(request);
+    if (response.status !== 402) {
+      return response;
+    }
+    const det = await detectProtocol(response);
+    if (det.protocol === 'mpp') {
+      return response;
+    }
+    let paymentRequired;
+    try {
+      const getHeader = (name: string) => response.headers.get(name);
+      let body: unknown;
+      try {
+        const responseText = await response.text();
+        if (responseText) {
+          body = JSON.parse(responseText) as unknown;
+        }
+      } catch {
+        /* ignore */
+      }
+      paymentRequired = httpClient.getPaymentRequiredResponse(getHeader, body);
+    } catch (error) {
+      throw new Error(
+        `Failed to parse payment requirements: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+    const hookHeaders = await httpClient.handlePaymentRequired(paymentRequired);
+    if (hookHeaders) {
+      const hookRequest = clonedRequest.clone();
+      for (const [key, value] of Object.entries(hookHeaders)) {
+        hookRequest.headers.set(key, value);
+      }
+      const hookResponse = await fetchImpl(hookRequest);
+      if (hookResponse.status !== 402) {
+        return hookResponse;
+      }
+    }
+    let paymentPayload;
+    try {
+      paymentPayload = await client.createPaymentPayload(paymentRequired);
+    } catch (error) {
+      throw new Error(
+        `Failed to create payment payload: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+    const paymentHeaders = httpClient.encodePaymentSignatureHeader(paymentPayload);
+    if (clonedRequest.headers.has('PAYMENT-SIGNATURE') || clonedRequest.headers.has('X-PAYMENT')) {
+      throw new Error('Payment already attempted');
+    }
+    for (const [key, value] of Object.entries(paymentHeaders)) {
+      clonedRequest.headers.set(key, value);
+    }
+    clonedRequest.headers.set(
+      'Access-Control-Expose-Headers',
+      'PAYMENT-RESPONSE,X-PAYMENT-RESPONSE',
+    );
+    const secondResponse = await fetchImpl(clonedRequest);
+    return secondResponse;
+  };
+}
 
 export type LeashX402Network = 'solana-mainnet' | 'solana-devnet' | 'solana-testnet';
 
@@ -126,7 +203,7 @@ export function createSvmBuyerFetch(opts: CreateSvmBuyerClientOptions): LeashFet
         });
     client.register(NETWORK_TO_CAIP2[n], scheme);
   }
-  return wrapFetchWithPayment(globalThis.fetch, client);
+  return wrapFetchWithMppAwarePayment(globalThis.fetch, client);
 }
 
 export {

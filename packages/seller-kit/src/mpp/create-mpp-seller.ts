@@ -159,15 +159,21 @@ export function createMppSeller(app: Hono, opts: CreateMppSellerOptions): MppSel
       // Mark as consumed only after the facilitator confirms.
       store.consume(credential.challengeId);
 
-      // Stamp settlement headers BEFORE handing off to the route handler so
-      // any downstream middleware can read them too.
-      c.header('x-payment-receipt', b64Json({ tx: settle.transaction, slot: settle.slot }));
-
       // Run the actual route handler. Hono dispatches the next matching
       // handler; we mounted on the same `(method, path)` tuple so the user's
       // GET/POST route fires next. Hono allows multiple handlers on the
       // same key — they run in registration order.
       await next();
+
+      // Stamp the settlement header on the actual response. We deliberately
+      // do this AFTER `next()` rather than before: when the inner route
+      // handler returns a fresh `new Response(...)`, Hono's response setter
+      // does NOT merge headers previously set via `c.header(...)` (those
+      // live on the internal `#preparedHeaders` and are dropped when the
+      // raw Response replaces `c.res`). Setting AFTER `next()` mutates the
+      // actual response's headers directly, which buyer-kit reads to learn
+      // the settlement tx + slot.
+      c.header('x-payment-receipt', b64Json({ tx: settle.transaction, slot: settle.slot }));
 
       // Emit the earn receipt after the handler runs so we can capture
       // the actual response status. Errors here are swallowed by the sink.

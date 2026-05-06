@@ -41,7 +41,12 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { findAssetSignerPda } from '@metaplex-foundation/mpl-core';
 import { publicKey } from '@metaplex-foundation/umi';
-import { createSeller, createMppSeller } from '@leashmarket/seller-kit';
+import {
+  createSeller,
+  createMppSeller,
+  createInMemoryChallengeStore,
+  type ChallengeStore,
+} from '@leashmarket/seller-kit';
 import { buildLeashEnvelope, buildLeashHeaders } from '@leashmarket/core';
 import type { ReceiptAny } from '@leashmarket/schemas';
 import { isReceiptV02 } from '@leashmarket/schemas';
@@ -201,6 +206,14 @@ export function buildPaywallRoutes(deps: PaywallRoutesDeps): Hono {
 type ReceiptHolder = { receipt: ReceiptAny | null };
 const receiptStore = new AsyncLocalStorage<ReceiptHolder>();
 
+let mppChallengeStoreSingleton: ChallengeStore | null = null;
+function getMppChallengeStore(): ChallengeStore {
+  if (!mppChallengeStoreSingleton) {
+    mppChallengeStoreSingleton = createInMemoryChallengeStore();
+  }
+  return mppChallengeStoreSingleton;
+}
+
 function settlementTxFromReceipt(r: ReceiptAny): string | null {
   if (isReceiptV02(r) && r.protocol === 'mpp') {
     const s = r.tx_sig ?? r.mpp_settlement_tx;
@@ -268,6 +281,7 @@ function buildSellerSubApp(
       network: link.network,
       facilitator: facilitatorForNetwork(deps.config, link.network),
       feePayerAddress: mppFeePayer,
+      challengeStore: getMppChallengeStore(),
       onReceipt: async (receipt) => {
         const holder = receiptStore.getStore();
         if (holder) holder.receipt = receipt;

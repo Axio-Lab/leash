@@ -43,6 +43,19 @@ describe('detectProtocol', () => {
     if (det.protocol === 'mpp') expect(det.challenge.challengeId).toBe('ch-test');
   });
 
+  it('prefers MPP body when payment-required header is also present', async () => {
+    const r = new Response(JSON.stringify(mppBody), {
+      status: 402,
+      headers: {
+        'content-type': 'application/problem+json',
+        'payment-required': x402Header,
+      },
+    });
+    const det = await detectProtocol(r);
+    expect(det.protocol).toBe('mpp');
+    if (det.protocol === 'mpp') expect(det.challenge.challengeId).toBe('ch-test');
+  });
+
   it('marks unknown 402 with no header and no MPP body', async () => {
     const r = new Response('plain text 402', { status: 402 });
     const det = await detectProtocol(r);

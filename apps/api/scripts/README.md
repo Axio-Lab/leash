@@ -156,15 +156,15 @@ The script is idempotent on the chain side:
 
 ### When it fails
 
-| Symptom                                                | Likely cause                                                                                                                       |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `expected a devnet key (lsh_test_*), got "lsh_live_…"` | You tried to run e2e against a mainnet key. Don't.                                                                                 |
-| `share_url … should start with API_URL …`              | API process has no `LEASH_API_PUBLIC_ORIGIN`, or it's set to a different origin than the one the script is hitting.                |
-| `owner … USDC balance (…) < required (…)`              | Top up the owner wallet at [https://faucet.circle.com](https://faucet.circle.com).                                                 |
-| `quote.chosen is null — wrong network on the API key?` | The API's seller config can't render an `accepts[]` for `solana-devnet` (check `/v1/seller/networks`).                             |
-| `paywall should respond with 402 …`                    | API isn't actually serving `/x/{id}` (check `LEASH_API_PUBLIC_ORIGIN` and that the `apps/api` build is current).                   |
-| `settlement failed; reason=…`                          | The buyer policy rejected the call, or the facilitator returned an error. The `decision` and `failureReason` are in the same line. |
-| `settled_count never bumped`                           | Settlement reached the chain but the API's paywall handler didn't observe it; check API logs for `payment_link.settled` errors.    |
+| Symptom                                                   | Likely cause                                                                                                                                                                   |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `expected a devnet key (lsh_test_*), got "lsh_live_…"`    | You tried to run e2e against a mainnet key. Don't.                                                                                                                             |
+| `share_url … should start with … LEASH_API_PUBLIC_ORIGIN` | API `LEASH_API_PUBLIC_ORIGIN` doesn't match `LEASH_E2E_PUBLIC_ORIGIN` / `LEASH_E2E_API_URL` (set `LEASH_E2E_PUBLIC_ORIGIN` in `.env.e2e` when using a tunnel + localhost API). |
+| `owner … USDC balance (…) < required (…)`                 | Top up the owner wallet at [https://faucet.circle.com](https://faucet.circle.com).                                                                                             |
+| `quote.chosen is null — wrong network on the API key?`    | The API's seller config can't render an `accepts[]` for `solana-devnet` (check `/v1/seller/networks`).                                                                         |
+| `paywall should respond with 402 …`                       | API isn't actually serving `/x/{id}` (check `LEASH_API_PUBLIC_ORIGIN` and that the `apps/api` build is current).                                                               |
+| `settlement failed; reason=…`                             | The buyer policy rejected the call, or the facilitator returned an error. The `decision` and `failureReason` are in the same line.                                             |
+| `settled_count never bumped`                              | Settlement reached the chain but the API's paywall handler didn't observe it; check API logs for `payment_link.settled` errors.                                                |
 
 ## `withdraw.ts`
 

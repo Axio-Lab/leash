@@ -51,13 +51,9 @@ export async function detectProtocol(response: Response): Promise<ProtocolDetect
     return { status: response.status, protocol: 'none' };
   }
 
-  const headerValue =
-    response.headers.get('payment-required') ?? response.headers.get('PAYMENT-REQUIRED');
-  if (headerValue && headerValue.length > 0) {
-    return { status: 402, protocol: 'x402', paymentRequiredHeader: headerValue };
-  }
-
-  // MPP path: parse the body. Don't consume the original response.
+  // Prefer an MPP problem+json body over `payment-required` when both are
+  // present. Some stacks attach x402-shaped headers on every 402; MPP is
+  // identified by the body and must win so buyer-kit runs tryMppRoute.
   let bodyText = '';
   try {
     bodyText = await response.clone().text();
@@ -75,6 +71,13 @@ export async function detectProtocol(response: Response): Promise<ProtocolDetect
       return { status: 402, protocol: 'mpp', challenge: parseMppChallengeBody(body) };
     }
   }
+
+  const headerValue =
+    response.headers.get('payment-required') ?? response.headers.get('PAYMENT-REQUIRED');
+  if (headerValue && headerValue.length > 0) {
+    return { status: 402, protocol: 'x402', paymentRequiredHeader: headerValue };
+  }
+
   return {
     status: 402,
     protocol: 'unknown',

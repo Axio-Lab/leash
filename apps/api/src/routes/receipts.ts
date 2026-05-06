@@ -14,7 +14,12 @@
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { ReceiptV1Schema, type ReceiptV1 } from '@leashmarket/schemas';
+import {
+  ReceiptV1Schema,
+  ReceiptV02Schema,
+  settlementTxSig,
+  type ReceiptAny,
+} from '@leashmarket/schemas';
 
 import type { AuthVariables } from '../auth/types.js';
 import type { LeashApiConfig } from '../config.js';
@@ -39,7 +44,10 @@ import { invalidRequest, notFound } from '../util/errors.js';
 // its own `z` and the constructed `ReceiptV1Schema` instance is fully
 // compatible — it's just a `z.object`. We re-cast to the local `z` type
 // so OpenAPI registration keeps the structural definition.
-const ReceiptBodySchema: z.ZodType<ReceiptV1> = ReceiptV1Schema as unknown as z.ZodType<ReceiptV1>;
+const ReceiptBodySchema: z.ZodType<ReceiptAny> = z.union([
+  ReceiptV1Schema,
+  ReceiptV02Schema,
+]) as unknown as z.ZodType<ReceiptAny>;
 
 const ReceiptListItemSchema = z
   .object({
@@ -98,7 +106,8 @@ export function buildReceiptRoutes(deps: {
       method: 'post',
       path: '/v1/receipts/{agent}',
       tags: ['receipts'],
-      summary: 'Ingest a `ReceiptV1`. Idempotent on `receipt_hash`.',
+      summary:
+        'Ingest a receipt (`v: "0.1"` x402 or `v: "0.2"` MPP/x402). Idempotent on `receipt_hash`.',
       request: {
         params: z.object({ agent: PubkeySchema }),
         body: {
@@ -149,6 +158,7 @@ export function buildReceiptRoutes(deps: {
       // can deep-link straight to the underlying receipt.
       let eventId: string | null = null;
       if (!result.duplicate) {
+        const settledSig = settlementTxSig(receipt);
         eventId = await createPreparedEvent(deps.db, {
           kind: 'receipt.published',
           network,
@@ -156,7 +166,7 @@ export function buildReceiptRoutes(deps: {
           agentAsset: agent,
           metadata: {
             receipt_hash: receipt.receipt_hash,
-            ...(receipt.tx_sig ? { tx_sig: receipt.tx_sig } : {}),
+            ...(settledSig ? { tx_sig: settledSig } : {}),
           },
         });
         // Receipts are terminal — there's no on-chain confirmation to
@@ -164,7 +174,7 @@ export function buildReceiptRoutes(deps: {
         // shows up in the right bucket on the explorer. We still
         // record the underlying signature on the event row itself so
         // the explorer's tx column isn't blank.
-        if (receipt.tx_sig) await markSubmitted(deps.db, eventId, receipt.tx_sig);
+        if (settledSig) await markSubmitted(deps.db, eventId, settledSig);
         await markConfirmed(deps.db, eventId);
         // Best-effort: emit a protocol-fee row when the receipt is a
         // settled earn carrying a `price.fee`. Idempotent on
