@@ -7,7 +7,7 @@
  * is what we actually do here) is a no-op for the views.
  */
 
-import type { ReceiptV1 } from '@leashmarket/schemas';
+import type { ReceiptAny } from '@leashmarket/schemas';
 
 export type EventRow = {
   id: string;
@@ -59,11 +59,9 @@ export type TreasuryBalances = {
 
 /**
  * The receipt shape consumed by `/receipt/<hash>` and the receipts
- * table. Pages access `ReceiptV1` fields directly (price, request_hash,
- * prev_receipt_hash, ts, …), so we surface the inner receipt
- * unmodified rather than the wrapper row.
+ * table: v0.1 x402 receipts or v0.2 dual-protocol (`parseReceiptAny`).
  */
-export type ReceiptRow = ReceiptV1;
+export type ReceiptRow = ReceiptAny;
 
 export type ReceiptPage = {
   items: ReceiptRow[];

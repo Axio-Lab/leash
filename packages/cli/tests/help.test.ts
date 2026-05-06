@@ -53,12 +53,21 @@ describe('leash CLI', () => {
     expect(stdout).toContain('treasury balance');
     expect(stdout).toContain('discover');
     expect(stdout).toContain('reputation');
+    expect(stdout).toContain('sell create-link');
+    expect(stdout).toContain('pay <link-url>');
   });
 
   it('prints version on `-v`', () => {
     const { code, stdout } = runCli(['-v']);
     expect(code).toBe(0);
     expect(stdout).toMatch(/^leash \d+\.\d+\.\d+/);
+  });
+
+  it('sell without subcommand prints usage with code 2', () => {
+    const { code, stderr } = runCli(['sell']);
+    expect(code).toBe(2);
+    expect(stderr).toContain('usage:');
+    expect(stderr).toContain('create-link');
   });
 
   it('rejects unknown commands with code 2', () => {

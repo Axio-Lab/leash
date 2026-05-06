@@ -13,7 +13,8 @@
  * {@link buildLeashEnvelope}.
  */
 
-import type { ReceiptV1 } from '@leashmarket/schemas';
+import type { ReceiptAny } from '@leashmarket/schemas';
+import { isReceiptV02 } from '@leashmarket/schemas';
 import {
   agentExplorerUrl,
   transactionExplorerUrl,
@@ -60,21 +61,35 @@ export type BuildLeashEnvelopeOptions = {
   explorerProvider?: ExplorerProvider;
 };
 
+function settlementTxForEnvelope(receipt: ReceiptAny): string | null {
+  if (isReceiptV02(receipt) && receipt.protocol === 'mpp') {
+    const s = receipt.tx_sig ?? receipt.mpp_settlement_tx;
+    return s != null && s.length > 0 ? s : null;
+  }
+  if (isReceiptV02(receipt)) {
+    const s = receipt.tx_sig;
+    return s != null && s.length > 0 ? s : null;
+  }
+  const s = receipt.tx_sig;
+  return s != null && s.length > 0 ? s : null;
+}
+
 /**
- * Build a {@link LeashPaymentEnvelope} from a settled `earn` `ReceiptV1`.
+ * Build a {@link LeashPaymentEnvelope} from a settled `earn` receipt (v0.1 or v0.2).
  *
- * The receipt is treated as the source of truth for `tx_sig`, `agent`,
+ * The receipt is treated as the source of truth for settlement signature, `agent`,
  * `price`, and `facilitator`. Explorer links are derived from `network` so
  * devnet receipts get the `?cluster=devnet` suffix automatically.
  */
 export function buildLeashEnvelope(
-  receipt: ReceiptV1,
+  receipt: ReceiptAny,
   opts: BuildLeashEnvelopeOptions,
 ): LeashPaymentEnvelope {
   const network = opts.network ?? deriveTokenNetwork(receipt);
   const provider = opts.explorerProvider ?? 'solscan';
+  const txSig = settlementTxForEnvelope(receipt);
   return {
-    tx_sig: receipt.tx_sig ?? null,
+    tx_sig: txSig,
     receipt_hash: receipt.receipt_hash,
     agent: receipt.agent,
     network: receipt.price?.network ?? null,
@@ -83,7 +98,7 @@ export function buildLeashEnvelope(
       : null,
     facilitator: receipt.facilitator ?? null,
     explorer: {
-      tx: transactionExplorerUrl(receipt.tx_sig ?? null, { network, provider }),
+      tx: transactionExplorerUrl(txSig, { network, provider }),
       agent: agentAppUrl(opts.origin, receipt.agent, provider, network),
     },
   };
@@ -94,7 +109,7 @@ export function buildLeashEnvelope(
  * `'devnet'` as a safe default when the receipt is missing network info —
  * matches the Leash playground's primary cluster.
  */
-function deriveTokenNetwork(receipt: ReceiptV1): TokenNetwork {
+function deriveTokenNetwork(receipt: ReceiptAny): TokenNetwork {
   const slug = receipt.price?.network ?? null;
   const friendly = networkFromCaip2(slug);
   if (friendly === 'solana-mainnet') return 'mainnet';

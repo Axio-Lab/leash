@@ -20,15 +20,25 @@
  *     that by returning JSON errors with detail rather than throwing.
  */
 
-import type { ReceiptV1 } from '@leashmarket/schemas';
+import type { ReceiptAny } from '@leashmarket/schemas';
+import { isReceiptV02 } from '@leashmarket/schemas';
 
 import type { DbClient } from './turso.js';
 import { execute } from './turso.js';
 import type { SvmNetwork } from '../util/network.js';
 
+function txSigForReceiptRow(r: ReceiptAny): string | null {
+  if (isReceiptV02(r) && r.protocol === 'mpp') {
+    const s = r.tx_sig ?? r.mpp_settlement_tx;
+    return s != null && s.length > 0 ? s : null;
+  }
+  const t = r.tx_sig;
+  return t != null && t.length > 0 ? t : null;
+}
+
 export type IngestReceiptArgs = {
   network: SvmNetwork;
-  receipt: ReceiptV1;
+  receipt: ReceiptAny;
 };
 
 export type IngestReceiptResult = {
@@ -48,6 +58,7 @@ export async function ingestReceipt(
   args: IngestReceiptArgs,
 ): Promise<IngestReceiptResult> {
   const r = args.receipt;
+  const txSig = txSigForReceiptRow(r);
   // Ensure the receipt row carries the same `network` slug as the
   // calling API key — buyer/seller kits set `price.network`, but a
   // denied call has `price = null`, so we trust the auth-derived
@@ -65,7 +76,7 @@ export async function ingestReceipt(
       r.nonce,
       r.decision,
       r.kind,
-      r.tx_sig ?? null,
+      txSig,
       r.payment_requirements_hash ?? null,
       JSON.stringify(r),
     ],
@@ -93,7 +104,7 @@ export type ReceiptRow = {
   txSig: string | null;
   paymentRequirementsHash: string | null;
   ingestedAt: string;
-  raw: ReceiptV1;
+  raw: ReceiptAny;
 };
 
 export async function listReceipts(db: DbClient, args: ListReceiptsArgs): Promise<ReceiptRow[]> {
@@ -182,9 +193,9 @@ function rowToReceipt(row: Record<string, unknown>): ReceiptRow {
   if (network !== 'solana-devnet' && network !== 'solana-mainnet') {
     throw new Error(`receipt has unexpected network: ${network}`);
   }
-  let raw: ReceiptV1;
+  let raw: ReceiptAny;
   try {
-    raw = JSON.parse(String(row.raw_json)) as ReceiptV1;
+    raw = JSON.parse(String(row.raw_json)) as ReceiptAny;
   } catch (err) {
     throw new Error(`receipt raw_json is corrupt: ${(err as Error).message}`);
   }

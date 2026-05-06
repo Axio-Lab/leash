@@ -86,6 +86,7 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
           description: args.description,
           amount: args.amount,
           currency: args.currency,
+          protocol: args.protocol,
         });
         return jsonResult({
           kind: 'payment_link',
@@ -94,6 +95,7 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
           url: created.share_url,
           price: `${args.amount} ${args.currency}`,
           currency: args.currency,
+          protocol: args.protocol ?? 'x402',
           label: args.label,
           network: created.network,
           owner_agent: created.owner_agent,
@@ -841,6 +843,7 @@ type CreatePaymentLinkOnBehalfArgs = {
   description?: string;
   amount: number;
   currency: 'USDC' | 'USDG' | 'USDT';
+  protocol?: 'x402' | 'mpp';
 };
 
 type PaymentLinkResponseBody = {
@@ -892,6 +895,7 @@ async function createPaymentLinkOnBehalfOfUser(
     method: 'GET',
     price: `${args.amount} ${args.currency}`,
     currency: args.currency,
+    protocol: args.protocol ?? 'x402',
     response: {
       status: 200,
       mimeType: 'application/json',

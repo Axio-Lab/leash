@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import type { Context as UmiContext } from '@metaplex-foundation/umi';
-import type { ReceiptV1 } from '@leashmarket/schemas';
+import type { ReceiptAny, ReceiptV1 } from '@leashmarket/schemas';
 import {
   buildLeashFeeExtra,
   computeFeeAtoms as computeFeeAtomsHelper,
@@ -145,7 +145,7 @@ export function createSeller(app: Hono, opts: CreateSellerOptions): Seller {
   const state: SellerState = { nonce: 0, prevReceiptHash: null };
   // Same precedence as buyer-kit: explicit `false` => off, function =>
   // user controls the sink, undefined => env + opts fan-out.
-  const receiptSink = resolveSellerReceiptSink(opts.onReceipt, opts.receipts);
+  const receiptSink = resolveSellerReceiptSink<ReceiptV1>(opts.onReceipt, opts.receipts);
 
   const { server, facilitatorUrl } = createSvmResourceServer({
     networks: [sellerNetwork],
@@ -416,15 +416,15 @@ async function emitEarnReceipt(args: {
  * copy (instead of importing from buyer-kit) so the seller package stays
  * server-only and doesn't pull in the buyer's `@solana/kit` dependency.
  */
-export function resolveSellerReceiptSink(
-  onReceipt: CreateSellerOptions['onReceipt'],
+export function resolveSellerReceiptSink<R extends ReceiptAny = ReceiptAny>(
+  onReceipt: ((receipt: R) => void | Promise<void>) | false | undefined,
   forward: SellerReceiptForwardConfig | undefined,
-): (receipt: ReceiptV1) => Promise<void> {
+): (receipt: R) => Promise<void> {
   if (onReceipt === false || envFlag('LEASH_RECEIPTS_DISABLED')) {
     return async () => {};
   }
   if (typeof onReceipt === 'function') {
-    return async (receipt) => {
+    return async (receipt: R) => {
       try {
         await onReceipt(receipt);
       } catch {
@@ -440,7 +440,7 @@ export function resolveSellerReceiptSink(
     ...(forward?.fetch ? { fetch: forward.fetch } : {}),
   };
   const fetchImpl = merged.fetch ?? globalThis.fetch;
-  return async (receipt) => {
+  return async (receipt: R) => {
     const tasks: Promise<unknown>[] = [];
     if (merged.runnerUrl) {
       tasks.push(
@@ -475,7 +475,7 @@ export function resolveSellerReceiptSink(
 async function doPost(
   fetchImpl: NonNullable<SellerReceiptForwardConfig['fetch']>,
   url: string,
-  receipt: ReceiptV1,
+  receipt: ReceiptAny,
   extraHeaders: Record<string, string> = {},
 ): Promise<void> {
   const res = await fetchImpl(url, {

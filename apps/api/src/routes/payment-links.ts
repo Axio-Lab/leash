@@ -108,6 +108,11 @@ const ResponseTemplateSchema = z
   })
   .openapi('PaymentLinkResponseTemplate');
 
+const PaymentLinkProtocolSchema = z.enum(['x402', 'mpp']).openapi({
+  description:
+    'Paywall protocol. `x402` uses `payment-required`; `mpp` uses `application/problem+json` (Machine Payments Protocol).',
+});
+
 const PaymentLinkCreateBody = z
   .object({
     id: EndpointIdSchema.optional(),
@@ -116,6 +121,7 @@ const PaymentLinkCreateBody = z
     owner_agent: PubkeySchema,
     owner_wallet: PubkeySchema.optional(),
     method: EndpointMethodSchema.default('GET'),
+    protocol: PaymentLinkProtocolSchema.default('x402'),
     price: z
       .string()
       .min(1)
@@ -146,6 +152,7 @@ const PaymentLinkPatchBody = z
     wrap_receipt: z.boolean().optional(),
     metadata: z.record(z.unknown()).optional(),
     disabled: z.boolean().optional(),
+    protocol: PaymentLinkProtocolSchema.optional(),
   })
   .openapi('PaymentLinkPatchBody');
 
@@ -153,6 +160,7 @@ const PaymentLinkSchema = z
   .object({
     id: z.string(),
     network: NetworkSchema,
+    protocol: PaymentLinkProtocolSchema,
     label: z.string(),
     description: z.string().nullable(),
     owner_agent: PubkeySchema,
@@ -246,7 +254,7 @@ export function buildPaymentLinkRoutes(
       method: 'post',
       path: '/v1/payment-links',
       tags: ['payment-links'],
-      summary: 'Create a hosted x402 payment link.',
+      summary: 'Create a hosted payment link (x402 or MPP).',
       request: {
         body: {
           required: true,
@@ -300,6 +308,7 @@ export function buildPaymentLinkRoutes(
           webhookUrl: body.webhook_url ?? null,
           wrapReceipt: body.wrap_receipt,
           metadata: body.metadata ?? {},
+          protocol: body.protocol,
         });
       } catch (err) {
         if (err instanceof PaymentLinkConflictError) {
@@ -319,7 +328,12 @@ export function buildPaymentLinkRoutes(
         network,
         apiKeyId: c.var.apiKey.id,
         agentAsset: body.owner_agent,
-        metadata: { payment_link_id: id, price: body.price, currency: body.currency },
+        metadata: {
+          payment_link_id: id,
+          price: body.price,
+          currency: body.currency,
+          protocol: body.protocol,
+        },
       });
       await markConfirmed(deps.db, eventId);
 
@@ -486,6 +500,7 @@ export function buildPaymentLinkRoutes(
           ...(patch.wrap_receipt !== undefined ? { wrapReceipt: patch.wrap_receipt } : {}),
           ...(patch.metadata !== undefined ? { metadata: patch.metadata } : {}),
           ...(patch.disabled !== undefined ? { disabled: patch.disabled } : {}),
+          ...(patch.protocol !== undefined ? { protocol: patch.protocol } : {}),
         },
       });
       if (!updated) throw notFound(`payment link "${id}" not found on ${network}`);
@@ -722,6 +737,7 @@ function rowToWire(row: PaymentLinkRow, config: LeashApiConfig) {
   return {
     id: row.id,
     network: row.network,
+    protocol: row.protocol,
     label: row.label,
     description: row.description,
     owner_agent: row.ownerAgent,

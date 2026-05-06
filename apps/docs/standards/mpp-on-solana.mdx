@@ -1,0 +1,38 @@
+---
+title: 'MPP on Solana (Leash)'
+description: Machine Payments Protocol (problem+json) challenges, crypto credentials, and facilitator settlement — dual-protocol with x402.
+---
+
+In addition to [Real x402 on Solana](/standards/x402-on-solana), Leash supports **MPP** (Machine Payments Protocol) paywalls on Solana: the seller advertises a challenge as **`application/problem+json`** on `402`, the buyer attaches a **crypto credential** (challenge-bound signed transaction), and a **facilitator** broadcasts settlement and returns a signature the seller records on the receipt.
+
+Use MPP when you want RFC 7807-shaped errors, body-carried challenges (instead of x402 `PAYMENT-*` headers), or a separate settle round-trip to your facilitator.
+
+## How Leash detects the rail
+
+`@leashmarket/core` classifies the unpaid `402` via **`detectProtocol`**: **x402** carries the offer in `PAYMENT-REQUIRED`; **MPP** carries it in **`application/problem+json`** with `type: "https://paymentauth.org/problems/payment-required"` and a `challengeId`.
+
+[`@leashmarket/buyer-kit`](/sdk/buyer-kit) runs this automatically — a single `buyer.fetch(url, init)` can settle either rail.
+
+## Seller surfaces
+
+| Surface                       | x402                                                   | MPP                                                                                   |
+| ----------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| **`@leashmarket/seller-kit`** | `createSeller` + `@x402/hono`                          | `createMppSeller` (Hono), challenge issuance + credential verify + facilitator client |
+| **Hosted payment links**      | Default `protocol: "x402"` on `POST /v1/payment-links` | Set `"protocol": "mpp"` — see [Payment links](/api/payment-links)                     |
+| **Runner endpoints**          | `EndpointV1` default `payment_protocol: "x402"`        | `payment_protocol: "mpp"` on the stored descriptor                                    |
+
+MPP routes still price in Leash-known stables and settle to the seller agent's **Asset Signer PDA**; the difference is the HTTP challenge envelope and the **`POST /mpp/settle`** facilitator step instead of wiring through an x402 `PAYMENT-RESPONSE` header.
+
+## Receipts
+
+MPP settlements produce **`ReceiptV02`** with `v: "0.2"` and `protocol: "mpp"` (see [Receipt V2 schema](/schemas/receipt-v2)): fields such as `mpp_challenge_id`, `mpp_settlement_tx`, and optional `tx_sig` mirror the on-chain proof. Legacy **`ReceiptV1`** remains valid for historical x402-only traffic — use `parseReceiptAny` / `receiptProtocol` in [`@leashmarket/schemas`](https://www.npmjs.com/package/@leashmarket/schemas) when ingesting mixed feeds.
+
+## Facilitators
+
+Your facilitator must expose **`POST /mpp/settle`** compatible with Leash's MPP client. x402 HTTPS facilitators are **not** drop-in substitutes for MPP settle — configure both when you run dual-protocol traffic. See [Run a facilitator](/guides/run-a-facilitator).
+
+## See also
+
+- [Payment links](/api/payment-links) — `protocol` field on create/update
+- [Receipt concept](/concepts/receipt) — v0.1 vs v0.2
+- [`@leashmarket/mcp-core`](/sdk/mcp-core) — `leash_pay_payment_link` and `leash_create_payment_link` (`protocol` option)

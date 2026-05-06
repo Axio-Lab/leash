@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { settlementTxSig } from '@leashmarket/schemas';
 import { ArrowRight, DollarSign, Receipt as ReceiptIcon, Wallet } from 'lucide-react';
 import {
   DbUnavailableError,
@@ -17,7 +18,7 @@ import { cn } from '@/lib/cn';
 /** Best-effort counterparty join: never fails the page render. */
 async function loadCounterparties(network: Network, rows: ReceiptRow[]) {
   const sigs = rows
-    .map((r) => r.tx_sig)
+    .map((r) => settlementTxSig(r))
     .filter((s): s is string => typeof s === 'string' && s.length > 0);
   try {
     return await getCounterpartiesForTxs(network, sigs);

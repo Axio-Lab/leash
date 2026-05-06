@@ -95,8 +95,15 @@ leash discover -q ocr --max-price 0.10
 # 6. Vet a counterparty before paying.
 leash reputation AGENT_MINT_PUBKEY
 
-# 7. Pay something.
+# 7. Pay something (x402 or MPP — probed automatically).
 leash pay https://example.com/x/abc123
+# POST + JSON body when the paid route needs it:
+# leash pay https://api.example.com/premium --method POST --body '{"pair":"SOL/USD"}'
+
+# 7b. Create a hosted payment link (needs LEASH_API_KEY + LEASH_API_URL).
+#     Default paywall is x402; add --protocol mpp for MPP (problem+json).
+leash sell create-link --label "Coffee" --amount 0.50 --currency USDC
+leash sell create-link --label "MPP tier" --amount 1 --protocol mpp
 
 # 8. Inspect or change the SPL spend authority. By default the agent
 #    is minted with unlimited USDC delegation; tighten, revoke, or
@@ -184,7 +191,14 @@ activity:
                                      (default 7). One row per UTC day with
                                      sent_usd, received_usd, net_usd, and
                                      per-direction counts.
-  pay LINK_URL                       probe → sign → settle an x402 paywall
+  pay <link-url> [--method GET|POST]
+                 [--body <json>]     probe → sign → settle via buyer-kit.
+                                     x402 + MPP are auto-detected; use POST/body
+                                     when the seller route requires it.
+  sell create-link --label L --amount N [--currency C]
+                    [--description …] [--protocol x402|mpp]
+                                     create a hosted payment link (LEASH_API_KEY).
+                                     Default protocol x402; mpp for MPP paywalls.
 
 misc:
   doctor                             config + RPC + API reachability check

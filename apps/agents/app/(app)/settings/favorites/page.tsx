@@ -21,6 +21,8 @@ type DiscoverRow = {
   source: DiscoverSource;
   price_usdc: string | null;
   pricing_type: 'free' | 'per_call' | 'variable';
+  /** Declared payment rails; default x402 when the catalogue omits them. */
+  protocols: Array<'x402' | 'mpp'>;
 };
 
 type PaySkillsEndpoint = {
@@ -85,12 +87,24 @@ function sourceLabel(source: DiscoverSource): string {
   return source === 'pay-skills' ? 'pay.sh' : 'Leash';
 }
 
+function rowProtocols(r: Record<string, unknown>): Array<'x402' | 'mpp'> {
+  const p = r.payment_protocol;
+  if (p === 'mpp' || p === 'x402') return [p];
+  const arr = r.payment_protocols;
+  if (Array.isArray(arr)) {
+    const out = arr.filter((x): x is 'x402' | 'mpp' => x === 'x402' || x === 'mpp');
+    if (out.length > 0) return out;
+  }
+  return ['x402'];
+}
+
 export default function FavoritesSettingsPage() {
   const { user } = usePrivy();
   const pid = user?.id ?? '';
   const [q, setQ] = React.useState('');
   const [debouncedQ, setDebouncedQ] = React.useState('');
   const [sourceFilter, setSourceFilter] = React.useState<'all' | DiscoverSource>('all');
+  const [protocolFilter, setProtocolFilter] = React.useState<'all' | 'x402' | 'mpp'>('all');
   const [page, setPage] = React.useState(1);
 
   React.useEffect(() => {
@@ -100,7 +114,7 @@ export default function FavoritesSettingsPage() {
 
   React.useEffect(() => {
     setPage(1);
-  }, [debouncedQ, sourceFilter]);
+  }, [debouncedQ, sourceFilter, protocolFilter]);
 
   // Always load: empty/short query = browse mode (no `capability` on the API).
   // 2+ chars narrows via `debouncedQ` → BFF → `capability`.
@@ -143,9 +157,11 @@ export default function FavoritesSettingsPage() {
         r.pricing_type === 'free' || r.pricing_type === 'per_call' || r.pricing_type === 'variable'
           ? r.pricing_type
           : 'variable';
-      return { slug, title, description, url, source, price_usdc, pricing_type };
+      const protocols = rowProtocols(r);
+      return { slug, title, description, url, source, price_usdc, pricing_type, protocols };
     })
-    .filter((x): x is DiscoverRow => x != null);
+    .filter((x): x is DiscoverRow => x != null)
+    .filter((row) => protocolFilter === 'all' || row.protocols.includes(protocolFilter));
 
   function entryFor(row: DiscoverRow): FavoriteEntry {
     return {
@@ -156,6 +172,7 @@ export default function FavoritesSettingsPage() {
       ...(row.price_usdc ? { pricePerCallUsdc: row.price_usdc } : {}),
       source: row.source,
       ...(row.url ? { url: row.url } : {}),
+      protocols: row.protocols,
     };
   }
 
@@ -201,6 +218,20 @@ export default function FavoritesSettingsPage() {
               }`}
             >
               {s === 'all' ? 'All' : s === 'leash' ? 'Leash' : 'pay.sh'}
+            </button>
+          ))}
+        </div>
+        <div className="inline-flex rounded-lg border border-border bg-bg p-0.5 text-xs">
+          {(['all', 'x402', 'mpp'] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setProtocolFilter(s)}
+              className={`px-2.5 py-1 rounded-md transition-colors ${
+                protocolFilter === s ? 'bg-bg-elev text-fg' : 'text-fg-muted hover:text-fg'
+              }`}
+            >
+              {s === 'all' ? 'All rails' : s}
             </button>
           ))}
         </div>
@@ -314,6 +345,14 @@ export default function FavoritesSettingsPage() {
               >
                 {sourceLabel(l.source ?? 'leash')}
               </span>
+              {(l.protocols ?? ['x402']).map((p) => (
+                <span
+                  key={p}
+                  className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-fg-subtle/15 text-fg-subtle"
+                >
+                  {p}
+                </span>
+              ))}
               <button
                 type="button"
                 className="text-danger ml-2 hover:underline"
@@ -363,6 +402,14 @@ function DiscoverRowCard({
             >
               {sourceLabel(row.source)}
             </span>
+            {row.protocols.map((p) => (
+              <span
+                key={p}
+                className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-fg-subtle/15 text-fg-subtle"
+              >
+                {p}
+              </span>
+            ))}
           </div>
           <div className="text-xs text-fg-muted font-mono truncate">{row.slug}</div>
           {row.description ? (

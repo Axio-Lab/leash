@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   LEASH_TOOLS,
@@ -7,6 +7,7 @@ import {
   jsonResult,
   lookupTokenBySymbolSafe,
   noAgentResult,
+  probePaymentLink,
   symbolForMintSafe,
   type LeashHost,
 } from '../src/index.js';
@@ -158,5 +159,65 @@ describe('helpers', () => {
     const parsed = JSON.parse(r.content[0]!.text) as { kind: string; status: string };
     expect(parsed.kind).toBe('payment_link');
     expect(parsed.status).toBe('no_agent');
+  });
+
+  describe('probePaymentLink', () => {
+    const savedFetch = globalThis.fetch;
+
+    afterEach(() => {
+      globalThis.fetch = savedFetch;
+    });
+
+    it('parses x402 payment-required header', async () => {
+      const accepts = [
+        {
+          network: 'solana-devnet',
+          payTo: 'Recv11111111111111111111111111111111',
+          asset: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+          amount: '1000',
+          currency: 'USDC',
+        },
+      ];
+      const b64 = Buffer.from(JSON.stringify({ accepts })).toString('base64');
+      globalThis.fetch = vi.fn(
+        async () =>
+          new Response('', {
+            status: 402,
+            headers: { 'payment-required': b64 },
+          }),
+      ) as typeof fetch;
+
+      const p = await probePaymentLink('https://example.com/x/foo?network=solana-devnet');
+      expect(p.protocol).toBe('x402');
+      expect(p.pay_to).toBe('Recv11111111111111111111111111111111');
+      expect(p.currency).toBe('USDC');
+    });
+
+    it('parses MPP problem+json', async () => {
+      const body = {
+        type: 'https://paymentauth.org/problems/payment-required',
+        status: 402,
+        challengeId: 'cid-1',
+        request: {
+          recipient: 'Recv11111111111111111111111111111111',
+          amount: '1000',
+          currency: 'USDC',
+          network: 'solana-devnet',
+          asset: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+        },
+      };
+      globalThis.fetch = vi.fn(
+        async () =>
+          new Response(JSON.stringify(body), {
+            status: 402,
+            headers: { 'content-type': 'application/problem+json' },
+          }),
+      ) as typeof fetch;
+
+      const p = await probePaymentLink('https://example.com/mpp');
+      expect(p.protocol).toBe('mpp');
+      expect(p.challenge_id).toBe('cid-1');
+      expect(p.pay_to).toBe('Recv11111111111111111111111111111111');
+    });
   });
 });

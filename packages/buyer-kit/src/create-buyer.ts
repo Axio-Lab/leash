@@ -1,11 +1,23 @@
-import type { ReceiptV1, RulesV1 } from '@leashmarket/schemas';
+import type {
+  MppChallengeV1,
+  ReceiptAny,
+  ReceiptV02Mpp,
+  ReceiptV1,
+  RulesV1,
+} from '@leashmarket/schemas';
+import { ReceiptV02MppSchema } from '@leashmarket/schemas';
 import {
+  buildAndSignMppTransfer,
+  buildMppAuthorizationHeader,
+  canonicalJson,
   computeFeeAtoms,
+  computeReceiptHash,
   createSvmBuyerFetch,
   currencyForAsset,
   decodePaymentResponseHeader,
   defaultFacilitatorFor,
   deriveAgentTreasuryAta,
+  detectProtocol,
   evaluate,
   finalizeReceipt,
   inspectSplTokenAccount,
@@ -21,6 +33,7 @@ import {
   type KnownStableSymbol,
   type LeashFetch,
   type LeashX402Network,
+  type MppCredentialV1,
   type PaymentRequirements,
   type PolicyState,
   type TokenNetwork,
@@ -75,7 +88,7 @@ export type BuyerConfig = {
    * The receipt object is **always** still returned on
    * `BuyerCallResult.receipt` regardless of this setting.
    */
-  onReceipt?: ((receipt: ReceiptV1) => void | Promise<void>) | false;
+  onReceipt?: ((receipt: ReceiptAny) => void | Promise<void>) | false;
   /**
    * Optional fan-out destinations applied when `onReceipt` is undefined
    * (the implicit default). Either or both can be set; Leash also looks
@@ -105,7 +118,14 @@ export type BuyerConfig = {
 
 export type BuyerCallResult = {
   response: Response;
-  receipt: ReceiptV1;
+  /**
+   * Receipt for this call. v0.1 for x402 payments (kept for wire stability),
+   * v0.2 with `protocol: 'mpp'` for MPP payments. Use `parseReceiptAny` to
+   * read either shape; `receipt.protocol` (when present) discriminates.
+   */
+  receipt: ReceiptAny;
+  /** Protocol detected on a 402, if any. `undefined` for non-paywall calls. */
+  protocol?: 'x402' | 'mpp';
   /**
    * The price the seller actually demanded (decoded from the `payment-required`
    * header). Present whenever the seller returned 402, regardless of whether
@@ -207,6 +227,7 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
         cfg.rules,
         state,
       );
+
       if (pol.decision === 'deny') {
         const draft = {
           v: '0.1' as const,
@@ -263,6 +284,36 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
       // stays in place as defensive code in case a buyer-side proxy ever
       // re-attaches them after eating the X-Leash-* headers.
       const settlement = parseSettlement(response) ?? parseRedirectSettlement(response);
+
+      // MPP fallback: x402's `wrapFetchWithPayment` only auto-pays 402s that
+      // carry a `payment-required` header. An MPP 402 (problem+json body, no
+      // header) falls through to here unchanged. Detect it, sign the SPL
+      // transfer, retry — and emit a v0.2 mpp receipt instead of v0.1.
+      if (!settlement && response.status === 402) {
+        const mppRoute = await tryMppRouteFromResponse({ response, url, init, cfg, networks });
+        if (mppRoute) {
+          state.recentRequestHashes.push(h);
+          const mppReceipt = buildMppReceipt({
+            cfg,
+            nonce: state.recentRequestHashes.length - 1,
+            method,
+            url,
+            body,
+            challenge: mppRoute.challenge,
+            response: mppRoute.response,
+            settlement: mppRoute.settlement,
+            facilitator,
+          });
+          await receiptSink(mppReceipt);
+          return {
+            response: mppRoute.response,
+            receipt: mppReceipt,
+            protocol: 'mpp',
+            quotedPrice: priceFromMppChallenge(mppRoute.challenge),
+            ...(mppRoute.failureReason ? { failureReason: mppRoute.failureReason } : {}),
+          };
+        }
+      }
       // `Response.error()` surfaces as `status: 0` AND `type === 'error'`.
       // **Opaque redirects** also surface as `status: 0` — but they mean the
       // request actually succeeded; the browser just stripped headers because
@@ -407,6 +458,7 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
       return {
         response,
         receipt,
+        protocol: 'x402',
         quotedPrice: quote?.price,
         failureReason: failureReason ?? undefined,
       };
@@ -662,9 +714,9 @@ void KNOWN_STABLE_SYMBOLS;
  *     never blocks the other.
  */
 export function resolveReceiptSink(
-  onReceipt: ((receipt: ReceiptV1) => void | Promise<void>) | false | undefined,
+  onReceipt: ((receipt: ReceiptAny) => void | Promise<void>) | false | undefined,
   forward: ReceiptForwardConfig | undefined,
-): (receipt: ReceiptV1) => Promise<void> {
+): (receipt: ReceiptAny) => Promise<void> {
   if (onReceipt === false || envFlag('LEASH_RECEIPTS_DISABLED')) {
     return async () => {};
   }
@@ -700,7 +752,6 @@ export function resolveReceiptSink(
         // Best-effort: log to console for local dev diagnostics, but
         // never propagate. Runner/API outages must not poison a buyer
         // call that already debited USDC.
-        // eslint-disable-next-line no-console
         console.warn('[buyer-kit] receipt forward failed:', (r.reason as Error).message);
       }
     }
@@ -710,7 +761,7 @@ export function resolveReceiptSink(
 function forwardToRunner(
   runnerUrl: string,
   fetchImpl: NonNullable<ReceiptForwardConfig['fetch']>,
-  receipt: ReceiptV1,
+  receipt: ReceiptAny,
 ): Promise<void> {
   const url = `${runnerUrl.replace(/\/+$/, '')}/a/${encodeURIComponent(receipt.agent)}/receipts`;
   return doPost(fetchImpl, url, receipt);
@@ -720,7 +771,7 @@ function forwardToApi(
   apiUrl: string,
   apiKey: string,
   fetchImpl: NonNullable<ReceiptForwardConfig['fetch']>,
-  receipt: ReceiptV1,
+  receipt: ReceiptAny,
 ): Promise<void> {
   const url = `${apiUrl.replace(/\/+$/, '')}/v1/receipts/${encodeURIComponent(receipt.agent)}`;
   return doPost(fetchImpl, url, receipt, { authorization: `Bearer ${apiKey}` });
@@ -729,7 +780,7 @@ function forwardToApi(
 async function doPost(
   fetchImpl: NonNullable<ReceiptForwardConfig['fetch']>,
   url: string,
-  receipt: ReceiptV1,
+  receipt: ReceiptAny,
   extraHeaders: Record<string, string> = {},
 ): Promise<void> {
   const res = await fetchImpl(url, {
@@ -742,6 +793,171 @@ async function doPost(
     throw new Error(`POST ${url} -> ${res.status}: ${detail.slice(0, 200)}`);
   }
 }
+
+/**
+ * MPP route: the x402 client already ran and returned a 402 it couldn't
+ * pay (because the body, not the header, carried the challenge — the MPP
+ * wire shape). Detect MPP on the response, sign the SPL transfer, retry
+ * with `Authorization: PaymentScheme`. Returns null when the response is
+ * not an MPP 402 (caller emits the existing x402 reject receipt).
+ *
+ * Avoids a wasted pre-flight GET: we reuse the x402 client's 402 response.
+ * The retry is the only extra wire call.
+ */
+async function tryMppRouteFromResponse(args: {
+  response: Response;
+  url: string;
+  init: RequestInit | undefined;
+  cfg: BuyerConfig;
+  networks: LeashX402Network[];
+}): Promise<{
+  response: Response;
+  challenge: MppChallengeV1;
+  settlement: MppSettlementProof | null;
+  failureReason?: string;
+} | null> {
+  const { response, url, init, cfg, networks } = args;
+
+  const det = await detectProtocol(response);
+  if (det.protocol !== 'mpp') return null;
+
+  const challenge = det.challenge;
+  if (!networks.map(String).includes(challenge.request.network)) {
+    return {
+      response,
+      challenge,
+      settlement: null,
+      failureReason: `mpp_network_unsupported: ${challenge.request.network}`,
+    };
+  }
+
+  let signedTx: string;
+  try {
+    signedTx = await buildAndSignMppTransfer({
+      challenge,
+      signer: cfg.signer,
+      ...(cfg.sourceTokenAccount ? { sourceTokenAccount: cfg.sourceTokenAccount } : {}),
+      ...(cfg.rpcUrl ? { rpcUrl: cfg.rpcUrl } : {}),
+    });
+  } catch (e) {
+    return {
+      response,
+      challenge,
+      settlement: null,
+      failureReason: `mpp_sign_failed: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+
+  const credential: MppCredentialV1 = {
+    v: '1',
+    challengeId: challenge.challengeId,
+    signedTx,
+  };
+  const headers = new Headers((init?.headers ?? {}) as Record<string, string> | Headers);
+  headers.set('authorization', buildMppAuthorizationHeader(credential));
+
+  let settled: Response;
+  try {
+    settled = await globalThis.fetch(url, { ...(init ?? {}), headers });
+  } catch (e) {
+    return {
+      response,
+      challenge,
+      settlement: null,
+      failureReason: `mpp_retry_failed: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+
+  const settlement = parseMppSettlementHeaders(settled);
+  return { response: settled, challenge, settlement };
+}
+
+type MppSettlementProof = {
+  settlementTx: string;
+  settlementSlot: string | number;
+};
+
+/**
+ * Read seller-stamped settlement headers off the MPP retry response.
+ * The seller-kit (Phase 4) sets `x-payment-receipt: <b64-json>` carrying
+ * `{ tx, slot }` after the facilitator confirms.
+ */
+function parseMppSettlementHeaders(response: Response): MppSettlementProof | null {
+  const header =
+    response.headers.get('x-payment-receipt') ?? response.headers.get('X-PAYMENT-RECEIPT') ?? null;
+  if (!header) return null;
+  try {
+    const padded = header.replace(/-/g, '+').replace(/_/g, '/');
+    const json =
+      typeof globalThis.atob === 'function'
+        ? globalThis.atob(padded)
+        : Buffer.from(padded, 'base64').toString('utf8');
+    const parsed = JSON.parse(json) as { tx?: string; slot?: string | number };
+    if (!parsed.tx) return null;
+    return { settlementTx: parsed.tx, settlementSlot: parsed.slot ?? '0' };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Build a `ReceiptV02` (mpp variant) for a settled MPP call. We skip the
+ * shared `finalizeReceipt` helper (which is hard-coded to ReceiptDraft of
+ * v0.1) and compute the hash ourselves over the canonical body so the
+ * receipt chain semantics carry over verbatim.
+ */
+function buildMppReceipt(args: {
+  cfg: BuyerConfig;
+  nonce: number;
+  method: string;
+  url: string;
+  body: string | null;
+  challenge: MppChallengeV1;
+  response: Response;
+  settlement: MppSettlementProof | null;
+  facilitator: string;
+}): ReceiptV02Mpp {
+  const { cfg, nonce, method, url, body, challenge, response, settlement, facilitator } = args;
+  const settled = settlement?.settlementTx != null && settlement.settlementTx.length > 0;
+  const decision: 'allow' | 'rejected' =
+    settled && response.status >= 200 && response.status < 400 ? 'allow' : 'rejected';
+  const draft = {
+    v: '0.2' as const,
+    protocol: 'mpp' as const,
+    kind: 'spend' as const,
+    agent: cfg.agent,
+    nonce,
+    ts: new Date().toISOString(),
+    policy_v: cfg.rules.v,
+    request: { method, url, body_hash: body ? requestHash({ method, url, body }) : null },
+    decision,
+    reason: settled ? null : ('mpp_settlement_pending' as const),
+    price: priceFromMppChallenge(challenge),
+    facilitator,
+    response: { status: response.status, body_hash: null },
+    prev_receipt_hash: null,
+    mpp_challenge_id: challenge.challengeId,
+    mpp_credential_type: 'crypto' as const,
+    mpp_settlement_tx: settlement?.settlementTx ?? '',
+    mpp_settlement_slot: settlement?.settlementSlot ?? '0',
+    tx_sig: settlement?.settlementTx ?? null,
+  } satisfies Omit<ReceiptV02Mpp, 'receipt_hash'>;
+  const receipt_hash = computeReceiptHash(draft);
+  return ReceiptV02MppSchema.parse({ ...draft, receipt_hash });
+}
+
+function priceFromMppChallenge(challenge: MppChallengeV1): ReceiptV1['price'] {
+  return {
+    amount: challenge.request.amount,
+    currency: challenge.request.currency,
+    network: challenge.request.network,
+    asset: challenge.request.asset,
+  };
+}
+
+// Touch helpers re-exported from core to keep tree-shaking honest when
+// downstream bundlers evaluate `import * as`.
+void canonicalJson;
 
 function readEnvForwardConfig(): ReceiptForwardConfig {
   if (typeof process === 'undefined' || !process.env) return {};

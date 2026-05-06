@@ -123,7 +123,8 @@ const PaySkillsEndpointSchema = z
       .nullable()
       .optional(),
     protocol: z.array(z.string()).optional().openapi({
-      description: 'Payment protocols the endpoint supports — typically `["x402"]`.',
+      description:
+        'Payment protocols the endpoint supports — typically `["x402"]`; dual-protocol sellers may include `"mpp"`.',
     }),
     supported_usd: z.array(z.string()).optional().openapi({
       description: 'Stablecoin symbols the seller accepts (e.g. `["USDC"]`, `["USDC","USDT"]`).',

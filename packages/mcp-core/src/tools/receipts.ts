@@ -21,7 +21,7 @@ const inputSchema = z.object({
 export const receiptsTool = defineTool({
   name: 'leash_receipts',
   description: [
-    'List recent x402 receipts for the active agent — every payment sent or received, newest first.',
+    'List recent payment receipts for the active agent (x402 and MPP v0.2) — every payment sent or received, newest first.',
     'Each receipt carries a Solana tx_signature and a deterministic receipt_hash so the user can verify on Solscan or the Leash explorer.',
     'On `status: "ok"`, surface a short summary (count + total volume + most-recent counterparty) and offer a link to the explorer URL. Quote tx hashes as inline `code`.',
   ].join(' '),

@@ -1,9 +1,16 @@
 ---
 title: Receipt
-description: Hash-chained JSONL feed of every gated call.
+description: Hash-chained JSONL feed of every gated call (v0.1 x402-shaped receipts and v0.2 dual-protocol).
 ---
 
-Every gated call yields a `ReceiptV1`:
+Every gated call yields a receipt. Today Leash persists two families:
+
+- **`ReceiptV1`** (`v: "0.1"`) — classic x402-shaped document (see [Receipt V1](/schemas/receipt-v1)).
+- **`ReceiptV2`** (`v: "0.2"`) — discriminated by **`protocol: "x402"` | `"mpp"`** (see [Receipt V2](/schemas/receipt-v2)). MPP settlements include `mpp_challenge_id`, `mpp_settlement_tx`, etc.
+
+Use `parseReceiptAny` / `receiptProtocol` / `settlementTxSig` from [`@leashmarket/schemas`](https://www.npmjs.com/package/@leashmarket/schemas) when reading mixed feeds or building explorers. See [MPP on Solana (Leash)](/standards/mpp-on-solana) for the MPP rail.
+
+For **`ReceiptV1`** specifically:
 
 - **`kind`** — `spend` (buyer-initiated) or `earn` (seller-initiated).
 - **`decision`** — outcome of the call:

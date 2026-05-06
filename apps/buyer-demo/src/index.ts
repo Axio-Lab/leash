@@ -1,6 +1,6 @@
 import { createBuyer } from '@leashmarket/buyer-kit';
 import { fetchPaymentLinkMeta } from '@leashmarket/core';
-import type { ReceiptV1 } from '@leashmarket/schemas';
+import type { ReceiptAny } from '@leashmarket/schemas';
 import { createKeyPairSignerFromBytes } from '@solana/kit';
 
 const sellerUrl = process.env.SELLER_URL ?? 'http://localhost:3001';
@@ -42,7 +42,7 @@ const rules = {
   triggers: [{ type: 'interval' as const, seconds: intervalMs / 1000 }],
 };
 
-async function postReceipt(r: ReceiptV1): Promise<void> {
+async function postReceipt(r: ReceiptAny): Promise<void> {
   await fetch(`${runnerUrl}/a/${r.agent}/receipts`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

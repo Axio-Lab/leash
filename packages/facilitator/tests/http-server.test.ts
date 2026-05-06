@@ -11,6 +11,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { x402Facilitator } from '@x402/core/facilitator';
+import type { FacilitatorSvmSigner } from '@x402/svm';
+import { SOLANA_DEVNET_CAIP2 } from '@x402/svm';
 import { createFacilitatorHttpServer, type ProtocolFeeHealthBlock } from '../src/http/server.js';
 
 function stubFacilitator(): x402Facilitator {
@@ -24,6 +26,16 @@ function stubFacilitator(): x402Facilitator {
       payer: 'noop',
     }),
   } as unknown as x402Facilitator;
+}
+
+function stubMppSigner(): FacilitatorSvmSigner {
+  return {
+    getAddresses: () => [],
+    signTransaction: async () => '',
+    simulateTransaction: async () => {},
+    sendTransaction: async () => '',
+    confirmTransaction: async () => {},
+  } as unknown as FacilitatorSvmSigner;
 }
 
 describe('createFacilitatorHttpServer', () => {
@@ -103,5 +115,26 @@ describe('createFacilitatorHttpServer', () => {
       body: JSON.stringify({ paymentPayload: {} }),
     });
     expect(settle.status).toBe(400);
+  });
+
+  it('POST /mpp/settle returns 400 for malformed body', async () => {
+    const app = createFacilitatorHttpServer({
+      facilitator: stubFacilitator(),
+      signerAddresses: [],
+      networks: [],
+      mpp: {
+        signer: stubMppSigner(),
+        allowedCaip2Networks: new Set([SOLANA_DEVNET_CAIP2]),
+      },
+    });
+    const res = await app.request('http://localhost/mpp/settle', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { success: false; error: string };
+    expect(body.success).toBe(false);
+    expect(body.error).toMatch(/mpp_missing_signed_tx|mpp_invalid/);
   });
 });

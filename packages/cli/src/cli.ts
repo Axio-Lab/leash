@@ -29,7 +29,8 @@
  *   leash discover endpoints <fqn>  Expand a pay-skills provider into paid URLs.
  *   leash reputation <agent_mint>   Reputation snapshot (public).
  *   leash receipts [--limit N]      Recent receipts for the active agent.
- *   leash pay <link-url> [--max …]  Pay an x402 paywall.
+ *   leash pay <link-url> [--method …]   Pay an x402 or MPP paywall (auto-detected).
+ *   leash sell create-link …            Create a hosted link (--protocol x402|mpp).
  *   leash doctor                    Config + RPC + API reachability check.
  *   leash help / -h                 Full help.
  *   leash version / -v              Show installed version.
@@ -98,6 +99,10 @@ async function main(): Promise<void> {
 
     case 'pay':
       await runPay(argv.slice(1));
+      return;
+
+    case 'sell':
+      await runSell(argv.slice(1));
       return;
 
     case 'doctor':
@@ -632,17 +637,95 @@ async function runPay(args: string[]): Promise<void> {
   const json = wantJson(args);
   const url = args.find((a) => /^https?:\/\//.test(a));
   if (!url) {
-    process.stderr.write('usage: leash pay <link-url>\n');
+    process.stderr.write(
+      'usage: leash pay <link-url> [--method GET|POST] [--body <json>] [--json]\n' +
+        '       x402 and MPP links are auto-detected after probing the paywall.\n',
+    );
     process.exit(2);
   }
-  const result = await hostRef.pay({ url });
+  const methodRaw = (optArg(args, '--method') ?? 'GET').toUpperCase();
+  if (methodRaw !== 'GET' && methodRaw !== 'POST') {
+    process.stderr.write('--method must be GET or POST\n');
+    process.exit(2);
+  }
+  const body = optArg(args, '--body');
+  const result = await hostRef.pay({
+    url,
+    method: methodRaw as 'GET' | 'POST',
+    ...(body ? { body } : {}),
+  });
   printResult(result, json, (payload) => {
     if (payload.status !== 'ok') return formatStatusError(payload);
+    const amt = payload.paid_amount_atomic ?? payload.amount;
+    const cur = payload.currency ?? '';
+    const summary = amt != null && cur ? `settled ${amt} ${cur} (atomic units)` : 'settled';
     return [
-      `paid ${payload.amount} ${payload.currency} → ${payload.recipient}`,
+      summary,
       `  tx_signature:    ${payload.tx_signature}`,
       `  receipt_hash:    ${payload.receipt_hash}`,
       `  explorer:        ${payload.explorer_url}`,
+    ].join('\n');
+  });
+}
+
+async function runSell(args: string[]): Promise<void> {
+  const sub = args[0];
+  if (sub === 'create-link') {
+    await runSellCreateLink(args.slice(1));
+    return;
+  }
+  process.stderr.write(
+    'usage: leash sell create-link --label <text> --amount <n> [--currency USDC|USDG|USDT] [--description <text>] [--protocol x402|mpp] [--json]\n' +
+      '\n' +
+      'Creates a hosted payment link via the Leash API (requires LEASH_API_KEY).\n' +
+      'Use --protocol mpp for MPP (`problem+json`) paywalls instead of default x402.\n',
+  );
+  process.exit(2);
+}
+
+async function runSellCreateLink(args: string[]): Promise<void> {
+  const { hostRef } = buildServerFromEnv();
+  const json = wantJson(args);
+  const label = optArg(args, '--label');
+  const amount = numArg(args, '--amount');
+  const currency = (optArg(args, '--currency') ?? 'USDC').toUpperCase() as 'USDC' | 'USDG' | 'USDT';
+  const description = optArg(args, '--description');
+  const protoRaw = optArg(args, '--protocol')?.toLowerCase();
+  const protocol =
+    protoRaw === 'mpp' ? ('mpp' as const) : protoRaw === 'x402' ? ('x402' as const) : undefined;
+
+  if (!label || amount == null || !(amount > 0)) {
+    process.stderr.write(
+      'usage: leash sell create-link --label <text> --amount <positive number> [--currency USDC|USDG|USDT] [--description <text>] [--protocol x402|mpp]\n',
+    );
+    process.exit(2);
+  }
+  if (!['USDC', 'USDG', 'USDT'].includes(currency)) {
+    process.stderr.write(`unsupported --currency ${currency} (use USDC, USDG, or USDT)\n`);
+    process.exit(2);
+  }
+  if (protoRaw && protoRaw !== 'mpp' && protoRaw !== 'x402') {
+    process.stderr.write('--protocol must be x402 or mpp\n');
+    process.exit(2);
+  }
+
+  const result = await hostRef.createPaymentLink({
+    label,
+    amount,
+    currency,
+    ...(description ? { description } : {}),
+    ...(protocol ? { protocol } : {}),
+  });
+  printResult(result, json, (payload) => {
+    if (payload.status !== 'ok') return formatStatusError(payload);
+    const proto = (payload.protocol as string | undefined) ?? 'x402';
+    return [
+      `payment link created (${proto})`,
+      `  id:          ${payload.id}`,
+      `  url:         ${payload.url}`,
+      `  price:       ${payload.price}`,
+      `  network:     ${payload.network}`,
+      `  owner_agent: ${payload.owner_agent}`,
     ].join('\n');
   });
 }
@@ -812,7 +895,14 @@ function printHelp(): void {
       '                                     running totals: sent/received/net in USD',
       '  daily [--days N]                   per-day P&L buckets for the last N days',
       '                                     (default 7); stables summed at 1:1 USD',
-      '  pay <link-url> [--max-spend-usdc N]',
+      '  pay <link-url> [--method GET|POST] [--body <json>]',
+      '                                     settle a payment via buyer-kit (local exec key).',
+      '                                     x402 + MPP links are probed automatically; use POST',
+      '                                     when the seller endpoint requires it.',
+      '  sell create-link --label L --amount N [--currency C] [--description …]',
+      '                    [--protocol x402|mpp]',
+      '                                     create a hosted payment link (needs LEASH_API_KEY).',
+      '                                     Default protocol is x402; use mpp for MPP paywalls.',
       '',
       'misc:',
       '  doctor                             config + RPC + API reachability check',

@@ -1,6 +1,6 @@
 ---
 title: '@leashmarket/buyer-kit'
-description: Scriptable buyer agents. createBuyer + real x402 fetch + chained ReceiptV1.
+description: Scriptable buyer agents. createBuyer + dual-protocol paywall fetch + chained receipts (x402 ReceiptV1 / MPP ReceiptV02).
 ---
 
 `@leashmarket/buyer-kit` wraps `@leashmarket/core` into the smallest possible "scriptable
@@ -51,6 +51,17 @@ const { response, receipt } = await buyer.fetch('https://api.example.com/quote',
 });
 ```
 
+## x402 and MPP (dual protocol)
+
+`createBuyer` and `buyer.fetch` **auto-detect** whether the seller speaks **x402**
+(`402` + `PAYMENT-REQUIRED`) or **MPP** (`402` + `application/problem+json`) on the
+first unpaid response. You do not pass a protocol flag on the buyer.
+
+MPP settlements yield **`ReceiptV02`** (`protocol: "mpp"`, facilitator metadata).
+When forwarding or storing receipts, prefer **`parseReceiptAny`** from
+`@leashmarket/schemas` so both v0.1 and v0.2 lines work. See
+[MPP on Solana (Leash)](/standards/mpp-on-solana) and [Receipt V2](/schemas/receipt-v2).
+
 ## What happens on each call
 
 1. **Policy gate** (`evaluate`) — host allow-list, per-call/daily ceilings,
@@ -96,6 +107,8 @@ configure explicitly. See [Receipts by default](/concepts/receipt#receipts-by-de
 ## API
 
 ```ts
+import type { ReceiptAny, ReceiptV1 } from '@leashmarket/schemas';
+
 type ReceiptForwardConfig = {
   runnerUrl?: string;
   apiUrl?: string;
@@ -140,12 +153,13 @@ type BuyerConfig = {
    * forwarding (including environment defaults). Omitted = use the
    * default fan-out resolved from `receipts` / env vars.
    */
-  onReceipt?: ((r: ReceiptV1) => void | Promise<void>) | false;
+  onReceipt?: ((r: ReceiptAny) => void | Promise<void>) | false;
 };
 
 type BuyerCallResult = {
   response: Response;
-  receipt: ReceiptV1;
+  /** Alias: `ReceiptAny` — x402 yields `ReceiptV1`, MPP yields `ReceiptV02`. */
+  receipt: ReceiptAny;
   /** Price the seller demanded (parsed from PAYMENT-REQUIRED on a 402). */
   quotedPrice?: ReceiptV1['price'];
   /** Reason the call did not settle (e.g. "insufficient_funds"). */

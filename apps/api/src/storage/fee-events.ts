@@ -22,7 +22,7 @@
  * route. Errors are logged via the optional `log` callback.
  */
 
-import type { ReceiptV1 } from '@leashmarket/schemas';
+import type { ReceiptAny } from '@leashmarket/schemas';
 
 import type { DbClient } from './turso.js';
 import { execute } from './turso.js';
@@ -31,7 +31,7 @@ import type { SvmNetwork } from '../util/network.js';
 
 export type EmitProtocolFeeArgs = {
   network: SvmNetwork;
-  receipt: ReceiptV1;
+  receipt: ReceiptAny;
   /**
    * Optional API key id to attribute the fee event to. Push ingest
    * carries one; the pull worker doesn't, so it stays null.

@@ -68,25 +68,30 @@ for (const tool of LEASH_TOOLS) {
 }
 ```
 
+**Payment tools:** `leash_create_payment_link` accepts optional **`protocol`**
+(`x402` \| `mpp`, default x402). `leash_pay_payment_link` accepts optional **`method`**
+(`GET` \| `POST`) and **`body`** (string, e.g. JSON) for POST paywalls — same
+dual-protocol behaviour as the CLI `leash pay` command.
+
 ## Built-in tools
 
-| Tool name                    | Description                                        |
-| ---------------------------- | -------------------------------------------------- |
-| `leash_discover`             | Browse the Leash + pay-skills provider catalog     |
-| `leash_pay_payment_link`     | Pay an x402 payment link with the agent's treasury |
-| `leash_pay_skills_endpoints` | Fetch endpoint list for a pay-skills provider      |
-| `leash_create_payment_link`  | Create a new payable link for your own endpoints   |
-| `leash_receipts`             | List receipts for the agent                        |
-| `leash_get_receipt`          | Look up a single receipt by ID                     |
-| `leash_check_balances`       | Check treasury USDC / token balances               |
-| `leash_withdraw_treasury`    | Withdraw funds from the treasury                   |
-| `leash_get_identity`         | Resolve the on-chain identity for an agent         |
-| `leash_register_agent`       | Register a new agent on-chain                      |
-| `leash_set_spend_limit`      | Update the agent's spend delegation limit          |
-| `leash_get_spend_limit`      | Read the current spend limit                       |
-| `leash_reputation`           | Fetch reputation scores for a provider             |
-| `leash_transaction_history`  | Paginated on-chain transaction history             |
-| `leash_daily_transactions`   | Daily aggregated transaction stats                 |
+| Tool name                    | Description                                               |
+| ---------------------------- | --------------------------------------------------------- |
+| `leash_discover`             | Browse the Leash + pay-skills provider catalog            |
+| `leash_pay_payment_link`     | Pay an x402 or MPP payment link with the agent's treasury |
+| `leash_pay_skills_endpoints` | Fetch endpoint list for a pay-skills provider             |
+| `leash_create_payment_link`  | Create a new payable link for your own endpoints          |
+| `leash_receipts`             | List receipts for the agent                               |
+| `leash_get_receipt`          | Look up a single receipt by ID                            |
+| `leash_check_balances`       | Check treasury USDC / token balances                      |
+| `leash_withdraw_treasury`    | Withdraw funds from the treasury                          |
+| `leash_get_identity`         | Resolve the on-chain identity for an agent                |
+| `leash_register_agent`       | Register a new agent on-chain                             |
+| `leash_set_spend_limit`      | Update the agent's spend delegation limit                 |
+| `leash_get_spend_limit`      | Read the current spend limit                              |
+| `leash_reputation`           | Fetch reputation scores for a provider                    |
+| `leash_transaction_history`  | Paginated on-chain transaction history                    |
+| `leash_daily_transactions`   | Daily aggregated transaction stats                        |
 
 ## Helpers
 
@@ -106,14 +111,18 @@ import {
 
 ### `probePaymentLink(url)`
 
-Sends a probe request and returns whether the URL is a valid x402 paywall,
-along with the parsed `payment-required` header details.
+Sends a probe `GET` and classifies a **402** response as **x402** (`payment-required`
+header) or **MPP** (problem+json with `challengeId`). Returns a normalised preview:
+
+- `protocol`: `'x402' | 'mpp'`
+- `network`, `pay_to`, `asset`, `amount_atomic`, `currency`
+- optional `description`; for MPP, `challenge_id`
+
+Throws if the response is not a paywall 402 or the body cannot be parsed as either protocol.
 
 ```ts
-const result = await probePaymentLink('https://api.example.com/premium');
-if (result.ok) {
-  console.log(result.requirement); // { maxAmountRequired, asset, payTo, ... }
-}
+const preview = await probePaymentLink('https://api.example.com/premium?network=solana-devnet');
+console.log(preview.protocol, preview.amount_atomic, preview.currency);
 ```
 
 ### `fetchDiscover(apiUrl, opts)`

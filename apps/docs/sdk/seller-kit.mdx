@@ -106,6 +106,18 @@ const server = createSvmResourceServer({
 See [`Real x402 on Solana`](/standards/x402-on-solana) for the protocol-level
 walkthrough.
 
+## MPP (`createMppSeller`)
+
+For sellers that emit **`application/problem+json`** challenges and settle via a
+facilitator’s **`POST /mpp/settle`**, mount **`createMppSeller`** from
+`@leashmarket/seller-kit` instead of `createSeller`. The same **Asset Signer PDA**
+treasury model applies; only the paywall wire format and settlement path differ.
+
+If you use **hosted** payment links instead of self-hosting, set
+**`protocol: "mpp"`** on [Payment links](/api/payment-links) so runners and buyers
+see consistent `payment_protocol`. See
+[MPP on Solana (Leash)](/standards/mpp-on-solana).
+
 ## HTTP equivalent (polyglot SDKs)
 
 If you're not on TypeScript, the same primitives are exposed as

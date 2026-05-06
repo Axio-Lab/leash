@@ -2,6 +2,8 @@
 
 import { z } from 'zod';
 
+const PayProtocolSchema = z.enum(['x402', 'mpp']);
+
 const EntrySchema = z.object({
   slug: z.string(),
   kind: z.enum(['tool', 'agent']),
@@ -16,6 +18,11 @@ const EntrySchema = z.object({
   source: z.enum(['leash', 'pay-skills']).optional(),
   /** Endpoint URL from the discover row, when known. */
   url: z.string().optional(),
+  /**
+   * Payment rail(s) advertised for this listing. Optional for older
+   * pinned rows; UI defaults to x402-only.
+   */
+  protocols: z.array(PayProtocolSchema).optional(),
 });
 
 export type FavoriteEntry = z.infer<typeof EntrySchema>;

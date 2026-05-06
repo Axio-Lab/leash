@@ -93,6 +93,11 @@ export const EndpointV1Schema = z.object({
    */
   webhook_url: HttpUrlSchema.optional(),
   /**
+   * Payment rail for this link: classic HTTP 402 x402 flow or MPP
+   * (`problem+json` challenge + facilitator settle).
+   */
+  payment_protocol: z.enum(['x402', 'mpp']).default('x402'),
+  /**
    * If `true`, JSON responses are wrapped as
    * `{ data: <user-body>, _leash: { tx_sig, receipt_hash, agent, explorer } }`
    * so paying agents have everything they need in one payload. Defaults

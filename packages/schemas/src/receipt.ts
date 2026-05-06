@@ -93,3 +93,102 @@ export const ReceiptV1Schema = z.object({
 });
 
 export type ReceiptV1 = z.infer<typeof ReceiptV1Schema>;
+
+/** Shared body for v0.2 receipts (both x402 and MPP rails). */
+const ReceiptV02CommonSchema = z.object({
+  v: z.literal('0.2'),
+  kind: ReceiptKindSchema.default('spend'),
+  agent: z.string(),
+  nonce: z.number().int().nonnegative(),
+  ts: z.string(),
+  policy_v: z.string(),
+  request: RequestSummarySchema,
+  decision: z.enum(['allow', 'deny', 'rejected']),
+  reason: z.string().nullable(),
+  price: PriceSchema.nullable(),
+  facilitator: FacilitatorSchema,
+  response: ResponseSummarySchema,
+  prev_receipt_hash: z.string().nullable(),
+  receipt_hash: z.string(),
+});
+
+export const ReceiptV02X402Schema = ReceiptV02CommonSchema.extend({
+  protocol: z.literal('x402'),
+  tx_sig: z.string().nullable(),
+  payment_requirements_hash: z.string().nullable().optional(),
+  /** Raw `PAYMENT-RESPONSE` header payload when captured. */
+  payment_response: z.string().nullable().optional(),
+});
+
+export const ReceiptV02MppSchema = ReceiptV02CommonSchema.extend({
+  protocol: z.literal('mpp'),
+  mpp_challenge_id: z.string(),
+  mpp_credential_type: z.literal('crypto'),
+  /** Solana transaction signature that settled the MPP challenge. */
+  mpp_settlement_tx: z.string(),
+  mpp_settlement_slot: z.union([z.string(), z.number().int()]),
+  /**
+   * Optional mirror of `mpp_settlement_tx` for UIs that only read `tx_sig`.
+   * When present, SHOULD equal `mpp_settlement_tx`.
+   */
+  tx_sig: z.string().nullable().optional(),
+  payment_requirements_hash: z.string().nullable().optional(),
+});
+
+export const ReceiptV02Schema = z.discriminatedUnion('protocol', [
+  ReceiptV02X402Schema,
+  ReceiptV02MppSchema,
+]);
+
+export type ReceiptV02 = z.infer<typeof ReceiptV02Schema>;
+export type ReceiptV02X402 = z.infer<typeof ReceiptV02X402Schema>;
+export type ReceiptV02Mpp = z.infer<typeof ReceiptV02MppSchema>;
+
+/** Any persisted receipt shape (v0.1 legacy or v0.2 dual-protocol). */
+export type ReceiptAny = ReceiptV1 | ReceiptV02;
+
+export function isReceiptV02(r: ReceiptAny): r is ReceiptV02 {
+  return r.v === '0.2';
+}
+
+/**
+ * Parse a receipt JSON object or string. Accepts `v: '0.1'` (legacy x402-only)
+ * or `v: '0.2'` with `protocol: 'x402' | 'mpp'`.
+ *
+ * Does **not** rewrite v0.1 into v0.2 (that would invalidate `receipt_hash`).
+ * Use {@link receiptProtocol} for a stable protocol label across versions.
+ */
+export function parseReceiptAny(json: unknown): ReceiptAny {
+  const obj: unknown = typeof json === 'string' ? (JSON.parse(json) as unknown) : json;
+  if (!obj || typeof obj !== 'object') {
+    throw new Error('receipt: expected object');
+  }
+  const o = obj as Record<string, unknown>;
+  if (o.v === '0.2') {
+    return ReceiptV02Schema.parse(obj);
+  }
+  return ReceiptV1Schema.parse(obj);
+}
+
+/** Protocol label for UI / filters. v0.1 receipts are always x402-shaped. */
+export function receiptProtocol(r: ReceiptAny): 'x402' | 'mpp' {
+  if (isReceiptV02(r)) return r.protocol;
+  return 'x402';
+}
+
+/**
+ * Canonical on-chain settlement signature for counterparty joins and
+ * explorer tx links (x402 `tx_sig`, MPP `tx_sig` or `mpp_settlement_tx`).
+ */
+export function settlementTxSig(r: ReceiptAny): string | null {
+  if (isReceiptV02(r) && r.protocol === 'mpp') {
+    const s = r.tx_sig ?? r.mpp_settlement_tx;
+    return s != null && s.length > 0 ? s : null;
+  }
+  if (isReceiptV02(r)) {
+    const s = r.tx_sig;
+    return s != null && s.length > 0 ? s : null;
+  }
+  const s = r.tx_sig;
+  return s != null && s.length > 0 ? s : null;
+}

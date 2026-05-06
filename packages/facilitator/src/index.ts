@@ -27,6 +27,8 @@ export type {
 export { buildFacilitatorSigner } from './signer.js';
 export type { LeashFacilitatorSignerOptions, ResolvedFacilitatorSigner } from './signer.js';
 
+export { mppNetworkToCaip2, mppSettleFromPostBody } from './mpp/index.js';
+export type { MppSettleHandlerOptions, MppSettleResultJson } from './mpp/index.js';
 export {
   registerLeashExactSvmScheme,
   LeashExactSvmFacilitator,

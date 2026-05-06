@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { receiptProtocol, settlementTxSig } from '@leashmarket/schemas';
 import { cn } from '@/lib/cn';
 import type { ReceiptRow } from '@/lib/types';
 import type { Network } from '@/lib/network';
@@ -20,6 +21,11 @@ const DECISION_CLS = {
   rejected:
     'bg-[oklch(0.30_0.18_60/0.4)] text-[oklch(0.85_0.16_60)] ring-1 ring-inset ring-[oklch(0.5_0.2_60/0.25)]',
 } as const;
+
+const PROTOCOL_CLS: Record<'x402' | 'mpp', string> = {
+  x402: 'bg-[oklch(0.30_0.12_250/0.45)] text-[oklch(0.88_0.08_250)] ring-1 ring-inset ring-[oklch(0.48_0.14_250/0.35)]',
+  mpp: 'bg-[oklch(0.30_0.14_45/0.45)] text-[oklch(0.9_0.12_75)] ring-1 ring-inset ring-[oklch(0.5_0.16_45/0.35)]',
+};
 
 function Pill({ value, cls }: { value: string; cls: string }) {
   return (
@@ -51,7 +57,8 @@ function counterpartyFor(
   r: ReceiptRow,
   cp: Counterparties | undefined,
 ): { payer: string | null; receiver: string | null } {
-  const known = r.tx_sig ? cp?.get(r.tx_sig) : undefined;
+  const tx = settlementTxSig(r);
+  const known = tx ? cp?.get(tx) : undefined;
   if (r.kind === 'earn') {
     return { payer: known?.payer ?? null, receiver: r.agent };
   }
@@ -91,7 +98,7 @@ export function ReceiptsTable({
         <table className="min-w-full divide-y divide-[--color-border] text-sm">
           <thead className="bg-[--color-bg-elev]/40 text-left text-[10px] uppercase tracking-wider text-[--color-fg-subtle]">
             <tr>
-              <th className="px-3 py-2.5 font-medium sm:px-4">Kind</th>
+              <th className="px-3 py-2.5 font-medium sm:px-4">Kind / rail</th>
               <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Decision</th>
               <th className="hidden px-3 py-2.5 font-medium md:table-cell">Payer</th>
               <th className="hidden px-3 py-2.5 font-medium md:table-cell">Receiver</th>
@@ -104,9 +111,11 @@ export function ReceiptsTable({
           <tbody className="divide-y divide-[--color-border]/60">
             {rows.map((r, idx) => {
               const { payer, receiver } = counterpartyFor(r, counterparties);
-              const rowHref = r.tx_sig ? `/tx/${r.tx_sig}` : `/receipt/${r.receipt_hash}`;
-              const rowLabel = r.tx_sig
-                ? `View transaction ${r.tx_sig}`
+              const txSig = settlementTxSig(r);
+              const proto = receiptProtocol(r);
+              const rowHref = txSig ? `/tx/${txSig}` : `/receipt/${r.receipt_hash}`;
+              const rowLabel = txSig
+                ? `View transaction ${txSig}`
                 : `View receipt ${r.receipt_hash}`;
               return (
                 <tr
@@ -121,8 +130,9 @@ export function ReceiptsTable({
                       className="absolute inset-0 z-0"
                       tabIndex={-1}
                     />
-                    <div className="relative z-10 px-3 py-2.5 align-middle sm:px-4">
+                    <div className="relative z-10 flex flex-wrap items-center gap-1.5 px-3 py-2.5 align-middle sm:px-4">
                       <Pill value={r.kind} cls={KIND_CLS[r.kind]} />
+                      <Pill value={proto} cls={PROTOCOL_CLS[proto]} />
                     </div>
                   </td>
                   <td className="relative z-10 hidden px-3 py-2.5 align-middle sm:table-cell">

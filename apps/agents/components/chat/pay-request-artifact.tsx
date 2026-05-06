@@ -12,8 +12,8 @@
  *   1. Resolve the agent record for caps + treasury network.
  *   2. Build a `@solana/kit` signer from the Privy embedded wallet.
  *   3. Derive the agent treasury ATA for the demanded asset.
- *   4. `createBuyer({...}).fetch(url)` → 402 → seller settles via the
- *      facilitator → 200 + PAYMENT-RESPONSE header.
+ *   4. `createBuyer({...}).fetch(url)` → 402 → seller settles (x402 or MPP)
+ *      via the facilitator → 200 + receipt.
  *   5. Show the receipt (txSig + receipt hash + explorer link) inline.
  */
 
@@ -33,7 +33,7 @@ import {
   type LeashX402Network,
   type KnownStableSymbol,
 } from '@leashmarket/core';
-import type { RulesV1 } from '@leashmarket/schemas';
+import { isReceiptV02, type ReceiptAny, type RulesV1 } from '@leashmarket/schemas';
 
 import { Button } from '@/components/ui/button';
 import { txUrl, receiptUrl, shortHash } from '@/lib/explorer';
@@ -51,6 +51,8 @@ export type PayRequestPayload = {
     amount_atomic?: string;
     currency?: string;
     description?: string;
+    protocol?: 'x402' | 'mpp';
+    challenge_id?: string;
   };
   /**
    * Stamped onto the payload by `markPayRequestPaid` after a successful
@@ -77,6 +79,15 @@ type FlowState =
       receiptHash: string;
     }
   | { kind: 'failed'; reason: string };
+
+function settlementTxSigFromReceipt(receipt: ReceiptAny): string | null {
+  if (isReceiptV02(receipt) && receipt.protocol === 'mpp') {
+    const s = receipt.tx_sig ?? receipt.mpp_settlement_tx;
+    return s != null && s.length > 0 ? s : null;
+  }
+  const t = receipt.tx_sig;
+  return t != null && t.length > 0 ? t : null;
+}
 
 const agentsFetcher = async (url: string) => {
   const res = await fetch(url, { credentials: 'include' });
@@ -246,7 +257,8 @@ export function PayRequestArtifact({
       // upstream side still verifies + settles exactly the same way.
       const target = sameOriginPaywallUrl(url) ?? url;
       const result = await buyer.fetch(target);
-      if (result.failureReason || !result.receipt.tx_sig) {
+      const settlementSig = settlementTxSigFromReceipt(result.receipt as ReceiptAny);
+      if (result.failureReason || !settlementSig) {
         const reason = result.failureReason ?? `seller returned HTTP ${result.response.status}`;
         setState({ kind: 'failed', reason });
         toast.error('Payment failed', { description: reason });
@@ -260,7 +272,7 @@ export function PayRequestArtifact({
       // seller-side one. Falling back to the local hash is fine when
       // the seller doesn't stamp headers (legacy paywalls).
       const stamped = parseLeashHeaders(result.response);
-      const txSig = stamped.txSig ?? result.receipt.tx_sig;
+      const txSig = stamped.txSig ?? settlementSig;
       const receiptHash = stamped.receiptHash ?? result.receipt.receipt_hash;
       setState({
         kind: 'paid',

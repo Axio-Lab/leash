@@ -1,26 +1,26 @@
 /**
- * GET an x402 payment link and decode the `payment-required` header
- * into a typed preview the buyer-side artifact (or the MCP `pay`
- * implementation) can consume.
+ * GET a Leash paywall URL and classify it as **x402** (payment-required
+ * header) or **MPP** (problem+json body) using the same rules as
+ * `@leashmarket/core` {@link detectProtocol}.
  *
- * The paywall always serves a single-network link, so we pick the
- * `accepts[]` entry whose network matches the URL's `?network=`
- * query (with a lenient fallback to `accepts[0]`).
- *
- * Throws on every error path so callers can wrap once and surface
- * the message verbatim to the model.
+ * Returns a `PaymentRequirementPreview` the buyer artifact (or MCP
+ * `pay`) can consume. Throws on non-402 responses and unrecognised 402s.
  */
 
+import { detectProtocol } from '@leashmarket/core';
 import { decodeBase64Json } from './base64-json.js';
 import { symbolForMintSafe } from './token-catalog.js';
 
 export type PaymentRequirementPreview = {
+  protocol: 'x402' | 'mpp';
   network: string;
   pay_to: string;
   asset: string;
   amount_atomic: string;
   currency: string;
   description?: string;
+  /** Present when `protocol === 'mpp'`. */
+  challenge_id?: string;
 };
 
 /**
@@ -37,14 +37,33 @@ function symbolForMintAnyNetwork(mint: string): string | null {
 
 export async function probePaymentLink(url: string): Promise<PaymentRequirementPreview> {
   const res = await fetch(url, { method: 'GET' });
-  if (res.status !== 402) {
-    throw new Error(`expected 402 from paywall, got HTTP ${res.status}`);
+  const det = await detectProtocol(res);
+
+  if (det.protocol === 'none') {
+    throw new Error(`expected 402 from paywall, got HTTP ${det.status}`);
   }
-  const header = res.headers.get('payment-required') ?? res.headers.get('PAYMENT-REQUIRED');
-  if (!header) {
-    throw new Error('seller did not send a `payment-required` header');
+  if (det.protocol === 'unknown') {
+    throw new Error(`paywall response is neither x402 nor MPP: ${det.detail}`);
   }
 
+  if (det.protocol === 'mpp') {
+    const ch = det.challenge;
+    const fromRegistry = symbolForMintAnyNetwork(ch.request.asset);
+    const currency = ch.request.currency ?? fromRegistry ?? 'USDC';
+    const out: PaymentRequirementPreview = {
+      protocol: 'mpp',
+      network: ch.request.network,
+      pay_to: ch.request.recipient,
+      asset: ch.request.asset,
+      amount_atomic: ch.request.amount,
+      currency,
+      challenge_id: ch.challengeId,
+    };
+    if (ch.detail) out.description = ch.detail;
+    return out;
+  }
+
+  const header = det.paymentRequiredHeader;
   const decoded = decodeBase64Json(header) as {
     error?: string;
     accepts?: Array<{
@@ -83,19 +102,11 @@ export async function probePaymentLink(url: string): Promise<PaymentRequirementP
     throw new Error('payment-required entry missing required fields');
   }
 
-  // Currency resolution order:
-  //   1. explicit `currency` on the chosen accept (extension surface;
-  //      vanilla x402 envelopes don't carry it, but we look anyway),
-  //   2. catalog reverse-lookup keyed by the asset mint (covers every
-  //      Leash-self-hosted x402 link since the API shapes 402 quotes
-  //      from the catalogued USDC/USDG/USDT mint),
-  //   3. last-resort 'USDC' so the model never sees an empty ticker.
-  // The previous unconditional `?? 'USDC'` mis-labelled USDG/USDT links
-  // and caused buyer-kit to ask for the wrong asset → `preferred_asset_unavailable`.
   const fromRegistry = symbolForMintAnyNetwork(chosen.asset);
   const currency = chosen.currency ?? fromRegistry ?? 'USDC';
 
   const out: PaymentRequirementPreview = {
+    protocol: 'x402',
     network: chosen.network,
     pay_to: chosen.payTo,
     asset: chosen.asset,

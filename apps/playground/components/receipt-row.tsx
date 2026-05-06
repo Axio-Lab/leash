@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import type { ReceiptV1 } from '@leashmarket/schemas';
+import type { ReceiptAny } from '@leashmarket/schemas';
+import { receiptProtocol, settlementTxSig } from '@leashmarket/schemas';
 import { formatReceiptPriceUsd, formatReceiptPriceWithCurrency } from '@/lib/format-receipt-price';
 import { Badge } from '@/components/ui/badge';
 import { JsonViewer } from '@/components/json-viewer';
@@ -9,13 +10,15 @@ import { ChevronRight, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { transactionExplorerUrl } from '@/lib/solscan';
 
-export function ReceiptRow({ receipt }: { receipt: ReceiptV1 }) {
+export function ReceiptRow({ receipt }: { receipt: ReceiptAny }) {
   const [open, setOpen] = React.useState(false);
-  const { kind, decision, request, price, ts, receipt_hash, tx_sig } = receipt;
+  const { kind, decision, request, price, ts, receipt_hash } = receipt;
+  const proto = receiptProtocol(receipt);
   // Default to devnet when the receipt didn't carry a network (older
   // receipts pre-`price.network`). Devnet is the only supported playground
   // cluster today so this is the safe assumption.
   const network = price?.network ?? 'solana-devnet';
+  const tx_sig = settlementTxSig(receipt);
   const txUrl = tx_sig ? transactionExplorerUrl(network, tx_sig) : null;
   return (
     <div className="rounded-md border border-border bg-bg-elev/60">
@@ -28,6 +31,9 @@ export function ReceiptRow({ receipt }: { receipt: ReceiptV1 }) {
           className={cn('size-4 text-fg-subtle transition-transform', open && 'rotate-90')}
         />
         <Badge variant={kind === 'earn' ? 'success' : 'brand'}>{kind}</Badge>
+        <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+          {proto}
+        </Badge>
         <Badge
           variant={
             decision === 'allow' ? 'outline' : decision === 'rejected' ? 'warning' : 'danger'

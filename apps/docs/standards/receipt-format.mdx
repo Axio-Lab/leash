@@ -3,7 +3,7 @@ title: Receipt format
 description: Wire format of the JSONL feed.
 ---
 
-Each line is canonical-JSON encoded `ReceiptV1` (see [Schemas](/schemas/receipt-v1)) terminated by `\n`. Constraints:
+Each line is canonical JSON: either **`ReceiptV1`** (`v: "0.1"`) or **`ReceiptV2`** (`v: "0.2"`) — see [Receipt V1](/schemas/receipt-v1) and [Receipt V2](/schemas/receipt-v2). Parse with `parseReceiptAny` when you need to accept both. Constraints:
 
 - One writer per agent.
 - Append-only.

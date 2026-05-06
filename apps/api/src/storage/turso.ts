@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 14;
+const SCHEMA_VERSION = 15;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -256,6 +256,7 @@ const SCHEMA_SQL: readonly string[] = [
     webhook_url TEXT,
     wrap_receipt INTEGER NOT NULL DEFAULT 0,
     metadata_json TEXT NOT NULL DEFAULT '{}',
+    payment_protocol TEXT NOT NULL DEFAULT 'x402',
     call_count INTEGER NOT NULL DEFAULT 0,
     settled_count INTEGER NOT NULL DEFAULT 0,
     last_called_at TEXT,
@@ -611,6 +612,10 @@ export async function runMigrations(db: Client): Promise<void> {
   const cur = await db.execute('SELECT version FROM schema_version ORDER BY version DESC LIMIT 1');
   const currentVersion = cur.rows.length > 0 ? Number(cur.rows[0]!.version) : 0;
 
+  if (currentVersion < 15) {
+    await migratePaymentLinksPaymentProtocol(db);
+  }
+
   // v3: drop the `kind IN ('asset','treasury')` CHECK on
   // `indexer_watchlist` so we can introduce new watch kinds (e.g.
   // 'treasury_ata') without another migration.
@@ -682,6 +687,16 @@ export async function runMigrations(db: Client): Promise<void> {
       sql: 'INSERT OR REPLACE INTO schema_version(version) VALUES(?)',
       args: [SCHEMA_VERSION],
     });
+  }
+}
+
+async function migratePaymentLinksPaymentProtocol(db: Client): Promise<void> {
+  const info = await db.execute('PRAGMA table_info(payment_links)');
+  const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
+  if (!names.has('payment_protocol')) {
+    await db.execute(
+      `ALTER TABLE payment_links ADD COLUMN payment_protocol TEXT NOT NULL DEFAULT 'x402'`,
+    );
   }
 }
 

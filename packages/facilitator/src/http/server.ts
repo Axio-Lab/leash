@@ -13,6 +13,7 @@
  *   - `POST /verify`     — `{ x402Version, paymentPayload, paymentRequirements }`
  *                          → `VerifyResponse`
  *   - `POST /settle`     — same body shape → `SettleResponse`
+ *   - `POST /mpp/settle` — `{ challenge, signedTx }` → `{ success, transaction?, slot?, error? }`
  *
  * What this does NOT do (yet — see `apps/docs/guides/run-a-facilitator.mdx`):
  *
@@ -26,6 +27,10 @@
 import { Hono } from 'hono';
 import type { x402Facilitator } from '@x402/core/facilitator';
 import type { PaymentPayload, PaymentRequirements } from '@x402/core/types';
+import type { FacilitatorSvmSigner } from '@x402/svm';
+import { SettlementCache } from '@x402/svm';
+
+import { mppSettleFromPostBody } from '../mpp/handle-settle.js';
 
 export type ProtocolFeeHealthBlock = {
   /**
@@ -56,6 +61,16 @@ export type CreateFacilitatorHttpOptions = {
    * the right treasury authority is wired up.
    */
   protocolFee?: ProtocolFeeHealthBlock;
+  /**
+   * When set, registers `POST /mpp/settle` for Machine Payments Protocol
+   * (Solana SPL settlement co-signed by this facilitator).
+   */
+  mpp?: {
+    signer: FacilitatorSvmSigner;
+    /** CAIP-2 network ids this facilitator will accept for MPP (e.g. from `createLeashFacilitator`). */
+    allowedCaip2Networks: ReadonlySet<string>;
+    settlementCache?: SettlementCache;
+  };
 };
 
 type VerifyOrSettleBody = {
@@ -140,6 +155,21 @@ export function createFacilitatorHttpServer(opts: CreateFacilitatorHttpOptions):
       return c.json({ error: 'settle_failed', message }, 422);
     }
   });
+
+  if (opts.mpp) {
+    const mppCfg = opts.mpp;
+    app.post('/mpp/settle', async (c) => {
+      const body = (await c.req.json().catch(() => null)) as unknown;
+      const { httpStatus, json } = await mppSettleFromPostBody(body, {
+        signer: mppCfg.signer,
+        allowedCaip2Networks: mppCfg.allowedCaip2Networks,
+        settlementCache: mppCfg.settlementCache,
+      });
+      if (httpStatus === 200) return c.json(json, 200);
+      if (httpStatus === 400) return c.json(json, 400);
+      return c.json(json, 422);
+    });
+  }
 
   return app;
 }
