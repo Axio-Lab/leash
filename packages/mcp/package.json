@@ -1,4 +1,7 @@
 {
+  "publishConfig": {
+    "access": "public"
+  },
   "name": "@leash/mcp",
   "version": "0.1.0",
   "description": "Standalone Leash MCP server. STDIO transport. Drop into Cursor / Claude Desktop / Cline / Continue / ChatGPT-MCP.",
@@ -30,11 +33,11 @@
     "test:yc-demo-devnet": "node --import tsx ./scripts/test-yc-demo-devnet.ts"
   },
   "dependencies": {
-    "@leash/buyer-kit": "workspace:*",
-    "@leash/core": "workspace:*",
-    "@leash/mcp-core": "workspace:*",
-    "@leash/registry-utils": "workspace:*",
-    "@leash/schemas": "workspace:*",
+    "@leash/buyer-kit": "^0.1.0",
+    "@leash/core": "^0.1.0",
+    "@leash/mcp-core": "^0.1.0",
+    "@leash/registry-utils": "^0.1.0",
+    "@leash/schemas": "^0.1.0",
     "@metaplex-foundation/mpl-core": "^1.10.0",
     "@metaplex-foundation/mpl-toolbox": "^0.10.0",
     "@metaplex-foundation/umi": "^1.5.1",

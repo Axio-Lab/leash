@@ -158,7 +158,6 @@ export default function ProfileAgentPage() {
             value={primary.treasury ?? ''}
             href={primary.treasury ? explorerUrl(primary.treasury, network) : undefined}
           />
-          <FieldRow label="Owner" value={wallet} />
         </dl>
       </section>
 

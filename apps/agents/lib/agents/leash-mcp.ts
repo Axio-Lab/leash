@@ -22,6 +22,7 @@ import { z } from 'zod';
 import {
   LEASH_TOOLS,
   fetchDiscover,
+  fetchPaySkillsProvider,
   fetchReputation,
   isLikelyBase58Address,
   jsonResult,
@@ -35,6 +36,7 @@ import {
   type LeashTool,
   type LeashToolResult,
   type PayArgs,
+  type PaySkillsProviderArgs,
   type ReputationArgs,
   type WithdrawArgs,
 } from '@leash/mcp-core';
@@ -358,6 +360,14 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
 
     async reputation(args: ReputationArgs): Promise<LeashToolResult> {
       return fetchReputation({
+        apiBaseUrl: env.leashApiUrl,
+        network: SOLANA_NETWORK as LeashHost['network'],
+        query: args,
+      });
+    },
+
+    async paySkillsProvider(args: PaySkillsProviderArgs): Promise<LeashToolResult> {
+      return fetchPaySkillsProvider({
         apiBaseUrl: env.leashApiUrl,
         network: SOLANA_NETWORK as LeashHost['network'],
         query: args,

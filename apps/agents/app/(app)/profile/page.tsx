@@ -16,6 +16,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { useSelectedNetwork } from '@/lib/network-preference';
 
 type AgentItem = {
   mint?: string;
@@ -30,11 +31,6 @@ const agentsFetcher = async (url: string) => {
   return res.json() as Promise<{ items: AgentItem[]; warning?: string }>;
 };
 
-function shortAddr(s?: string | null): string {
-  if (!s) return '—';
-  return s.length > 18 ? `${s.slice(0, 8)}…${s.slice(-8)}` : s;
-}
-
 function copy(value: string | undefined, label = 'Copied') {
   if (!value) return;
   void navigator.clipboard?.writeText(value);
@@ -43,9 +39,7 @@ function copy(value: string | undefined, label = 'Copied') {
 
 export default function ProfileOverviewPage() {
   const { user } = usePrivy();
-  const [selectedNetwork, setSelectedNetwork] = React.useState<'solana-mainnet' | 'solana-devnet'>(
-    'solana-mainnet',
-  );
+  const [selectedNetwork, setSelectedNetwork] = useSelectedNetwork();
 
   type Account = {
     type?: string;
@@ -165,10 +159,10 @@ export default function ProfileOverviewPage() {
           <dl className="grid gap-3 sm:grid-cols-2">
             <Field label="Name" value={primary.name ?? '—'} />
             <Field label="Network" value={selectedNetwork} mono />
-            <Field label="Mint" value={shortAddr(primary.mint)} fullValue={primary.mint} mono />
+            <Field label="Mint" value={primary.mint ?? '—'} fullValue={primary.mint} mono />
             <Field
               label="Treasury"
-              value={shortAddr(primary.treasury)}
+              value={primary.treasury ?? '—'}
               fullValue={primary.treasury}
               mono
             />

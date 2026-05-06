@@ -8,6 +8,14 @@ const EntrySchema = z.object({
   listingId: z.string(),
   title: z.string(),
   pricePerCallUsdc: z.string().optional(),
+  /**
+   * Catalogue the entry came from. Optional for backwards compat
+   * with favorites stored before pay-skills support landed; falls
+   * back to `'leash'` on read.
+   */
+  source: z.enum(['leash', 'pay-skills']).optional(),
+  /** Endpoint URL from the discover row, when known. */
+  url: z.string().optional(),
 });
 
 export type FavoriteEntry = z.infer<typeof EntrySchema>;

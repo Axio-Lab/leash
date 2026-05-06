@@ -1,4 +1,7 @@
 {
+  "publishConfig": {
+    "access": "public"
+  },
   "name": "@leash/mcp-core",
   "version": "0.1.0",
   "private": false,

@@ -50,22 +50,23 @@ host that speaks Model Context Protocol over STDIO. Settlement happens
 in-process — `leash_pay_payment_link` actually signs + submits with
 the local executive keypair and returns the on-chain receipt.
 
-| Tool name                      | What it does                                                                                    |
-| ------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `leash_register_agent`         | Two-step provisioning (generate / import executive → fund → mint + delegate + record).          |
-| `leash_get_identity`           | Self-introspection: agent mint, treasury PDA, executive pubkey, network.                        |
-| `leash_check_treasury_balance` | List SOL + SPL stable balances on the treasury PDA.                                             |
-| `leash_create_payment_link`    | Mint a hosted x402 paywall (`/v1/payment-links`).                                               |
-| `leash_pay_payment_link`       | Probe → policy-check → sign → settle → finalise receipt for an x402 URL.                        |
-| `leash_withdraw_treasury`      | Owner-driven SOL or stable withdrawal via `mpl-core::Execute`.                                  |
-| `leash_set_spend_limit`        | Update the SPL `Approve` delegation (unlimited / amount / revoke).                              |
-| `leash_get_spend_limit`        | Read the live delegation + treasury balance for an SPL stable.                                  |
-| `leash_receipts`               | Paginated receipts feed for the active agent.                                                   |
-| `leash_get_receipt`            | Look up a single ReceiptV1 by `receipt_hash` (the `/receipt/{hash}` blob the explorer renders). |
-| `leash_transaction_history`    | All earn + spend receipts in the last N days (default 7) with USD totals.                       |
-| `leash_daily_transactions`     | Per-day buckets for the same window (`{ date, sent_usd, received_usd, net_usd, ... }`).         |
-| `leash_discover`               | Public marketplace search (`/v1/discover`).                                                     |
-| `leash_reputation`             | Reputation snapshot for any agent mint (`/v1/agents/:mint/reputation`).                         |
+| Tool name                      | What it does                                                                                                                                                                                                                                                                                 |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `leash_register_agent`         | Two-step provisioning (generate / import executive → fund → mint + delegate + record).                                                                                                                                                                                                       |
+| `leash_get_identity`           | Self-introspection: agent mint, treasury PDA, executive pubkey, network.                                                                                                                                                                                                                     |
+| `leash_check_treasury_balance` | List SOL + SPL stable balances on the treasury PDA.                                                                                                                                                                                                                                          |
+| `leash_create_payment_link`    | Mint a hosted x402 paywall (`/v1/payment-links`).                                                                                                                                                                                                                                            |
+| `leash_pay_payment_link`       | Probe → policy-check → sign → settle → finalise receipt for an x402 URL.                                                                                                                                                                                                                     |
+| `leash_withdraw_treasury`      | Owner-driven SOL or stable withdrawal via `mpl-core::Execute`.                                                                                                                                                                                                                               |
+| `leash_set_spend_limit`        | Update the SPL `Approve` delegation (unlimited / amount / revoke).                                                                                                                                                                                                                           |
+| `leash_get_spend_limit`        | Read the live delegation + treasury balance for an SPL stable.                                                                                                                                                                                                                               |
+| `leash_receipts`               | Paginated receipts feed for the active agent.                                                                                                                                                                                                                                                |
+| `leash_get_receipt`            | Look up a single ReceiptV1 by `receipt_hash` (the `/receipt/{hash}` blob the explorer renders).                                                                                                                                                                                              |
+| `leash_transaction_history`    | All earn + spend receipts in the last N days (default 7) with USD totals.                                                                                                                                                                                                                    |
+| `leash_daily_transactions`     | Per-day buckets for the same window (`{ date, sent_usd, received_usd, net_usd, ... }`).                                                                                                                                                                                                      |
+| `leash_discover`               | Public unified search (`/v1/discover`) — merges the Leash marketplace with the Solana Foundation `pay-skills` registry. Each item has a `source: 'leash' \| 'pay-skills'` tag.                                                                                                               |
+| `leash_pay_skills_endpoints`   | Expand a `pay-skills` discover item into its individual paid endpoints (`/v1/discover/pay-skills/{fqn}`). Returns `{ method, url, pricing, protocol, supported_usd, probe_status }[]`. The recommended agent flow is `leash_discover → leash_pay_skills_endpoints → leash_pay_payment_link`. |
+| `leash_reputation`             | Reputation snapshot for any agent mint (`/v1/agents/:mint/reputation`).                                                                                                                                                                                                                      |
 
 Install:
 
@@ -98,7 +99,8 @@ leash treasury balance
 leash treasury withdraw --to W --amount N --token SOL|USDC|USDG|USDT
 leash treasury limit [--token USDC|USDG|USDT]
 leash treasury set-limit [--token T] (--unlimited | --revoke | --amount N)
-leash discover [-q QUERY] [--max-price N] [--pricing-type T] [--limit N]
+leash discover [-q QUERY] [--max-price N] [--pricing-type T] [--source leash|pay-skills|all] [--limit N]
+leash discover endpoints <fqn>             # expand a pay-skills provider into its paid URLs
 leash reputation <agent_mint> [--network solana-devnet|solana-mainnet]
 leash receipts [--limit N] [--direction outgoing|incoming|both]
 leash receipt <receipt_hash>

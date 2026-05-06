@@ -240,6 +240,39 @@ if (recomputed !== parsed.receipt_hash) throw new Error('tampered');
 const linksToPrev = chainReceipt(parsed, prevReceipt); // bool
 ```
 
+## 10. Discover and pay an external API (pay-skills)
+
+The `/v1/discover` feed merges Leash marketplace listings with the Solana
+Foundation [`pay-skills`](https://github.com/solana-foundation/pay-skills)
+registry. Each row carries `source: "leash" | "pay-skills"`. For pay-skills
+items, `slug` is the provider FQN (e.g. `agentmail/email`); use it to expand
+the provider into its individual paid endpoints.
+
+```ts
+import { LeashClient } from '@leash/sdk';
+
+const leash = new LeashClient({ baseUrl: 'https://api.leash.market' });
+
+// 1. Search by capability — public, no auth.
+const search = await leash.discover({ capability: 'email', source: 'pay-skills', limit: 5 });
+
+// 2. Pick a provider and expand it.
+const item = search.items[0]!; // source === 'pay-skills'
+const provider = await leash.paySkillsProvider(item.slug);
+
+// 3. Pick the right endpoint and pay it with @leash/buyer-kit (omitted).
+const ep = provider.endpoints.find((e) => e.probe_status === 'ok' && e.protocol?.includes('x402'));
+console.log(`${ep!.method} ${ep!.url} — accepts ${(ep!.supported_usd ?? []).join(', ')}`);
+```
+
+CLI equivalent:
+
+```bash
+leash discover -q email --source pay-skills --limit 5
+leash discover endpoints agentmail/email
+leash pay https://x402.api.agentmail.to/v0/inboxes
+```
+
 ## Pointer back to canonical docs
 
 If a snippet here is older than the live docs, the live docs win. Fetch

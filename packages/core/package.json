@@ -1,4 +1,7 @@
 {
+  "publishConfig": {
+    "access": "public"
+  },
   "name": "@leash/core",
   "version": "0.1.0",
   "private": false,
@@ -21,7 +24,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@leash/schemas": "workspace:*",
+    "@leash/schemas": "^0.1.0",
     "@metaplex-foundation/mpl-agent-registry": "^0.2.5",
     "@metaplex-foundation/mpl-core": "^1.10.0",
     "@metaplex-foundation/umi": "^1.0.0",

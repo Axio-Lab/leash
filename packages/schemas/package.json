@@ -1,4 +1,7 @@
 {
+  "publishConfig": {
+    "access": "public"
+  },
   "name": "@leash/schemas",
   "version": "0.1.0",
   "private": false,

@@ -17,6 +17,7 @@ import { registerAgentTool } from './register-agent.js';
 import { getIdentityTool } from './get-identity.js';
 import { receiptsTool } from './receipts.js';
 import { discoverTool } from './discover.js';
+import { paySkillsEndpointsTool } from './pay-skills-endpoints.js';
 import { reputationTool } from './reputation.js';
 import { setSpendLimitTool } from './set-spend-limit.js';
 import { getSpendLimitTool } from './get-spend-limit.js';
@@ -33,6 +34,7 @@ export {
   getIdentityTool,
   receiptsTool,
   discoverTool,
+  paySkillsEndpointsTool,
   reputationTool,
   setSpendLimitTool,
   getSpendLimitTool,
@@ -51,6 +53,7 @@ export const LEASH_TOOLS: ReadonlyArray<LeashTool> = [
   getReceiptTool,
   getSpendLimitTool,
   payPaymentLinkTool,
+  paySkillsEndpointsTool,
   receiptsTool,
   registerAgentTool,
   reputationTool,

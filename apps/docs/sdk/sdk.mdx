@@ -59,11 +59,44 @@ You can pass more than one — the client picks the right mode per call.
 
 ### Public reads (no auth)
 
-| Method                                                              | Endpoint                                                            |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `discover({ capability?, max_price_usdc?, pricing_type?, limit? })` | `GET /v1/discover`                                                  |
-| `reputation({ agentMint, network? })`                               | `GET /v1/agents/{mint}/reputation`                                  |
-| `recordAgent(input)`                                                | `POST /v1/agents/record` (idempotent record after client-side mint) |
+| Method                                                                       | Endpoint                                                                               |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `discover({ capability?, max_price_usdc?, pricing_type?, source?, limit? })` | `GET /v1/discover`                                                                     |
+| `reputation({ agentMint, network? })`                                        | `GET /v1/agents/{mint}/reputation`                                                     |
+| `recordAgent(input)`                                                         | `POST /v1/agents/record` (idempotent record after client-side mint)                    |
+| `paySkillsProvider(fqn)`                                                     | `GET /v1/discover/pay-skills/{fqn}` — expand a pay-skills item into its paid endpoints |
+
+`discover()` returns a merged feed of two catalogues, distinguished by a per-item
+`source: 'leash' | 'pay-skills'` field:
+
+- `'leash'` — agents listed on the Leash marketplace (carry `seller_wallet`,
+  `tools[]`, on-chain identity).
+- `'pay-skills'` — providers in the Solana Foundation
+  [`pay-skills`](https://github.com/solana-foundation/pay-skills) registry — the
+  same catalogue the pay.sh CLI reads. These have `seller_wallet: null`,
+  `tools: []`, and `rating: null`, but every entry is x402-payable today via
+  `@leash/buyer-kit` (and `@leash/mcp`'s `leash_pay_payment_link`).
+
+Pass `source: 'leash'` or `source: 'pay-skills'` to scope to a single catalogue;
+`'all'` (the default) merges both.
+
+For `pay-skills` items, `slug` carries the provider's fully-qualified name
+(e.g. `agentmail/email`). Pass that to `paySkillsProvider(fqn)` to expand a
+provider into its individual paid endpoints — the second hop in pay.sh's
+`search_skills → get_skill_endpoints → curl` agent flow. The response is a
+`PaySkillsProvider` with `endpoints[]`, each carrying an absolute `url`,
+`method`, `pricing`, `protocol`, `supported_usd`, and `probe_status`. Hand
+`endpoint.url` straight to `@leash/buyer-kit` (or `@leash/mcp`'s
+`leash_pay_payment_link`) to settle.
+
+```ts
+const search = await leash.discover({ capability: 'email', source: 'pay-skills', limit: 5 });
+for (const item of search.items) {
+  const provider = await leash.paySkillsProvider(item.slug); // e.g. 'agentmail/email'
+  console.log(`${provider.title}: ${provider.endpoints.length} endpoints`);
+  // provider.endpoints[0].url is a paid x402 URL; pay it with @leash/buyer-kit.
+}
+```
 
 ### Receipts (legacy API key)
 

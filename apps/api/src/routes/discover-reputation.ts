@@ -23,12 +23,13 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 
 import type { LeashApiConfig } from '../config.js';
+import { getPaySkillsProvider, searchPaySkills } from '../external/pay-skills.js';
 import { ApiErrorSchema, NetworkSchema, PubkeySchema } from '../openapi/common.js';
 import { listListings } from '../storage/listings.js';
 import type { CacheClient } from '../storage/redis.js';
 import { execute } from '../storage/turso.js';
 import type { DbClient } from '../storage/turso.js';
-import { invalidRequest } from '../util/errors.js';
+import { invalidRequest, notFound } from '../util/errors.js';
 import type { SvmNetwork } from '../util/network.js';
 
 export type DiscoverReputationDeps = {
@@ -39,20 +40,29 @@ export type DiscoverReputationDeps = {
 
 const DiscoverItemSchema = z
   .object({
+    source: z.enum(['leash', 'pay-skills']).openapi({
+      description:
+        'Catalogue this entry came from. `leash` items are agents listed on the Leash marketplace (carry seller_wallet + tools); `pay-skills` items are pulled from the Solana Foundation pay-skills registry (https://github.com/solana-foundation/pay-skills) and have no on-chain seller identity.',
+    }),
     url: z.string().url(),
     title: z.string(),
     description: z.string(),
-    slug: z.string(),
+    slug: z.string().openapi({
+      description:
+        'Listing slug for Leash entries; provider FQN (e.g. "agentmail/email") for pay-skills entries.',
+    }),
     category: z.string(),
     price_usdc: z.string().nullable().openapi({
       description: 'Decimal USDC price for `per_call` listings; null for free or variable.',
     }),
     pricing_type: z.enum(['free', 'per_call', 'variable']),
     seller_agent_mint: PubkeySchema.nullable(),
-    seller_wallet: PubkeySchema,
+    seller_wallet: PubkeySchema.nullable().openapi({
+      description: 'Owner wallet for Leash listings; null for pay-skills entries.',
+    }),
     rating: z.number().min(0).max(1).nullable().openapi({
       description:
-        'Aggregated rating in `[0, 1]`. Currently derived from the listing rating + seller dispute rate; null when neither signal exists.',
+        'Aggregated rating in `[0, 1]`. Currently derived from the listing rating + seller dispute rate; null when neither signal exists. Always null for pay-skills entries.',
     }),
     health_status: z.enum(['ok', 'warn', 'down']).nullable(),
     tags: z.array(z.string()),
@@ -65,7 +75,7 @@ const DiscoverItemSchema = z
       )
       .openapi({
         description:
-          'Tools the listing exposes. The MCP host advertises this so an LLM can pick the right call once a service is selected.',
+          'Tools the listing exposes. The MCP host advertises this so an LLM can pick the right call once a service is selected. Always empty for pay-skills entries (use `endpoint_count` and the provider OpenAPI doc).',
       }),
   })
   .openapi('DiscoverItem');
@@ -76,6 +86,68 @@ const DiscoverResponseSchema = z
     next_cursor: z.string().nullable(),
   })
   .openapi('DiscoverResponse');
+
+const PaySkillsEndpointSchema = z
+  .object({
+    method: z.string(),
+    path: z.string().openapi({
+      description: 'Endpoint path relative to `service_url`.',
+    }),
+    url: z.string().url().openapi({
+      description:
+        'Absolute URL — `service_url` joined with `path`. Pay this directly with `leash_pay_payment_link` / `buyer.fetch()`; the gateway returns 402 with the x402 challenge.',
+    }),
+    description: z.string().optional(),
+    resource: z.string().optional(),
+    pricing: z
+      .object({
+        mode: z.string().optional(),
+        dimensions: z
+          .array(
+            z.object({
+              direction: z.string().optional(),
+              scale: z.number().optional(),
+              unit: z.string().optional(),
+              tiers: z
+                .array(
+                  z.object({
+                    price_usd: z.number().optional(),
+                    threshold: z.number().optional(),
+                  }),
+                )
+                .optional(),
+            }),
+          )
+          .optional(),
+      })
+      .nullable()
+      .optional(),
+    protocol: z.array(z.string()).optional().openapi({
+      description: 'Payment protocols the endpoint supports — typically `["x402"]`.',
+    }),
+    supported_usd: z.array(z.string()).optional().openapi({
+      description: 'Stablecoin symbols the seller accepts (e.g. `["USDC"]`, `["USDC","USDT"]`).',
+    }),
+    probe_status: z.string().optional().openapi({
+      description:
+        'pay-skills publishes a probe result per endpoint. `ok` means a recent live request returned the expected challenge; treat anything else as caution.',
+    }),
+    probe_description: z.string().optional(),
+  })
+  .openapi('PaySkillsEndpoint');
+
+const PaySkillsProviderResponseSchema = z
+  .object({
+    fqn: z.string(),
+    title: z.string(),
+    description: z.string(),
+    use_case: z.string().optional(),
+    category: z.string(),
+    service_url: z.string().url(),
+    version: z.string().optional(),
+    endpoints: z.array(PaySkillsEndpointSchema),
+  })
+  .openapi('PaySkillsProvider');
 
 const ReputationResponseSchema = z
   .object({
@@ -113,7 +185,7 @@ export function buildDiscoverReputationRoutes(deps: DiscoverReputationDeps): Ope
       tags: ['discover'],
       summary: 'Search the agent marketplace by capability, price, and reputation.',
       description:
-        'Returns approved listings filtered by capability (matched against category, name, description, tags, and tool names) and an optional `max_price_usdc` ceiling. Results are sorted by health + listing rating.',
+        'Returns paid services from two catalogues, merged into one list with a per-item `source` tag: (1) approved Leash marketplace listings (filterable by capability, price), and (2) the Solana Foundation `pay-skills` provider catalogue (https://github.com/solana-foundation/pay-skills) — the same registry the pay.sh CLI reads. Both sources are filterable by capability (substring match against title / description / category / use_case) and by an optional `max_price_usdc` ceiling. Use `source=leash` or `source=pay-skills` to scope to a single catalogue.',
       request: {
         query: z.object({
           capability: z.string().min(1).optional().openapi({
@@ -128,6 +200,10 @@ export function buildDiscoverReputationRoutes(deps: DiscoverReputationDeps): Ope
                 'Maximum decimal USDC price per call. Listings priced strictly above this value are filtered out. Free + variable-priced listings are always included unless `pricing_type=per_call` is also set.',
             }),
           pricing_type: z.enum(['free', 'per_call', 'variable']).optional(),
+          source: z.enum(['leash', 'pay-skills', 'all']).optional().openapi({
+            description:
+              'Which catalogue(s) to read. Defaults to `all` (Leash listings + pay-skills providers merged with a per-item `source` tag).',
+          }),
           limit: z.coerce.number().int().min(1).max(100).optional(),
         }),
       },
@@ -143,18 +219,37 @@ export function buildDiscoverReputationRoutes(deps: DiscoverReputationDeps): Ope
       },
     }),
     async (c) => {
-      const { capability, max_price_usdc, pricing_type, limit } = c.req.valid('query');
-
-      const listings = await listListings(deps.db, {
-        status: 'approved',
-        ...(capability ? { q: capability } : {}),
-        limit: limit ?? 25,
-      });
+      const { capability, max_price_usdc, pricing_type, source, limit } = c.req.valid('query');
 
       const cap = max_price_usdc ? Number(max_price_usdc) : Number.POSITIVE_INFINITY;
       if (Number.isNaN(cap)) throw invalidRequest('max_price_usdc must be a number');
 
-      const items = listings
+      const wantLeash = source !== 'pay-skills';
+      const wantPaySkills = source !== 'leash';
+      // Pull each source up to its own `limit` so a small global
+      // limit doesn't starve one catalogue. Final merge is capped
+      // again below.
+      const perSourceLimit = limit ?? 25;
+
+      const [listings, paySkillsItems] = await Promise.all([
+        wantLeash
+          ? listListings(deps.db, {
+              status: 'approved',
+              ...(capability ? { q: capability } : {}),
+              limit: perSourceLimit,
+            })
+          : Promise.resolve([] as Awaited<ReturnType<typeof listListings>>),
+        wantPaySkills
+          ? searchPaySkills({
+              ...(capability ? { capability } : {}),
+              ...(max_price_usdc ? { max_price_usdc: Number(max_price_usdc) } : {}),
+              ...(pricing_type ? { pricing_type } : {}),
+              limit: perSourceLimit,
+            })
+          : Promise.resolve([]),
+      ]);
+
+      const leashItems = listings
         .filter((l) => {
           if (pricing_type && l.pricing.type !== pricing_type) return false;
           if (l.pricing.type === 'per_call') {
@@ -180,6 +275,7 @@ export function buildDiscoverReputationRoutes(deps: DiscoverReputationDeps): Ope
                   ? 0
                   : null;
           return {
+            source: 'leash' as const,
             url: l.endpoint,
             title: l.name,
             description: l.description,
@@ -196,7 +292,142 @@ export function buildDiscoverReputationRoutes(deps: DiscoverReputationDeps): Ope
           };
         });
 
-      return c.json({ items, next_cursor: null }, 200);
+      // Merge with a stable preference: rated Leash listings first,
+      // then unrated Leash, then pay-skills (sorted by min price
+      // ascending so cheap free-tier APIs surface before metered ones).
+      const sortedPaySkills = [...paySkillsItems].sort((a, b) => {
+        const av = a.pricing_type === 'free' ? 0 : Number(a.price_usdc ?? Number.POSITIVE_INFINITY);
+        const bv = b.pricing_type === 'free' ? 0 : Number(b.price_usdc ?? Number.POSITIVE_INFINITY);
+        return av - bv;
+      });
+      const merged = [...leashItems, ...sortedPaySkills].slice(0, limit ?? 25);
+
+      return c.json({ items: merged, next_cursor: null }, 200);
+    },
+  );
+
+  // ────────────────────────────────────────────────────────────────
+  // GET /v1/discover/pay-skills/{operator}/{name}
+  // GET /v1/discover/pay-skills/{operator}/{origin}/{name}
+  //
+  // pay-skills FQNs are 2- or 3-segment paths (`google/translate`,
+  // `coinbase-cdp/coinbase-developer-platform/baseSepoliaWalletApi`).
+  // We expose the same shape as `pay skills endpoints <fqn>` so an
+  // agent can do search → expand → pay without touching the
+  // upstream catalogue directly.
+  // ────────────────────────────────────────────────────────────────
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/v1/discover/pay-skills/{op}/{a}/{b}',
+      tags: ['discover'],
+      summary: 'Expand a pay-skills provider into its paid endpoints (3-segment FQN).',
+      description:
+        'Companion to `/v1/discover` for pay-skills providers. Given a fully-qualified name from the catalogue (e.g. `agentmail/email`, `coinbase-cdp/coinbase-developer-platform/baseSepoliaWalletApi`), returns the published endpoint list with absolute URLs the agent can hand straight to `leash_pay_payment_link`. Mirrors `pay skills endpoints` from the pay.sh CLI but served through the same Leash origin used elsewhere — no extra client config.',
+      request: {
+        params: z.object({
+          op: z.string().min(1),
+          a: z.string().min(1),
+          b: z.string().min(1).optional(),
+        }),
+      },
+      responses: {
+        200: {
+          description: 'Provider endpoint list.',
+          content: { 'application/json': { schema: PaySkillsProviderResponseSchema } },
+        },
+        404: {
+          description: 'No such provider in the pay-skills catalogue.',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const { op, a, b } = c.req.valid('param');
+      const fqn = b ? `${op}/${a}/${b}` : `${op}/${a}`;
+      const provider = await getPaySkillsProvider({ fqn });
+      if (!provider) throw notFound(`pay-skills provider not found: ${fqn}`);
+      return c.json(
+        {
+          fqn: provider.fqn,
+          title: provider.title,
+          description: provider.description,
+          ...(provider.use_case ? { use_case: provider.use_case } : {}),
+          category: provider.category,
+          service_url: provider.service_url,
+          ...(provider.version ? { version: provider.version } : {}),
+          endpoints: provider.endpoints.map((ep, i) => ({
+            method: ep.method,
+            path: ep.path,
+            url: provider.endpoint_urls[i] ?? '',
+            ...(ep.description ? { description: ep.description } : {}),
+            ...(ep.resource ? { resource: ep.resource } : {}),
+            ...(ep.pricing ? { pricing: ep.pricing } : {}),
+            ...(ep.protocol ? { protocol: ep.protocol } : {}),
+            ...(ep.supported_usd ? { supported_usd: ep.supported_usd } : {}),
+            ...(ep.probe_status ? { probe_status: ep.probe_status } : {}),
+            ...(ep.probe_description ? { probe_description: ep.probe_description } : {}),
+          })),
+        },
+        200,
+      );
+    },
+  );
+
+  // 2-segment alias.
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/v1/discover/pay-skills/{op}/{a}',
+      tags: ['discover'],
+      summary: 'Expand a pay-skills provider into its paid endpoints (2-segment FQN).',
+      description: 'Same as the 3-segment variant — see `/v1/discover/pay-skills/{op}/{a}/{b}`.',
+      request: {
+        params: z.object({
+          op: z.string().min(1),
+          a: z.string().min(1),
+        }),
+      },
+      responses: {
+        200: {
+          description: 'Provider endpoint list.',
+          content: { 'application/json': { schema: PaySkillsProviderResponseSchema } },
+        },
+        404: {
+          description: 'No such provider.',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const { op, a } = c.req.valid('param');
+      const fqn = `${op}/${a}`;
+      const provider = await getPaySkillsProvider({ fqn });
+      if (!provider) throw notFound(`pay-skills provider not found: ${fqn}`);
+      return c.json(
+        {
+          fqn: provider.fqn,
+          title: provider.title,
+          description: provider.description,
+          ...(provider.use_case ? { use_case: provider.use_case } : {}),
+          category: provider.category,
+          service_url: provider.service_url,
+          ...(provider.version ? { version: provider.version } : {}),
+          endpoints: provider.endpoints.map((ep, i) => ({
+            method: ep.method,
+            path: ep.path,
+            url: provider.endpoint_urls[i] ?? '',
+            ...(ep.description ? { description: ep.description } : {}),
+            ...(ep.resource ? { resource: ep.resource } : {}),
+            ...(ep.pricing ? { pricing: ep.pricing } : {}),
+            ...(ep.protocol ? { protocol: ep.protocol } : {}),
+            ...(ep.supported_usd ? { supported_usd: ep.supported_usd } : {}),
+            ...(ep.probe_status ? { probe_status: ep.probe_status } : {}),
+            ...(ep.probe_description ? { probe_description: ep.probe_description } : {}),
+          })),
+        },
+        200,
+      );
     },
   );
 

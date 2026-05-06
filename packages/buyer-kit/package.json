@@ -1,4 +1,7 @@
 {
+  "publishConfig": {
+    "access": "public"
+  },
   "name": "@leash/buyer-kit",
   "version": "0.1.0",
   "private": false,
@@ -21,8 +24,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@leash/core": "workspace:*",
-    "@leash/schemas": "workspace:*",
+    "@leash/core": "^0.1.0",
+    "@leash/schemas": "^0.1.0",
     "@solana/kit": "^5.1.0",
     "@x402/core": "^2.10.0",
     "@x402/fetch": "^2.10.0",

@@ -25,7 +25,8 @@
  *   leash agent import <path>       Install agent.json (alias for `leash-mcp import`).
  *   leash treasury balance          List SOL + USDC/USDG/USDT balances.
  *   leash treasury withdraw …       Owner-driven on-chain withdrawal.
- *   leash discover [-q QUERY] …     Marketplace search (public).
+ *   leash discover [-q QUERY] …     Search Leash + pay-skills (public).
+ *   leash discover endpoints <fqn>  Expand a pay-skills provider into paid URLs.
  *   leash reputation <agent_mint>   Reputation snapshot (public).
  *   leash receipts [--limit N]      Recent receipts for the active agent.
  *   leash pay <link-url> [--max …]  Pay an x402 paywall.
@@ -386,12 +387,27 @@ async function runTreasurySetLimit(args: string[]): Promise<void> {
 // ────────────────────────────────────────────────────────────────────────────
 
 async function runDiscover(args: string[]): Promise<void> {
+  // Sub-commands. Today: `discover endpoints <fqn>` mirrors
+  // `pay skills endpoints <fqn>` from the pay.sh CLI — handy for
+  // expanding a chosen pay-skills provider into its paid URLs once
+  // search has narrowed the field.
+  if (args[0] === 'endpoints') {
+    await runDiscoverEndpoints(args.slice(1));
+    return;
+  }
+
   const { hostRef } = buildServerFromEnv();
   const json = wantJson(args);
+  const rawSource = optArg(args, '--source');
+  const source =
+    rawSource === 'leash' || rawSource === 'pay-skills' || rawSource === 'all'
+      ? rawSource
+      : undefined;
   const query = {
     capability: optArg(args, '-q') ?? optArg(args, '--capability'),
     max_price_usdc: numArg(args, '--max-price'),
     pricing_type: optArg(args, '--pricing-type') as 'free' | 'per_call' | 'variable' | undefined,
+    source,
     limit: numArg(args, '--limit'),
   };
   const cleaned = Object.fromEntries(
@@ -410,8 +426,56 @@ async function runDiscover(args: string[]): Promise<void> {
           : item.pricing_type === 'variable'
             ? 'variable'
             : `${item.price_usdc ?? '?'} USDC/call`;
-      lines.push(`  • ${item.title} — ${price} — ${item.url}`);
-      lines.push(`    ${item.description}`);
+      const tag = item.source === 'pay-skills' ? '[pay.sh]' : '[leash] ';
+      const slug = item.source === 'pay-skills' ? `  (fqn: ${item.slug})` : '';
+      lines.push(`  ${tag} ${item.title} — ${price} — ${item.url}${slug}`);
+      lines.push(`           ${item.description}`);
+    }
+    if ((payload.items ?? []).some((i: { source?: string }) => i.source === 'pay-skills')) {
+      lines.push('');
+      lines.push('Tip: `leash discover endpoints <fqn>` to expand a pay.sh provider.');
+    }
+    return lines.join('\n');
+  });
+}
+
+async function runDiscoverEndpoints(args: string[]): Promise<void> {
+  const { hostRef } = buildServerFromEnv();
+  const json = wantJson(args);
+  const fqn = args.find((a) => !a.startsWith('--'));
+  if (!fqn) {
+    process.stderr.write(
+      'usage: leash discover endpoints <fqn>\n' +
+        '\n' +
+        '  <fqn>   pay-skills FQN like `agentmail/email` or\n' +
+        '          `coinbase-cdp/coinbase-developer-platform/baseSepoliaWalletApi`.\n' +
+        '          Lift it from the `(fqn: ...)` hint emitted by `leash discover`.\n',
+    );
+    process.exit(2);
+  }
+  const result = await hostRef.paySkillsProvider({ fqn });
+  printResult(result, json, (payload) => {
+    if (payload.status !== 'ok') return formatStatusError(payload);
+    const lines = [
+      `${payload.title} — ${payload.fqn}`,
+      `  service_url: ${payload.service_url}`,
+      `  category:    ${payload.category}`,
+      `  endpoints:   ${payload.endpoints.length}`,
+      '',
+    ];
+    for (const ep of payload.endpoints ?? []) {
+      const protocols = (ep.protocol ?? []).join(',') || '(none)';
+      const stables = (ep.supported_usd ?? []).join(',') || '(none)';
+      const probe = ep.probe_status ?? '?';
+      const priceTier = ep.pricing?.dimensions?.[0]?.tiers?.[0]?.price_usd;
+      const price = typeof priceTier === 'number' ? `${priceTier} USD` : 'variable';
+      lines.push(
+        `  ${ep.method.padEnd(6)} ${ep.url}` +
+          `\n           ${ep.description ?? '(no description)'}`,
+      );
+      lines.push(
+        `           price=${price}  protocol=${protocols}  stables=${stables}  probe=${probe}`,
+      );
     }
     return lines.join('\n');
   });
@@ -731,7 +795,11 @@ function printHelp(): void {
       '                                     human units (e.g. --amount 100 = $100 USDC).',
       '',
       'marketplace + reputation:',
-      '  discover [-q QUERY] [--max-price N] [--pricing-type T] [--limit N]',
+      '  discover [-q QUERY] [--max-price N] [--pricing-type T] [--source leash|pay-skills|all] [--limit N]',
+      '    Searches the Leash marketplace + Solana Foundation pay-skills registry (merged).',
+      '  discover endpoints <fqn>           expand a pay-skills provider into its paid endpoint',
+      '                                     URLs (mirrors `pay skills endpoints <fqn>`). Take the',
+      '                                     <fqn> from the `(fqn: ...)` hint of `leash discover`.',
       '  reputation <agent_mint> [--network solana-devnet|solana-mainnet]',
       '',
       'activity:',

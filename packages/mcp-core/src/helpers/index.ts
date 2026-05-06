@@ -9,7 +9,11 @@ export { decodeBase64Json } from './base64-json.js';
 export { probePaymentLink, type PaymentRequirementPreview } from './probe-payment-link.js';
 export {
   fetchDiscover,
+  fetchPaySkillsProvider,
   fetchReputation,
   type DiscoverItem,
+  type DiscoverSource,
+  type PaySkillsEndpoint,
+  type PaySkillsProvider,
   type ReputationSnapshot,
 } from './discover-reputation.js';

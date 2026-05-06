@@ -78,8 +78,19 @@ leash agent create
 # 4. Confirm identity.
 leash agent show
 
-# 5. Look at the marketplace.
+# 5. Look at the marketplace. Searches the Leash registry AND the Solana
+#    Foundation `pay-skills` catalogue (https://github.com/solana-foundation/pay-skills);
+#    each row is tagged [leash] or [pay.sh] in the output.
 leash discover -q ocr --max-price 0.10
+# leash discover -q email --source pay-skills    # scope to a single catalogue
+# Expand a chosen pay-skills provider into its individual paid endpoints
+# (mirrors `pay skills endpoints <fqn>`). Use the (fqn: ...) hint emitted
+# by `leash discover` for source=pay-skills rows.
+# leash discover endpoints agentmail/email
+
+# Smoke (from the monorepo root): pay-skills index + merged /v1/discover on :8801 and LEASH_API_URL from apps/agents/.env
+# pnpm verify:discover
+# pnpm verify:discover --rm-self   # optional: delete the script after green
 
 # 6. Vet a counterparty before paying.
 leash reputation AGENT_MINT_PUBKEY
@@ -148,7 +159,12 @@ treasury commands:
                                      human units (e.g. --amount 100 = $100 USDC).
 
 marketplace + reputation:
-  discover [-q QUERY] [--max-price N] [--pricing-type T] [--limit N]
+  discover [-q QUERY] [--max-price N] [--pricing-type T] [--source leash|pay-skills|all] [--limit N]
+    Searches the Leash marketplace + Solana Foundation pay-skills registry (merged).
+  discover endpoints <fqn>
+    Expand a pay-skills provider into its paid endpoint URLs (mirrors
+    `pay skills endpoints <fqn>`). Take <fqn> from the (fqn: ...) hint
+    emitted by `leash discover`.
   reputation AGENT_MINT [--network solana-devnet|solana-mainnet]
 
 activity:

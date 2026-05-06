@@ -13,7 +13,17 @@
 
 export type SvmNetwork = 'solana-devnet' | 'solana-mainnet';
 
+export type DiscoverSource = 'leash' | 'pay-skills';
+
 export type DiscoverItem = {
+  /**
+   * Catalogue this entry came from. `'leash'` items are agents listed
+   * on the Leash marketplace; `'pay-skills'` items come from the
+   * Solana Foundation `pay-skills` registry
+   * (https://github.com/solana-foundation/pay-skills) and have no
+   * on-chain seller identity.
+   */
+  source: DiscoverSource;
   url: string;
   title: string;
   description: string;
@@ -22,7 +32,8 @@ export type DiscoverItem = {
   price_usdc: string | null;
   pricing_type: 'free' | 'per_call' | 'variable';
   seller_agent_mint: string | null;
-  seller_wallet: string;
+  /** Owner wallet for Leash entries; null for pay-skills entries. */
+  seller_wallet: string | null;
   rating: number | null;
   health_status: 'ok' | 'warn' | 'down' | null;
   tags: string[];
@@ -32,6 +43,52 @@ export type DiscoverItem = {
 export type DiscoverResponse = {
   items: DiscoverItem[];
   next_cursor: string | null;
+};
+
+/**
+ * Per-endpoint pricing block as published by the pay-skills catalogue.
+ * Most endpoints today are simple flat-rate per-call (a single `tiers`
+ * entry with `price_usd`); usage-based and tiered pricing share the
+ * same shape so callers should always inspect `mode` first.
+ */
+export type PaySkillsEndpointPricing = {
+  mode?: string;
+  dimensions?: Array<{
+    direction?: string;
+    scale?: number;
+    unit?: string;
+    tiers?: Array<{ price_usd?: number; threshold?: number }>;
+  }>;
+};
+
+export type PaySkillsEndpoint = {
+  method: string;
+  /** Path relative to `service_url`. */
+  path: string;
+  /** Absolute URL (`service_url` + `path`) — what the buyer calls. */
+  url: string;
+  description?: string;
+  resource?: string;
+  pricing?: PaySkillsEndpointPricing | null;
+  /** Payment protocols supported, e.g. `['x402']`. */
+  protocol?: string[];
+  /** Stablecoin symbols accepted, e.g. `['USDC']` or `['USDC','USDT']`. */
+  supported_usd?: string[];
+  /** `'ok'` when the catalogue's last live probe matched the expected challenge. */
+  probe_status?: string;
+  probe_description?: string;
+};
+
+export type PaySkillsProvider = {
+  /** Fully qualified name, e.g. `agentmail/email`. */
+  fqn: string;
+  title: string;
+  description: string;
+  use_case?: string;
+  category: string;
+  service_url: string;
+  version?: string;
+  endpoints: PaySkillsEndpoint[];
 };
 
 export type ReputationSnapshot = {

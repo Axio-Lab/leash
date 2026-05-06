@@ -79,6 +79,7 @@ describe('LeashClient (public reads)', () => {
       body: {
         items: [
           {
+            source: 'leash',
             url: 'https://x',
             title: 'T',
             description: 'D',

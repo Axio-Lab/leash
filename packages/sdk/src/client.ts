@@ -31,6 +31,7 @@ import type {
   PaymentLinkCreateInput,
   PaymentLinkPatchInput,
   PaymentLinksListResponse,
+  PaySkillsProvider,
   Receipt,
   RecordAgentInput,
   RecordAgentResponse,
@@ -91,6 +92,14 @@ export class LeashClient {
       capability?: string;
       max_price_usdc?: number;
       pricing_type?: 'free' | 'per_call' | 'variable';
+      /**
+       * Restrict to a single catalogue:
+       *   - `'leash'`: agents on the Leash marketplace.
+       *   - `'pay-skills'`: providers in the Solana Foundation
+       *     `pay-skills` registry.
+       *   - `'all'` (default): merged.
+       */
+      source?: 'leash' | 'pay-skills' | 'all';
       limit?: number;
     } = {},
   ): Promise<DiscoverResponse> {
@@ -98,10 +107,40 @@ export class LeashClient {
     if (query.capability) params.set('capability', query.capability);
     if (query.max_price_usdc != null) params.set('max_price_usdc', String(query.max_price_usdc));
     if (query.pricing_type) params.set('pricing_type', query.pricing_type);
+    if (query.source) params.set('source', query.source);
     if (query.limit) params.set('limit', String(query.limit));
     return this.requestJson<DiscoverResponse>(
       'GET',
       `/v1/discover${params.toString() ? `?${params}` : ''}`,
+    );
+  }
+
+  /**
+   * Expand a `pay-skills` provider into its endpoint list.
+   *
+   * Use after {@link discover}: an item with `source === 'pay-skills'`
+   * carries an `slug` equal to the provider FQN
+   * (e.g. `agentmail/email`). Pass that here to get the absolute
+   * endpoint URLs, methods, pricing, and supported stablecoins so the
+   * agent can hand a URL to `buyer.fetch()` or `host.pay()`.
+   *
+   * Mirrors `pay skills endpoints <fqn>` from the pay.sh CLI.
+   */
+  async paySkillsProvider(fqn: string): Promise<PaySkillsProvider> {
+    const trimmed = fqn.trim().replace(/^\/+|\/+$/g, '');
+    if (!trimmed.includes('/')) {
+      throw new LeashError(
+        400,
+        `pay-skills FQN must include at least one '/' (got "${fqn}")`,
+        null,
+      );
+    }
+    return this.requestJson<PaySkillsProvider>(
+      'GET',
+      `/v1/discover/pay-skills/${trimmed
+        .split('/')
+        .map((seg) => encodeURIComponent(seg))
+        .join('/')}`,
     );
   }
 

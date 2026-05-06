@@ -18,9 +18,10 @@ import {
   XIcon,
 } from 'lucide-react';
 
-import { LEASH_AGENT_MODEL, SOLANA_NETWORK, SOLANA_RPC } from '@/lib/env';
+import { LEASH_AGENT_MODEL, SOLANA_RPC_DEVNET, SOLANA_RPC_MAINNET } from '@/lib/env';
 import { formatChainError } from '@/lib/format-chain-error';
 import { mintAgentBrowserSide } from '@/lib/mint-agent';
+import { useSelectedNetwork } from '@/lib/network-preference';
 import { delegateAgentSpend, provisionAgentTreasury } from '@/lib/onboarding';
 import { usePrivyUmi } from '@/lib/use-privy-umi';
 import { Button } from '@/components/ui/button';
@@ -75,6 +76,7 @@ export function OnboardingGate({
   const { user } = usePrivy();
   const { umi, wallet, ready } = usePrivyUmi();
   const router = useRouter();
+  const [selectedNetwork] = useSelectedNetwork();
 
   const [step, setStep] = React.useState<StepId>('identity');
   const [name, setName] = React.useState('');
@@ -97,12 +99,14 @@ export function OnboardingGate({
 
   const privyId = user?.id ?? '';
 
+  const selectedRpc = selectedNetwork === 'solana-mainnet' ? SOLANA_RPC_MAINNET : SOLANA_RPC_DEVNET;
+
   React.useEffect(() => {
     let cancelled = false;
     async function load() {
       if (!wallet?.address) return;
       try {
-        const conn = new Connection(SOLANA_RPC, 'confirmed');
+        const conn = new Connection(selectedRpc, 'confirmed');
         const lamports = await conn.getBalance(new PublicKey(wallet.address));
         if (!cancelled) setSolBalance(lamports / LAMPORTS_PER_SOL);
       } catch {
@@ -113,7 +117,7 @@ export function OnboardingGate({
     return () => {
       cancelled = true;
     };
-  }, [wallet?.address]);
+  }, [wallet?.address, selectedRpc]);
 
   function generateExecutor() {
     const kp = Keypair.generate();
@@ -283,7 +287,7 @@ export function OnboardingGate({
         description: description.trim(),
         image: imageUrl ?? '',
         services: cleanServices,
-        network: SOLANA_NETWORK,
+        network: selectedNetwork,
       });
       mint = minted.mint;
       treasury = minted.treasury;
@@ -306,7 +310,7 @@ export function OnboardingGate({
           description: description.trim(),
           image_url: imageUrl,
           services: cleanServices,
-          network: SOLANA_NETWORK,
+          network: selectedNetwork,
           model: LEASH_AGENT_MODEL,
           system_prompt: systemPrompt,
           capabilities: [],
@@ -328,7 +332,7 @@ export function OnboardingGate({
       await provisionAgentTreasury({
         umi,
         agentMint: mint,
-        network: SOLANA_NETWORK,
+        network: selectedNetwork,
         onProgress: (msg) =>
           setStage((prev) => (prev.kind === 'provisioning' ? { ...prev, status: msg } : prev)),
       });
@@ -343,7 +347,7 @@ export function OnboardingGate({
         umi,
         agentMint: mint,
         executive: executor.address,
-        network: SOLANA_NETWORK,
+        network: selectedNetwork,
         onProgress: (msg) =>
           setStage((prev) => (prev.kind === 'delegating' ? { ...prev, status: msg } : prev)),
       });
@@ -375,7 +379,7 @@ export function OnboardingGate({
     router.push('/agents');
   }
 
-  const lowSol = solBalance !== null && solBalance < 0.05 && SOLANA_NETWORK === 'solana-devnet';
+  const lowSol = solBalance !== null && solBalance < 0.05 && selectedNetwork === 'solana-devnet';
 
   const wrapCls = fullPage ? 'min-h-dvh flex items-center justify-center p-6' : '';
   const cardCls = fullPage
@@ -390,7 +394,7 @@ export function OnboardingGate({
             Create your on-chain agent
           </h2>
           <p className="text-sm text-fg-muted mt-1">
-            Network: <span className="font-mono text-fg">{SOLANA_NETWORK}</span> · metadata follows
+            Network: <span className="font-mono text-fg">{selectedNetwork}</span> · metadata follows
             the{' '}
             <a
               href="https://eips.ethereum.org/EIPS/eip-8004"

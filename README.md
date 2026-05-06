@@ -36,8 +36,9 @@ pnpm turbo run test typecheck lint
 ```bash
 # 1. spin up Postgres-equivalent (Turso file DB, pre-seeded)
 pnpm --filter @leash/api db:migrate
-pnpm --filter @leash/api seed:listings   # 3 demo MCPs in the marketplace
 pnpm --filter @leash/api seed:demo       # 1 agent + 3 pending tasks
+# (Marketplace listings populate organically once sellers register —
+#  Favorites also surfaces the Solana Foundation pay-skills catalogue.)
 
 # 2. backend
 pnpm --filter @leash/api dev                       # :8787

@@ -31,6 +31,7 @@ import {
 } from '@leash/core';
 import {
   fetchDiscover,
+  fetchPaySkillsProvider,
   fetchReputation,
   isLikelyBase58Address,
   jsonResult,
@@ -47,6 +48,7 @@ import {
   type LeashHost,
   type LeashToolResult,
   type PayArgs,
+  type PaySkillsProviderArgs,
   type ReceiptsArgs,
   type RegisterAgentArgs,
   type ReputationArgs,
@@ -528,6 +530,14 @@ class StdioHost implements LeashHost {
 
   async reputation(args: ReputationArgs): Promise<LeashToolResult> {
     return fetchReputation({
+      apiBaseUrl: this.apiBaseUrl,
+      network: this.network,
+      query: args,
+    });
+  }
+
+  async paySkillsProvider(args: PaySkillsProviderArgs): Promise<LeashToolResult> {
+    return fetchPaySkillsProvider({
       apiBaseUrl: this.apiBaseUrl,
       network: this.network,
       query: args,
