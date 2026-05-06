@@ -3,11 +3,18 @@ import { z } from 'zod';
 /** MPP-on-Solana payment requirement embedded in a 402 problem+json body. */
 export const MppChallengeRequestSchema = z.object({
   recipient: z.string(),
+  /** Atomic token amount (base units) as a decimal string. */
   amount: z.string(),
   currency: z.string(),
   network: z.string(),
   asset: z.string(),
   deadline: z.string().optional(),
+  /**
+   * Solana pubkey that pays tx fees + co-signs ATA idempotent creates (same
+   * role as x402 `paymentRequirements.extra.feePayer`). Required for SPL
+   * settlement unless the deployment injects a default at the buyer.
+   */
+  feePayer: z.string().optional(),
 });
 
 export type MppChallengeRequest = z.infer<typeof MppChallengeRequestSchema>;

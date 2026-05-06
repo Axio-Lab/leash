@@ -13,6 +13,8 @@ export * from './x402/facilitator.js';
 export * from './x402/headers.js';
 export * from './x402/parse.js';
 export * from './x402/webhook.js';
+export * from './mpp/index.js';
+export * from './payments/index.js';
 export * from './treasury/balance.js';
 export * from './treasury/inspect-token-account.js';
 export * from './treasury/list-balances.js';
