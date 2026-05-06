@@ -66,6 +66,7 @@ describe('@leashmarket/mcp server', () => {
       'leash_get_receipt',
       'leash_get_spend_limit',
       'leash_pay_payment_link',
+      'leash_pay_skills_endpoints',
       'leash_receipts',
       'leash_register_agent',
       'leash_reputation',

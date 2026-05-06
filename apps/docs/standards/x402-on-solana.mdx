@@ -18,7 +18,7 @@ buyer or stand up a seller, see the SDK pages for
 | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------- | --------------------------------------------- |
 | **Executive** (Privy wallet, Node keypair, TEE)                                                                        | The SPL transfer (as **delegate** of the buyer agent treasury) | —                                | Pays the buyer-side fee on the transfer       |
 | **Buyer agent** (Core asset)                                                                                           | Nothing — passive owner                                        | Asset Signer PDA → SPL token ATA | —                                             |
-| **Seller** (`@leashmarket/seller-kit` middleware)                                                                            | Nothing                                                        | Asset Signer PDA (`payTo`)       | —                                             |
+| **Seller** (`@leashmarket/seller-kit` middleware)                                                                      | Nothing                                                        | Asset Signer PDA (`payTo`)       | —                                             |
 | **Facilitator** (`devnet-facilitator.leash.market` devnet, `facilitator.leash.market` mainnet, or any compatible host) | Nothing                                                        | —                                | Pays the **network fee** to broadcast `payTo` |
 
 Both parties address themselves via Core Asset Signer PDAs. Funds land in

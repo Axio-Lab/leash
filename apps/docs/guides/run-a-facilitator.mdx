@@ -14,10 +14,10 @@ Leash **SDKs** (`@leashmarket/buyer-kit`, `@leashmarket/seller-kit`) resolve the
 
 The table below is the **“what you get if you set nothing”** default — it is **not** a whitelist. You can point `LEASH_FACILITATOR_URL` (or `facilitator:` on `createBuyer` / `createSeller`) at **any** HTTPS base URL that implements the x402 facilitator HTTP API and publishes the **exact** SVM scheme for your cluster.
 
-| Network     | Default                                   | Example third-party alternatives                                                                    |
-| ----------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Network     | Default                                   | Example third-party alternatives                                                                          |
+| ----------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | **Devnet**  | `https://devnet-facilitator.leash.market` | `https://devnet-facilitator.leash.market`, `http://localhost:8787` (local `@leashmarket/facilitator-app`) |
-| **Mainnet** | `https://facilitator.leash.market`        | `https://facilitator.leash.market`, or any other mainnet-capable x402 facilitator you run or trust  |
+| **Mainnet** | `https://facilitator.leash.market`        | `https://facilitator.leash.market`, or any other mainnet-capable x402 facilitator you run or trust        |
 
 The **hosted Leash API** (`api.leash.market`) uses **`LEASH_API_FACILITATOR_URL`** for its own `/x/{id}` paywall and seller-utils — that is server-side only and does not change your SDK defaults. That value can also be **any** compatible facilitator base URL, not only the Leash binary.
 

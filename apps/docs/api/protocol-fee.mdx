@@ -39,10 +39,10 @@ anyone running `@leashmarket/facilitator` can opt into.
 | Field             | Value                                          | Where it lives                                                                     |
 | ----------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Rate              | `100` bps (`1.00%`)                            | `LEASH_FEE_BPS` env on facilitator + API                                           |
-| Rounding          | Ceiling, in atomic units                       | `computeFeeAtoms` in `@leashmarket/core/fees`                                            |
+| Rounding          | Ceiling, in atomic units                       | `computeFeeAtoms` in `@leashmarket/core/fees`                                      |
 | Mainnet authority | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W` | `LEASH_FEE_AUTHORITY_MAINNET` (override only if self-hosting your own facilitator) |
 | Devnet authority  | `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W` | `LEASH_FEE_AUTHORITY_DEVNET`                                                       |
-| Live snapshot     | `GET /v1/health` `.protocol_fee` block         | API + `@leashmarket/facilitator` `/health`                                               |
+| Live snapshot     | `GET /v1/health` `.protocol_fee` block         | API + `@leashmarket/facilitator` `/health`                                         |
 
 The hosted Leash mainnet and devnet facilitators always serve the
 defaults. Override the env only if you are **operating your own

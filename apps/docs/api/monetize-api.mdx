@@ -12,11 +12,11 @@ writes a chained `ReceiptV1` for every call — all visible on
 
 ## Pick your integration shape
 
-| Shape                             | Best when                                                             | You ship                                         |
-| --------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------ |
-| **Hosted payment link**           | Fixed or templated JSON response, zero new infra, sharable URL        | `POST /v1/payment-links` → share `share_url`     |
+| Shape                                   | Best when                                                             | You ship                                         |
+| --------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------ |
+| **Hosted payment link**                 | Fixed or templated JSON response, zero new infra, sharable URL        | `POST /v1/payment-links` → share `share_url`     |
 | **Sidecar (`@leashmarket/seller-kit`)** | Your API is TypeScript / Hono; you want the route inside your process | `createSeller` + env for receipt fan-out         |
-| **Edge (any language)**           | Python / Go / Rust / Worker in front of your route                    | Buyer + seller HTTP utilities, or link + webhook |
+| **Edge (any language)**                 | Python / Go / Rust / Worker in front of your route                    | Buyer + seller HTTP utilities, or link + webhook |
 
 All three settle the same way on-chain and emit the same explorer /
 metrics events once the seller agent is set up correctly.
