@@ -6,7 +6,7 @@ import { createSeller } from '@leashmarket/seller-kit';
 import { stubFacilitator } from '@leashmarket/seller-kit/test-utils';
 import { createBuyer } from '@leashmarket/buyer-kit';
 import type { ClientSvmSigner, LeashFetch } from '@leashmarket/core';
-import type { ReceiptV1, RulesV1 } from '@leashmarket/schemas';
+import type { ReceiptAny, RulesV1 } from '@leashmarket/schemas';
 import { ReceiptV1Schema } from '@leashmarket/schemas';
 
 const AGENT = '11111111111111111111111111111111';
@@ -44,7 +44,7 @@ describe('merged-demo: in-process buyer ↔ seller ↔ receipt store', () => {
   });
 
   it('buyer policy gate emits a valid spend receipt on a 200 (with stubbed fetch)', async () => {
-    const sink: ReceiptV1[] = [];
+    const sink: ReceiptAny[] = [];
     const stubFetch: LeashFetch = async () =>
       new Response(JSON.stringify({ paid: true }), { status: 200 });
     const buyer = createBuyer({
