@@ -21,6 +21,7 @@
 import { x402Facilitator } from '@x402/core/facilitator';
 import type { Network } from '@x402/core/types';
 import { SOLANA_DEVNET_CAIP2, SOLANA_MAINNET_CAIP2, SOLANA_TESTNET_CAIP2 } from '@x402/svm';
+import { SettlementCache } from '@x402/svm';
 import {
   resolveLeashFeeAuthority,
   resolveLeashFeeBps,
@@ -44,7 +45,7 @@ const NETWORK_TO_CAIP2: Record<LeashNetworkSlug, string> = {
   mainnet: SOLANA_MAINNET_CAIP2,
 };
 
-export const LEASH_FACILITATOR_BUILD = 'leash-facilitator/0.1';
+export const LEASH_FACILITATOR_BUILD = 'leash-facilitator/0.2';
 
 export type CreateLeashFacilitatorOptions = LeashFacilitatorSignerOptions & {
   /**
@@ -111,12 +112,18 @@ export async function createLeashFacilitator(
   // buyer can't double-settle by hopping protocol versions.
   registerLeashExactSvmScheme(facilitator, { signer: signer.signer, networks: networkArg });
 
+  const mppSettlementCache = new SettlementCache();
   const app = createFacilitatorHttpServer({
     facilitator,
     signerAddresses: signer.addresses,
     networks,
     build: LEASH_FACILITATOR_BUILD,
     protocolFee: buildProtocolFeeHealthBlock(slugs),
+    mpp: {
+      signer: signer.signer,
+      allowedCaip2Networks: new Set(networks),
+      settlementCache: mppSettlementCache,
+    },
   });
 
   return { app, facilitator, signer, caip2Networks: networks };
