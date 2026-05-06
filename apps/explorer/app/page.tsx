@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { settlementTxSig } from '@leashmarket/schemas';
 import { ArrowRight } from 'lucide-react';
 import {
   DbUnavailableError,
@@ -44,7 +45,7 @@ export default async function HomePage() {
   // best-effort: a DB hiccup here just falls back to "—" rather than
   // failing the whole homepage render.
   const recentTxSigs = recentReceipts
-    .map((r) => r.tx_sig)
+    .map((r) => settlementTxSig(r))
     .filter((s): s is string => typeof s === 'string' && s.length > 0);
   const counterpartiesRes = await safe(() => getCounterpartiesForTxs(network, recentTxSigs));
   const counterparties = counterpartiesRes.ok ? counterpartiesRes.data : undefined;

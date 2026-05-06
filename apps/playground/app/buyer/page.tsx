@@ -16,7 +16,12 @@ import {
   TOKEN_2022_PROGRAM_ADDRESS,
   type KnownStableSymbol,
 } from '@leashmarket/core';
-import type { EndpointV1, ReceiptV1, RulesV1 } from '@leashmarket/schemas';
+import {
+  type EndpointV1,
+  type ReceiptAny,
+  type RulesV1,
+  settlementTxSig,
+} from '@leashmarket/schemas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -63,8 +68,8 @@ function decimalToAtomicUsdc(input: string): bigint | null {
 type FireResult =
   | {
       ok: true;
-      receipt: ReceiptV1;
-      quotedPrice?: ReceiptV1['price'];
+      receipt: ReceiptAny;
+      quotedPrice?: ReceiptAny['price'];
       failureReason?: string;
       /**
        * `Pay with` value when `fire()` ran. The seller 402 header often
@@ -135,7 +140,7 @@ export default function BuyerPage() {
 
   const [loading, setLoading] = React.useState(false);
   const [result, setResult] = React.useState<FireResult | null>(null);
-  const [history, setHistory] = React.useState<ReceiptV1[]>([]);
+  const [history, setHistory] = React.useState<ReceiptAny[]>([]);
 
   React.useEffect(() => {
     const a = listAgents();
@@ -356,7 +361,7 @@ export default function BuyerPage() {
   const isLimitlessAgent = isLimitless(agentRecord?.rules ?? null);
   const rulesCardData = isLimitlessAgent ? {} : rules;
 
-  async function shipReceipt(receipt: ReceiptV1): Promise<void> {
+  async function shipReceipt(receipt: ReceiptAny): Promise<void> {
     try {
       await fetch(`/api/receipts/${encodeURIComponent(receipt.agent)}`, {
         method: 'POST',
@@ -530,7 +535,7 @@ export default function BuyerPage() {
         },
       });
       setHistory((h) => [callResult.receipt, ...h].slice(0, 25));
-      const settled = !!callResult.receipt.tx_sig;
+      const settled = !!settlementTxSig(callResult.receipt);
       const status = callResult.response.status;
       // A `redirected` response (303 → followed) with status 0 is *not* a
       // network failure; it's a successful payment + redirect. Treat it
@@ -990,30 +995,33 @@ export default function BuyerPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-2">
-                  {history.map((r) => (
-                    <div
-                      key={r.receipt_hash}
-                      className="flex items-center gap-2 text-xs font-mono text-fg-muted"
-                    >
-                      <Badge variant={r.decision === 'allow' ? 'success' : 'danger'}>
-                        {r.decision}
-                      </Badge>
-                      <span className="truncate">
-                        {r.request.method} {r.request.url}
-                      </span>
-                      {r.tx_sig && r.price?.network && (
-                        <a
-                          href={transactionExplorerUrl(r.price.network, r.tx_sig)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-brand hover:underline"
-                        >
-                          {r.tx_sig.slice(0, 6)}…
-                        </a>
-                      )}
-                      <span className="ml-auto text-fg-subtle">#{r.nonce}</span>
-                    </div>
-                  ))}
+                  {history.map((r) => {
+                    const hTx = settlementTxSig(r);
+                    return (
+                      <div
+                        key={r.receipt_hash}
+                        className="flex items-center gap-2 text-xs font-mono text-fg-muted"
+                      >
+                        <Badge variant={r.decision === 'allow' ? 'success' : 'danger'}>
+                          {r.decision}
+                        </Badge>
+                        <span className="truncate">
+                          {r.request.method} {r.request.url}
+                        </span>
+                        {hTx && r.price?.network && (
+                          <a
+                            href={transactionExplorerUrl(r.price.network, hTx)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-brand hover:underline"
+                          >
+                            {hTx.slice(0, 6)}…
+                          </a>
+                        )}
+                        <span className="ml-auto text-fg-subtle">#{r.nonce}</span>
+                      </div>
+                    );
+                  })}
                 </CardContent>
               </Card>
             )}
@@ -1071,7 +1079,8 @@ function DevnetStableFundHint({ symbol }: { symbol: string }) {
 
 function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) {
   const leash = result.response.leash;
-  const settled = !!result.receipt.tx_sig;
+  const receiptTx = settlementTxSig(result.receipt);
+  const settled = !!receiptTx;
   const status = result.response.status;
   // A status-0 response that was actually `redirected` is a real,
   // settled call — the browser just stripped headers because the seller
@@ -1312,24 +1321,21 @@ function ResultPanel({ result }: { result: Extract<FireResult, { ok: true }> }) 
         </a>
       )}
 
-      {result.receipt.tx_sig ? (
+      {receiptTx ? (
         <a
           href={
             leash.tx_explorer?.trim() ||
-            transactionExplorerUrl(
-              result.receipt.price?.network ?? SOLANA_NETWORK,
-              result.receipt.tx_sig,
-            )
+            transactionExplorerUrl(result.receipt.price?.network ?? SOLANA_NETWORK, receiptTx)
           }
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1.5 text-xs text-brand hover:underline w-fit font-mono"
-          title={result.receipt.tx_sig}
+          title={receiptTx}
         >
           <ExternalLink className="size-3" />
           View txn on explorer
           <span className="text-fg-subtle">
-            ({result.receipt.tx_sig.slice(0, 8)}…{result.receipt.tx_sig.slice(-4)})
+            ({receiptTx.slice(0, 8)}…{receiptTx.slice(-4)})
           </span>
         </a>
       ) : null}
@@ -1381,7 +1387,7 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
  * `decimalToAtomicUsdc` above; if we ever add a non-6dp stable this
  * div needs to key off the receipt's resolved decimals.
  */
-function FeeBreakdown({ price }: { price: ReceiptV1['price'] | null | undefined }) {
+function FeeBreakdown({ price }: { price: ReceiptAny['price'] | null | undefined }) {
   if (!price) return null;
   if (!price.fee) return null;
   const currency = price.currency || 'tokens';

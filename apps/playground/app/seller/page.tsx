@@ -16,7 +16,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import type { EndpointV1, ReceiptV1 } from '@leashmarket/schemas';
+import { type EndpointV1, type ReceiptAny, settlementTxSig } from '@leashmarket/schemas';
 import { KNOWN_STABLE_SYMBOLS, type KnownStableSymbol } from '@leashmarket/core';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
@@ -68,6 +68,7 @@ export default function SellerPage() {
   const [customId, setCustomId] = React.useState('');
   const [webhookUrl, setWebhookUrl] = React.useState('');
   const [wrapReceipt, setWrapReceipt] = React.useState(true);
+  const [paymentProtocol, setPaymentProtocol] = React.useState<'x402' | 'mpp'>('x402');
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [origin, setOrigin] = React.useState('');
@@ -83,6 +84,7 @@ export default function SellerPage() {
     setCustomId('');
     setWebhookUrl('');
     setWrapReceipt(true);
+    setPaymentProtocol('x402');
   }
 
   React.useEffect(() => {
@@ -107,7 +109,7 @@ export default function SellerPage() {
   // Earn-receipt feed for the selected agent. We auto-refresh every 5s so
   // a payment landing in another tab shows up here without a manual reload.
   const receiptsKey = ownerAgent ? `/api/receipts/${ownerAgent}` : null;
-  const { data: receiptFeed, error: receiptError } = useSWR<{ receipts: ReceiptV1[] }>(
+  const { data: receiptFeed, error: receiptError } = useSWR<{ receipts: ReceiptAny[] }>(
     receiptsKey,
     fetcher,
     { refreshInterval: 5000 },
@@ -115,7 +117,7 @@ export default function SellerPage() {
   const earnReceipts = React.useMemo(
     () =>
       (receiptFeed?.receipts ?? [])
-        .filter((r) => r.kind === 'earn' && r.decision === 'allow' && r.tx_sig)
+        .filter((r) => r.kind === 'earn' && r.decision === 'allow' && settlementTxSig(r))
         // newest first
         .slice()
         .reverse(),
@@ -181,6 +183,7 @@ export default function SellerPage() {
           },
           webhook_url: webhookUrl.trim() || undefined,
           wrap_receipt: wrapReceipt,
+          payment_protocol: paymentProtocol,
         }),
       });
       const json = (await res.json().catch(() => null)) as {
@@ -290,6 +293,20 @@ export default function SellerPage() {
                     onChange={(e) => setDescription(e.target.value)}
                     rows={2}
                   />
+                </Field>
+
+                <Field label="Payment rail">
+                  <select
+                    value={paymentProtocol}
+                    onChange={(e) => setPaymentProtocol(e.target.value as 'x402' | 'mpp')}
+                    className="h-9 rounded-md border border-border bg-bg-elev px-3 text-sm"
+                  >
+                    <option value="x402">x402 (HTTP 402 + facilitator)</option>
+                    <option value="mpp">MPP (challenge + settle)</option>
+                  </select>
+                  <span className="text-[11px] text-fg-subtle">
+                    MPP is for Solana MPP credentials; x402 is the default paywall.
+                  </span>
                 </Field>
 
                 <div className="grid grid-cols-3 gap-3">
@@ -580,6 +597,9 @@ function PaymentLinkRow({
           className={cn('size-4 text-fg-subtle transition-transform', open && 'rotate-90')}
         />
         <Badge variant="brand">{endpoint.method}</Badge>
+        <Badge variant={endpoint.payment_protocol === 'mpp' ? 'warning' : 'outline'}>
+          {endpoint.payment_protocol ?? 'x402'}
+        </Badge>
         <Badge variant="success">
           {endpoint.price} {endpoint.currency}
         </Badge>

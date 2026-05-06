@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ReceiptV1Schema, type ReceiptV1 } from '@leashmarket/schemas';
+import { parseReceiptAny, type ReceiptAny } from '@leashmarket/schemas';
 import { getReceiptsJsonl } from '@/lib/runner';
 import { RUNNER_URL } from '@/lib/env';
 
@@ -20,7 +20,7 @@ export async function GET(
     .map((line) => line.trim())
     .filter(Boolean);
 
-  const receipts: ReceiptV1[] = [];
+  const receipts: ReceiptAny[] = [];
   const errors: Array<{ line: number; error: string }> = [];
 
   lines.forEach((raw, idx) => {
@@ -31,11 +31,10 @@ export async function GET(
       errors.push({ line: idx + 1, error: (err as Error).message });
       return;
     }
-    const parsed = ReceiptV1Schema.safeParse(json);
-    if (parsed.success) {
-      receipts.push(parsed.data);
-    } else {
-      errors.push({ line: idx + 1, error: parsed.error.message });
+    try {
+      receipts.push(parseReceiptAny(json));
+    } catch (err) {
+      errors.push({ line: idx + 1, error: (err as Error).message });
     }
   });
 
@@ -58,16 +57,18 @@ export async function POST(
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message ?? 'invalid_json' }, { status: 400 });
   }
-  const parsed = ReceiptV1Schema.safeParse(body);
-  if (!parsed.success) {
+  let receipt: ReceiptAny;
+  try {
+    receipt = parseReceiptAny(body);
+  } catch (err) {
     return NextResponse.json(
-      { error: 'invalid_receipt', detail: parsed.error.message },
+      { error: 'invalid_receipt', detail: (err as Error).message },
       { status: 422 },
     );
   }
-  if (parsed.data.agent !== mint) {
+  if (receipt.agent !== mint) {
     return NextResponse.json(
-      { error: 'agent_mismatch', detail: `receipt.agent=${parsed.data.agent} != :mint=${mint}` },
+      { error: 'agent_mismatch', detail: `receipt.agent=${receipt.agent} != :mint=${mint}` },
       { status: 422 },
     );
   }
@@ -75,7 +76,7 @@ export async function POST(
     const upstream = await fetch(`${RUNNER_URL}/a/${mint}/receipts`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(parsed.data),
+      body: JSON.stringify(receipt),
     });
     const text = await upstream.text();
     return new Response(text, {

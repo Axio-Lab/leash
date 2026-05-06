@@ -119,10 +119,8 @@ function eventToRow(row: ApiEventRow): EventRow {
 }
 
 function receiptToRow(row: ApiReceiptRow): ReceiptRow {
-  // The wrapper carries (network, ingested_at, …) but the views render
-  // the inner ReceiptV1 directly (price, request_hash, prev_receipt_hash,
-  // ts, …). Surfacing `raw` keeps every page that already worked off
-  // the public API response shape unchanged.
+  // Wrapper row carries ingested_at + receipt_hash for cursoring; views render
+  // the typed receipt in `raw` (v0.1 or v0.2 dual-protocol).
   return row.raw;
 }
 
@@ -219,7 +217,7 @@ export async function listRecentReceipts(opts: {
     }),
   );
   // Pull cursor metadata off the underlying ApiReceiptRow, before we
-  // strip it down to ReceiptV1 in receiptToRow.
+  // strip it down to the inner receipt in receiptToRow.
   const last = rows[rows.length - 1];
   const next_cursor =
     last && rows.length === limit ? `${last.ingestedAt}|${last.receiptHash}` : null;
@@ -283,7 +281,7 @@ export async function listProtocolFeeTotals(network: Network): Promise<ProtocolF
  * 6-decimals 1:1-to-USD, so the SQL can sum atomic ints and the
  * caller divides by 1e6 to get USD without per-mint arithmetic.
  *
- * The receipts table stores the canonical `ReceiptV1` payload as
+ * The receipts table stores the canonical receipt JSON (`ReceiptAny`) as
  * `raw_json`, so we extract the relevant scalars via `json_extract`.
  * Receipts that lack a `price.amount` (rare — e.g. legacy denied
  * rows) are simply skipped via the `WHERE` clause.

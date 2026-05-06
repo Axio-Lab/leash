@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { settlementTxSig } from '@leashmarket/schemas';
 import { Bot, Coins, Receipt as ReceiptIcon } from 'lucide-react';
 import { DbUnavailableError, getCounterpartiesForTxs, listEvents, listReceipts } from '@/lib/db';
 import { probeAgentOnOtherNetwork } from '@/lib/cross-network';
@@ -48,7 +49,7 @@ async function safeRpc<T>(fn: () => Promise<T>): Promise<Result<T>> {
 /** Best-effort counterparty join for the agent receipt feed. */
 async function safeCounterparties(network: Network, rows: ReceiptRow[]) {
   const sigs = rows
-    .map((r) => r.tx_sig)
+    .map((r) => settlementTxSig(r))
     .filter((s): s is string => typeof s === 'string' && s.length > 0);
   try {
     return await getCounterpartiesForTxs(network, sigs);

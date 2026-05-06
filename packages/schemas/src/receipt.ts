@@ -175,3 +175,20 @@ export function receiptProtocol(r: ReceiptAny): 'x402' | 'mpp' {
   if (isReceiptV02(r)) return r.protocol;
   return 'x402';
 }
+
+/**
+ * Canonical on-chain settlement signature for counterparty joins and
+ * explorer tx links (x402 `tx_sig`, MPP `tx_sig` or `mpp_settlement_tx`).
+ */
+export function settlementTxSig(r: ReceiptAny): string | null {
+  if (isReceiptV02(r) && r.protocol === 'mpp') {
+    const s = r.tx_sig ?? r.mpp_settlement_tx;
+    return s != null && s.length > 0 ? s : null;
+  }
+  if (isReceiptV02(r)) {
+    const s = r.tx_sig;
+    return s != null && s.length > 0 ? s : null;
+  }
+  const s = r.tx_sig;
+  return s != null && s.length > 0 ? s : null;
+}

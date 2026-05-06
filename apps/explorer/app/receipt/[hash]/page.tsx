@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { receiptProtocol, settlementTxSig } from '@leashmarket/schemas';
 import { ArrowLeft, ArrowRight, ExternalLink, Hash, Link as LinkIcon } from 'lucide-react';
 import { DbUnavailableError, getReceiptByHash } from '@/lib/db';
 import { probeReceiptOnOtherNetwork } from '@/lib/cross-network';
@@ -49,6 +50,8 @@ export default async function ReceiptPage({ params }: Props) {
   }
 
   const displayJson = toDisplayReceiptJson(r, network);
+  const txSig = settlementTxSig(r);
+  const proto = receiptProtocol(r);
 
   return (
     <div className="space-y-8">
@@ -64,6 +67,7 @@ export default async function ReceiptPage({ params }: Props) {
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <KindPill value={r.kind} />
+          <ProtocolPill value={proto} />
           <DecisionPill value={r.decision} />
           <span className="rounded-md border border-[--color-border] bg-[--color-bg-elev]/60 px-2 py-0.5 text-[10px] uppercase tracking-wider text-[--color-fg-muted] backdrop-blur-md">
             nonce {r.nonce}
@@ -83,13 +87,9 @@ export default async function ReceiptPage({ params }: Props) {
           <Field label="Agent">
             <Mono value={r.agent} href={`/agent/${r.agent}`} />
           </Field>
-          {r.tx_sig ? (
+          {txSig ? (
             <Field label="Tx signature">
-              <Mono
-                value={r.tx_sig}
-                href={`/tx/${r.tx_sig}`}
-                external={solscanTxUrl(network, r.tx_sig)}
-              />
+              <Mono value={txSig} href={`/tx/${txSig}`} external={solscanTxUrl(network, txSig)} />
             </Field>
           ) : null}
           {r.price ? (
@@ -169,9 +169,9 @@ export default async function ReceiptPage({ params }: Props) {
           <ArrowLeft className="h-3 w-3 transition-transform group-hover:-translate-x-0.5" />
           Back to receipts
         </Link>
-        {r.tx_sig ? (
+        {txSig ? (
           <a
-            href={solscanTxUrl(network, r.tx_sig)}
+            href={solscanTxUrl(network, txSig)}
             target="_blank"
             rel="noreferrer noopener"
             className="group inline-flex items-center gap-1.5 rounded-full border border-[--color-border] bg-[--color-brand-soft]/40 px-3 py-1.5 text-xs text-[--color-fg] backdrop-blur-md transition-all hover:border-[--color-brand-strong] hover:bg-[--color-brand-soft]"
@@ -240,6 +240,23 @@ function ChainStep({
         <ArrowRight className="h-3 w-3 text-[--color-fg-subtle]" aria-hidden="true" />
       ) : null}
     </div>
+  );
+}
+
+function ProtocolPill({ value }: { value: 'x402' | 'mpp' }) {
+  const cls =
+    value === 'mpp'
+      ? 'bg-[oklch(0.30_0.14_45/0.45)] text-[oklch(0.9_0.12_75)] ring-1 ring-inset ring-[oklch(0.5_0.16_45/0.35)]'
+      : 'bg-[oklch(0.30_0.12_250/0.45)] text-[oklch(0.88_0.08_250)] ring-1 ring-inset ring-[oklch(0.48_0.14_250/0.35)]';
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider',
+        cls,
+      )}
+    >
+      {value}
+    </span>
   );
 }
 
