@@ -210,9 +210,14 @@ class StdioHost implements LeashHost {
         rules: defaultRules(),
       });
 
-      const { response, receipt, failureReason } = await buyer.fetch(args.url, {
-        method: 'GET',
-      });
+      const method = args.method ?? 'GET';
+      const fetchInit: RequestInit = { method };
+      if (method === 'POST' && args.body != null && args.body.length > 0) {
+        fetchInit.body = args.body;
+        fetchInit.headers = { 'content-type': 'application/json' };
+      }
+
+      const { response, receipt, failureReason } = await buyer.fetch(args.url, fetchInit);
       const bodyText = await response
         .clone()
         .text()
@@ -382,6 +387,7 @@ class StdioHost implements LeashHost {
         method: 'GET',
         price: `${args.amount} ${args.currency}`,
         currency: args.currency,
+        protocol: args.protocol ?? 'x402',
         response: {
           status: 200,
           mimeType: 'application/json',
@@ -418,6 +424,7 @@ class StdioHost implements LeashHost {
         price: `${args.amount} ${args.currency}`,
         currency: args.currency,
         label: args.label,
+        protocol: args.protocol ?? 'x402',
         network: json.network,
         owner_agent: json.owner_agent,
       });

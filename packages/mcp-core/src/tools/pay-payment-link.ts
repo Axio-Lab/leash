@@ -4,6 +4,11 @@ import { defineTool } from '../tool.js';
 
 const inputSchema = z.object({
   url: z.string().url().describe('The full https://…/x/<id>?network=… payment link.'),
+  method: z
+    .enum(['GET', 'POST'])
+    .optional()
+    .describe('HTTP method for the paid request. Default GET.'),
+  body: z.string().optional().describe('JSON (or other) body when using POST. Ignored for GET.'),
 });
 
 export const payPaymentLinkTool = defineTool({

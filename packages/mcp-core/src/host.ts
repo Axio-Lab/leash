@@ -38,10 +38,19 @@ export type CreatePaymentLinkArgs = {
   currency: StableSymbol;
   label: string;
   description?: string;
+  /** Hosted paywall rail. Defaults to x402 (`payment-required`). */
+  protocol?: 'x402' | 'mpp';
 };
 
 export type PayArgs = {
   url: string;
+  /** HTTP method for the paid request. Default GET (matches most `/x/<id>` links). */
+  method?: 'GET' | 'POST';
+  /**
+   * Raw request body for POST (e.g. JSON). Ignored when `method` is GET
+   * or omitted.
+   */
+  body?: string;
 };
 
 export type WithdrawArgs = {

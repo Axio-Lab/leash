@@ -17,12 +17,18 @@ const inputSchema = z.object({
     .max(120)
     .describe('Human-readable label for the link (e.g. "Coffee — large").'),
   description: z.string().max(500).optional(),
+  protocol: z
+    .enum(['x402', 'mpp'])
+    .optional()
+    .describe(
+      'Paywall protocol: `x402` (HTTP 402 + payment-required) or `mpp` (application/problem+json + MPP settle). Defaults to x402.',
+    ),
 });
 
 export const createPaymentLinkTool = defineTool({
   name: 'leash_create_payment_link',
   description: [
-    'Create an x402 payment link the user (or another agent) can call to pay this agent in USDC/USDG/USDT.',
+    'Create a payment link (x402 or MPP) the user (or another agent) can call to pay this agent in USDC/USDG/USDT.',
     'Requires an on-chain agent (treasury). Returns the public share URL on success — quote it back as a markdown link.',
   ].join(' '),
   inputSchema,
