@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { MppChallengeV1 } from '@leashmarket/schemas';
 import {
   buildMppAuthorizationHeader,
   decodeMppCredential,
@@ -12,9 +13,10 @@ import {
   parseMppChallengeBody,
 } from '../src/mpp/index.js';
 
-const challenge = {
+/** Typed so `type` stays the literal MPP problem URI (not widened to `string`). */
+const challenge: MppChallengeV1 = {
   type: MPP_PROBLEM_TYPE,
-  status: 402 as const,
+  status: 402,
   challengeId: 'ch-1',
   title: 'Payment Required',
   detail: 'pay to continue',
