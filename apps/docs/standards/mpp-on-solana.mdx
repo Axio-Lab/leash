@@ -15,11 +15,11 @@ Use MPP when you want RFC 7807-shaped errors, body-carried challenges (instead o
 
 ## Seller surfaces
 
-| Surface | x402 | MPP |
-| ------- | ---- | --- |
-| **`@leashmarket/seller-kit`** | `createSeller` + `@x402/hono` | `createMppSeller` (Hono), challenge issuance + credential verify + facilitator client |
-| **Hosted payment links** | Default `protocol: "x402"` on `POST /v1/payment-links` | Set `"protocol": "mpp"` — see [Payment links](/api/payment-links) |
-| **Runner endpoints** | `EndpointV1` default `payment_protocol: "x402"` | `payment_protocol: "mpp"` on the stored descriptor |
+| Surface                       | x402                                                   | MPP                                                                                   |
+| ----------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| **`@leashmarket/seller-kit`** | `createSeller` + `@x402/hono`                          | `createMppSeller` (Hono), challenge issuance + credential verify + facilitator client |
+| **Hosted payment links**      | Default `protocol: "x402"` on `POST /v1/payment-links` | Set `"protocol": "mpp"` — see [Payment links](/api/payment-links)                     |
+| **Runner endpoints**          | `EndpointV1` default `payment_protocol: "x402"`        | `payment_protocol: "mpp"` on the stored descriptor                                    |
 
 MPP routes still price in Leash-known stables and settle to the seller agent's **Asset Signer PDA**; the difference is the HTTP challenge envelope and the **`POST /mpp/settle`** facilitator step instead of wiring through an x402 `PAYMENT-RESPONSE` header.
 

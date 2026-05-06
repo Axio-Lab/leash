@@ -62,7 +62,9 @@ describe('createBuyer (MPP)', () => {
       }),
     );
     const globalFetch = vi.fn(async (_url, init?: RequestInit) => {
-      const headers = new Headers((init?.headers ?? {}) as HeadersInit);
+      const headers = new Headers(
+        (init?.headers ?? {}) as ConstructorParameters<typeof Headers>[0],
+      );
       // Verify the buyer attached the PaymentScheme credential on the retry.
       expect(headers.get('authorization')).toMatch(/^PaymentScheme /);
       return new Response('{"ok":true}', {
