@@ -5,6 +5,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import {
   EndpointV1Schema,
   LeashBlockV1Schema,
+  ReceiptV02Schema,
   ReceiptV1Schema,
   RegistrationV1Schema,
   RulesV1Schema,
@@ -17,6 +18,7 @@ await mkdir(outDir, { recursive: true });
 
 const specs = [
   ['receipt-v1', ReceiptV1Schema],
+  ['receipt-v2', ReceiptV02Schema],
   ['rules-v1', RulesV1Schema],
   ['leash-block-v1', LeashBlockV1Schema],
   ['registration-v1', RegistrationV1Schema],
