@@ -110,6 +110,7 @@
             "group": "Schemas",
             "pages": [
               "schemas/receipt-v1",
+              "schemas/receipt-v2",
               "schemas/rules-v1",
               "schemas/leash-block-v1",
               "schemas/registration-v1",
@@ -120,6 +121,7 @@
             "group": "Standards",
             "pages": [
               "standards/x402-on-solana",
+              "standards/mpp-on-solana",
               "standards/receipt-format",
               "standards/conformance"
             ]

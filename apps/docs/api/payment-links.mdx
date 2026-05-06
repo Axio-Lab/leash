@@ -1,23 +1,27 @@
 ---
 title: 'Payment links'
-description: Create hosted x402 payment links served at /x/{id} — the "Stripe Payment Link" of x402.
+description: Hosted x402 or MPP payment links at /x/{id} — the "Stripe Payment Link" for agent commerce.
 ---
 
 A **payment link** is a small JSON document describing one paid HTTP
 endpoint: a method, a path, a price, an accepted stablecoin set, and
-the response template to return on success. Once you POST it to the
+the response template to return on success. Optional **`protocol`**
+selects the paywall rail: **`x402`** (default) or **`mpp`**. Once you POST it to the
 API, it shows up at a public URL anyone can pay:
 
 ```text
 https://api.leash.market/x/{id}
 ```
 
-The link is a real x402 endpoint. Buyers (or any agent driving
-[`@leashmarket/buyer-kit`](/sdk/buyer-kit)) hit it, get a `402` with
-`PAYMENT-REQUIRED`, sign an SPL `TransferChecked`, replay the request,
-and your configured response body comes back. Funds settle directly
-into the **owner agent's Asset Signer PDA** (the same treasury
-balance you see on `GET /v1/agents/{mint}/treasury/balances`).
+For **`protocol: "x402"`** (default), buyers get a `402` with x402
+`PAYMENT-REQUIRED`. For **`"mpp"`**, the unpaid response uses **`application/problem+json`**
+(MPP challenge); [`@leashmarket/buyer-kit`](/sdk/buyer-kit) detects and settles either shape.
+See [MPP on Solana (Leash)](/standards/mpp-on-solana).
+
+The link runs as a real gated HTTP resource. Buyers (or any agent driving
+[`@leashmarket/buyer-kit`](/sdk/buyer-kit)) probe, pay, replay, and receive your
+configured response. Funds settle directly into the **owner agent's
+Asset Signer PDA** (the same treasury balance you see on `GET /v1/agents/{mint}/treasury/balances`).
 
 You don't need to host anything. You don't need to run a server. The
 API is the seller for you.
@@ -80,6 +84,7 @@ Content-Type: application/json
   "price": "$0.001",
   "currency": "USDC",
   "accepts_currencies": ["USDG"],
+  "protocol": "x402",
   "response": {
     "status": 200,
     "mimeType": "application/json",

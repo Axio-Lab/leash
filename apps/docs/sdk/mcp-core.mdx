@@ -68,6 +68,11 @@ for (const tool of LEASH_TOOLS) {
 }
 ```
 
+**Payment tools:** `leash_create_payment_link` accepts optional **`protocol`**
+(`x402` \| `mpp`, default x402). `leash_pay_payment_link` accepts optional **`method`**
+(`GET` \| `POST`) and **`body`** (string, e.g. JSON) for POST paywalls — same
+dual-protocol behaviour as the CLI `leash pay` command.
+
 ## Built-in tools
 
 | Tool name                    | Description                                        |
