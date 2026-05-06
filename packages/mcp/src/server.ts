@@ -2,7 +2,7 @@
  * STDIO-transport Leash MCP server.
  *
  * Builds an `@modelcontextprotocol/sdk` server, registers each
- * `LeashTool` from `@leash/mcp-core` against the standalone host,
+ * `LeashTool` from `@leashmarket/mcp-core` against the standalone host,
  * and returns the configured `McpServer` ready for the caller to
  * connect to a transport (STDIO, HTTP, in-memory).
  *
@@ -42,6 +42,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   LEASH_TOOLS,
   fetchDiscover,
+  fetchPaySkillsProvider,
   fetchReputation,
   type CheckTreasuryBalanceArgs,
   type CreatePaymentLinkArgs,
@@ -54,6 +55,7 @@ import {
   type LeashTool,
   type LeashToolResult,
   type PayArgs,
+  type PaySkillsProviderArgs,
   type ReceiptsArgs,
   type RegisterAgentArgs,
   type ReputationArgs,
@@ -61,7 +63,7 @@ import {
   type SvmNetwork,
   type TransactionHistoryArgs,
   type WithdrawArgs,
-} from '@leash/mcp-core';
+} from '@leashmarket/mcp-core';
 
 import {
   defaultConfigPath,
@@ -279,6 +281,9 @@ export class HostRef implements LeashHost {
   }
   reputation(args: ReputationArgs): Promise<LeashToolResult> {
     return this.inner.reputation(args);
+  }
+  paySkillsProvider(args: PaySkillsProviderArgs): Promise<LeashToolResult> {
+    return this.inner.paySkillsProvider(args);
   }
   setSpendLimit(args: SetSpendLimitArgs): Promise<LeashToolResult> {
     return this.inner.setSpendLimit(args);
@@ -584,6 +589,13 @@ function makePlaceholderHost(defaults: LeashHostDefaults): LeashHost {
     },
     async reputation(args) {
       return fetchReputation({
+        apiBaseUrl: defaults.apiBaseUrl,
+        network: defaults.network,
+        query: args,
+      });
+    },
+    async paySkillsProvider(args) {
+      return fetchPaySkillsProvider({
         apiBaseUrl: defaults.apiBaseUrl,
         network: defaults.network,
         query: args,

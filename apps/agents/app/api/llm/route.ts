@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 
-import { encryptSecret } from '@leash/platform-auth/encryption';
+import { encryptSecret } from '@leashmarket/platform-auth/encryption';
 
 import { getDb } from '@/lib/db';
 import { ensureAgentChatTables } from '@/lib/db-schema';

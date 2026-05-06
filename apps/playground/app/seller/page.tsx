@@ -16,8 +16,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import type { EndpointV1, ReceiptV1 } from '@leash/schemas';
-import { KNOWN_STABLE_SYMBOLS, type KnownStableSymbol } from '@leash/core';
+import type { EndpointV1, ReceiptV1 } from '@leashmarket/schemas';
+import { KNOWN_STABLE_SYMBOLS, type KnownStableSymbol } from '@leashmarket/core';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -48,7 +48,7 @@ const fetcher = async (url: string) => {
  * The "Stripe Payment Links" surface for x402 on Solana. Pick one of your
  * agents, declare a method + path + price, define the response template,
  * save it. The runner persists the descriptor and `/x/<id>` becomes a
- * live x402 paywall served by `@leash/seller-kit`.
+ * live x402 paywall served by `@leashmarket/seller-kit`.
  */
 export default function SellerPage() {
   const toast = useToast();
@@ -221,9 +221,9 @@ export default function SellerPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="@leash/seller-kit"
+        eyebrow="@leashmarket/seller-kit"
         title="Payment-link builder"
-        description="Mint shareable x402 payment links. Pick one of your agents, declare a price + response, and the runner gives you back a public URL — anything that speaks x402 (including @leash/buyer-kit) can pay it."
+        description="Mint shareable x402 payment links. Pick one of your agents, declare a price + response, and the runner gives you back a public URL — anything that speaks x402 (including @leashmarket/buyer-kit) can pay it."
       />
 
       <section className="grid gap-4 md:grid-cols-4">
@@ -257,7 +257,7 @@ export default function SellerPage() {
               </CardTitle>
               <CardDescription>
                 The runner stores the descriptor; <InlineCode>/x/&lt;id&gt;</InlineCode> serves it
-                with the real <InlineCode>@leash/seller-kit</InlineCode> middleware.
+                with the real <InlineCode>@leashmarket/seller-kit</InlineCode> middleware.
               </CardDescription>
             </CardHeader>
             <CardContent>

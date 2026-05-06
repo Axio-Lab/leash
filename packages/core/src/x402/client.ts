@@ -85,7 +85,7 @@ export type CreateSvmBuyerClientOptions = {
  * @example
  * ```ts
  * import { createKeyPairSignerFromBytes } from '@solana/kit';
- * import { createSvmBuyerFetch } from '@leash/core';
+ * import { createSvmBuyerFetch } from '@leashmarket/core';
  *
  * const signer = await createKeyPairSignerFromBytes(secret);
  * const paidFetch = createSvmBuyerFetch({ signer, networks: ['solana-devnet'] });

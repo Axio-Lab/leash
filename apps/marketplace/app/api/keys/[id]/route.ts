@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { listPlatformKeys, removePlatformKey } from '@leash/platform-auth';
+import { listPlatformKeys, removePlatformKey } from '@leashmarket/platform-auth';
 
 import { getDb } from '@/lib/db';
 import { getLeash } from '@/lib/leash';

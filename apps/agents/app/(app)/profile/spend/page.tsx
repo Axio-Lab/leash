@@ -11,7 +11,7 @@ import {
   WalletIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { KNOWN_STABLES, getSpendDelegation, setSpendDelegation } from '@leash/registry-utils';
+import { KNOWN_STABLES, getSpendDelegation, setSpendDelegation } from '@leashmarket/registry-utils';
 import type { Umi } from '@metaplex-foundation/umi';
 import { usePrivy } from '@privy-io/react-auth';
 

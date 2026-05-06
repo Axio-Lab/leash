@@ -1,9 +1,9 @@
 ---
-title: '@leash/seller-kit'
+title: '@leashmarket/seller-kit'
 description: Hono integration. Asset Signer PDA payTo. Real x402 middleware on Solana.
 ---
 
-`@leash/seller-kit` mounts the real `@x402/hono` middleware on a list of
+`@leashmarket/seller-kit` mounts the real `@x402/hono` middleware on a list of
 `METHOD /path` routes and resolves `payTo` to the seller agent's Asset
 Signer PDA so funds land directly in the agent's treasury.
 
@@ -11,7 +11,7 @@ Signer PDA so funds land directly in the agent's treasury.
 import { Hono } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
-import { createSeller } from '@leash/seller-kit';
+import { createSeller } from '@leashmarket/seller-kit';
 
 const umi = createUmi('https://api.devnet.solana.com').use(mplCore());
 const app = new Hono();
@@ -47,7 +47,7 @@ app.post('/tag', (c) => c.json({ tagged: true }));
    derives the on-chain destination for SPL transfers (`payTo`). All
    x402 settlements credit this PDA, so the agent's treasury balance grows
    automatically as buyers pay.
-2. Builds a `createSvmResourceServer` (from `@leash/seller-kit/x402`) bound
+2. Builds a `createSvmResourceServer` (from `@leashmarket/seller-kit/x402`) bound
    to `devnet-facilitator.leash.market` on `solana-devnet` (or the network you
    configure) by default. Other facilitators are fully supported — see
    [Configuring the facilitator](#configuring-the-facilitator). The facilitator
@@ -93,7 +93,7 @@ The default is `https://devnet-facilitator.leash.market` (devnet) /
 HTTPS-compatible facilitator:
 
 ```ts
-import { createSvmResourceServer } from '@leash/seller-kit/x402';
+import { createSvmResourceServer } from '@leashmarket/seller-kit/x402';
 
 const server = createSvmResourceServer({
   network: 'solana-devnet',

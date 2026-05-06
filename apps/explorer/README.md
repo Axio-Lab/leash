@@ -1,4 +1,4 @@
-# @leash/explorer
+# @leashmarket/explorer
 
 `explorer.leash.market` — the Leash protocol explorer. Solscan-style
 search across agents, transactions, receipts, and events on **devnet
@@ -31,7 +31,7 @@ webhook worker, and reads straight from the same shared state:
 - Every list view (`/events`, `/health`, recent feed on `/`) is a
   direct libsql read against the same DB the API writes to.
 - The agent page (`/agent/<mint>`) makes direct Solana RPC calls via
-  the snapshot helpers exported from `@leash/api`.
+  the snapshot helpers exported from `@leashmarket/api`.
 - There is **no API key**, **no `LEASH_API_URL`**, and **no HTTP hop**
   between the explorer and the API. They are peers in the same trust
   boundary.
@@ -87,24 +87,24 @@ clusters.
 
 ## Local dev
 
-The explorer imports from the compiled `@leash/api` package, so build
+The explorer imports from the compiled `@leashmarket/api` package, so build
 the workspace once first:
 
 ```bash
 pnpm install
 pnpm -r build
-pnpm --filter @leash/explorer dev
+pnpm --filter @leashmarket/explorer dev
 # http://localhost:3100
 ```
 
-If you change `@leash/api` and want the explorer to pick it up,
-re-run `pnpm --filter @leash/api build`.
+If you change `@leashmarket/api` and want the explorer to pick it up,
+re-run `pnpm --filter @leashmarket/api build`.
 
 ## Tests
 
 ```bash
-pnpm --filter @leash/explorer test
+pnpm --filter @leashmarket/explorer test
 ```
 
-The tests stub `@leash/api`'s storage and Umi helpers; they don't
+The tests stub `@leashmarket/api`'s storage and Umi helpers; they don't
 require a real database or RPC.

@@ -1,6 +1,6 @@
 ---
 title: 'Run a Leash facilitator'
-description: 'Use facilitator.leash.market (mainnet) / devnet-facilitator.leash.market (devnet), or self-host @leash/facilitator.'
+description: 'Use facilitator.leash.market (mainnet) / devnet-facilitator.leash.market (devnet), or self-host @leashmarket/facilitator.'
 ---
 
 > Leash operates two public facilitators: **`https://facilitator.leash.market`** (mainnet)
@@ -10,14 +10,14 @@ description: 'Use facilitator.leash.market (mainnet) / devnet-facilitator.leash.
 
 ## Default facilitators vs overrides (any compatible host)
 
-Leash **SDKs** (`@leash/buyer-kit`, `@leash/seller-kit`) resolve the facilitator URL through [`defaultFacilitatorFor`](https://github.com/leash-market/leash/blob/main/packages/core/src/x402/facilitator.ts): optional `LEASH_FACILITATOR_URL`, else a per-network default, else a universal fallback.
+Leash **SDKs** (`@leashmarket/buyer-kit`, `@leashmarket/seller-kit`) resolve the facilitator URL through [`defaultFacilitatorFor`](https://github.com/leash-market/leash/blob/main/packages/core/src/x402/facilitator.ts): optional `LEASH_FACILITATOR_URL`, else a per-network default, else a universal fallback.
 
 The table below is the **“what you get if you set nothing”** default — it is **not** a whitelist. You can point `LEASH_FACILITATOR_URL` (or `facilitator:` on `createBuyer` / `createSeller`) at **any** HTTPS base URL that implements the x402 facilitator HTTP API and publishes the **exact** SVM scheme for your cluster.
 
-| Network     | Default                                   | Example third-party alternatives                                                                    |
-| ----------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| **Devnet**  | `https://devnet-facilitator.leash.market` | `https://devnet-facilitator.leash.market`, `http://localhost:8787` (local `@leash/facilitator-app`) |
-| **Mainnet** | `https://facilitator.leash.market`        | `https://facilitator.leash.market`, or any other mainnet-capable x402 facilitator you run or trust  |
+| Network     | Default                                   | Example third-party alternatives                                                                          |
+| ----------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **Devnet**  | `https://devnet-facilitator.leash.market` | `https://devnet-facilitator.leash.market`, `http://localhost:8787` (local `@leashmarket/facilitator-app`) |
+| **Mainnet** | `https://facilitator.leash.market`        | `https://facilitator.leash.market`, or any other mainnet-capable x402 facilitator you run or trust        |
 
 The **hosted Leash API** (`api.leash.market`) uses **`LEASH_API_FACILITATOR_URL`** for its own `/x/{id}` paywall and seller-utils — that is server-side only and does not change your SDK defaults. That value can also be **any** compatible facilitator base URL, not only the Leash binary.
 
@@ -44,9 +44,9 @@ management.
 
 ## Wire compatibility
 
-`@leash/facilitator` registers the **Exact SVM** scheme from `@x402/svm`
+`@leashmarket/facilitator` registers the **Exact SVM** scheme from `@x402/svm`
 for both protocol v1 and v2. That means every existing Leash buyer
-(`@leash/buyer-kit`) and seller (`@leash/seller-kit`) deployment works
+(`@leashmarket/buyer-kit`) and seller (`@leashmarket/seller-kit`) deployment works
 out of the box: just set `LEASH_FACILITATOR_URL`.
 
 ```bash
@@ -65,7 +65,7 @@ Coinbase) is a one-env-var swap.
 
 ```bash
 # 1. Install the package binary
-pnpm add -g @leash/facilitator
+pnpm add -g @leashmarket/facilitator
 
 # 2. Generate a Solana keypair to act as fee payer
 solana-keygen new -o .leash-fee-payer.json --no-bip39-passphrase
@@ -105,16 +105,16 @@ For local hacking on the facilitator itself, use the workspace app:
 solana-keygen new -o .leash-fee-payer.json --no-bip39-passphrase
 solana airdrop 1 -k .leash-fee-payer.json --url https://api.devnet.solana.com
 export LEASH_FACILITATOR_SECRET_KEY="$(cat .leash-fee-payer.json)"
-pnpm --filter @leash/facilitator-app dev
+pnpm --filter @leashmarket/facilitator-app dev
 ```
 
 Then in a second terminal:
 
 ```bash
 export LEASH_FACILITATOR_URL=http://localhost:8787
-pnpm --filter @leash/buyer-demo start    # all three demos pick this up
-pnpm --filter @leash/seller-demo start
-pnpm --filter @leash/merged-demo start
+pnpm --filter @leashmarket/buyer-demo start    # all three demos pick this up
+pnpm --filter @leashmarket/seller-demo start
+pnpm --filter @leashmarket/merged-demo start
 ```
 
 ## Configuration
@@ -165,7 +165,7 @@ The CLI prints a `WARNING` line when mainnet is enabled. Heed it.
 
 ## Architecture (one paragraph)
 
-`@leash/facilitator` is a thin Hono app built on `x402Facilitator` from
+`@leashmarket/facilitator` is a thin Hono app built on `x402Facilitator` from
 `@x402/core`. Instead of registering the upstream `ExactSvmScheme` / `ExactSvmSchemeV1`
 directly, it registers `LeashExactSvmFacilitator` (x402 v2) and
 `LeashExactSvmFacilitatorV1` (legacy v1) — two custom schemes that extend
@@ -181,7 +181,7 @@ fee-payer address and live `protocol_fee` block.
 ## Roadmap
 
 - **v0.2** — Settlement persistence. Cross-reference settled txs with
-  `ReceiptV1` records from `@leash/runner` to power the explorer.
+  `ReceiptV1` records from `@leashmarket/runner` to power the explorer.
 - **v0.3** — Multi-key fee payer rotation for higher throughput.
 - **v0.4** — Mainnet on the hosted instance.
 - **v0.5** — Hooks for fraud detection and per-merchant rate limiting.

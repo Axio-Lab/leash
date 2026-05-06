@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# Static Mintlify site for `@leash/docs`.
+# Static Mintlify site for `@leashmarket/docs`.
 #
 # IMPORTANT — Railway / Docker build context:
 #   The build context MUST be the **monorepo root** (`.`). If you set
@@ -27,10 +27,10 @@ RUN apt-get update \
 
 COPY . .
 
-RUN pnpm install --frozen-lockfile --filter "@leash/docs..."
+RUN pnpm install --frozen-lockfile --filter "@leashmarket/docs..."
 
-# `^build` pulls in `@leash/schemas` before `gen-schema-docs.mjs` runs.
-RUN pnpm turbo run build --filter=@leash/docs
+# `^build` pulls in `@leashmarket/schemas` before `gen-schema-docs.mjs` runs.
+RUN pnpm turbo run build --filter=@leashmarket/docs
 
 WORKDIR /app/apps/docs
 RUN pnpm exec mintlify export --output /tmp/docs-export.zip \

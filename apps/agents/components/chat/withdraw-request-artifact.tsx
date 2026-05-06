@@ -12,7 +12,7 @@
  *   1. A summary of what will move (token, amount, destination, network).
  *   2. A single "Approve & withdraw" button that calls
  *      `withdrawTreasury` / `withdrawTreasurySol` from
- *      `@leash/registry-utils` using the same `usePrivyUmi` flow that
+ *      `@leashmarket/registry-utils` using the same `usePrivyUmi` flow that
  *      already powers /profile/agent → Treasury panel.
  *   3. Inline confirmation (tx sig + Solscan link) on success, with
  *      `markWithdrawCompleted` stamping the artifact so a refresh
@@ -30,8 +30,8 @@ import useSWR from 'swr';
 import { usePrivy } from '@privy-io/react-auth';
 import { publicKey } from '@metaplex-foundation/umi';
 import { AlertTriangleIcon, Check, Loader2 } from 'lucide-react';
-import { TOKEN_2022_PROGRAM_ID } from '@leash/core';
-import { withdrawTreasury, withdrawTreasurySol } from '@leash/registry-utils';
+import { TOKEN_2022_PROGRAM_ID } from '@leashmarket/core';
+import { withdrawTreasury, withdrawTreasurySol } from '@leashmarket/registry-utils';
 
 import { Button } from '@/components/ui/button';
 import { shortHash, solscanAccountUrl, solscanTxUrl } from '@/lib/explorer';

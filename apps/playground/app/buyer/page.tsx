@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import { ExternalLink, Plus, Receipt, Send, Shield, ShieldOff, Trash2, Wallet } from 'lucide-react';
-import { createBuyer, type BuyerCallResult } from '@leash/buyer-kit';
+import { createBuyer, type BuyerCallResult } from '@leashmarket/buyer-kit';
 import {
   applyFeeGrossUp,
   deriveAgentTreasuryAta,
@@ -15,8 +15,8 @@ import {
   networkFromRpc,
   TOKEN_2022_PROGRAM_ADDRESS,
   type KnownStableSymbol,
-} from '@leash/core';
-import type { EndpointV1, ReceiptV1, RulesV1 } from '@leash/schemas';
+} from '@leashmarket/core';
+import type { EndpointV1, ReceiptV1, RulesV1 } from '@leashmarket/schemas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,7 +43,7 @@ import {
   getSpendDelegation,
   TOKEN_2022_PROGRAM_ID,
   type SpendDelegationStatus,
-} from '@leash/registry-utils';
+} from '@leashmarket/registry-utils';
 import { formatReceiptPriceWithCurrency } from '@/lib/format-receipt-price';
 
 const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
@@ -108,7 +108,7 @@ const fetcher = async (url: string) => {
  * wallet acts as that agent's registered Executive (per Metaplex's Run an
  * Agent docs) and signs every x402 SPL transfer on the agent's behalf.
  * Behaviour rules captured at agent creation are enforced before each
- * call by `@leash/buyer-kit`'s policy gate.
+ * call by `@leashmarket/buyer-kit`'s policy gate.
  */
 export default function BuyerPage() {
   const toast = useToast();
@@ -645,7 +645,7 @@ export default function BuyerPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="@leash/buyer-kit"
+        eyebrow="@leashmarket/buyer-kit"
         title="Autonomous-agent cockpit"
         description="Pick one of your agents, point it at any x402 URL on the open internet, and your Privy wallet will sign on its behalf as the registered Executive. Behaviour rules captured at agent creation gate every call."
       />

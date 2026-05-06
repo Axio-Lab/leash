@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { peekPrivyJwt, verifyPrivyJwtDetailed } from '@leash/platform-auth';
+import { peekPrivyJwt, verifyPrivyJwtDetailed } from '@leashmarket/platform-auth';
 
 import { getServerEnv } from '@/lib/env';
 

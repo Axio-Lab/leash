@@ -124,6 +124,14 @@ export type DiscoverArgs = {
   max_price_usdc?: number;
   /** Pricing-type filter. */
   pricing_type?: 'free' | 'per_call' | 'variable';
+  /**
+   * Restrict to a single catalogue:
+   *   - `'leash'`: agents listed on the Leash marketplace.
+   *   - `'pay-skills'`: providers in the Solana Foundation
+   *     `pay-skills` registry.
+   *   - `'all'` (default): merged.
+   */
+  source?: 'leash' | 'pay-skills' | 'all';
   /** Max items to return. Server-capped. */
   limit?: number;
 };
@@ -131,6 +139,23 @@ export type DiscoverArgs = {
 export type ReputationArgs = {
   agent_mint: string;
   network?: SvmNetwork;
+};
+
+/**
+ * Inputs for `leash_pay_skills_endpoints` — expand a chosen
+ * `pay-skills` provider (returned by `leash_discover`) into its
+ * paid endpoint list. Mirrors `pay skills endpoints <fqn>` from the
+ * pay.sh CLI.
+ */
+export type PaySkillsProviderArgs = {
+  /**
+   * Fully-qualified provider name as published in the catalogue.
+   * Two- or three-segment paths, e.g. `agentmail/email` or
+   * `coinbase-cdp/coinbase-developer-platform/baseSepoliaWalletApi`.
+   * Lift this verbatim from a `leash_discover` item that has
+   * `source === 'pay-skills'` (the FQN lives in `slug`).
+   */
+  fqn: string;
 };
 
 /**
@@ -292,6 +317,14 @@ export interface LeashHost {
    * — both hosts hit `GET /v1/agents/:mint/reputation` directly.
    */
   reputation(args: ReputationArgs): Promise<LeashToolResult>;
+
+  /**
+   * Expand a `pay-skills` discover item into its paid endpoints.
+   * Public — hits `GET /v1/discover/pay-skills/:fqn` directly. The
+   * returned `endpoint_urls[]` are absolute URLs the agent can pay
+   * via `pay()` without any extra plumbing.
+   */
+  paySkillsProvider(args: PaySkillsProviderArgs): Promise<LeashToolResult>;
 
   /**
    * Owner-driven update of the SPL `Approve` delegation that lets

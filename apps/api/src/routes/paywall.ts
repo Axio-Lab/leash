@@ -42,9 +42,9 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { findAssetSignerPda } from '@metaplex-foundation/mpl-core';
 import { publicKey } from '@metaplex-foundation/umi';
-import { createSeller } from '@leash/seller-kit';
-import { buildLeashEnvelope, buildLeashHeaders } from '@leash/core';
-import type { ReceiptV1 } from '@leash/schemas';
+import { createSeller } from '@leashmarket/seller-kit';
+import { buildLeashEnvelope, buildLeashHeaders } from '@leashmarket/core';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 
 import { type LeashApiConfig, facilitatorForNetwork } from '../config.js';
 import type { CacheClient } from '../storage/redis.js';

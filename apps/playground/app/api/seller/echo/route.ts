@@ -2,15 +2,15 @@ import { NextResponse } from 'next/server';
 import { Hono } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
-import { createSeller } from '@leash/seller-kit';
-import type { ReceiptV1 } from '@leash/schemas';
+import { createSeller } from '@leashmarket/seller-kit';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 import { FACILITATOR_URL, RUNNER_URL, SOLANA_RPC } from '@/lib/env';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 /**
- * Playground echo seller. Uses the real `@leash/seller-kit` so:
+ * Playground echo seller. Uses the real `@leashmarket/seller-kit` so:
  *   1. 402 is enforced via `simpleX402Gate` (matches production wiring)
  *   2. Every paid call emits an `earn` `ReceiptV1` to `${RUNNER_URL}/a/:agent/receipts`
  *      so the explorer fills from BOTH sides of the trade.

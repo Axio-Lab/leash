@@ -42,7 +42,7 @@ export type PaymentLinkMeta = {
 
 /**
  * Inputs for {@link buildPaymentLinkMeta} — the producer-side builder used by
- * the Leash web app's `/x/<id>` route. Keeping the builder in `@leash/core`
+ * the Leash web app's `/x/<id>` route. Keeping the builder in `@leashmarket/core`
  * means producer and consumer share one TypeScript shape, so any change to
  * the discovery contract becomes a typecheck error in both places.
  */
@@ -94,7 +94,7 @@ export function buildPaymentLinkMeta(input: BuildPaymentLinkMetaInput): PaymentL
     ok: true,
     kind: 'leash.payment-link',
     ...(docsUrl ? { docs: docsUrl } : {}),
-    note: `Send ${endpoint.method} ${linkUrl} with an x402 client (e.g. @leash/buyer-kit) to pay this link. This GET surface is metadata-only — no payment is taken.`,
+    note: `Send ${endpoint.method} ${linkUrl} with an x402 client (e.g. @leashmarket/buyer-kit) to pay this link. This GET surface is metadata-only — no payment is taken.`,
     endpoint: {
       id: endpoint.id,
       label: endpoint.label,

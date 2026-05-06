@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# Per-service Dockerfile for `@leash/facilitator` (the x402 facilitator
+# Per-service Dockerfile for `@leashmarket/facilitator` (the x402 facilitator
 # HTTP server). Designed for the leash monorepo + Railway / Fly / any
 # Docker host.
 
@@ -9,8 +9,8 @@
 #   1. `base`    — pinned Node 22 + Corepack-activated pnpm.
 #   2. `build`   — copies the whole workspace, runs a frozen install
 #                  scoped to facilitator's transitive workspace deps,
-#                  builds them via Turbo (so `@leash/core` is built
-#                  before `@leash/facilitator`).
+#                  builds them via Turbo (so `@leashmarket/core` is built
+#                  before `@leashmarket/facilitator`).
 #   3. `prune`   — runs `pnpm deploy` to produce a self-contained
 #                  facilitator directory at `/out` (own `package.json`,
 #                  hoisted `node_modules`, built `dist/` only).
@@ -31,14 +31,14 @@ WORKDIR /app
 
 # ---------- build ----------
 # We need the full workspace here so the lockfile stays in sync and
-# Turbo can compute the build graph for `@leash/facilitator...`.
+# Turbo can compute the build graph for `@leashmarket/facilitator...`.
 # `.dockerignore` keeps node_modules / dist / .turbo / docs out so the
 # context stays small.
 FROM base AS build
 COPY . .
-RUN pnpm install --frozen-lockfile --filter "@leash/facilitator..."
+RUN pnpm install --frozen-lockfile --filter "@leashmarket/facilitator..."
 # Turbo uses tsconfig.build.json under the hood for both packages.
-RUN pnpm --filter "@leash/facilitator..." build
+RUN pnpm --filter "@leashmarket/facilitator..." build
 
 # ---------- prune ----------
 # `pnpm deploy --prod` materializes a deployable copy of the package
@@ -46,7 +46,7 @@ RUN pnpm --filter "@leash/facilitator..." build
 # `/out/node_modules` and dev-only deps stripped. The package.json
 # `files: ["dist"]` field controls what lands in the bundle.
 FROM build AS prune
-RUN pnpm --filter @leash/facilitator deploy --prod /out
+RUN pnpm --filter @leashmarket/facilitator deploy --prod /out
 
 # ---------- runtime ----------
 FROM node:22-bookworm-slim AS runner

@@ -3,7 +3,7 @@ title: 'Standalone MCP server'
 description: 'Drop Leash into Cursor, Claude Desktop, Cline, Continue, or ChatGPT-MCP. STDIO transport, 14 tools, zero browser in the loop.'
 ---
 
-`@leash/mcp` is the agent-first surface of Leash. It runs as a
+`@leashmarket/mcp` is the agent-first surface of Leash. It runs as a
 [Model Context Protocol](https://modelcontextprotocol.io) server
 over STDIO, so any MCP-compatible host (Cursor, Claude Desktop,
 Cline, Continue, ChatGPT-MCP, …) can let its agent **mint**, **pay**,
@@ -18,7 +18,7 @@ browser or the chat product in the loop.
   "mcpServers": {
     "leash": {
       "command": "npx",
-      "args": ["-y", "@leash/mcp"],
+      "args": ["-y", "@leashmarket/mcp"],
     },
   },
 }
@@ -31,11 +31,13 @@ in **two steps**:
    `~/.config/leash/agent.json`, and tell you to send ~0.01 SOL to
    the printed address — this is the agent's owner / executive.
 2. After you fund it, call `leash_register_agent` again. The MCP
-   mints the MPL Core agent asset, sets unlimited USDC delegation
-   from the treasury PDA to the executive, records the asset on the
-   Leash API, and **hot-swaps** the in-memory host so subsequent
-   tool calls (`leash_pay_payment_link`, `leash_check_treasury_balance`,
-   etc.) work without a restart.
+   mints the MPL Core agent asset, sets an unlimited USDC delegation
+   from the treasury PDA to the executive (the default; tighten,
+   revoke, or extend to USDT / USDG via `leash_set_spend_limit`),
+   records the asset on the Leash API, and **hot-swaps** the
+   in-memory host so subsequent tool calls
+   (`leash_pay_payment_link`, `leash_check_treasury_balance`, etc.)
+   work without a restart.
 
 The cluster (devnet vs mainnet) comes from `LEASH_NETWORK` — same
 flow either way, since rent + gas are paid by the user's executive
@@ -114,22 +116,23 @@ The MCP exposes 14 canonical tools. Each is also available through
 the Claude Agent SDK in the chat product (same names, same shapes —
 [shared definitions](https://github.com/leash-market/leash/tree/main/packages/mcp-core/src/tools)).
 
-| Tool                           | What it does                                                                                                                       |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `leash_register_agent`         | Two-step onboarding. First call returns funding instructions; second call mints + delegates + records + hot-swaps.                 |
-| `leash_get_identity`           | Self-introspection — what agent am I, on which network, what's my treasury PDA.                                                    |
-| `leash_check_treasury_balance` | Read SOL + USDC/USDG/USDT balances on the agent treasury PDA.                                                                      |
-| `leash_pay_payment_link`       | Probe an x402 link, sign + settle the SPL transfer locally, return the receipt.                                                    |
-| `leash_create_payment_link`    | Mint an x402 paywall the user can share.                                                                                           |
-| `leash_withdraw_treasury`      | Owner-driven withdrawal of SOL or an SPL stable to any wallet (mpl-core::Execute).                                                 |
-| `leash_set_spend_limit`        | Owner-driven update of the SPL `Approve` delegation. Tighten / revoke / restore the executive's spend authority for an SPL stable. |
-| `leash_get_spend_limit`        | Inspect the active SPL delegation (delegate pubkey, remaining cap, treasury balance) for an SPL stable.                            |
-| `leash_receipts`               | Paginated receipts feed for the active agent.                                                                                      |
-| `leash_get_receipt`            | Fetch a single ReceiptV1 by `receipt_hash` — the same canonical JSON the explorer renders at `/receipt/{hash}`.                    |
-| `leash_transaction_history`    | List every earn + spend receipt in the last N days (default 7) plus running totals (`sent_usd`, `received_usd`, `net_usd`).        |
-| `leash_daily_transactions`     | Bin the same window into per-day buckets (`{ date, sent_usd, received_usd, net_usd, sent_count, received_count }`).                |
-| `leash_discover`               | Search the marketplace for paid services by capability + price. Public, no agent needed.                                           |
-| `leash_reputation`             | Live reputation snapshot for any on-chain agent — settled-call volume, dispute rate, normalised rating in `[0,1]`.                 |
+| Tool                           | What it does                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `leash_register_agent`         | Two-step onboarding. First call returns funding instructions; second call mints + delegates + records + hot-swaps.                                                                                                                                                                                                                |
+| `leash_get_identity`           | Self-introspection — what agent am I, on which network, what's my treasury PDA.                                                                                                                                                                                                                                                   |
+| `leash_check_treasury_balance` | Read SOL + USDC/USDG/USDT balances on the agent treasury PDA.                                                                                                                                                                                                                                                                     |
+| `leash_pay_payment_link`       | Probe an x402 link, sign + settle the SPL transfer locally, return the receipt.                                                                                                                                                                                                                                                   |
+| `leash_create_payment_link`    | Mint an x402 paywall the user can share.                                                                                                                                                                                                                                                                                          |
+| `leash_withdraw_treasury`      | Owner-driven withdrawal of SOL or an SPL stable to any wallet (mpl-core::Execute).                                                                                                                                                                                                                                                |
+| `leash_set_spend_limit`        | Owner-driven update of the SPL `Approve` delegation. Tighten / revoke / restore the executive's spend authority for an SPL stable.                                                                                                                                                                                                |
+| `leash_get_spend_limit`        | Inspect the active SPL delegation (delegate pubkey, remaining cap, treasury balance) for an SPL stable.                                                                                                                                                                                                                           |
+| `leash_receipts`               | Paginated receipts feed for the active agent.                                                                                                                                                                                                                                                                                     |
+| `leash_get_receipt`            | Fetch a single ReceiptV1 by `receipt_hash` — the same canonical JSON the explorer renders at `/receipt/{hash}`.                                                                                                                                                                                                                   |
+| `leash_transaction_history`    | List every earn + spend receipt in the last N days (default 7) plus running totals (`sent_usd`, `received_usd`, `net_usd`).                                                                                                                                                                                                       |
+| `leash_daily_transactions`     | Bin the same window into per-day buckets (`{ date, sent_usd, received_usd, net_usd, sent_count, received_count }`).                                                                                                                                                                                                               |
+| `leash_discover`               | Search paid services by capability + price across two catalogues: the Leash marketplace and the Solana Foundation `pay-skills` registry (~75 stablecoin-gated APIs). Each item carries a `source: 'leash' \| 'pay-skills'` tag. Public, no agent needed.                                                                          |
+| `leash_pay_skills_endpoints`   | Expand a `pay-skills` discover item (where `source === 'pay-skills'`) into its paid endpoint list — `{ method, url, pricing, protocol, supported_usd, probe_status }`. Mirrors `pay skills endpoints <fqn>` from the pay.sh CLI. Use as the second hop in `leash_discover → leash_pay_skills_endpoints → leash_pay_payment_link`. |
+| `leash_reputation`             | Live reputation snapshot for any on-chain agent — settled-call volume, dispute rate, normalised rating in `[0,1]`.                                                                                                                                                                                                                |
 
 ## Verify it works
 
@@ -228,7 +231,9 @@ the MCP:
 3. Mint the MPL Core agent asset (`createAgent`).
 4. Set unlimited USDC spend delegation from the treasury PDA to the
    executive (`setSpendDelegation` / SPL `Approve` capped at
-   `u64::MAX`).
+   `u64::MAX`). Add USDT / USDG delegations later with
+   `leash_set_spend_limit({ symbol: 'USDT' | 'USDG', mode: 'unlimited' | 'amount', amount? })` —
+   the cap is per-mint.
 5. POST `/v1/agents/record` so the Leash API has a row for receipts
    - discovery + reputation.
 6. Promote the pending block to a full `agent.json` and hot-swap

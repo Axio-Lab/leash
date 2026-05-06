@@ -9,7 +9,7 @@
  *
  *   1. Pure derivation — `policy/evaluate`, `receipt/finalize`,
  *      `receipt/verify`, `networks`, `currency`. These have no IO and
- *      are asserted directly against `@leash/core` fixtures.
+ *      are asserted directly against `@leashmarket/core` fixtures.
  *
  *   2. Live network probe — `quote`, `payment/execute`. These hit a
  *      real URL via `fetch`. We stand up a dynamic stub server (`http`)
@@ -28,7 +28,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { finalizeReceipt, paymentRequirementsHash, type PaymentRequirements } from '@leash/core';
+import {
+  finalizeReceipt,
+  paymentRequirementsHash,
+  type PaymentRequirements,
+} from '@leashmarket/core';
 import { findAssociatedTokenPda } from '@metaplex-foundation/mpl-toolbox';
 import { findAssetSignerPda } from '@metaplex-foundation/mpl-core';
 import { publicKey } from '@metaplex-foundation/umi';
@@ -215,7 +219,7 @@ describe('buyer endpoints', () => {
   // POST /v1/buyer/receipt/finalize + /verify
   // ------------------------------------------------------------
   describe('POST /v1/buyer/receipt/finalize', () => {
-    it('matches the result of @leash/core finalizeReceipt()', async () => {
+    it('matches the result of @leashmarket/core finalizeReceipt()', async () => {
       const rig = await createTestRig();
       const draft = {
         v: '0.1' as const,

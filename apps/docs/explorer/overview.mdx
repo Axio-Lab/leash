@@ -115,7 +115,7 @@ The pieces:
   `receipts` tables the API writes to.
 - **Live agent panels** on `/agent/<mint>` (identity status, treasury
   PDA, native SOL + SPL balances) call the same Solana RPCs the API
-  uses, in-process, via the snapshot helpers exported from `@leash/api`.
+  uses, in-process, via the snapshot helpers exported from `@leashmarket/api`.
 - The browser only ever sees `'devnet' | 'mainnet'` (carried by the
   `leash_network` cookie). All database and RPC reads happen on the
   Next.js server.

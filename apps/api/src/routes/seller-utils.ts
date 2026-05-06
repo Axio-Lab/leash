@@ -2,7 +2,7 @@
  * Seller-kit utility endpoints.
  *
  * These are the small "introspection + helpers" surfaces that
- * `@leash/seller-kit` exposes as plain TypeScript exports
+ * `@leashmarket/seller-kit` exposes as plain TypeScript exports
  * (`KNOWN_TOKENS`, `KNOWN_STABLE_SYMBOLS`, `defaultFacilitatorFor`,
  * `parsePrice`, `resolveSellerPayTo`). API consumers — including
  * polyglot SDKs that don't have access to the JS package — need an
@@ -29,8 +29,8 @@ import {
   KNOWN_TOKENS,
   type KnownStableSymbol,
   type TokenNetwork,
-} from '@leash/core';
-import { parsePrice } from '@leash/seller-kit';
+} from '@leashmarket/core';
+import { parsePrice } from '@leashmarket/seller-kit';
 
 import type { AuthVariables } from '../auth/types.js';
 import { type LeashApiConfig, facilitatorForNetwork } from '../config.js';

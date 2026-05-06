@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { createBuyer } from '../src/create-buyer.js';
-import type { LeashFetch } from '@leash/core';
-import type { ClientSvmSigner } from '@leash/core';
+import type { LeashFetch } from '@leashmarket/core';
+import type { ClientSvmSigner } from '@leashmarket/core';
 
 afterEach(() => {
   vi.restoreAllMocks();

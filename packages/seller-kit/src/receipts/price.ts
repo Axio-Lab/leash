@@ -1,11 +1,11 @@
-import type { ReceiptV1 } from '@leash/schemas';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 import {
   decimalToAtomic,
   KNOWN_STABLE_SYMBOLS,
   lookupTokenBySymbol,
   type KnownStableSymbol,
   type TokenNetwork,
-} from '@leash/core';
+} from '@leashmarket/core';
 
 type Price = NonNullable<ReceiptV1['price']>;
 
@@ -17,7 +17,7 @@ type Price = NonNullable<ReceiptV1['price']>;
  * `amount` is returned as the **atomic integer** for the resolved currency
  * on the supplied `network` (e.g. `"$0.001"` → `"1000"` for USDC's 6
  * decimals). This keeps every receipt — earn or spend — using the same
- * on-the-wire representation, so format helpers in `@leash/core/format`
+ * on-the-wire representation, so format helpers in `@leashmarket/core/format`
  * never have to guess whether a string is decimal or atomic.
  *
  * Resolution rules:

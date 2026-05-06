@@ -107,7 +107,7 @@ services:
     build: *shared-build
     image: leash:local
     restart: unless-stopped
-    command: ['pnpm', '--filter', '@leash/agents', 'start']
+    command: ['pnpm', '--filter', '@leashmarket/agents', 'start']
     working_dir: /app
     ports:
       - '4100:4100'
@@ -146,7 +146,7 @@ services:
     build: *shared-build
     image: leash:local
     restart: unless-stopped
-    command: ['pnpm', '--filter', '@leash/marketplace', 'start']
+    command: ['pnpm', '--filter', '@leashmarket/marketplace', 'start']
     working_dir: /app
     ports:
       - '4200:4200'
@@ -176,7 +176,7 @@ services:
     build: *shared-build
     image: leash:local
     restart: unless-stopped
-    command: ['pnpm', '--filter', '@leash/explorer', 'start']
+    command: ['pnpm', '--filter', '@leashmarket/explorer', 'start']
     working_dir: /app
     ports:
       - '3100:3100'
@@ -204,7 +204,7 @@ services:
     build: *shared-build
     image: leash:local
     restart: unless-stopped
-    command: ['pnpm', '--filter', '@leash/facilitator-app', 'start']
+    command: ['pnpm', '--filter', '@leashmarket/facilitator-app', 'start']
     working_dir: /app
     ports:
       - '8787:8787'

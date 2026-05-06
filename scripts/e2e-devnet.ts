@@ -3,12 +3,12 @@
  *
  * What it does — entirely on Solana devnet, with a live facilitator:
  *
- *   1. Spins up an in-process Hono seller mounted via `@leash/seller-kit`,
+ *   1. Spins up an in-process Hono seller mounted via `@leashmarket/seller-kit`,
  *      configured to receive on the seller agent's Asset Signer PDA.
  *   2. Reads (or creates) a delegation from the buyer agent's treasury USDC
  *      ATA to the executive keypair using `setSpendDelegation` from
- *      `@leash/registry-utils`.
- *   3. Fires a real `POST /pay` from `@leash/buyer-kit`'s
+ *      `@leashmarket/registry-utils`.
+ *   3. Fires a real `POST /pay` from `@leashmarket/buyer-kit`'s
  *      `LeashDelegateExactSvmScheme` — the on-chain transfer is a vanilla
  *      `TransferChecked` signed by the executive as the SPL delegate of the
  *      agent treasury.
@@ -57,13 +57,13 @@ import { base58 } from '@metaplex-foundation/umi/serializers';
 import { mplCore } from '@metaplex-foundation/mpl-core';
 import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
 
-import { createBuyer } from '@leash/buyer-kit';
-import { createSeller } from '@leash/seller-kit';
+import { createBuyer } from '@leashmarket/buyer-kit';
+import { createSeller } from '@leashmarket/seller-kit';
 import {
   setSpendDelegation,
   getSpendDelegation,
   provisionTreasuryAtas,
-} from '@leash/registry-utils';
+} from '@leashmarket/registry-utils';
 
 const RPC = process.env.LEASH_TEST_RPC ?? 'https://api.devnet.solana.com';
 const USDC = process.env.LEASH_TEST_USDC_MINT ?? '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';

@@ -2,7 +2,7 @@
  * Wiring tests for `lib/rpc.ts`.
  *
  * The explorer's agent page reads identity + treasury balances directly
- * via Umi, calling into `@leash/api`'s shared snapshot helpers. We
+ * via Umi, calling into `@leashmarket/api`'s shared snapshot helpers. We
  * stub those out and verify our wrapper:
  *   - picks the correct RPC URL per network (devnet vs mainnet)
  *   - hands the canonical SVM slug to the snapshot helpers
@@ -15,7 +15,7 @@ const getAgentSummaryMock = vi.fn();
 const getAgentTreasuryBalancesMock = vi.fn();
 const umiReadOnlyMock = vi.fn(() => ({}));
 
-vi.mock('@leash/api', () => ({
+vi.mock('@leashmarket/api', () => ({
   getAgentSummary: getAgentSummaryMock,
   getAgentTreasuryBalances: getAgentTreasuryBalancesMock,
   umiReadOnly: umiReadOnlyMock,

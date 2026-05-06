@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Writes Mintlify MDX stubs under apps/docs/schemas/ from @leash/schemas JSON Schema exports.
- * Run after `pnpm --filter @leash/schemas build`.
+ * Writes Mintlify MDX stubs under apps/docs/schemas/ from @leashmarket/schemas JSON Schema exports.
+ * Run after `pnpm --filter @leashmarket/schemas build`.
  */
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -17,7 +17,7 @@ let files;
 try {
   files = await readdir(schemaDir);
 } catch (e) {
-  console.error('Missing JSON schemas. Build @leash/schemas first:', schemaDir);
+  console.error('Missing JSON schemas. Build @leashmarket/schemas first:', schemaDir);
   process.exit(1);
 }
 

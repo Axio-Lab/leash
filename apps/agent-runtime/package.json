@@ -1,5 +1,5 @@
 {
-  "name": "@leash/agent-runtime",
+  "name": "@leashmarket/agent-runtime",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@leash/platform-auth": "workspace:*",
+    "@leashmarket/platform-auth": "workspace:*",
     "@libsql/client": "^0.14.0",
     "ioredis": "^5.4.1",
     "ulid": "^2.3.0",

@@ -4,7 +4,7 @@ import {
   RulesV1Schema,
   RegistrationV1Schema,
   LeashBlockV1Schema,
-} from '@leash/schemas';
+} from '@leashmarket/schemas';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';

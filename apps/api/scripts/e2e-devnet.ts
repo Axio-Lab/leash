@@ -1,10 +1,10 @@
 /**
- * End-to-end devnet smoke test for the @leash/api surface.
+ * End-to-end devnet smoke test for the @leashmarket/api surface.
  *
  * What this script proves
  * -----------------------
- * The shipped HTTP API exposes the same primitives as `@leash/seller-kit`
- * and `@leash/buyer-kit`, plus the hosted-paywall flow on `/x/{id}`. This
+ * The shipped HTTP API exposes the same primitives as `@leashmarket/seller-kit`
+ * and `@leashmarket/buyer-kit`, plus the hosted-paywall flow on `/x/{id}`. This
  * script drives every public endpoint that contributes to that flow against
  * a *real* Leash API process (local by default) and a *real* Solana devnet,
  * and asserts that:
@@ -66,7 +66,7 @@
  *
  * Usage
  * -----
- *   pnpm --filter @leash/api e2e:devnet
+ *   pnpm --filter @leashmarket/api e2e:devnet
  * or:
  *   cd apps/api && node --env-file=.env.e2e --import tsx ./scripts/e2e-devnet.ts
  */
@@ -88,14 +88,14 @@ import { mplCore, findAssetSignerPda } from '@metaplex-foundation/mpl-core';
 import { mplToolbox, findAssociatedTokenPda } from '@metaplex-foundation/mpl-toolbox';
 import { createTokenIfMissing, transferTokens, fetchToken } from '@metaplex-foundation/mpl-toolbox';
 
-import { createBuyer } from '@leash/buyer-kit';
+import { createBuyer } from '@leashmarket/buyer-kit';
 import {
   createAgent,
   setSpendDelegation,
   getSpendDelegation,
   provisionTreasuryAtas,
   TOKEN_2022_PROGRAM_ID,
-} from '@leash/registry-utils';
+} from '@leashmarket/registry-utils';
 
 import {
   isNoOp,

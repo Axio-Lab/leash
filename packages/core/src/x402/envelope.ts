@@ -7,13 +7,13 @@
  * `wrap_receipt`. That summary is also the body of every webhook delivered
  * to the configured `webhook_url`.
  *
- * Putting the shape + builder in `@leash/core` means producers (the seller
+ * Putting the shape + builder in `@leashmarket/core` means producers (the seller
  * route) and consumers (buyer-kit, downstream agents) share one TypeScript
  * type. Don't construct envelope objects ad-hoc; always go through
  * {@link buildLeashEnvelope}.
  */
 
-import type { ReceiptV1 } from '@leash/schemas';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 import {
   agentExplorerUrl,
   transactionExplorerUrl,

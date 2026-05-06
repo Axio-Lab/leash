@@ -3,7 +3,7 @@
  *
  * Lives inside the agent profile page (`/agents/[mint]`). Wraps the
  * `launchAgentToken` + `getAgentToken` helpers exported from
- * `@leash/registry-utils` so the playground proves the SDK end-to-end
+ * `@leashmarket/registry-utils` so the playground proves the SDK end-to-end
  * (no UI-only re-implementations of Metaplex flows).
  *
  * UX rules (matching the Metaplex docs):
@@ -36,7 +36,7 @@ import {
   isGenesisTokenImageUrl,
   type AgentTokenStatus,
   type LaunchAgentTokenResult,
-} from '@leash/registry-utils';
+} from '@leashmarket/registry-utils';
 import type { Umi } from '@metaplex-foundation/umi';
 import { transactionExplorerUrl, addressExplorerUrl } from '@/lib/solscan';
 

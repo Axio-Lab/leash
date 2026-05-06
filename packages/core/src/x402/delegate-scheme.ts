@@ -108,7 +108,7 @@ export type LeashExactSvmSchemeOptions = {
  * @example
  * ```ts
  * import { x402Client } from '@x402/core/client';
- * import { LeashDelegateExactSvmScheme } from '@leash/core';
+ * import { LeashDelegateExactSvmScheme } from '@leashmarket/core';
  *
  * const client = new x402Client();
  * client.register('solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1XkXr8aBmpfk5', new LeashDelegateExactSvmScheme({

@@ -3,8 +3,8 @@ import { createRunnerClient } from '../src/client/index.js';
 import { createEndpointStore } from '../src/storage/endpoints.js';
 import { createHttpServer } from '../src/http/server.js';
 import { createMemoryStore } from '../src/storage/memory.js';
-import { finalizeReceipt } from '@leash/core';
-import type { ReceiptV1 } from '@leash/schemas';
+import { finalizeReceipt } from '@leashmarket/core';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 
 const OWNER_AGENT = '11111111111111111111111111111111';
 

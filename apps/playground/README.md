@@ -1,25 +1,25 @@
-# @leash/playground
+# @leashmarket/playground
 
 Interactive playground (`leash · playground`) for the Leash stack. Drives the
 runner, agents, sellers, buyers, and schemas from one place — same Roboto +
 JetBrains Mono typography, white inverted logo, and aurora theme as
-`@leash/explorer` and `@leash/agents`.
+`@leashmarket/explorer` and `@leashmarket/agents`.
 
 ## Run
 
 ```bash
 cp apps/playground/.env.local.example apps/playground/.env.local   # paste your Privy appId
 pnpm install
-pnpm --filter @leash/playground dev                                # http://localhost:4000
+pnpm --filter @leashmarket/playground dev                                # http://localhost:4000
 ```
 
 For the dashboard's runner status to flip green, also start the runner:
 
 ```bash
-pnpm --filter @leash/runner start                                  # http://localhost:8787
+pnpm --filter @leashmarket/runner start                                  # http://localhost:8787
 ```
 
-If you start the runner on another port (e.g. `PORT=8788 pnpm --filter @leash/runner start`),
+If you start the runner on another port (e.g. `PORT=8788 pnpm --filter @leashmarket/runner start`),
 set **`LEASH_RUNNER_URL=http://localhost:8788`** in `apps/playground/.env` and restart `next dev` —
 the UI calls the runner from the **Next server**, which still defaults to port **8787**.
 
@@ -41,14 +41,14 @@ the UI calls the runner from the **Next server**, which still defaults to port *
 
 All wrap the SDK packages so the browser never touches Node-only code.
 
-- `GET /api/runner/health` → `@leash/runner /health`
-- `GET /api/runner/pause` → `@leash/runner /pause`
-- `GET /api/receipts/[mint]` → parses NDJSON into `ReceiptV1[]` via `@leash/schemas`
-- `POST /api/buyer/fire` → `createBuyer({ agent, rules }).fetch(url, init)` from `@leash/buyer-kit`
-- `POST /api/seller/echo` → x402-shaped echo (matches `@leash/seller-kit`'s `simpleX402Gate`)
+- `GET /api/runner/health` → `@leashmarket/runner /health`
+- `GET /api/runner/pause` → `@leashmarket/runner /pause`
+- `GET /api/receipts/[mint]` → parses NDJSON into `ReceiptV1[]` via `@leashmarket/schemas`
+- `POST /api/buyer/fire` → `createBuyer({ agent, rules }).fetch(url, init)` from `@leashmarket/buyer-kit`
+- `POST /api/seller/echo` → x402-shaped echo (matches `@leashmarket/seller-kit`'s `simpleX402Gate`)
 - `GET /api/seller/payTo?asset=…` → `resolveSellerPayTo` (Asset Signer PDA)
-- `GET /api/registry/resolve?uri=…` → `@leash/registry-utils` `resolveByoUri`
-- `POST /api/schemas/validate` → live Zod schemas from `@leash/schemas`
+- `GET /api/registry/resolve?uri=…` → `@leashmarket/registry-utils` `resolveByoUri`
+- `POST /api/schemas/validate` → live Zod schemas from `@leashmarket/schemas`
 - `GET /api/agents/identity?asset=…` → MIP-104 status, owner, AgentIdentity URI
 - `GET /api/agents/balance?asset=…` → SOL + SPL (Token + Token-2022) for the Asset Signer PDA
 - `GET /api/agents/executive?asset=…&authority=…` → executive registration + delegation status (read-only)

@@ -1,5 +1,5 @@
 /**
- * HTTP server smoke tests for `@leash/facilitator`.
+ * HTTP server smoke tests for `@leashmarket/facilitator`.
  *
  * The interesting surface for the Leash protocol fee work is `/health`:
  * operators rely on it (and the docs encourage them) to confirm the

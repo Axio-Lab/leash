@@ -1,5 +1,5 @@
 /**
- * Public entrypoint of the `@leash/api` server. Re-exports the app
+ * Public entrypoint of the `@leashmarket/api` server. Re-exports the app
  * factory plus the few helpers callers might want for embedding (tests,
  * bespoke deployments, in-process integration with sister apps such as
  * the Leash Explorer).

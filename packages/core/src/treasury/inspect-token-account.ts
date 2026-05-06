@@ -9,7 +9,7 @@
  * account does not exist (uninitialised ATA) so callers can distinguish
  * "truly empty" from "missing".
  *
- * Used by `@leash/buyer-kit` to reclassify a generic facilitator
+ * Used by `@leashmarket/buyer-kit` to reclassify a generic facilitator
  * `transaction_simulation` failure into a precise
  * `insufficient_balance` / `insufficient_allowance` / `no_delegate`
  * verdict on the resulting receipt.

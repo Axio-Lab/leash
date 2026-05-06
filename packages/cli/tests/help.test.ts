@@ -1,5 +1,5 @@
 /**
- * Smoke tests for `@leash/cli`.
+ * Smoke tests for `@leashmarket/cli`.
  *
  * The CLI is consumed via the `leash` binary, so end-to-end tests
  * here run the source under `tsx` in a child process and assert on

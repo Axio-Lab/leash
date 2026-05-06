@@ -1,5 +1,5 @@
 /**
- * Buyer-kit endpoints — full HTTP parity with `@leash/buyer-kit`.
+ * Buyer-kit endpoints — full HTTP parity with `@leashmarket/buyer-kit`.
  *
  * The buyer-kit is the only piece of Leash that holds a private key
  * (the buyer's signing wallet), so we cannot literally hoist the whole
@@ -54,8 +54,8 @@ import {
   type KnownStableSymbol,
   type PaymentRequirements,
   type TokenNetwork,
-} from '@leash/core';
-import { ReceiptV1Schema, RulesV1Schema, type ReceiptV1 } from '@leash/schemas';
+} from '@leashmarket/core';
+import { ReceiptV1Schema, RulesV1Schema, type ReceiptV1 } from '@leashmarket/schemas';
 import { transferTokensChecked } from '@metaplex-foundation/mpl-toolbox';
 import { publicKey } from '@metaplex-foundation/umi';
 
@@ -984,7 +984,7 @@ function buildBuyerNetwork(config: LeashApiConfig, network: SvmNetwork) {
   };
 }
 
-// Re-imported locally so the buyer file doesn't pull in @leash/registry-utils
+// Re-imported locally so the buyer file doesn't pull in @leashmarket/registry-utils
 // just for the program-id constants. The values are stable Solana program ids.
 import { publicKey as _pk } from '@metaplex-foundation/umi';
 const SPL_TOKEN_PROGRAM_ID = _pk('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');

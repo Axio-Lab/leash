@@ -1,13 +1,13 @@
 ---
 title: 'Buyer endpoints'
-description: HTTP parity for @leash/buyer-kit — quote, policy gate, payment prepare/execute, receipt finalize/verify.
+description: HTTP parity for @leashmarket/buyer-kit — quote, policy gate, payment prepare/execute, receipt finalize/verify.
 ---
 
 The buyer side of x402 is harder to expose as a single HTTP call
 than the seller side, because the buyer holds the private key. The
 API can't sign for you. Instead, the eight `/v1/buyer/*` endpoints
 break the buyer flow down into discrete primitives that mirror the
-TypeScript [`@leash/buyer-kit`](/sdk/buyer-kit) one-to-one:
+TypeScript [`@leashmarket/buyer-kit`](/sdk/buyer-kit) one-to-one:
 
 | Endpoint                          | Purpose                                                      | IO   |
 | --------------------------------- | ------------------------------------------------------------ | ---- |
@@ -124,7 +124,7 @@ seller refuses to quote without authentication.
 
 ## `POST /v1/buyer/policy/evaluate`
 
-A pure HTTP wrapper around `evaluate` from `@leash/core`. No IO, no
+A pure HTTP wrapper around `evaluate` from `@leashmarket/core`. No IO, no
 state writes, just the policy gate from
 [`RulesV1`](/schemas/rules-v1).
 
@@ -319,7 +319,7 @@ for the full buyer-side flow.
 
 Pure helper that computes `receipt_hash` for a draft receipt. Useful
 when you want to chain receipts client-side without holding the
-whole `@leash/core` library in your runtime.
+whole `@leashmarket/core` library in your runtime.
 
 ```http
 POST /v1/buyer/receipt/finalize
@@ -352,7 +352,7 @@ Content-Type: application/json
 }
 ```
 
-Same byte output as `finalizeReceipt` from `@leash/core`. Idempotent.
+Same byte output as `finalizeReceipt` from `@leashmarket/core`. Idempotent.
 
 ## `POST /v1/buyer/receipt/verify`
 
@@ -387,13 +387,13 @@ human-readable reason:
 { "ok": false, "nonce": 17, "reason": "receipt_hash_mismatch" }
 ```
 
-This is the same `verifyReceiptChain` from `@leash/core` —
+This is the same `verifyReceiptChain` from `@leashmarket/core` —
 identical results, no JS dependency.
 
 ## `GET /v1/buyer/networks`
 
 Buyer-side network catalog. Same shape as the seller side, but
-named for symmetry with `@leash/buyer-kit`.
+named for symmetry with `@leashmarket/buyer-kit`.
 
 ```http
 GET /v1/buyer/networks
@@ -464,7 +464,7 @@ Authorization: Bearer lsh_test_...
 
 ## See also
 
-- [`@leash/buyer-kit`](/sdk/buyer-kit) — the TypeScript surface
+- [`@leashmarket/buyer-kit`](/sdk/buyer-kit) — the TypeScript surface
   these endpoints mirror, including failure-classification
   ergonomics for the SDK use case.
 - [Payment links](/api/payment-links) — the seller-side endpoint

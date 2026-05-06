@@ -1,13 +1,13 @@
 ---
-title: '@leash/buyer-kit'
+title: '@leashmarket/buyer-kit'
 description: Scriptable buyer agents. createBuyer + real x402 fetch + chained ReceiptV1.
 ---
 
-`@leash/buyer-kit` wraps `@leash/core` into the smallest possible "scriptable
+`@leashmarket/buyer-kit` wraps `@leashmarket/core` into the smallest possible "scriptable
 buyer". One call, one chained receipt, one real x402 SPL transfer.
 
 ```ts
-import { createBuyer } from '@leash/buyer-kit';
+import { createBuyer } from '@leashmarket/buyer-kit';
 import { createKeyPairSignerFromBytes } from '@solana/kit';
 import fs from 'node:fs';
 
@@ -58,7 +58,7 @@ const { response, receipt } = await buyer.fetch('https://api.example.com/quote',
    network traffic, no spend.
 2. **`paidFetch`** = `wrapFetchWithPayment` from `@x402/fetch`, registered
    with `LeashDelegateExactSvmScheme` (when `sourceTokenAccount` is set) or
-   `LeashExactSvmScheme` (owner mode) from `@leash/core`. Both use the `exact`
+   `LeashExactSvmScheme` (owner mode) from `@leashmarket/core`. Both use the `exact`
    scheme id and are wire-compatible with every x402 facilitator. The first
    request is normal; on `402 Payment Required` the wrapper:
    - Decodes `PAYMENT-REQUIRED` to the seller's `accepts[]`.
@@ -113,7 +113,7 @@ type BuyerConfig = {
   receipts?: ReceiptForwardConfig;
   /**
    * Optional. The agent treasury **SPL token account** (ATA) to spend from,
-   * returned by `setSpendDelegation` from `@leash/registry-utils`. Its mint
+   * returned by `setSpendDelegation` from `@leashmarket/registry-utils`. Its mint
    * must match the asset the seller will demand **and** the stable you intend
    * to pay with (e.g. pass the treasury's USDG ATA when
    * `preferredCurrency: 'USDG'`). When set, every settled call signs as the
@@ -154,7 +154,7 @@ type BuyerCallResult = {
 ```
 
 When `sourceTokenAccount` is set the buyer-kit registers
-`LeashDelegateExactSvmScheme` from `@leash/core` instead of the vanilla
+`LeashDelegateExactSvmScheme` from `@leashmarket/core` instead of the vanilla
 `@x402/svm` exact scheme — wire-compatible with every facilitator (the
 on-chain instruction is still a plain SPL `TransferChecked`), but with the
 **agent treasury** as the source instead of the executive's own ATA.
@@ -165,14 +165,14 @@ When the seller returns `402` without settling, the kit reads the on-chain
 state of the source token account and stamps the receipt's `reason` with one
 of:
 
-| Reason                        | Meaning                                                                   | Fix                                                               |
-| ----------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `preferred_asset_unavailable` | You set `preferredCurrency` but the seller's `accepts[]` omits that mint. | Pick a currency the link advertises, or ask the seller to add it. |
-| `insufficient_balance`        | Treasury holds less than the seller demanded (for the quoted mint).       | Top up the agent's treasury ATA for that mint.                    |
-| `insufficient_allowance`      | Delegate cap is below the demanded price.                                 | Re-run `setSpendDelegation` with a higher cap for that mint.      |
-| `no_delegate`                 | The treasury ATA exists but no SPL delegate is set.                       | Run `setSpendDelegation` from `@leash/registry-utils`.            |
-| `wrong_delegate`              | The set delegate is not the executive that signed.                        | Re-approve with the current executive.                            |
-| `ata_missing`                 | The agent has never held this mint.                                       | Send any amount of the mint to mint the ATA.                      |
+| Reason                        | Meaning                                                                                                                                                                                                                                            | Fix                                                               |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `preferred_asset_unavailable` | You set `preferredCurrency` but the seller's `accepts[]` omits that mint.                                                                                                                                                                          | Pick a currency the link advertises, or ask the seller to add it. |
+| `insufficient_balance`        | Treasury holds less than the seller demanded (for the quoted mint).                                                                                                                                                                                | Top up the agent's treasury ATA for that mint.                    |
+| `insufficient_allowance`      | Delegate cap is below the demanded price.                                                                                                                                                                                                          | Re-run `setSpendDelegation` with a higher cap for that mint.      |
+| `no_delegate`                 | The treasury ATA exists but no SPL delegate is set.                                                                                                                                                                                                | Run `setSpendDelegation` from `@leashmarket/registry-utils`.      |
+| `wrong_delegate`              | The set delegate is not the executive that signed.                                                                                                                                                                                                 | Re-approve with the current executive.                            |
+| `ata_missing`                 | The agent has never held this mint (the buyer-kit pre-flight derives the ATA under the right program — `spl-token` for USDC/USDT, `spl-token-2022` for USDG — so this is a real "treasury empty for this mint" signal, not a Token-2022 mismatch). | Send any amount of the mint to mint the ATA.                      |
 
 The full receipt reason takes the form `<classified>: <seller breadcrumb>`
 (e.g. `insufficient_balance: transaction_simulation`). UI panels match on the

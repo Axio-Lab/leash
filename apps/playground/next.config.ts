@@ -2,11 +2,11 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   transpilePackages: [
-    '@leash/schemas',
-    '@leash/core',
-    '@leash/buyer-kit',
-    '@leash/seller-kit',
-    '@leash/registry-utils',
+    '@leashmarket/schemas',
+    '@leashmarket/core',
+    '@leashmarket/buyer-kit',
+    '@leashmarket/seller-kit',
+    '@leashmarket/registry-utils',
   ],
   output: 'standalone',
   serverExternalPackages: [

@@ -1,5 +1,5 @@
 /**
- * Hono+OpenAPI app builder for `@leash/api`.
+ * Hono+OpenAPI app builder for `@leashmarket/api`.
  *
  * Composes:
  *   - public health/version routes (no auth)

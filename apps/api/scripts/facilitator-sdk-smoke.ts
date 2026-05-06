@@ -3,10 +3,10 @@
  *
  * What this proves
  * ----------------
- * `@leash/seller-kit` (the merchant) and `@leash/buyer-kit` (the agent
+ * `@leashmarket/seller-kit` (the merchant) and `@leashmarket/buyer-kit` (the agent
  * paying with USDC) can complete a real x402 settlement on devnet when
  * BOTH are pointed at a locally-running facilitator (default
- * `http://localhost:8787`). It bypasses the @leash/api HTTP surface
+ * `http://localhost:8787`). It bypasses the @leashmarket/api HTTP surface
  * entirely so a green run isolates the facilitator + SDK pair from any
  * API regressions.
  *
@@ -62,9 +62,9 @@ import { base58 } from '@metaplex-foundation/umi/serializers';
 import { mplCore } from '@metaplex-foundation/mpl-core';
 import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
 
-import { createBuyer } from '@leash/buyer-kit';
-import { createSeller } from '@leash/seller-kit';
-import { getSpendDelegation } from '@leash/registry-utils';
+import { createBuyer } from '@leashmarket/buyer-kit';
+import { createSeller } from '@leashmarket/seller-kit';
+import { getSpendDelegation } from '@leashmarket/registry-utils';
 
 const FACILITATOR_URL = (process.env.LEASH_FACILITATOR_URL ?? 'http://localhost:8787').replace(
   /\/+$/,

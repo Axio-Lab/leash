@@ -2,12 +2,12 @@
  * Client-side agent provisioning.
  *
  * The Leash protocol no longer holds keypairs or runs a faucet —
- * agent provisioning is fully client-side from `@leash/mcp` /
- * `@leash/cli` / `@leash/sdk`. This module owns the three operations
+ * agent provisioning is fully client-side from `@leashmarket/mcp` /
+ * `@leashmarket/cli` / `@leashmarket/sdk`. This module owns the three operations
  * the host runs in series:
  *
  *   1. Generate (or import) the executive keypair.
- *   2. Mint the MPL Core agent asset (`@leash/registry-utils::createAgent`).
+ *   2. Mint the MPL Core agent asset (`@leashmarket/registry-utils::createAgent`).
  *   3. Set unlimited USDC spend delegation from the agent's treasury
  *      PDA to the executive (`setSpendDelegation`) so the buyer-kit
  *      can spend treasury USDC without `no_delegate` failures.
@@ -34,7 +34,7 @@ import {
 } from '@metaplex-foundation/umi';
 import { base58 } from '@metaplex-foundation/umi/serializers';
 
-import type { SvmNetwork } from '@leash/mcp-core';
+import type { SvmNetwork } from '@leashmarket/mcp-core';
 import {
   KNOWN_STABLES,
   SPL_TOKEN_PROGRAM_ID,
@@ -43,7 +43,7 @@ import {
   registrationToDataUrl,
   setSpendDelegation,
   type RegistrationService,
-} from '@leash/registry-utils';
+} from '@leashmarket/registry-utils';
 
 /**
  * Recommended SOL balance for the executive before calling
@@ -192,7 +192,7 @@ export async function mintAgentLocally(args: MintLocallyArgs): Promise<MintLocal
   const { executive, network, rpcUrl, apiBaseUrl } = args;
   const fetchImpl = args.fetchImpl ?? globalThis.fetch;
   const name = (args.name ?? '').trim() || `Agent ${executive.pubkey.slice(0, 8)}`;
-  const description = args.description ?? 'Provisioned via @leash/mcp';
+  const description = args.description ?? 'Provisioned via @leashmarket/mcp';
   const imageUrl = args.imageUrl ?? '';
   const callerServices = args.services ?? [];
 
@@ -203,7 +203,7 @@ export async function mintAgentLocally(args: MintLocallyArgs): Promise<MintLocal
   // row. `createAgent` writes its own `receipts` service entry into
   // the on-chain `agentMetadata.services[]` block, so we keep the
   // off-chain doc symmetrical: caller services + receipts injection
-  // happen via the same `@leash/registry-utils` paths the chat
+  // happen via the same `@leashmarket/registry-utils` paths the chat
   // product uses.
   const registration = buildRegistrationV1({
     name,
@@ -216,7 +216,7 @@ export async function mintAgentLocally(args: MintLocallyArgs): Promise<MintLocal
 
   // 1. Mint the MPL Core agent. The executive pays rent, owns the
   //    asset, and controls the on-chain identity from this point on.
-  //    `createAgent` from `@leash/registry-utils` auto-injects a
+  //    `createAgent` from `@leashmarket/registry-utils` auto-injects a
   //    `receipts` service unless the caller already includes one.
   const minted = await createAgent(umi, {
     wallet: executive.pubkey,
@@ -238,7 +238,7 @@ export async function mintAgentLocally(args: MintLocallyArgs): Promise<MintLocal
   //    pre-flight returns `no_delegate` and the very first
   //    `leash_pay_payment_link` call fails. Cap is `u64::MAX`; users
   //    can revoke / re-approve smaller caps later via
-  //    `@leash/registry-utils::setSpendDelegation` /
+  //    `@leashmarket/registry-utils::setSpendDelegation` /
   //    `revokeSpendDelegation`.
   const usdc = KNOWN_STABLES[network].find((s) => s.symbol === 'USDC');
   if (!usdc) {
@@ -356,7 +356,7 @@ async function waitForAssetVisible(args: {
 }
 
 // `buildRegistrationDataUrl` was inlined here in v0.2 — it's now
-// shared with the chat product via `@leash/registry-utils`'s
+// shared with the chat product via `@leashmarket/registry-utils`'s
 // `buildRegistrationV1` + `registrationToDataUrl`. Keeping all
 // three surfaces (chat / MCP / CLI) on one EIP-8004 builder means
 // the on-chain `uri` shape stays identical regardless of who minted.

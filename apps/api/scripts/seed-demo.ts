@@ -1,25 +1,25 @@
 /**
  * Seed a self-contained demo flow:
- *   1. ensure marketplace seed listings exist (delegates to the same data
- *      `seed-listings.ts` produces)
- *   2. create one demo platform user
- *   3. mint a service `lsh_*` key for the agent
- *   4. record a demo `agents` row pre-wired with the seed listings as
- *      capabilities — so the explorer + dashboard show a populated agent
- *      out of the box
- *   5. enqueue three pending tasks the agent-runtime can pick up
+ *   1. create one demo platform user
+ *   2. mint a service `lsh_*` key for the agent
+ *   3. record a demo `agents` row pre-wired with seed capabilities so
+ *      the explorer + dashboard show a populated agent out of the box
+ *   4. enqueue three pending tasks the agent-runtime can pick up
+ *
+ * No marketplace listings are seeded — the Favorites page surfaces the
+ * Solana Foundation pay-skills catalogue automatically, and real Leash
+ * listings populate as sellers register.
  *
  * Idempotent: skips anything already present.
  *
  * Usage:
- *   pnpm --filter @leash/api db:migrate
- *   pnpm --filter @leash/api seed:listings
- *   pnpm --filter @leash/api seed:demo
+ *   pnpm --filter @leashmarket/api db:migrate
+ *   pnpm --filter @leashmarket/api seed:demo
  */
 
 import { createClient } from '@libsql/client';
 
-import { encryptSecret } from '@leash/platform-auth/encryption';
+import { encryptSecret } from '@leashmarket/platform-auth/encryption';
 
 import {
   createPlatformAgent,
@@ -76,20 +76,12 @@ if (agent) {
   });
   serviceKeyId = issued.key.id;
 
-  const capabilities: Capability[] = [
-    {
-      slug: 'data-fetch',
-      endpoint: 'https://data.demo.leash.market/mcp',
-      tools: ['weather_now', 'fx_rate'],
-      paid: false,
-    },
-    {
-      slug: 'premium-search',
-      endpoint: 'https://search.demo.leash.market/mcp',
-      tools: ['search', 'fetch_url'],
-      paid: true,
-    },
-  ];
+  // Demo agent ships without pre-bound capabilities — the chat brain
+  // surfaces real services through `leash_discover` (Leash + pay-skills)
+  // at runtime, and Composio tools attach via the OAuth flow on
+  // /settings/connections. Keep this empty so re-seeding never
+  // resurrects fabricated `*.demo.leash.market` endpoints.
+  const capabilities: Capability[] = [];
 
   agent = await createPlatformAgent(db, {
     mint: DEMO_AGENT_MINT,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RulesV1 } from '@leash/schemas';
+import type { RulesV1 } from '@leashmarket/schemas';
 import { evaluate } from '../src/policy/evaluate.js';
 import type { PolicyState } from '../src/policy/state.js';
 

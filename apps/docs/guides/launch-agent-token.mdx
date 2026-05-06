@@ -7,7 +7,7 @@ description: 'Launch the canonical bonding-curve token for a Leash agent via Met
 > Genesis routes its creator fees to the agent's Asset Signer PDA (the
 > treasury) and wraps the launch transactions in `mpl-core::Execute` so
 > the agent itself executes them on-chain. The Leash SDK
-> (`@leash/registry-utils`) ships a thin, typed wrapper plus a one-click
+> (`@leashmarket/registry-utils`) ships a thin, typed wrapper plus a one-click
 > playground UI on `/agents/[mint]`. Mirrors the Metaplex
 > [Create an Agent Token](https://www.metaplex.com/docs/agents/create-agent-token)
 > guide.
@@ -28,7 +28,7 @@ the optional `firstBuyAmount`) and **must be the agent's owner**.
 ## One-shot launch
 
 ```ts
-import { launchAgentToken } from '@leash/registry-utils';
+import { launchAgentToken } from '@leashmarket/registry-utils';
 
 const result = await launchAgentToken(umi, {
   agentAsset: '<Core asset address>',
@@ -78,7 +78,7 @@ For hardware wallets, custom priority fees, or "inspect-then-send"
 flows:
 
 ```ts
-import { prepareAgentTokenLaunch, sendPreparedAgentTokenLaunch } from '@leash/registry-utils';
+import { prepareAgentTokenLaunch, sendPreparedAgentTokenLaunch } from '@leashmarket/registry-utils';
 
 const prepared = await prepareAgentTokenLaunch(umi, {
   /* same input */
@@ -90,7 +90,7 @@ const result = await sendPreparedAgentTokenLaunch(umi, prepared);
 ## Read agent → token state
 
 ```ts
-import { getAgentToken, hasAgentToken } from '@leash/registry-utils';
+import { getAgentToken, hasAgentToken } from '@leashmarket/registry-utils';
 
 const status = await getAgentToken(umi, '<Core asset>');
 // {
@@ -114,7 +114,7 @@ If you launched a token outside Leash and now want to associate it
 with an agent (the "Set Agent Token" path from the Metaplex docs):
 
 ```ts
-import { setAgentToken } from '@leash/registry-utils';
+import { setAgentToken } from '@leashmarket/registry-utils';
 
 const { signature } = await setAgentToken(umi, {
   agentAsset: '<Core asset>',
@@ -160,14 +160,14 @@ signed by `umi.identity` (the user's connected wallet).
 template for ops scripts and CI smoke tests.
 
 ```bash
-pnpm --filter @leash/agent-token-demo build
+pnpm --filter @leashmarket/agent-token-demo build
 
 LEASH_OWNER_SECRET_KEY='[1,2,3,...,64]' \
 LEASH_AGENT_ASSET='<Core asset>' \
 LEASH_TOKEN_IMAGE='https://…' \
 LEASH_TOKEN_NAME='Plexpert' LEASH_TOKEN_SYMBOL='PLX' \
 LEASH_NETWORK='solana-devnet' \
-pnpm --filter @leash/agent-token-demo start
+pnpm --filter @leashmarket/agent-token-demo start
 ```
 
 The script:

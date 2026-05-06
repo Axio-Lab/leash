@@ -1,4 +1,4 @@
-import type { ReceiptV1 } from '@leash/schemas';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 import { canonicalJson, sha256Hex } from './hash.js';
 
 export type ReceiptDraft = Omit<ReceiptV1, 'receipt_hash'>;

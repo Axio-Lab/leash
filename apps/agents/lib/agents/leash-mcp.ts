@@ -1,7 +1,7 @@
 /**
- * Chat-product adapter for `@leash/mcp-core`.
+ * Chat-product adapter for `@leashmarket/mcp-core`.
  *
- * The shared tool definitions live in `@leash/mcp-core/tools` so the
+ * The shared tool definitions live in `@leashmarket/mcp-core/tools` so the
  * standalone STDIO MCP server (`packages/mcp`) and CLI can use the
  * exact same `name`/`schema` set. This module is the runtime glue:
  *
@@ -12,16 +12,21 @@
  *      so the in-process MCP server can be passed to `query()`.
  *
  * Adding a new tool means: drop the definition into
- * `@leash/mcp-core/tools` + implement the host method here.
+ * `@leashmarket/mcp-core/tools` + implement the host method here.
  */
 
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import type { McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
-import { TOKEN_2022_PROGRAM_ID, deriveAgentTreasuryAddress, listSplBalances } from '@leash/core';
+import {
+  TOKEN_2022_PROGRAM_ID,
+  deriveAgentTreasuryAddress,
+  listSplBalances,
+} from '@leashmarket/core';
 import { z } from 'zod';
 import {
   LEASH_TOOLS,
   fetchDiscover,
+  fetchPaySkillsProvider,
   fetchReputation,
   isLikelyBase58Address,
   jsonResult,
@@ -35,10 +40,11 @@ import {
   type LeashTool,
   type LeashToolResult,
   type PayArgs,
+  type PaySkillsProviderArgs,
   type ReputationArgs,
   type WithdrawArgs,
-} from '@leash/mcp-core';
-import { listPlatformKeys } from '@leash/platform-auth';
+} from '@leashmarket/mcp-core';
+import { listPlatformKeys } from '@leashmarket/platform-auth';
 
 import { getDb } from '@/lib/db';
 import { SOLANA_NETWORK, SOLANA_RPC, getServerEnv } from '@/lib/env';
@@ -364,6 +370,14 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
       });
     },
 
+    async paySkillsProvider(args: PaySkillsProviderArgs): Promise<LeashToolResult> {
+      return fetchPaySkillsProvider({
+        apiBaseUrl: env.leashApiUrl,
+        network: SOLANA_NETWORK as LeashHost['network'],
+        query: args,
+      });
+    },
+
     async setSpendLimit(): Promise<LeashToolResult> {
       // Chat product signs spend-delegation transactions through the
       // Privy embedded wallet, not the model. Pointing the user at
@@ -562,7 +576,7 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
 // instead of in a shared package because the chat host's transport for
 // receipts is an HTTP fetch with a per-user platform key, not an
 // agent-signed call \u2014 the URL/auth shape diverges enough that pulling
-// it into `@leash/mcp-core` would force an awkward strategy parameter.
+// it into `@leashmarket/mcp-core` would force an awkward strategy parameter.
 // ────────────────────────────────────────────────────────────────────────────
 
 type ChatReceiptRow = {
@@ -785,7 +799,7 @@ function adaptToClaudeTool(def: LeashTool, host: LeashHost) {
 
 /**
  * In-process MCP tools for payment links, treasury pay, and marketplace calls.
- * Uses the shared `@leash/mcp-core` definitions so every Leash surface
+ * Uses the shared `@leashmarket/mcp-core` definitions so every Leash surface
  * (chat product, standalone STDIO MCP, CLI) exposes an identical tool
  * surface to the LLM.
  */

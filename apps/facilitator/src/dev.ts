@@ -1,13 +1,13 @@
 /**
- * Development entrypoint for `@leash/facilitator-app`. Convenience
- * wrapper over the `@leash/facilitator` CLI that prints clearer
+ * Development entrypoint for `@leashmarket/facilitator-app`. Convenience
+ * wrapper over the `@leashmarket/facilitator` CLI that prints clearer
  * onboarding errors and (optionally) loads `.env` for local dev.
  *
  * In production, run the published `leash-facilitator` binary from
- * `@leash/facilitator` (see `package.json` `start` script).
+ * `@leashmarket/facilitator` (see `package.json` `start` script).
  */
 import { serve } from '@hono/node-server';
-import { createLeashFacilitator, parseNetworksEnv } from '@leash/facilitator';
+import { createLeashFacilitator, parseNetworksEnv } from '@leashmarket/facilitator';
 
 if (!process.env.LEASH_FACILITATOR_SECRET_KEY) {
   console.error(

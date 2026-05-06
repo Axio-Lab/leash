@@ -121,7 +121,7 @@ export async function createEventSubscriber(redisUrl?: string | null): Promise<E
     // Static import (matches `redis.ts`) because Next.js bundling
     // rewrites dynamic `await import('ioredis')` in a way that loses
     // the `Redis` constructor. The cost is negligible — ioredis is
-    // already a transitive dep of every consumer of `@leash/api`.
+    // already a transitive dep of every consumer of `@leashmarket/api`.
     const sub = new Redis(redisUrl, {
       lazyConnect: true,
       maxRetriesPerRequest: null,

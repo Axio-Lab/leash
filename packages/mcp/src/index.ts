@@ -1,5 +1,5 @@
 /**
- * `@leash/mcp` — standalone MCP server for Leash.
+ * `@leashmarket/mcp` — standalone MCP server for Leash.
  *
  * Public exports
  * --------------

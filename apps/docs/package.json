@@ -1,5 +1,5 @@
 {
-  "name": "@leash/docs",
+  "name": "@leashmarket/docs",
   "private": true,
   "scripts": {
     "predev": "node ../../scripts/gen-schema-docs.mjs",
@@ -10,7 +10,7 @@
     "test": "echo skip"
   },
   "dependencies": {
-    "@leash/schemas": "workspace:*"
+    "@leashmarket/schemas": "workspace:*"
   },
   "devDependencies": {
     "mintlify": "^4.0.739"

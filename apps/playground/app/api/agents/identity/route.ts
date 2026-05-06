@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchAsset } from '@metaplex-foundation/mpl-core';
-import { getAgentIdentityStatus } from '@leash/registry-utils';
+import { getAgentIdentityStatus } from '@leashmarket/registry-utils';
 import { asPublicKey, getReadOnlyUmi } from '@/lib/umi';
 
 export const runtime = 'nodejs';

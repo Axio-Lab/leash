@@ -1,9 +1,9 @@
 ---
 title: 'Seller utilities'
-description: HTTP parity for the @leash/seller-kit helpers — networks, facilitator, parse-price, pay-to.
+description: HTTP parity for the @leashmarket/seller-kit helpers — networks, facilitator, parse-price, pay-to.
 ---
 
-`@leash/seller-kit` exports a handful of small helpers that don't
+`@leashmarket/seller-kit` exports a handful of small helpers that don't
 build transactions but every seller integration needs:
 
 - "Which stables can I price in on this network?"
@@ -170,7 +170,7 @@ explaining what was tried.
 ## `GET /v1/agents/{mint}/pay-to`
 
 Resolves the **Asset Signer PDA** for an agent — the on-chain account
-that receives funds when buyers pay through `@leash/seller-kit` or a
+that receives funds when buyers pay through `@leashmarket/seller-kit` or a
 hosted [`payment link`](/api/payment-links). Pure PDA derivation
 via `mpl-core`; no RPC required.
 
@@ -195,7 +195,7 @@ field without ever touching `mpl-core` yourself.
 
 The TypeScript SDK already has all of this — it's just `import
 { parsePrice, KNOWN_TOKENS, defaultFacilitatorFor } from
-'@leash/seller-kit'`. The HTTP surface exists for two reasons:
+'@leashmarket/seller-kit'`. The HTTP surface exists for two reasons:
 
 1. **Polyglot SDKs.** A Python or Go client can't `import`
    TypeScript. They get the same answers via REST and stay one
@@ -204,11 +204,11 @@ The TypeScript SDK already has all of this — it's just `import
    need a single source of truth for "supported currencies on this
    network" + "the facilitator we'll settle through". The endpoints
    make these dropdowns trivial without bundling the entire
-   `@leash/core` registry into the browser.
+   `@leashmarket/core` registry into the browser.
 
 ## See also
 
-- [`@leash/seller-kit`](/sdk/seller-kit) — the TypeScript surface
+- [`@leashmarket/seller-kit`](/sdk/seller-kit) — the TypeScript surface
   these endpoints mirror.
 - [Payment links](/api/payment-links) — uses `parsePrice` internally
   on every create / patch.

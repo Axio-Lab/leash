@@ -25,7 +25,7 @@
  */
 
 import type { NextRequest } from 'next/server';
-import { createEventSubscriber, type LiveEventMessage } from '@leash/api';
+import { createEventSubscriber, type LiveEventMessage } from '@leashmarket/api';
 import { isNetwork, networkToSlug, type Network } from '@/lib/network';
 
 // Subscribers + heartbeats need Node primitives; Edge runtime is out.

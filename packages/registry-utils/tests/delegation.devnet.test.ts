@@ -6,7 +6,7 @@
  *   LEASH_TEST_PAYER_SECRET_KEY='<base58-or-json-array-secret>' \
  *   LEASH_TEST_AGENT_ASSET='<core-asset-pubkey>'                \
  *   LEASH_TEST_USDC_MINT='4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU' \
- *   pnpm --filter @leash/registry-utils test:devnet
+ *   pnpm --filter @leashmarket/registry-utils test:devnet
  *
  * Pre-conditions on-chain:
  *

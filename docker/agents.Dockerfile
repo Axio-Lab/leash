@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# `@leash/agents` — agents.leash.market (Next.js, `output: 'standalone'`).
+# `@leashmarket/agents` — agents.leash.market (Next.js, `output: 'standalone'`).
 #
 # Build context MUST be the monorepo root. On Railway:
 #   Root Directory   = `/`
@@ -62,8 +62,8 @@ ENV NEXT_PUBLIC_PRIVY_APP_ID=$NEXT_PUBLIC_PRIVY_APP_ID \
     NEXT_PUBLIC_SOLANA_NETWORK=$NEXT_PUBLIC_SOLANA_NETWORK \
     NEXT_PUBLIC_EXPLORER_URL=$NEXT_PUBLIC_EXPLORER_URL
 
-RUN pnpm install --frozen-lockfile --filter "@leash/agents..."
-RUN pnpm turbo run build --filter=@leash/agents
+RUN pnpm install --frozen-lockfile --filter "@leashmarket/agents..."
+RUN pnpm turbo run build --filter=@leashmarket/agents
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app

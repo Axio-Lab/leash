@@ -1,5 +1,5 @@
 {
-  "name": "@leash/runner",
+  "name": "@leashmarket/runner",
   "version": "0.1.0",
   "private": false,
   "type": "module",
@@ -16,9 +16,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@leash/buyer-kit": "workspace:*",
-    "@leash/core": "workspace:*",
-    "@leash/schemas": "workspace:*",
+    "@leashmarket/buyer-kit": "workspace:*",
+    "@leashmarket/core": "workspace:*",
+    "@leashmarket/schemas": "workspace:*",
     "hono": "^4.6.14",
     "@hono/node-server": "^1.13.7"
   },

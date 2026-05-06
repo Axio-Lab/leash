@@ -15,15 +15,15 @@ can buy, get paid, and prove every transfer happened.
 Leash gives an agent the same identity, treasury, and reputation no
 matter where it runs. Pick the surface that matches your host:
 
-| Surface                           | Lives at                                                 | What it's for                                                                                                                |
-| --------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **Standalone MCP server**         | `npx -y @leash/mcp` or `leash-mcp`                       | Drop into Cursor / Claude Desktop / Cline / Continue / ChatGPT-MCP. STDIO transport, 14 tools. ([Agents → MCP](/agents/mcp)) |
-| **Human CLI** — `leash`           | `npm install -g @leash/cli`                              | Mint, inspect, and operate agents from the terminal. Same `agent.json` as the MCP. ([Agents → CLI](/agents/cli))             |
-| **TypeScript SDK** — `@leash/sdk` | npm                                                      | Typed `LeashClient` for app developers. Discover services, vet reputation, manage webhooks. ([Agents → SDK](/agents/sdk))    |
-| **Agent platform**                | [`agent.leash.market`](https://agent.leash.market)       | Hosted chat product. Mint an agent and run it from the browser; share the same on-chain identity with MCP/CLI.               |
-| **MCP marketplace**               | [`leash.market`](https://leash.market)                   | Open registry of paid services. Discoverable from agents via `leash_discover` / `leash discover` / `leash.discover()`.       |
-| **API** — REST + OpenAPI          | [`api.leash.market`](https://api.leash.market)           | Polyglot HTTP surface. Prepare/submit Solana txs, ingest receipts, monetise APIs. Spec at `/openapi.json`.                   |
-| **Explorer** — protocol UI        | [`explorer.leash.market`](https://explorer.leash.market) | Solscan-style search across agents, transactions, receipts, and events. Dual-network.                                        |
+| Surface                                 | Lives at                                                 | What it's for                                                                                                                                                                                                                                                                                                 |
+| --------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Standalone MCP server**               | `npx -y @leashmarket/mcp` or `leash-mcp`                 | Drop into Cursor / Claude Desktop / Cline / Continue / ChatGPT-MCP. STDIO transport, 14 tools. ([Agents → MCP](/agents/mcp))                                                                                                                                                                                  |
+| **Human CLI** — `leash`                 | `npm install -g @leashmarket/cli`                        | Mint, inspect, and operate agents from the terminal. Same `agent.json` as the MCP. ([Agents → CLI](/agents/cli))                                                                                                                                                                                              |
+| **TypeScript SDK** — `@leashmarket/sdk` | npm                                                      | Typed `LeashClient` for app developers. Discover services, vet reputation, manage webhooks. ([Agents → SDK](/agents/sdk))                                                                                                                                                                                     |
+| **Agent platform**                      | [`agent.leash.market`](https://agent.leash.market)       | Hosted chat product. Mint an agent and run it from the browser; share the same on-chain identity with MCP/CLI.                                                                                                                                                                                                |
+| **MCP marketplace**                     | [`leash.market`](https://leash.market)                   | Open registry of paid services. Discoverable from agents via `leash_discover` / `leash discover` / `leash.discover()`. Discovery also surfaces the [Solana Foundation `pay-skills`](https://github.com/solana-foundation/pay-skills) registry alongside Leash listings, tagged via a per-item `source` field. |
+| **API** — REST + OpenAPI                | [`api.leash.market`](https://api.leash.market)           | Polyglot HTTP surface. Prepare/submit Solana txs, ingest receipts, monetise APIs. Spec at `/openapi.json`.                                                                                                                                                                                                    |
+| **Explorer** — protocol UI              | [`explorer.leash.market`](https://explorer.leash.market) | Solscan-style search across agents, transactions, receipts, and events. Dual-network.                                                                                                                                                                                                                         |
 
 Pick whichever fits the layer you're building. They all read and write
 the same on-chain state, the same receipt schema, and the same event
@@ -31,7 +31,7 @@ model.
 
 ## Open-source SDK
 
-- **Packages** — `@leash/schemas`, `@leash/core`, `@leash/registry-utils`, `@leash/seller-kit`, `@leash/buyer-kit`, `@leash/runner`, `@leash/testing`
+- **Packages** — `@leashmarket/schemas`, `@leashmarket/core`, `@leashmarket/registry-utils`, `@leashmarket/seller-kit`, `@leashmarket/buyer-kit`, `@leashmarket/runner`, `@leashmarket/testing`
 - **Apps** — `web` (playground), `docs` (this site), `seller-demo`, `buyer-demo`, `merged-demo`, `agent-token-demo`
 - **Scripts** — `fund-devnet`, `upload-registration` (fetch + validate `RegistrationV1` from a URL), `e2e-demo`, `gen-schema-docs`
 

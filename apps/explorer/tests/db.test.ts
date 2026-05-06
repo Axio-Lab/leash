@@ -3,7 +3,7 @@
  *
  * The explorer is an internal infra tool — it talks straight to the
  * libsql database the API and indexer write to. These tests stub the
- * `@leash/api` storage helpers and verify our wrapper:
+ * `@leashmarket/api` storage helpers and verify our wrapper:
  *   - maps `Network` ('devnet'|'mainnet') to the canonical SVM slug
  *   - reshapes camelCase storage rows into the snake_case wire types
  *     the explorer's pages already render
@@ -31,7 +31,7 @@ const {
   runMigrationsMock: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@leash/api', () => ({
+vi.mock('@leashmarket/api', () => ({
   listEvents: listEventsMock,
   getEventById: getEventByIdMock,
   listEventsForSignature: listEventsForSignatureMock,

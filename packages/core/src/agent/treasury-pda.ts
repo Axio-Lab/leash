@@ -3,7 +3,7 @@
  * treasury's SPL token ATA for a given mint. These mirror what `mpl-core`'s
  * `findAssetSignerPda` does (seeds = `["mpl-core-execute", asset]`, program =
  * `CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d`) but using `@solana/kit`
- * primitives so consumers (e.g. `@leash/buyer-kit`) can derive the source
+ * primitives so consumers (e.g. `@leashmarket/buyer-kit`) can derive the source
  * token account without dragging in the Umi runtime.
  *
  * Used by `createBuyer` to surface precise pre-flight failure reasons

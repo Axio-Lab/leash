@@ -28,7 +28,7 @@ function restoreEnv(snap: Record<string, string | undefined>): void {
   }
 }
 
-describe('@leash/mcp server', () => {
+describe('@leashmarket/mcp server', () => {
   let envSnap: Record<string, string | undefined>;
 
   beforeEach(() => {
@@ -66,6 +66,7 @@ describe('@leash/mcp server', () => {
       'leash_get_receipt',
       'leash_get_spend_limit',
       'leash_pay_payment_link',
+      'leash_pay_skills_endpoints',
       'leash_receipts',
       'leash_register_agent',
       'leash_reputation',

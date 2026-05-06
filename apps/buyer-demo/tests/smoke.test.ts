@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createBuyer } from '@leash/buyer-kit';
-import type { ClientSvmSigner, LeashFetch } from '@leash/core';
-import { ReceiptV1Schema, type RulesV1 } from '@leash/schemas';
+import { createBuyer } from '@leashmarket/buyer-kit';
+import type { ClientSvmSigner, LeashFetch } from '@leashmarket/core';
+import { ReceiptV1Schema, type RulesV1 } from '@leashmarket/schemas';
 
 const RULES: RulesV1 = {
   v: '0.1',
@@ -19,7 +19,7 @@ const STUB_SIGNER = {} as ClientSvmSigner;
  * integration suite (`packages/seller-kit/tests`) — here we stub `cfg.fetch`
  * so we never touch the wallet, RPC, or facilitator.
  */
-describe('buyer-demo / @leash/buyer-kit', () => {
+describe('buyer-demo / @leashmarket/buyer-kit', () => {
   beforeEach(() => {
     /* nothing — we inject `fetch` per test */
   });

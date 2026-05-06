@@ -88,7 +88,7 @@ export function mountOpenApi(
       title: 'Leash API',
       version: LEASH_API_VERSION,
       description:
-        'Public Leash API. Mirrors @leash/registry-utils over HTTP using a prepare/send split. ' +
+        'Public Leash API. Mirrors @leashmarket/registry-utils over HTTP using a prepare/send split. ' +
         'Network is selected by API key prefix (`lsh_test_*` => devnet, `lsh_live_*` => mainnet).',
     },
     tags: [
@@ -120,14 +120,14 @@ export function mountOpenApi(
         name: 'seller-utils',
         description:
           'Read-only seller-kit helpers (`networks`, `facilitator`, `parse-price`, `pay-to`). ' +
-          'Mirrors the `@leash/seller-kit` exports for polyglot SDKs and UI dropdowns.',
+          'Mirrors the `@leashmarket/seller-kit` exports for polyglot SDKs and UI dropdowns.',
       },
       {
         name: 'buyer',
         description:
           'Buyer-kit endpoints — quote, policy gate, payment prepare/execute, ' +
           'receipt finalize/verify, and network/currency catalogs. Full HTTP ' +
-          'parity with `@leash/buyer-kit` for polyglot SDKs.',
+          'parity with `@leashmarket/buyer-kit` for polyglot SDKs.',
       },
       {
         name: 'admin',
@@ -168,7 +168,7 @@ export function mountOpenApi(
     description:
       'Triple-header on-chain auth: `X-Leash-Agent` (asset mint), `X-Leash-Timestamp` (ISO-8601), ' +
       '`X-Leash-Sig` (base58 ed25519 signature over `${method}\\n${path}\\n${ts}\\n${sha256(body)}\\n${mint}`). ' +
-      'Used by `@leash/sdk`, `@leash/cli`, and `@leash/mcp` so agents can hit /v1/agents/{mint}/* without an API key.',
+      'Used by `@leashmarket/sdk`, `@leashmarket/cli`, and `@leashmarket/mcp` so agents can hit /v1/agents/{mint}/* without an API key.',
   });
 
   if (config.docsEnabled) {

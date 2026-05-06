@@ -1,6 +1,6 @@
 import { createClient, type Client } from '@libsql/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { encryptSecret } from '@leash/platform-auth/encryption';
+import { encryptSecret } from '@leashmarket/platform-auth/encryption';
 
 import { executeTask } from '../src/executor.js';
 import { runOnce } from '../src/loop.js';

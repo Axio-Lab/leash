@@ -3,7 +3,7 @@
  *
  * Usage: pnpm exec tsx scripts/upload-registration.ts <https://…/registration.json>
  */
-import { resolveByoUri } from '@leash/registry-utils';
+import { resolveByoUri } from '@leashmarket/registry-utils';
 
 async function main(): Promise<void> {
   const uri = process.argv[2];

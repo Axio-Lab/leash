@@ -7,7 +7,7 @@
  *   SELLER_URL=http://localhost:3001 \\
  *   pnpm exec tsx scripts/e2e-demo.ts
  */
-import { createBuyer } from '@leash/buyer-kit';
+import { createBuyer } from '@leashmarket/buyer-kit';
 import { createKeyPairSignerFromBytes } from '@solana/kit';
 
 const seller = process.env.SELLER_URL ?? 'http://localhost:3001';

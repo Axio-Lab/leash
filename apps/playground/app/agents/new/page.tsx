@@ -19,8 +19,8 @@ import {
   provisionTreasuryAtas,
   type CreateAgentInput,
   type ProvisionTreasuryAtasResult,
-} from '@leash/registry-utils';
-import type { RulesV1 } from '@leash/schemas';
+} from '@leashmarket/registry-utils';
+import type { RulesV1 } from '@leashmarket/schemas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

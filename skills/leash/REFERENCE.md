@@ -3,22 +3,22 @@
 Read SKILL.md first. This file is the surface map you grep when the
 agent asks "which package / route / env var does X?".
 
-## SDK packages (`@leash/*`)
+## SDK packages (`@leashmarket/*`)
 
-| Package                 | Headline export                                                                                                                        | Use it for                                                                                           |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `@leash/core`           | `Policy.evaluate`, `hashReceipt`, `chainReceipt`                                                                                       | Pure policy + receipt primitives. No I/O. Used by buyer + seller + runner alike.                     |
-| `@leash/seller-kit`     | `createSeller(app, opts)`                                                                                                              | Mounts the real `@x402/hono` middleware on a Hono app. PayTo = treasury PDA.                         |
-| `@leash/buyer-kit`      | `createBuyer({ agent, signer, ... })`                                                                                                  | Returns a `fetch`-shaped function that runs policy + signs x402 transfers + finalises receipts.      |
-| `@leash/registry-utils` | `createAgent`, `prepareAgentMint`, `getSpendDelegation`, `prepareSetSpendDelegation`, `findAssetSignerPda`                             | Mint MIP-104 agents, derive treasury, manage delegations.                                            |
-| `@leash/runner`         | `leash-runner` CLI / `createRunner`                                                                                                    | HTTP service hosting JSONL receipt feed + payment-link endpoints + kill switch.                      |
-| `@leash/facilitator`    | `leash-facilitator` CLI                                                                                                                | Run your own x402 facilitator (devnet in v0.1).                                                      |
-| `@leash/schemas`        | `ReceiptV1Schema`, `RulesV1Schema`, etc.                                                                                               | Zod + JSON-Schema for every wire shape.                                                              |
-| `@leash/testing`        | `leash-conformance` CLI, in-memory facilitator                                                                                         | Conformance tests + offline fixtures.                                                                |
-| `@leash/sdk`            | `LeashClient` (`discover`, `reputation`, `receipts`, `getReceipt`, `transactionHistory`, `dailyTransactions`, payment-links, webhooks) | Typed wrapper over `api.leash.market`. Browser/Bun/Deno-friendly; agent-signed + legacy bearer auth. |
-| `@leash/mcp`            | `leash-mcp` STDIO MCP server, `mintAgentLocally`                                                                                       | Drop the 14-tool Leash MCP into Cursor / Claude / Cline / etc. Settles in-process.                   |
-| `@leash/cli`            | `leash` terminal CLI                                                                                                                   | Human-driven wrapper over the same `LeashHost`. `--json` for scripting.                              |
-| `@leash/mcp-core`       | `LeashHost`, `LEASH_TOOLS`, `defineTool`                                                                                               | Host-agnostic core every Leash MCP surface implements. Author new tools here.                        |
+| Package                       | Headline export                                                                                                                        | Use it for                                                                                           |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `@leashmarket/core`           | `Policy.evaluate`, `hashReceipt`, `chainReceipt`                                                                                       | Pure policy + receipt primitives. No I/O. Used by buyer + seller + runner alike.                     |
+| `@leashmarket/seller-kit`     | `createSeller(app, opts)`                                                                                                              | Mounts the real `@x402/hono` middleware on a Hono app. PayTo = treasury PDA.                         |
+| `@leashmarket/buyer-kit`      | `createBuyer({ agent, signer, ... })`                                                                                                  | Returns a `fetch`-shaped function that runs policy + signs x402 transfers + finalises receipts.      |
+| `@leashmarket/registry-utils` | `createAgent`, `prepareAgentMint`, `getSpendDelegation`, `prepareSetSpendDelegation`, `findAssetSignerPda`                             | Mint MIP-104 agents, derive treasury, manage delegations.                                            |
+| `@leashmarket/runner`         | `leash-runner` CLI / `createRunner`                                                                                                    | HTTP service hosting JSONL receipt feed + payment-link endpoints + kill switch.                      |
+| `@leashmarket/facilitator`    | `leash-facilitator` CLI                                                                                                                | Run your own x402 facilitator (devnet in v0.1).                                                      |
+| `@leashmarket/schemas`        | `ReceiptV1Schema`, `RulesV1Schema`, etc.                                                                                               | Zod + JSON-Schema for every wire shape.                                                              |
+| `@leashmarket/testing`        | `leash-conformance` CLI, in-memory facilitator                                                                                         | Conformance tests + offline fixtures.                                                                |
+| `@leashmarket/sdk`            | `LeashClient` (`discover`, `reputation`, `receipts`, `getReceipt`, `transactionHistory`, `dailyTransactions`, payment-links, webhooks) | Typed wrapper over `api.leash.market`. Browser/Bun/Deno-friendly; agent-signed + legacy bearer auth. |
+| `@leashmarket/mcp`            | `leash-mcp` STDIO MCP server, `mintAgentLocally`                                                                                       | Drop the 14-tool Leash MCP into Cursor / Claude / Cline / etc. Settles in-process.                   |
+| `@leashmarket/cli`            | `leash` terminal CLI                                                                                                                   | Human-driven wrapper over the same `LeashHost`. `--json` for scripting.                              |
+| `@leashmarket/mcp-core`       | `LeashHost`, `LEASH_TOOLS`, `defineTool`                                                                                               | Host-agnostic core every Leash MCP surface implements. Author new tools here.                        |
 
 ## HTTPS API — `https://api.leash.market`
 
@@ -30,7 +30,7 @@ devnet, `lsh_live_*` → mainnet).
 
 - `GET /v1/health` — also returns a `protocol_fee` block:
   `{ bps, pct, authorities: { 'solana-mainnet', 'solana-devnet' } }`.
-  Mirrors the same block on `@leash/facilitator` `/health`.
+  Mirrors the same block on `@leashmarket/facilitator` `/health`.
 - `GET /v1/version`
 - `GET /openapi.json`
 
@@ -77,13 +77,13 @@ Submit:
 - `POST /v1/payment-links/preview` → shows the 402 a buyer would see.
 - Public path `/x/{id}?network=solana-devnet` — what you share with buyers; returns 402 + `payment-required` for unpaid GETs, 200 once settled.
 
-### Seller utilities (HTTP parity with `@leash/seller-kit` helpers)
+### Seller utilities (HTTP parity with `@leashmarket/seller-kit` helpers)
 
 - `GET  /v1/seller/networks` — supported network slugs + facilitator URLs + accepted currencies.
 - `GET  /v1/seller/facilitator` — currently configured facilitator for a given network.
 - `POST /v1/seller/parse-price` — turn `"$0.001"` into `{ amount, currency, asset }`.
 
-### Buyer utilities (HTTP parity with `@leash/buyer-kit`)
+### Buyer utilities (HTTP parity with `@leashmarket/buyer-kit`)
 
 - `POST /v1/buyer/quote` — probe a URL, return the 402's `accepts[]` decoded.
 - `POST /v1/buyer/policy/evaluate` — run `RulesV1` against a quote without signing.
@@ -117,7 +117,7 @@ The MCP / CLI / SDK all expose helpers built on the receipts feed:
 | MCP     | `leash_transaction_history`                                                   | Receipts in the last N days (default 7) with USD totals (`total_sent_usd`, `total_received_usd`, `net_usd`). |
 | MCP     | `leash_daily_transactions`                                                    | Per-day buckets `[{ date, sent_usd, received_usd, net_usd, sent_count, received_count }]`.                   |
 | CLI     | `leash receipt <hash>` / `leash history` / `leash daily`                      | Plain-text or `--json` versions of the same.                                                                 |
-| SDK     | `getReceipt(hash)` / `transactionHistory({...})` / `dailyTransactions({...})` | Typed responses (see `@leash/sdk` types).                                                                    |
+| SDK     | `getReceipt(hash)` / `transactionHistory({...})` / `dailyTransactions({...})` | Typed responses (see `@leashmarket/sdk` types).                                                              |
 
 Stables (USDC / USDG / USDT) are summed as USD 1:1 in the aggregate
 helpers. Receipts in non-stable currencies are still counted but
@@ -172,7 +172,7 @@ currency, asset, receipt_hash, tx_sig? }`.
 | Var                                   | Owner       | What it controls                                                                                                                                    |
 | ------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `LEASH_API_URL`                       | SDK         | Default `https://api.leash.market`. Override for self-host.                                                                                         |
-| `LEASH_API_KEY`                       | SDK         | Used by `@leash/seller-kit` `onReceipt` default to forward receipts to the API.                                                                     |
+| `LEASH_API_KEY`                       | SDK         | Used by `@leashmarket/seller-kit` `onReceipt` default to forward receipts to the API.                                                               |
 | `LEASH_API_FACILITATOR_URL`           | API server  | Override the facilitator URL the hosted paywall uses (default: `devnet-facilitator.leash.market` on devnet, `facilitator.leash.market` on mainnet). |
 | `LEASH_API_ADMIN_SECRET`              | API server  | Bearer secret for `/v1/admin/*` routes.                                                                                                             |
 | `LEASH_API_REDIS_URL`                 | API server  | Required for rate limits, idempotency, SSE Pub/Sub. Defaults to in-memory.                                                                          |
@@ -222,7 +222,7 @@ Frequent codes:
 
 - **"Why is `price` null on my spend receipt?"** The seller didn't echo
   `paymentRequirements` in the `PAYMENT-RESPONSE` header. Update
-  `@leash/seller-kit` and re-run; the buyer-kit will populate
+  `@leashmarket/seller-kit` and re-run; the buyer-kit will populate
   `receipt.price` from the echoed requirements.
 - **"My withdraw signed but didn't show on the explorer."** Run the
   withdraw via `apps/api/scripts/withdraw.ts` (or `POST /v1/agents/{mint}/treasury/withdraw/prepare` → sign → `POST /v1/submit`), not a raw RPC call. **`POST /v1/submit` is what writes the event row and watchlists the agent**; the indexer only tracks activity for watchlisted agents.
@@ -234,7 +234,7 @@ Frequent codes:
   1% Leash protocol fee — the buyer signs `gross = amount + fee`, not
   `amount`. Re-approve via `/v1/agents/{mint}/delegation/prepare` with
   `pad_for_protocol_fee: true`, or compute the gross-up yourself via
-  `applyFeeGrossUp` from `@leash/core`. Same fix applies to "treasury
+  `applyFeeGrossUp` from `@leashmarket/core`. Same fix applies to "treasury
   balance is short by ~1%".
 - **"Where do my fees go?"** A single Leash-owned wallet on both
   clusters: `3DdcJkvjW7KLtMeko3Zr57jEJWhqRHuPsEBFm1XJYh7W`. Confirm via

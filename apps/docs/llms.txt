@@ -21,9 +21,9 @@
 
 ## Agents (drop Leash into your AI host)
 
-- [Standalone MCP server](https://docs.leash.market/agents/mcp.md): `npx -y @leash/mcp` — Cursor / Claude Desktop / Cline / Continue / ChatGPT-MCP wiring, 14 canonical tools (`leash_register_agent`, `leash_pay_payment_link`, `leash_set_spend_limit`, `leash_get_receipt`, `leash_transaction_history`, `leash_daily_transactions`, `leash_discover`, …), STDIO transport.
-- [Human CLI — `leash`](https://docs.leash.market/agents/cli.md): `npm install -g @leash/cli` — terminal-driven agent ops sharing the same `agent.json` as the MCP.
-- [TypeScript SDK — `@leash/sdk`](https://docs.leash.market/agents/sdk.md): Typed `LeashClient` for app developers. Browser/Bun/Deno/Node friendly; X-Leash-Sig auth for agent-scoped endpoints.
+- [Standalone MCP server](https://docs.leash.market/agents/mcp.md): `npx -y @leashmarket/mcp` — Cursor / Claude Desktop / Cline / Continue / ChatGPT-MCP wiring, 14 canonical tools (`leash_register_agent`, `leash_pay_payment_link`, `leash_set_spend_limit`, `leash_get_receipt`, `leash_transaction_history`, `leash_daily_transactions`, `leash_discover`, …), STDIO transport.
+- [Human CLI — `leash`](https://docs.leash.market/agents/cli.md): `npm install -g @leashmarket/cli` — terminal-driven agent ops sharing the same `agent.json` as the MCP.
+- [TypeScript SDK — `@leashmarket/sdk`](https://docs.leash.market/agents/sdk.md): Typed `LeashClient` for app developers. Browser/Bun/Deno/Node friendly; X-Leash-Sig auth for agent-scoped endpoints.
 
 ## Concepts (read first)
 
@@ -36,7 +36,7 @@
 
 ## Guides (do this)
 
-- [Create an agent](https://docs.leash.market/guides/create-an-agent.md): Mint a Core asset and register an `AgentIdentity` in one transaction with `@leash/registry-utils`.
+- [Create an agent](https://docs.leash.market/guides/create-an-agent.md): Mint a Core asset and register an `AgentIdentity` in one transaction with `@leashmarket/registry-utils`.
 - [Bring your own keypair](https://docs.leash.market/guides/bring-your-own-keypair.md): Mint and run an agent without Privy — local keypair, server env var, or generated operator key.
 - [Fund an agent](https://docs.leash.market/guides/fund-an-agent.md): Approve a spend allowance from your agent treasury so the executive can pay x402 calls on its behalf.
 - [Create a payment link](https://docs.leash.market/guides/create-an-endpoint.md): No-code x402 paywalls. Pick an agent, declare a price + response, share a URL.
@@ -46,7 +46,7 @@
 - [Withdraw treasury funds](https://docs.leash.market/guides/withdraw-funds.md): Owner-driven withdraw of stablecoins + native SOL via MPL Core Execute.
 - [Launch an agent token](https://docs.leash.market/guides/launch-agent-token.md): Bonding-curve token via Metaplex Genesis. Creator fees route to the treasury PDA automatically.
 - [Pause an agent](https://docs.leash.market/guides/pause-an-agent.md): Env breaker plus on-chain `AppData` mirror.
-- [Run a Leash facilitator](https://docs.leash.market/guides/run-a-facilitator.md): Use `facilitator.leash.market` (mainnet) / `devnet-facilitator.leash.market` (devnet), or self-host `@leash/facilitator`.
+- [Run a Leash facilitator](https://docs.leash.market/guides/run-a-facilitator.md): Use `facilitator.leash.market` (mainnet) / `devnet-facilitator.leash.market` (devnet), or self-host `@leashmarket/facilitator`.
 
 ## API — `api.leash.market`
 
@@ -56,8 +56,8 @@
 - [Agents](https://docs.leash.market/api/agents.md): Mint, read, and manage Leash agents over HTTP — the same flow the SDK exposes, callable from any language.
 - [Monetise an existing API](https://docs.leash.market/api/monetize-api.md): Charge per call on a SaaS endpoint you already host, without rewriting it.
 - [Payment links](https://docs.leash.market/api/payment-links.md): Create hosted x402 payment links served at `/x/{id}` — the "Stripe Payment Link" of x402.
-- [Seller utilities](https://docs.leash.market/api/seller-utils.md): HTTP parity for the `@leash/seller-kit` helpers — networks, facilitator, parse-price, pay-to.
-- [Buyer endpoints](https://docs.leash.market/api/buyer.md): HTTP parity for `@leash/buyer-kit` — quote, policy gate, payment prepare/execute, receipt finalize/verify.
+- [Seller utilities](https://docs.leash.market/api/seller-utils.md): HTTP parity for the `@leashmarket/seller-kit` helpers — networks, facilitator, parse-price, pay-to.
+- [Buyer endpoints](https://docs.leash.market/api/buyer.md): HTTP parity for `@leashmarket/buyer-kit` — quote, policy gate, payment prepare/execute, receipt finalize/verify.
 - [Protocol fee](https://docs.leash.market/api/protocol-fee.md): The 1% Leash protocol fee on every settlement — wire shape (`extra['leash.fee']`), math, allowance gross-up, and how to enforce or relax it on a self-hosted facilitator.
 - [Treasury](https://docs.leash.market/api/treasury.md): Read SOL + SPL balances, provision stable ATAs, prepare owner-driven withdrawals.
 - [Receipts](https://docs.leash.market/api/receipts.md): Push receipts in, pull receipts out, register pull targets the indexer will poll.
@@ -77,12 +77,12 @@
 
 ## SDK reference
 
-- [`@leash/core`](https://docs.leash.market/sdk/core.md): Policy evaluation, receipt hashing, x402 client adapter, treasury, kill-switch.
-- [`@leash/seller-kit`](https://docs.leash.market/sdk/seller-kit.md): Hono integration. Asset Signer PDA payTo. Real x402 middleware on Solana.
-- [`@leash/buyer-kit`](https://docs.leash.market/sdk/buyer-kit.md): Scriptable buyer agents. `createBuyer` + real x402 fetch + chained `ReceiptV1`.
-- [`@leash/registry-utils`](https://docs.leash.market/sdk/registry-utils.md): Registration URI resolution, leash-block helpers, Metaplex agent flows.
-- [`@leash/runner`](https://docs.leash.market/sdk/runner.md): HTTP service that hosts JSONL receipt feeds, payment-link endpoints, and the kill switch.
-- [`@leash/testing`](https://docs.leash.market/sdk/testing.md): Fixtures, in-memory facilitator, and the `leash-conformance` CLI.
+- [`@leashmarket/core`](https://docs.leash.market/sdk/core.md): Policy evaluation, receipt hashing, x402 client adapter, treasury, kill-switch.
+- [`@leashmarket/seller-kit`](https://docs.leash.market/sdk/seller-kit.md): Hono integration. Asset Signer PDA payTo. Real x402 middleware on Solana.
+- [`@leashmarket/buyer-kit`](https://docs.leash.market/sdk/buyer-kit.md): Scriptable buyer agents. `createBuyer` + real x402 fetch + chained `ReceiptV1`.
+- [`@leashmarket/registry-utils`](https://docs.leash.market/sdk/registry-utils.md): Registration URI resolution, leash-block helpers, Metaplex agent flows.
+- [`@leashmarket/runner`](https://docs.leash.market/sdk/runner.md): HTTP service that hosts JSONL receipt feeds, payment-link endpoints, and the kill switch.
+- [`@leashmarket/testing`](https://docs.leash.market/sdk/testing.md): Fixtures, in-memory facilitator, and the `leash-conformance` CLI.
 
 ## Schemas (canonical JSON shapes)
 

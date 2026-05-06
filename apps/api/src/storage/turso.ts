@@ -458,7 +458,7 @@ const SCHEMA_SQL: readonly string[] = [
   // `encrypted_credential` is the channel's secret material:
   //   - Telegram BYO bot token (small string).
   //   - WhatsApp Baileys auth state (JSON-serialized, can be larger).
-  // Both sealed with the same `@leash/platform-auth` AES-GCM envelope
+  // Both sealed with the same `@leashmarket/platform-auth` AES-GCM envelope
   // we use for `agents.encrypted_llm_key`.
   //
   // `signing_mode` controls how chat-initiated signing tools resolve:

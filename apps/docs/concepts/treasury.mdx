@@ -7,7 +7,7 @@ The Asset Signer PDA derived from the MPL Core asset is the agent treasury. It h
 
 - **Receiving** any SPL stable (USDC, USDT, USDG) requires no signature —
   standard SPL transfers land in the PDA's per-mint ATA. Use
-  `provisionTreasuryAtas` from `@leash/registry-utils` once after mint to
+  `provisionTreasuryAtas` from `@leashmarket/registry-utils` once after mint to
   ensure faucets and wallets find an ATA for every supported stable.
 - **Spending** requires the asset owner (or a delegated executive) to sign an
   `Execute` instruction routed through MPL Core. For x402 calls the
@@ -25,10 +25,10 @@ The Asset Signer PDA derived from the MPL Core asset is the agent treasury. It h
   via [`Launch an agent token`](/guides/launch-agent-token)) accrue
   directly to this PDA as **native SOL**. Drain them with
   `withdrawTreasurySol` / `withdrawTreasurySolAll` from
-  `@leash/registry-utils` (or one click in the playground's withdraw
+  `@leashmarket/registry-utils` (or one click in the playground's withdraw
   card — pick `SOL (native)` from the currency dropdown).
 
-`@leash/core` exposes `deriveAgentTreasuryAddress`,
+`@leashmarket/core` exposes `deriveAgentTreasuryAddress`,
 `deriveAgentTreasuryAta({ asset, mint })`, `listSplBalances`, and
 `getTreasuryBalance`; v0.1 demos use these to render the treasury readout
 without a wallet.

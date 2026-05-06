@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { finalizeReceipt } from '@leash/core';
+import { finalizeReceipt } from '@leashmarket/core';
 import { appendLine, createMemoryStore, listLines } from '../src/storage/memory.js';
 import { createHttpServer } from '../src/http/server.js';
 

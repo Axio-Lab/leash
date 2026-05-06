@@ -1,5 +1,5 @@
 {
-  "name": "@leash/testing",
+  "name": "@leashmarket/testing",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -22,8 +22,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@leash/core": "workspace:*",
-    "@leash/schemas": "workspace:*",
+    "@leashmarket/core": "workspace:*",
+    "@leashmarket/schemas": "workspace:*",
     "hono": "^4.6.14"
   },
   "devDependencies": {

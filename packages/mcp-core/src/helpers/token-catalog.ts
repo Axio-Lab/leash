@@ -2,7 +2,7 @@
  * Static catalogue of the SPL stablecoins Leash treasuries
  * understand. Mirrors `apps/agents/lib/agents/leash-mcp.ts` so the
  * shared withdraw tool can resolve `mint`, `decimals`, and `program`
- * without taking a hard import dep on `@leash/core/tokens` (which
+ * without taking a hard import dep on `@leashmarket/core/tokens` (which
  * pulls in the full mpl-toolbox graph and is heavier than what an
  * MCP STDIO server should bundle).
  *

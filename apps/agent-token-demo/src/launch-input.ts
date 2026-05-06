@@ -5,7 +5,7 @@
  * RPC connection at module load time).
  */
 
-import type { LaunchAgentTokenInput, SvmNetwork } from '@leash/registry-utils';
+import type { LaunchAgentTokenInput, SvmNetwork } from '@leashmarket/registry-utils';
 
 export type DemoEnv = Record<string, string | undefined>;
 

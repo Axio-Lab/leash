@@ -3,7 +3,7 @@ title: Build a buyer
 description: Script an agent that pays an x402 endpoint with real SPL stables (USDC, USDT, USDG) on Solana.
 ---
 
-`@leash/buyer-kit` is the smallest possible "scriptable buyer". You give
+`@leashmarket/buyer-kit` is the smallest possible "scriptable buyer". You give
 it a Core asset mint (the agent), a `RulesV1` policy, and a `@solana/kit`
 signer. It returns a `fetch` that:
 
@@ -12,7 +12,7 @@ signer. It returns a `fetch` that:
 3. Emits a chained `ReceiptV1`.
 
 ```ts
-import { createBuyer } from '@leash/buyer-kit';
+import { createBuyer } from '@leashmarket/buyer-kit';
 import { createKeyPairSignerFromBytes } from '@solana/kit';
 import fs from 'node:fs';
 

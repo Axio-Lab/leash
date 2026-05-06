@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createBuyer } from '@leash/buyer-kit';
+import { createBuyer } from '@leashmarket/buyer-kit';
 import { createKeyPairSignerFromBytes } from '@solana/kit';
-import type { RulesV1 } from '@leash/schemas';
+import type { RulesV1 } from '@leashmarket/schemas';
 
 /**
  * Live integration test against a real devnet x402 round-trip.
@@ -10,7 +10,7 @@ import type { RulesV1 } from '@leash/schemas';
  *
  *   1. Generate a devnet keypair and fund it with devnet SOL + USDC.
  *      See `apps/buyer-demo/README.md` for the faucet links.
- *   2. Stand up a seller (e.g. `pnpm --filter @leash/seller-demo start`)
+ *   2. Stand up a seller (e.g. `pnpm --filter @leashmarket/seller-demo start`)
  *      pointed at a real Core asset mint.
  *   3. Run with the env vars wired:
  *
@@ -18,7 +18,7 @@ import type { RulesV1 } from '@leash/schemas';
  *      LEASH_BUYER_SECRET_KEY="$(cat ~/.config/solana/leash-buyer.json)" \
  *      LEASH_INTEGRATION_SELLER_URL=http://localhost:3001/tag \
  *      LEASH_INTEGRATION_AGENT=<Core asset mint> \
- *      pnpm --filter @leash/buyer-demo test
+ *      pnpm --filter @leashmarket/buyer-demo test
  */
 const enabled = process.env.LEASH_INTEGRATION === '1';
 const sellerUrl = process.env.LEASH_INTEGRATION_SELLER_URL;

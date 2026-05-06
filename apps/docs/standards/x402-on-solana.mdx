@@ -9,8 +9,8 @@ stablecoins on Solana (registry-backed **USDC**, **USDT**, **USDG**) using the
 **facilitator**. This page documents the wire format,
 the headers, and how to swap facilitators. If you only want to fire a
 buyer or stand up a seller, see the SDK pages for
-[`@leash/buyer-kit`](/sdk/buyer-kit) and
-[`@leash/seller-kit`](/sdk/seller-kit).
+[`@leashmarket/buyer-kit`](/sdk/buyer-kit) and
+[`@leashmarket/seller-kit`](/sdk/seller-kit).
 
 ## The cast
 
@@ -18,7 +18,7 @@ buyer or stand up a seller, see the SDK pages for
 | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------- | --------------------------------------------- |
 | **Executive** (Privy wallet, Node keypair, TEE)                                                                        | The SPL transfer (as **delegate** of the buyer agent treasury) | —                                | Pays the buyer-side fee on the transfer       |
 | **Buyer agent** (Core asset)                                                                                           | Nothing — passive owner                                        | Asset Signer PDA → SPL token ATA | —                                             |
-| **Seller** (`@leash/seller-kit` middleware)                                                                            | Nothing                                                        | Asset Signer PDA (`payTo`)       | —                                             |
+| **Seller** (`@leashmarket/seller-kit` middleware)                                                                      | Nothing                                                        | Asset Signer PDA (`payTo`)       | —                                             |
 | **Facilitator** (`devnet-facilitator.leash.market` devnet, `facilitator.leash.market` mainnet, or any compatible host) | Nothing                                                        | —                                | Pays the **network fee** to broadcast `payTo` |
 
 Both parties address themselves via Core Asset Signer PDAs. Funds land in
@@ -36,12 +36,12 @@ facilitator wraps for you.
 
 Leash sidesteps this with a one-time delegation:
 
-1. Owner runs `setSpendDelegation` (`@leash/registry-utils`). It wraps an
+1. Owner runs `setSpendDelegation` (`@leashmarket/registry-utils`). It wraps an
    SPL `Approve` in `mpl-core::Execute`, signed by the owner; the program
    debits the asset signer PDA via CPI and authorises the executive as the
    ATA's SPL **delegate** for up to `delegated_amount` units.
 2. Buyer-kit, when constructed with `sourceTokenAccount`, registers
-   `LeashDelegateExactSvmScheme` (`@leash/core`) instead of
+   `LeashDelegateExactSvmScheme` (`@leashmarket/core`) instead of
    `ExactSvmScheme`. The on-chain transfer is still a vanilla
    `TransferChecked` — only the `source` field switches from "executive's
    ATA" to "agent treasury's ATA", and `authority` is the executive
@@ -95,7 +95,7 @@ payment link or `createSeller` route config). Each row carries the same atomic
 
 ### Buyer mint choice
 
-`@leash/buyer-kit` maps `preferredCurrency` (`'USDC' | 'USDT' | 'USDG'`)
+`@leashmarket/buyer-kit` maps `preferredCurrency` (`'USDC' | 'USDT' | 'USDG'`)
 to a concrete mint address for the buyer's configured cluster, then passes
 it to the x402 client selector as `preferredAsset`. The selector finds the
 matching `accepts[i]` entry by mint and pays that one.
@@ -111,7 +111,7 @@ buyer's mint — so a failed USDG attempt stamps `currency: "USDG"` and
 `asset: 4F6PM96…` on the receipt, not the seller's primary (often USDC).
 
 Validate the seller's `accepts[]` before firing via `fetchPaymentLinkMeta`
-(`@leash/core`) or the discovery JSON at the link URL.
+(`@leashmarket/core`) or the discovery JSON at the link URL.
 
 Notes:
 
@@ -127,7 +127,7 @@ Notes:
 ### `PAYMENT-SIGNATURE` (client → server, retry)
 
 The buyer's partially-signed transaction + a copy of the `accepted`
-requirement (the middleware does a deep equality check). `@leash/core`
+requirement (the middleware does a deep equality check). `@leashmarket/core`
 builds and signs this automatically via `LeashDelegateExactSvmScheme`
 (agent treasury / delegate flow) or `LeashExactSvmScheme` (executive's
 own wallet). Both are wire-compatible with the `exact` scheme — the
@@ -150,13 +150,13 @@ Any HTTPS x402 facilitator works. The Leash defaults:
 | `solana-devnet`  | `https://devnet-facilitator.leash.market` | Leash-operated devnet, gas-sponsored, Token-2022 supported. |
 | `solana-mainnet` | `https://facilitator.leash.market`        | Leash-operated mainnet, gas-sponsored.                      |
 
-Third-party alternatives (all wire-compatible): `devnet-facilitator.leash.market` (devnet), `facilitator.leash.market` (mainnet), community hosts, self-hosted `@leash/facilitator`.
+Third-party alternatives (all wire-compatible): `devnet-facilitator.leash.market` (devnet), `facilitator.leash.market` (mainnet), community hosts, self-hosted `@leashmarket/facilitator`.
 
 Override per-process by setting `LEASH_FACILITATOR_URL`, or per-seller via
 `facilitator: '…'`:
 
 ```ts
-import { createSvmResourceServer } from '@leash/seller-kit/x402';
+import { createSvmResourceServer } from '@leashmarket/seller-kit/x402';
 
 const server = createSvmResourceServer({
   networks: ['solana-mainnet'],

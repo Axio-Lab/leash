@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { createTestRig } from './helpers.js';
-import { decryptSecret } from '@leash/platform-auth/encryption';
+import { decryptSecret } from '@leashmarket/platform-auth/encryption';
 
 const ADMIN_SECRET = 'a'.repeat(48);
 const ENC_KEY = 'a'.repeat(64); // 32-byte hex

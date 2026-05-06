@@ -1,5 +1,5 @@
 ---
-title: '@leash/runner'
+title: '@leashmarket/runner'
 description: HTTP service that hosts JSONL receipt feeds, payment-link endpoints, and the kill switch.
 ---
 
@@ -64,7 +64,7 @@ empty string to disable. Lines are either an `EndpointV1` (upsert) or
 `{"$delete": "<id>"}` (remove).
 
 ```ts
-import { createHttpServer, createMemoryStore, createEndpointStore } from '@leash/runner';
+import { createHttpServer, createMemoryStore, createEndpointStore } from '@leashmarket/runner';
 
 const app = createHttpServer(createMemoryStore(), {
   endpoints: createEndpointStore({ persistPath: '/var/lib/leash/endpoints.jsonl' }),
@@ -78,7 +78,7 @@ raw `fetch` (and don't misspell paths). It validates against
 `EndpointV1Schema` / `ReceiptV1Schema` on the way out.
 
 ```ts
-import { createRunnerClient } from '@leash/runner';
+import { createRunnerClient } from '@leashmarket/runner';
 
 const runner = createRunnerClient({ url: 'http://localhost:4040' });
 

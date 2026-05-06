@@ -9,7 +9,7 @@ Every snippet here is the smallest thing that actually works. Pair with
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { keypairIdentity } from '@metaplex-foundation/umi';
 import { mplCore } from '@metaplex-foundation/mpl-core';
-import { createAgent } from '@leash/registry-utils';
+import { createAgent } from '@leashmarket/registry-utils';
 
 const umi = createUmi('https://api.devnet.solana.com').use(mplCore());
 umi.use(keypairIdentity(/* ownerKeypair: Keypair */));
@@ -57,27 +57,44 @@ curl -sS "https://api.leash.market/v1/events/<event_id>" \
 ## 2. Provision a treasury ATA + delegate spend (SDK)
 
 ```ts
-import { findAssetSignerPda, prepareSetSpendDelegation } from '@leash/registry-utils';
+import { findAssetSignerPda, prepareSetSpendDelegation } from '@leashmarket/registry-utils';
+import { tokenProgramForMint, TOKEN_2022_PROGRAM_ID } from '@leashmarket/core';
 
 const [treasury] = findAssetSignerPda(umi, { asset: agentAsset });
-// USDC on devnet
-const usdcMint = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
 
-// Approve up to 10 USDC for the executive keypair to spend.
-const tx = await prepareSetSpendDelegation(umi, {
+// USDC (legacy SPL Token) on devnet.
+const usdcMint = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+const usdcTx = await prepareSetSpendDelegation(umi, {
   agentAsset,
   mint: usdcMint,
   delegate: executivePubkey,
-  amount: 10_000_000n, // atomic units (USDC has 6 decimals)
+  amount: 10_000_000n, // 10 USDC, 6 decimals
 });
-await tx.sendAndConfirm(umi);
+await usdcTx.sendAndConfirm(umi);
+
+// USDG (SPL Token-2022) on devnet — pass the token program explicitly so the
+// helper writes the Approve under the right program and the buyer-kit's
+// pre-flight (which uses `tokenProgramForMint` internally) finds the matching
+// ATA. Without this you'd silently approve a legacy-program ATA that doesn't
+// exist and the next pay would fail with `ata_missing`.
+const usdgMint = '4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7';
+const usdgProgram =
+  tokenProgramForMint(usdgMint) === 'spl-token-2022' ? TOKEN_2022_PROGRAM_ID : undefined;
+const usdgTx = await prepareSetSpendDelegation(umi, {
+  agentAsset,
+  mint: usdgMint,
+  delegate: executivePubkey,
+  amount: 10_000_000n, // 10 USDG, 6 decimals
+  ...(usdgProgram ? { tokenProgram: usdgProgram } : {}),
+});
+await usdgTx.sendAndConfirm(umi);
 ```
 
 ## 3. Build a paying buyer (SDK)
 
 ```ts
-import { createBuyer } from '@leash/buyer-kit';
-import { getSpendDelegation } from '@leash/registry-utils';
+import { createBuyer } from '@leashmarket/buyer-kit';
+import { getSpendDelegation } from '@leashmarket/registry-utils';
 import { createKeyPairSignerFromBytes } from '@solana/kit';
 
 const signer = await createKeyPairSignerFromBytes(executiveSecretBytes);
@@ -132,7 +149,7 @@ For a SaaS endpoint you already host, set `response.proxy: { url: 'https://your-
 import { Hono } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
-import { createSeller } from '@leash/seller-kit';
+import { createSeller } from '@leashmarket/seller-kit';
 
 const umi = createUmi(process.env.SOLANA_RPC_URL!).use(mplCore());
 const app = new Hono();
@@ -184,7 +201,7 @@ solana airdrop 1 -k .leash-fee-payer.json --url https://api.devnet.solana.com
 
 # 2. Boot
 export LEASH_FACILITATOR_SECRET_KEY="$(cat .leash-fee-payer.json)"
-pnpm --filter @leash/facilitator-app dev
+pnpm --filter @leashmarket/facilitator-app dev
 # → listens on http://127.0.0.1:8787
 
 # 3. Point an SDK / API integration at it
@@ -195,7 +212,7 @@ Smoke-test it end-to-end:
 
 ```bash
 LEASH_FACILITATOR_URL=http://localhost:8787 \
-  pnpm --filter @leash/api facilitator:smoke
+  pnpm --filter @leashmarket/api facilitator:smoke
 ```
 
 ## 8. Subscribe to lifecycle events with a webhook
@@ -214,13 +231,46 @@ curl -sS https://api.leash.market/v1/webhooks \
 ## 9. Verify a receipt offline (SDK)
 
 ```ts
-import { ReceiptV1Schema } from '@leash/schemas';
-import { hashReceipt, chainReceipt } from '@leash/core';
+import { ReceiptV1Schema } from '@leashmarket/schemas';
+import { hashReceipt, chainReceipt } from '@leashmarket/core';
 
 const parsed = ReceiptV1Schema.parse(receiptJson);
 const recomputed = hashReceipt(parsed); // strips receipt_hash, recomputes
 if (recomputed !== parsed.receipt_hash) throw new Error('tampered');
 const linksToPrev = chainReceipt(parsed, prevReceipt); // bool
+```
+
+## 10. Discover and pay an external API (pay-skills)
+
+The `/v1/discover` feed merges Leash marketplace listings with the Solana
+Foundation [`pay-skills`](https://github.com/solana-foundation/pay-skills)
+registry. Each row carries `source: "leash" | "pay-skills"`. For pay-skills
+items, `slug` is the provider FQN (e.g. `agentmail/email`); use it to expand
+the provider into its individual paid endpoints.
+
+```ts
+import { LeashClient } from '@leashmarket/sdk';
+
+const leash = new LeashClient({ baseUrl: 'https://api.leash.market' });
+
+// 1. Search by capability — public, no auth.
+const search = await leash.discover({ capability: 'email', source: 'pay-skills', limit: 5 });
+
+// 2. Pick a provider and expand it.
+const item = search.items[0]!; // source === 'pay-skills'
+const provider = await leash.paySkillsProvider(item.slug);
+
+// 3. Pick the right endpoint and pay it with @leashmarket/buyer-kit (omitted).
+const ep = provider.endpoints.find((e) => e.probe_status === 'ok' && e.protocol?.includes('x402'));
+console.log(`${ep!.method} ${ep!.url} — accepts ${(ep!.supported_usd ?? []).join(', ')}`);
+```
+
+CLI equivalent:
+
+```bash
+leash discover -q email --source pay-skills --limit 5
+leash discover endpoints agentmail/email
+leash pay https://x402.api.agentmail.to/v0/inboxes
 ```
 
 ## Pointer back to canonical docs

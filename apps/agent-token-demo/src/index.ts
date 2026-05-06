@@ -25,15 +25,15 @@
  *
  * Run:
  *
- *   pnpm --filter @leash/agent-token-demo build
+ *   pnpm --filter @leashmarket/agent-token-demo build
  *   LEASH_OWNER_SECRET_KEY=... LEASH_AGENT_ASSET=... LEASH_TOKEN_IMAGE=... \
- *   pnpm --filter @leash/agent-token-demo start
+ *   pnpm --filter @leashmarket/agent-token-demo start
  */
 
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { keypairIdentity, publicKey } from '@metaplex-foundation/umi';
 import { mplCore } from '@metaplex-foundation/mpl-core';
-import { launchAgentToken, getAgentToken } from '@leash/registry-utils';
+import { launchAgentToken, getAgentToken } from '@leashmarket/registry-utils';
 import { buildLaunchInput, explorerCluster, readDemoConfig } from './launch-input.js';
 
 async function main() {

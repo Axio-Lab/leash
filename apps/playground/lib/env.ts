@@ -3,7 +3,7 @@
  * sees variables prefixed with `NEXT_PUBLIC_*`.
  */
 
-import { FALLBACK_FACILITATOR_URL, networkFromRpc } from '@leash/core';
+import { FALLBACK_FACILITATOR_URL, networkFromRpc } from '@leashmarket/core';
 
 /**
  * x402 facilitator base URL (no trailing slash). Used by `createBuyer` /

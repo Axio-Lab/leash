@@ -1,11 +1,11 @@
-# `@leash/facilitator-app`
+# `@leashmarket/facilitator-app`
 
-Thin runner around [`@leash/facilitator`](../../packages/facilitator) for
+Thin runner around [`@leashmarket/facilitator`](../../packages/facilitator) for
 operating `https://facilitator.leash.market`. The Hono server speaks the
 [x402 facilitator HTTP protocol](https://github.com/x402-foundation/x402)
 (`/verify`, `/settle`, `/supported`, plus a `/health` extra) and is
 wire-compatible with `HTTPFacilitatorClient` from `@x402/core`, so any
-`@leash/buyer-kit` / `@leash/seller-kit` deployment can point at it
+`@leashmarket/buyer-kit` / `@leashmarket/seller-kit` deployment can point at it
 with zero code changes.
 
 ## v0.1 scope
@@ -15,7 +15,7 @@ with zero code changes.
   the fee-payer with real SOL.
 - **Single fee payer.** The signer's pubkey is the SOL-paying account
   for every settlement; load-balancing across multiple payers will
-  arrive once we wire up multi-key support in `@leash/facilitator`.
+  arrive once we wire up multi-key support in `@leashmarket/facilitator`.
 - **No auth, no rate limits.** Front it with a Cloudflare Worker if
   you publish the URL.
 
@@ -35,26 +35,26 @@ solana airdrop 1 -k .leash-fee-payer.json --url https://api.devnet.solana.com
 
 # 3. Boot the server
 export LEASH_FACILITATOR_SECRET_KEY="$(cat .leash-fee-payer.json)"
-pnpm --filter @leash/facilitator-app dev
+pnpm --filter @leashmarket/facilitator-app dev
 ```
 
 > Smoke-test the local facilitator with a real on-chain settle:
 >
 > ```bash
 > # Once-only: fund a buyer treasury + delegation (re-uses .env.e2e).
-> pnpm --filter @leash/api e2e:devnet
+> pnpm --filter @leashmarket/api e2e:devnet
 >
 > # Then any time:
 > LEASH_FACILITATOR_URL=http://localhost:8787 \
->   pnpm --filter @leash/api facilitator:smoke
+>   pnpm --filter @leashmarket/api facilitator:smoke
 > ```
 >
 > The smoke script spins up a one-route seller-kit Hono server in-
-> process and pays it through `@leash/buyer-kit`, asserting a real
+> process and pays it through `@leashmarket/buyer-kit`, asserting a real
 > devnet `tx_sig` lands and the receipt's `facilitator` field stamps
 > the local URL. Pair it with the API path
 > (`LEASH_API_FACILITATOR_URL=http://localhost:8787 pnpm --filter
-@leash/api e2e:devnet`) for a full-stack proof.
+@leashmarket/api e2e:devnet`) for a full-stack proof.
 
 You should see:
 
@@ -75,9 +75,9 @@ of these against your local instance:
 
 ```bash
 export LEASH_FACILITATOR_URL=http://localhost:8787
-pnpm --filter @leash/buyer-demo start
-pnpm --filter @leash/seller-demo start
-pnpm --filter @leash/merged-demo start
+pnpm --filter @leashmarket/buyer-demo start
+pnpm --filter @leashmarket/seller-demo start
+pnpm --filter @leashmarket/merged-demo start
 ```
 
 To use the production endpoint (devnet only for v0.1):
@@ -91,8 +91,8 @@ export LEASH_FACILITATOR_URL=https://facilitator.leash.market
 Build the package and run the published binary directly:
 
 ```bash
-pnpm --filter @leash/facilitator build
-pnpm --filter @leash/facilitator-app start
+pnpm --filter @leashmarket/facilitator build
+pnpm --filter @leashmarket/facilitator-app start
 ```
 
 See [`apps/docs/guides/run-a-facilitator.mdx`](../docs/guides/run-a-facilitator.mdx)

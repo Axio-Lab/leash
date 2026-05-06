@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { RegistrationV1Schema } from '@leash/schemas';
+import { RegistrationV1Schema } from '@leashmarket/schemas';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';

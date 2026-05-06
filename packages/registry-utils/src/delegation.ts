@@ -37,7 +37,7 @@
  *   - The serialisation of `Approve` / `Revoke` is the SPL Token
  *     program's classic-token discriminators (4 = Approve, 5 = Revoke);
  *     we ship them as raw bytes so we don't depend on web3.js inside
- *     `@leash/registry-utils`.
+ *     `@leashmarket/registry-utils`.
  */
 
 import { execute } from '@metaplex-foundation/mpl-core';
@@ -89,7 +89,7 @@ export const KNOWN_STABLES: Record<
       // Token-2022 program. Using the classic SPL Token program here
       // makes `createIdempotentAssociatedToken` fail with
       // `IncorrectProgramId` during simulation. Keep this in sync with
-      // `KNOWN_TOKENS` in `@leash/core/tokens`.
+      // `KNOWN_TOKENS` in `@leashmarket/core/tokens`.
       symbol: 'USDG',
       mint: publicKey('2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH'),
       tokenProgram: TOKEN_2022_PROGRAM_ID,

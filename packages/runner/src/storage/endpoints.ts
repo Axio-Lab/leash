@@ -2,7 +2,7 @@
  * In-memory endpoint store with optional append-only JSONL persistence.
  *
  * Endpoints are payment-link descriptors (see `EndpointV1` in
- * `@leash/schemas`). The runner stores them so that any caller can resolve
+ * `@leashmarket/schemas`). The runner stores them so that any caller can resolve
  * `https://<host>/x/<id>` from anywhere — not just the device that
  * created the link.
  *
@@ -17,7 +17,7 @@
 
 import { mkdirSync, appendFileSync, readFileSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { EndpointV1Schema, type EndpointV1 } from '@leash/schemas';
+import { EndpointV1Schema, type EndpointV1 } from '@leashmarket/schemas';
 
 export type EndpointStore = {
   /** All endpoints currently known to the runner. */

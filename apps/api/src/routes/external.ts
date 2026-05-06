@@ -19,7 +19,7 @@
  */
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { decryptSecret, encryptSecret } from '@leash/platform-auth/encryption';
+import { decryptSecret, encryptSecret } from '@leashmarket/platform-auth/encryption';
 
 import { adminAuth } from '../auth/admin.js';
 import type { LeashApiConfig } from '../config.js';
@@ -746,7 +746,7 @@ export function buildExternalRoutes(deps: ExternalRoutesDeps): OpenAPIHono {
       if (existing.channel === 'telegram' && existing.encryptedCredential) {
         try {
           const encKey = getEncryptionKey(deps.config);
-          const { decryptSecret } = await import('@leash/platform-auth/encryption');
+          const { decryptSecret } = await import('@leashmarket/platform-auth/encryption');
           const token = decryptSecret(existing.encryptedCredential, encKey);
           await fetch(`https://api.telegram.org/bot${token}/deleteWebhook`).catch(() => {});
         } catch {
@@ -1017,7 +1017,7 @@ export function buildExternalPublicRoutes(deps: ExternalRoutesDeps): OpenAPIHono
   //   - Record an audit row.
   //
   // The actual "run agent + reply" logic lives in phase 3 once
-  // @leash/agent-runtime is extracted.
+  // @leashmarket/agent-runtime is extracted.
   app.openapi(
     createRoute({
       method: 'post',

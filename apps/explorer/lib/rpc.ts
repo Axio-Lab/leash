@@ -3,7 +3,7 @@
  *
  * The agent page renders identity + treasury balances, both of which
  * are pure RPC reads. We skip the API entirely and call the same
- * `@leash/api` snapshot helpers in-process — same logic, same shape,
+ * `@leashmarket/api` snapshot helpers in-process — same logic, same shape,
  * one fewer hop.
  *
  * Configure with:
@@ -21,7 +21,7 @@ import {
   getAgentTreasuryBalances,
   umiReadOnly,
   type SvmNetwork,
-} from '@leash/api';
+} from '@leashmarket/api';
 import type { Umi } from '@metaplex-foundation/umi';
 
 import type { Network } from './network';

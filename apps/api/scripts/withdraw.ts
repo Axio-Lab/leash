@@ -27,7 +27,7 @@
  *
  * Usage
  * -----
- *   pnpm --filter @leash/api withdraw
+ *   pnpm --filter @leashmarket/api withdraw
  * or:
  *   cd apps/api && node \
  *     --env-file-if-exists=.env --env-file-if-exists=.env.e2e \
@@ -53,7 +53,7 @@ import {
   fetchToken,
 } from '@metaplex-foundation/mpl-toolbox';
 
-import { getTreasuryBalance, TOKEN_2022_PROGRAM_ID } from '@leash/registry-utils';
+import { getTreasuryBalance, TOKEN_2022_PROGRAM_ID } from '@leashmarket/registry-utils';
 
 import {
   signWireTransaction,
@@ -64,7 +64,7 @@ import {
 } from './lib/api-prepare-submit.js';
 
 // Devnet USDG (Global Dollar by Paxos) — Token-2022 mint, 6 decimals.
-// Mirrors `KNOWN_TOKENS` in `@leash/core/tokens` so this script keeps
+// Mirrors `KNOWN_TOKENS` in `@leashmarket/core/tokens` so this script keeps
 // working even if the API isn't reachable for token metadata lookups.
 const DEVNET_USDG_MINT = '4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7';
 const USDG_DECIMALS = 6;

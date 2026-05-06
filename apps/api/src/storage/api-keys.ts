@@ -14,7 +14,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { address } from '@solana/kit';
 import { ulid } from 'ulid';
-import { decryptSecret, encryptSecret } from '@leash/platform-auth/encryption';
+import { decryptSecret, encryptSecret } from '@leashmarket/platform-auth/encryption';
 
 import type { DbClient } from './turso.js';
 import { execute } from './turso.js';

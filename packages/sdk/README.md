@@ -1,4 +1,4 @@
-# @leash/sdk
+# @leashmarket/sdk
 
 Typed TypeScript client for the public Leash API. Use it from any
 JavaScript runtime — browsers, Bun, Deno, Node, edge — to:
@@ -12,7 +12,7 @@ JavaScript runtime — browsers, Bun, Deno, Node, edge — to:
 
 > Provisioning agents (generating keypairs, minting MPL Core assets,
 > setting USDC delegation) is **not** in the SDK — use
-> [`@leash/mcp`](../mcp/README.md) (`mintAgentLocally()`) or the
+> [`@leashmarket/mcp`](../mcp/README.md) (`mintAgentLocally()`) or the
 > `leash agent create` CLI for that. The SDK is for "remote control"
 > of agents that already exist; the MCP is the engine that creates
 > them.
@@ -20,15 +20,15 @@ JavaScript runtime — browsers, Bun, Deno, Node, edge — to:
 ## Install
 
 ```bash
-pnpm add @leash/sdk
+pnpm add @leashmarket/sdk
 # or
-npm install @leash/sdk
+npm install @leashmarket/sdk
 ```
 
 ## Quickstart
 
 ```ts
-import { LeashClient } from '@leash/sdk';
+import { LeashClient } from '@leashmarket/sdk';
 
 const leash = new LeashClient({ baseUrl: 'https://api.leash.market' });
 
@@ -42,7 +42,7 @@ const rep = await leash.reputation({
 if (rep.rating < 0.5) throw new Error('seller has too low a rating');
 
 // 3. Record a client-minted agent — public, no auth (idempotent on
-//    `mint`). Mint + delegate the asset locally with `@leash/mcp`'s
+//    `mint`). Mint + delegate the asset locally with `@leashmarket/mcp`'s
 //    `mintAgentLocally` first, then hand the result here.
 const recorded = await leash.recordAgent({
   mint: 'BcN4ToBs8jE3dbYNhYqDJqGnKPjH3zRX8gsDUDH72JQp',
@@ -61,7 +61,7 @@ keypair. Pass the keypair and mint to the constructor; the SDK
 stamps a fresh signature per request.
 
 ```ts
-import { LeashClient } from '@leash/sdk';
+import { LeashClient } from '@leashmarket/sdk';
 
 const leash = new LeashClient({
   agentMint: 'AjfeyP...',
@@ -98,7 +98,7 @@ weight = min(1, log10(settled_calls + 1) / 3)
 Network / non-2xx responses throw `LeashError`:
 
 ```ts
-import { LeashError } from '@leash/sdk';
+import { LeashError } from '@leashmarket/sdk';
 
 try {
   await leash.discover();
@@ -119,7 +119,7 @@ caught by integration tests.
 ## Develop
 
 ```bash
-pnpm --filter @leash/sdk typecheck
-pnpm --filter @leash/sdk test
-pnpm --filter @leash/sdk build
+pnpm --filter @leashmarket/sdk typecheck
+pnpm --filter @leashmarket/sdk test
+pnpm --filter @leashmarket/sdk build
 ```

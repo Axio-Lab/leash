@@ -7,7 +7,7 @@ import {
   parseLeashHeaders,
 } from '../src/x402/headers.js';
 import { buildWebhookPayload, parseWebhookPayload } from '../src/x402/webhook.js';
-import type { ReceiptV1 } from '@leash/schemas';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 
 const RECEIPT: ReceiptV1 = {
   v: '0.1',

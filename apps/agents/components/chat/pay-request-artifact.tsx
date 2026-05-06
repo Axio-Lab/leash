@@ -23,7 +23,7 @@ import { toast } from 'sonner';
 import useSWR from 'swr';
 import { usePrivy } from '@privy-io/react-auth';
 import { Check, Loader2 } from 'lucide-react';
-import { createBuyer } from '@leash/buyer-kit';
+import { createBuyer } from '@leashmarket/buyer-kit';
 import {
   deriveAgentTreasuryAta,
   KNOWN_STABLE_SYMBOLS,
@@ -32,8 +32,8 @@ import {
   tokenProgramForMint,
   type LeashX402Network,
   type KnownStableSymbol,
-} from '@leash/core';
-import type { RulesV1 } from '@leash/schemas';
+} from '@leashmarket/core';
+import type { RulesV1 } from '@leashmarket/schemas';
 
 import { Button } from '@/components/ui/button';
 import { txUrl, receiptUrl, shortHash } from '@/lib/explorer';

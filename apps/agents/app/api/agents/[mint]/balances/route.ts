@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { deriveAgentTreasuryAddress, listSplBalances } from '@leash/core';
+import { deriveAgentTreasuryAddress, listSplBalances } from '@leashmarket/core';
 
 import { SOLANA_RPC, SOLANA_NETWORK } from '@/lib/env';
 import { requirePrivySession } from '@/lib/privy-server';

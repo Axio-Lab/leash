@@ -10,7 +10,7 @@
  *     `Execute` instruction during withdraws and the SPL `Approve`
  *     during delegate rotation.
  *
- *   - `@solana/kit` `TransactionSigner` — used by `@leash/buyer-kit`
+ *   - `@solana/kit` `TransactionSigner` — used by `@leashmarket/buyer-kit`
  *     when paying x402 links (the underlying x402 SVM scheme is
  *     written against `@solana/kit`).
  *
@@ -36,7 +36,7 @@ import { mplCore } from '@metaplex-foundation/mpl-core';
 import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
 import { base58 } from '@metaplex-foundation/umi/serializers';
 
-import type { SvmNetwork } from '@leash/mcp-core';
+import type { SvmNetwork } from '@leashmarket/mcp-core';
 
 export type LeashSigner = {
   /** Base58 ed25519 public key. */

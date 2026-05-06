@@ -8,7 +8,7 @@ to "Stripe Payment Links" for x402 on Solana. You don't need to host a
 Hono server, manage facilitator wiring, or write any code; the runner
 stores your `EndpointV1` descriptors and the Next.js app exposes them at
 `https://<host>/x/<id>` as fully-functional x402 paywalls served by
-`@leash/seller-kit`.
+`@leashmarket/seller-kit`.
 
 ## Walkthrough
 
@@ -37,7 +37,7 @@ When someone pays a link, an x402 **facilitator** verifies the buyer’s signed 
 
 ### Built-in defaults by network
 
-**`@leash/facilitator`** is now the **default for both networks**:
+**`@leashmarket/facilitator`** is now the **default for both networks**:
 
 | Network (`solana-*`) | Default URL                               | Notes                                                                              |
 | -------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -58,7 +58,7 @@ Third-party examples: `devnet-facilitator.leash.market` (devnet), `facilitator.l
 - **Browser (`/buyer`)** — set `NEXT_PUBLIC_LEASH_FACILITATOR_URL` (inlined at build time).
 - **Server routes** (`/x/<id>`, `/api/seller/echo`) — also read `LEASH_FACILITATOR_URL`.
 
-Both are optional; if unset, the app uses the same defaults as the table above. Point both at `http://localhost:8787` when running [`@leash/facilitator-app`](/guides/run-a-facilitator) locally.
+Both are optional; if unset, the app uses the same defaults as the table above. Point both at `http://localhost:8787` when running [`@leashmarket/facilitator-app`](/guides/run-a-facilitator) locally.
 
 ### Hosted API (`api.leash.market`)
 
@@ -66,7 +66,7 @@ Payment links served at `https://api.leash.market/x/{id}` use whatever the API o
 
 ### Self-hosting or using a third-party facilitator (optional)
 
-The Leash defaults work for most users. If you need a custom settlement path — self-hosted [`@leash/facilitator`](/guides/run-a-facilitator), a community host, or a third-party provider like `devnet-facilitator.leash.market` / `facilitator.leash.market` — pass a `facilitator:` override or set the env var. The wire contract is the same across all of them. See [Run a Leash facilitator](/guides/run-a-facilitator).
+The Leash defaults work for most users. If you need a custom settlement path — self-hosted [`@leashmarket/facilitator`](/guides/run-a-facilitator), a community host, or a third-party provider like `devnet-facilitator.leash.market` / `facilitator.leash.market` — pass a `facilitator:` override or set the env var. The wire contract is the same across all of them. See [Run a Leash facilitator](/guides/run-a-facilitator).
 
 ### Related docs
 
@@ -128,11 +128,11 @@ HTTP error. The receipt feed under `/a/<agent>/receipts` is the canonical
 source of truth.
 
 Downstream agents that receive these payloads should validate them with
-`parseWebhookPayload` from `@leash/core` rather than parsing the JSON by
+`parseWebhookPayload` from `@leashmarket/core` rather than parsing the JSON by
 hand:
 
 ```ts
-import { parseWebhookPayload } from '@leash/core';
+import { parseWebhookPayload } from '@leashmarket/core';
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -142,7 +142,7 @@ export async function POST(req: Request) {
 ```
 
 **Per-call override:** buyers can add an `x-leash-callback: <url>`
-request header (`LEASH_CALLBACK_HEADER` from `@leash/core`) to fire one
+request header (`LEASH_CALLBACK_HEADER` from `@leashmarket/core`) to fire one
 of their own webhooks. This is on top of the seller's `webhook_url`
 (both will be called) — so the seller and buyer can each pipe the
 response into different downstream agents.
@@ -176,7 +176,7 @@ The shareable URL is a real x402 paywall:
 curl -i -X POST https://yourapp/x/<id> -d '{"hello":"leash"}'
 
 # Pay → 200 + your response template + a real Solana tx_sig
-# (use @leash/buyer-kit or the autonomous-agent cockpit)
+# (use @leashmarket/buyer-kit or the autonomous-agent cockpit)
 
 # Discovery (browser-friendly) — open the link directly in a browser to get
 # a JSON descriptor of the offer. Works for any endpoint method without
@@ -256,7 +256,7 @@ browser callers (CORS-safe).
 
 ## Why this is "real" x402
 
-`/x/[id]` mounts `@leash/seller-kit`'s `createSeller` with the
+`/x/[id]` mounts `@leashmarket/seller-kit`'s `createSeller` with the
 `EndpointV1` you registered. The middleware:
 
 - Returns `402 PAYMENT REQUIRED` plus a base64
@@ -270,5 +270,5 @@ browser callers (CORS-safe).
   `/a/<owner_agent>/receipts` — so the agent's profile feed updates in
   real time.
 
-Anyone with a `@leash/buyer-kit` client (or any `@x402/fetch` consumer)
+Anyone with a `@leashmarket/buyer-kit` client (or any `@x402/fetch` consumer)
 can pay it.

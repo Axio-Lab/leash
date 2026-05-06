@@ -44,6 +44,9 @@ const echoHost: LeashHost = {
   async reputation(args) {
     return jsonResult({ kind: 'echo:reputation', args });
   },
+  async paySkillsProvider(args) {
+    return jsonResult({ kind: 'echo:pay_skills_provider', args });
+  },
   async setSpendLimit(args) {
     return jsonResult({ kind: 'echo:set_spend_limit', args });
   },
@@ -72,6 +75,7 @@ describe('LEASH_TOOLS', () => {
       'leash_get_receipt',
       'leash_get_spend_limit',
       'leash_pay_payment_link',
+      'leash_pay_skills_endpoints',
       'leash_receipts',
       'leash_register_agent',
       'leash_reputation',

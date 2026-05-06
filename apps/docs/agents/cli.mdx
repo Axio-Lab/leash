@@ -3,7 +3,7 @@ title: 'Human CLI — leash'
 description: 'Operate your Leash agent from the terminal. Same identity as the MCP, no chat product required.'
 ---
 
-`@leash/cli` ships a `leash` binary for human operators. It wraps
+`@leashmarket/cli` ships a `leash` binary for human operators. It wraps
 the same `LeashHost` the standalone MCP exposes to AI agents, but
 skips the MCP wire protocol and renders results as plain text (or
 `--json` for piping into `jq` / scripts).
@@ -11,12 +11,12 @@ skips the MCP wire protocol and renders results as plain text (or
 ## Install
 
 ```bash
-npm install -g @leash/cli
+npm install -g @leashmarket/cli
 # or
-pnpm add -g @leash/cli
+pnpm add -g @leashmarket/cli
 ```
 
-Pair with `@leash/mcp` to expose the same identity to an AI agent.
+Pair with `@leashmarket/mcp` to expose the same identity to an AI agent.
 Both binaries read the same `~/.config/leash/agent.json`.
 
 ## Bring your own RPC (strongly recommended)
@@ -78,8 +78,19 @@ leash agent create
 # 4. Confirm identity.
 leash agent show
 
-# 5. Look at the marketplace.
+# 5. Look at the marketplace. Searches the Leash registry AND the Solana
+#    Foundation `pay-skills` catalogue (https://github.com/solana-foundation/pay-skills);
+#    each row is tagged [leash] or [pay.sh] in the output.
 leash discover -q ocr --max-price 0.10
+# leash discover -q email --source pay-skills    # scope to a single catalogue
+# Expand a chosen pay-skills provider into its individual paid endpoints
+# (mirrors `pay skills endpoints <fqn>`). Use the (fqn: ...) hint emitted
+# by `leash discover` for source=pay-skills rows.
+# leash discover endpoints agentmail/email
+
+# Smoke (from the monorepo root): pay-skills index + merged /v1/discover on :8801 and LEASH_API_URL from apps/agents/.env
+# pnpm verify:discover
+# pnpm verify:discover --rm-self   # optional: delete the script after green
 
 # 6. Vet a counterparty before paying.
 leash reputation AGENT_MINT_PUBKEY
@@ -88,11 +99,14 @@ leash reputation AGENT_MINT_PUBKEY
 leash pay https://example.com/x/abc123
 
 # 8. Inspect or change the SPL spend authority. By default the agent
-#    is minted with unlimited USDC delegation; tighten / revoke as needed.
+#    is minted with unlimited USDC delegation; tighten, revoke, or
+#    extend to USDT / USDG (each token has an independent cap).
 leash treasury limit --token USDC
 leash treasury set-limit --token USDC --amount 100   # cap at $100 USDC
 leash treasury set-limit --token USDC --revoke       # pause autonomous spending
 leash treasury set-limit --token USDC --unlimited    # restore default
+leash treasury set-limit --token USDG --unlimited    # also accept USDG (Token-2022)
+leash treasury set-limit --token USDT --amount 50    # cap at $50 USDT
 
 # 9. Inspect activity.
 leash receipts                                # latest receipts (newest first)
@@ -145,7 +159,12 @@ treasury commands:
                                      human units (e.g. --amount 100 = $100 USDC).
 
 marketplace + reputation:
-  discover [-q QUERY] [--max-price N] [--pricing-type T] [--limit N]
+  discover [-q QUERY] [--max-price N] [--pricing-type T] [--source leash|pay-skills|all] [--limit N]
+    Searches the Leash marketplace + Solana Foundation pay-skills registry (merged).
+  discover endpoints <fqn>
+    Expand a pay-skills provider into its paid endpoint URLs (mirrors
+    `pay skills endpoints <fqn>`). Take <fqn> from the (fqn: ...) hint
+    emitted by `leash discover`.
   reputation AGENT_MINT [--network solana-devnet|solana-mainnet]
 
 activity:

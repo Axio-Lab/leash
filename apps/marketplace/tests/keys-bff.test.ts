@@ -15,7 +15,7 @@ import {
   removePlatformKey,
   type LeashAdminClient,
   type LeashApiKeyRecord,
-} from '@leash/platform-auth';
+} from '@leashmarket/platform-auth';
 
 let db: Client;
 

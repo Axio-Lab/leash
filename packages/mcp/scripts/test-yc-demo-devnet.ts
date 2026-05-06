@@ -1,5 +1,5 @@
 /**
- * Real-devnet integration test for the standalone `@leash/mcp` server.
+ * Real-devnet integration test for the standalone `@leashmarket/mcp` server.
  *
  * What this proves end-to-end through the MCP wire protocol
  * --------------------------------------------------------
@@ -39,10 +39,10 @@
  *   LEASH_E2E_RPC        devnet RPC (default: api.devnet.solana.com)
  *
  * Bring the api up first:
- *   pnpm --filter @leash/api dev
+ *   pnpm --filter @leashmarket/api dev
  *
  * Then:
- *   pnpm --filter @leash/mcp test:yc-demo-devnet
+ *   pnpm --filter @leashmarket/mcp test:yc-demo-devnet
  */
 
 import { mkdtempSync, rmSync } from 'node:fs';

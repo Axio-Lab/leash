@@ -6,7 +6,7 @@ Operational scripts for the Leash API. Anything that pokes a _real_ network
 ## `e2e-devnet.ts`
 
 End-to-end smoke test that drives every payment-link / paywall / receipt
-endpoint exposed by `@leash/api` against a _real_ Leash API process and a
+endpoint exposed by `@leashmarket/api` against a _real_ Leash API process and a
 _real_ Solana devnet, and verifies the resulting state.
 
 What it covers (in order):
@@ -17,7 +17,7 @@ What it covers (in order):
 3. buyer utilities — `/v1/buyer/networks`, `/v1/buyer/currency`,
    `POST /v1/buyer/policy/evaluate`
 4. agent resolution — mints two MPL-Core agents (seller + buyer) with
-   `@leash/registry-utils` if `LEASH_E2E_SELLER_AGENT` /
+   `@leashmarket/registry-utils` if `LEASH_E2E_SELLER_AGENT` /
    `LEASH_E2E_BUYER_AGENT` aren't supplied
 5. `GET /v1/agents/{seller}/pay-to` — asserts the API derives the same Asset
    Signer PDA as the SDK
@@ -99,17 +99,17 @@ From the repo root:
 
 ```bash
 # 1. start the API in another terminal (devnet by default)
-pnpm --filter @leash/api dev
+pnpm --filter @leashmarket/api dev
 
 # 2. issue a devnet key once (see docs/api/auth.mdx); copy the value into .env.e2e
 
 # 3. run the e2e
 cp apps/api/.env.e2e.example apps/api/.env.e2e
 $EDITOR apps/api/.env.e2e
-pnpm --filter @leash/api e2e:devnet
+pnpm --filter @leashmarket/api e2e:devnet
 ```
 
-`pnpm --filter @leash/api e2e:devnet` is wired to:
+`pnpm --filter @leashmarket/api e2e:devnet` is wired to:
 
 ```bash
 node \
@@ -136,7 +136,7 @@ seller agent  : 9aGq…
 buyer  agent  : H8nP…
 ```
 
-Open the explorer (`pnpm --filter @leash/explorer dev`) at:
+Open the explorer (`pnpm --filter @leashmarket/explorer dev`) at:
 
 - `/payment-links/<link-id>` — counters + last paid signature
 - `/agents/<seller>` — earn receipts feed
@@ -206,7 +206,7 @@ configured the e2e suite have nothing extra to set up.
 ### Run it
 
 ```bash
-pnpm --filter @leash/api withdraw
+pnpm --filter @leashmarket/api withdraw
 ```
 
 ### When it fails
@@ -269,25 +269,25 @@ configured the e2e suite have nothing extra to set up.
 
 ```bash
 # default: deposit 100 USDG into the canonical demo agent
-pnpm --filter @leash/api fund
+pnpm --filter @leashmarket/api fund
 
 # deposit a different amount of USDC
-LEASH_FUND_SYMBOL=USDC LEASH_FUND_AMOUNT=0.25 pnpm --filter @leash/api fund
+LEASH_FUND_SYMBOL=USDC LEASH_FUND_AMOUNT=0.25 pnpm --filter @leashmarket/api fund
 
 # arbitrary mint
 LEASH_FUND_MINT=<mint> LEASH_FUND_TOKEN_PROGRAM=spl LEASH_FUND_DECIMALS=6 \
-  LEASH_FUND_AMOUNT=10 pnpm --filter @leash/api fund
+  LEASH_FUND_AMOUNT=10 pnpm --filter @leashmarket/api fund
 ```
 
-The indexer worker (`pnpm --filter @leash/api indexer:dev` in another
+The indexer worker (`pnpm --filter @leashmarket/api indexer:dev` in another
 terminal) MUST be running for step 5 to terminate — the API itself
 never observes deposits, only the indexer does.
 
 ### When it fails
 
-| Symptom                                                           | Likely cause                                                                                                                  |
-| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `owner … USDG balance (…) < required (…)`                         | Owner wallet has no funds. Top up via the printed faucet URL.                                                                 |
-| `indexer did not surface a fund event for signature … within 90s` | The indexer worker isn't running, or the public devnet RPC is rate-limiting it. Check `pnpm --filter @leash/api indexer:dev`. |
-| `expected a devnet key (lsh_test_*), got "lsh_live_…"`            | This script is devnet-only by design — fork it if you really need a mainnet variant.                                          |
-| `unknown symbol "FOO" — supported: USDG, USDC`                    | Either pick a known symbol or set `LEASH_FUND_MINT` + `LEASH_FUND_DECIMALS` + `LEASH_FUND_TOKEN_PROGRAM`.                     |
+| Symptom                                                           | Likely cause                                                                                                                        |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `owner … USDG balance (…) < required (…)`                         | Owner wallet has no funds. Top up via the printed faucet URL.                                                                       |
+| `indexer did not surface a fund event for signature … within 90s` | The indexer worker isn't running, or the public devnet RPC is rate-limiting it. Check `pnpm --filter @leashmarket/api indexer:dev`. |
+| `expected a devnet key (lsh_test_*), got "lsh_live_…"`            | This script is devnet-only by design — fork it if you really need a mainnet variant.                                                |
+| `unknown symbol "FOO" — supported: USDG, USDC`                    | Either pick a known symbol or set `LEASH_FUND_MINT` + `LEASH_FUND_DECIMALS` + `LEASH_FUND_TOKEN_PROGRAM`.                           |

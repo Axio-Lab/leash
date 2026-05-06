@@ -1,5 +1,5 @@
 /**
- * Local-dev entrypoint for `@leash/api`. Reads env from the working
+ * Local-dev entrypoint for `@leashmarket/api`. Reads env from the working
  * directory's `.env` (via `--env-file=.env` or `dotenv-cli`), runs DB
  * migrations, and serves on `LEASH_API_HOST:LEASH_API_PORT`.
  *

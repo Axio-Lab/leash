@@ -7,7 +7,7 @@
  * key — and shapes rows into the snake_case wire types the views
  * already consume.
  *
- * On first use we call `@leash/api`'s `runMigrations` against this
+ * On first use we call `@leashmarket/api`'s `runMigrations` against this
  * client (same CREATE TABLE IF NOT EXISTS as the API bootstrap), so a
  * brand-new `file:…` path gets an empty but valid schema instead of
  * "no such table: events".
@@ -37,7 +37,7 @@ import {
   type EventKind,
   type EventRow as ApiEventRow,
   type ReceiptRow as ApiReceiptRow,
-} from '@leash/api';
+} from '@leashmarket/api';
 
 import type { Network } from './network';
 import { networkToSlug } from './network';

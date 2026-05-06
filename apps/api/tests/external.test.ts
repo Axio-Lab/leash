@@ -9,14 +9,14 @@
  *   - Approval token lifecycle (mint → consume → idempotent re-consume).
  *   - Public approval read endpoint (no admin secret needed).
  *
- * Phase 3 will add dispatcher tests once @leash/agent-runtime is wired
+ * Phase 3 will add dispatcher tests once @leashmarket/agent-runtime is wired
  * up; until then the webhook returns `queued: true` for authorised
  * messages and `dropped: ...` otherwise.
  */
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { decryptSecret } from '@leash/platform-auth/encryption';
+import { decryptSecret } from '@leashmarket/platform-auth/encryption';
 
 import { createTestRig } from './helpers.js';
 

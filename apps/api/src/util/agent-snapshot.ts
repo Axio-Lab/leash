@@ -19,7 +19,7 @@ import {
   KNOWN_STABLES,
   type AgentTokenStatus,
   type TreasurySolBalance,
-} from '@leash/registry-utils';
+} from '@leashmarket/registry-utils';
 import {
   safeFetchAgentIdentityV1FromSeeds,
   safeFetchAgentIdentityV2FromSeeds,

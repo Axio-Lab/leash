@@ -3,7 +3,7 @@
 import * as React from 'react';
 import useSWR from 'swr';
 import { RefreshCw, Activity, Pause, Play, Hash } from 'lucide-react';
-import type { ReceiptV1 } from '@leash/schemas';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -45,7 +45,7 @@ export default function RunnerPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="@leash/runner"
+        eyebrow="@leashmarket/runner"
         title="Runner explorer"
         description="Live view of an agent's `receipts.jsonl` plus the runner's pause + kill-switch state."
         actions={

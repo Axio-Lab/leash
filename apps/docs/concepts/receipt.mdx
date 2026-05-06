@@ -11,13 +11,13 @@ Every gated call yields a `ReceiptV1`:
   - `deny` — policy gate denied the call before any payment was attempted. No fetch was made.
   - `rejected` — policy gate allowed the call but settlement failed (insufficient balance, facilitator/RPC error, 402 with no `PAYMENT-RESPONSE`, etc). `reason` carries the failure cause; `tx_sig` is `null`.
 - **`reason`** — human-readable explanation when `decision !== 'allow'` (e.g. `insufficient_balance`, `insufficient_allowance`, `preferred_asset_unavailable: …`, `transaction_simulation`, `replay`, `denyHost`, `Network error — …`).
-- **`price`** — when present, `amount` is the **atomic** integer string for the SPL mint in `asset` (use `@leash/core` format helpers); `currency` is the human ticker (USDC / USDT / USDG) for the settled or quoted mint.
+- **`price`** — when present, `amount` is the **atomic** integer string for the SPL mint in `asset` (use `@leashmarket/core` format helpers); `currency` is the human ticker (USDC / USDT / USDG) for the settled or quoted mint.
 - **`price.network`** — friendly Leash slug (`solana-devnet`, `solana-mainnet`, `solana-testnet`) — never the raw CAIP-2 chain id (`solana:<genesis>`).
 - **`nonce`** — gapless, per-agent, monotonically increasing from 0.
 - **`prev_receipt_hash`** — `null` at genesis, otherwise the previous receipt's hash.
 - **`receipt_hash`** — `sha256(canonicalJson(receipt without receipt_hash))`.
 
-Verify any feed with `@leash/core` `verifyReceiptChain` or the `leash-conformance` CLI shipped from `@leash/testing`.
+Verify any feed with `@leashmarket/core` `verifyReceiptChain` or the `leash-conformance` CLI shipped from `@leashmarket/testing`.
 
 ## Receipts by default
 
@@ -46,5 +46,5 @@ out-of-band coordination. Override with `receiptsUrl` on `createAgent`,
 the `LEASH_RECEIPTS_URL` env, or `LEASH_NO_RECEIPTS_URL=1` to disable.
 
 See [Receipts API](/api/receipts) for the API surface and
-[`@leash/buyer-kit`](/sdk/buyer-kit) / [`@leash/seller-kit`](/sdk/seller-kit)
+[`@leashmarket/buyer-kit`](/sdk/buyer-kit) / [`@leashmarket/seller-kit`](/sdk/seller-kit)
 for the kit-level options.

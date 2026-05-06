@@ -11,7 +11,7 @@
  * Defaults (as of April 2026):
  *
  *   - **Solana devnet** → `https://devnet-facilitator.leash.market`
- *     Leash-operated `@leash/facilitator` instance. Gas-sponsored, supports
+ *     Leash-operated `@leashmarket/facilitator` instance. Gas-sponsored, supports
  *     the `exact` SVM scheme (x402 v1 + v2), Token-2022, and the Leash
  *     1% protocol fee leg. The facilitator auto-provisions destination ATAs
  *     (seller payTo + fee vault) so first-time USDG/USDT settlements work

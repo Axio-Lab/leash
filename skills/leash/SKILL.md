@@ -6,7 +6,7 @@ description: >-
   user mentions Leash, leash.market, agent treasuries, x402, agent-to-agent
   payments, agent payment links, agent paywalls, MPL Core agents on Solana,
   monetise an API per call on Solana, or wants to build a buyer / seller /
-  merged agent. Covers the @leash/* SDK, the api.leash.market HTTPS surface,
+  merged agent. Covers the @leashmarket/* SDK, the api.leash.market HTTPS surface,
   the prepare → sign → submit lifecycle, hosted payment links at /x/{id},
   the explorer at explorer.leash.market, the local facilitator, and the
   fund / withdraw flows on the agent treasury PDA.
@@ -24,66 +24,67 @@ on the same identity** — one mint, two roles.
 
 ## Pick your surface
 
-| You want to…                                             | Reach for                                                           |
-| -------------------------------------------------------- | ------------------------------------------------------------------- |
-| Drive Leash from Python / Go / Rust / curl               | The HTTPS API at `api.leash.market` — see `REFERENCE.md`            |
-| Ship a TS app with no remote dependency                  | The `@leash/*` SDK packages — see `EXAMPLES.md`                     |
-| Charge per call on a SaaS endpoint you already host      | Hosted **payment links** (`POST /v1/payment-links`)                 |
-| Mount real x402 middleware on your own Hono app          | `@leash/seller-kit` `createSeller`                                  |
-| Script an agent that pays an x402 endpoint               | `@leash/buyer-kit` `createBuyer`                                    |
-| Mint a brand-new agent (asset + AgentIdentity) in one tx | `@leash/registry-utils` `createAgent`, or `POST /v1/agents/prepare` |
-| Inspect agents / receipts / events with a UI             | `https://explorer.leash.market`                                     |
-| Settle locally without depending on hosted infra         | `@leash/facilitator` (devnet) — see `REFERENCE.md`                  |
-| Drop Leash tools into a coding agent (Cursor / Claude)   | `@leash/mcp` STDIO MCP — see "Agent surfaces" below                 |
-| Run agent ops from the terminal                          | `leash` CLI in `@leash/cli` — see "Agent surfaces" below            |
+| You want to…                                             | Reach for                                                                 |
+| -------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Drive Leash from Python / Go / Rust / curl               | The HTTPS API at `api.leash.market` — see `REFERENCE.md`                  |
+| Ship a TS app with no remote dependency                  | The `@leashmarket/*` SDK packages — see `EXAMPLES.md`                     |
+| Charge per call on a SaaS endpoint you already host      | Hosted **payment links** (`POST /v1/payment-links`)                       |
+| Mount real x402 middleware on your own Hono app          | `@leashmarket/seller-kit` `createSeller`                                  |
+| Script an agent that pays an x402 endpoint               | `@leashmarket/buyer-kit` `createBuyer`                                    |
+| Mint a brand-new agent (asset + AgentIdentity) in one tx | `@leashmarket/registry-utils` `createAgent`, or `POST /v1/agents/prepare` |
+| Inspect agents / receipts / events with a UI             | `https://explorer.leash.market`                                           |
+| Settle locally without depending on hosted infra         | `@leashmarket/facilitator` (devnet) — see `REFERENCE.md`                  |
+| Drop Leash tools into a coding agent (Cursor / Claude)   | `@leashmarket/mcp` STDIO MCP — see "Agent surfaces" below                 |
+| Run agent ops from the terminal                          | `leash` CLI in `@leashmarket/cli` — see "Agent surfaces" below            |
 
 ## Agent surfaces — MCP / CLI / SDK
 
 Leash ships three first-class surfaces for autonomous agents. They all
-delegate to the same `LeashHost` contract in `@leash/mcp-core`, so the
+delegate to the same `LeashHost` contract in `@leashmarket/mcp-core`, so the
 behavior is identical across them; only the wire protocol differs.
 
-### `@leash/mcp` — 14-tool STDIO MCP server
+### `@leashmarket/mcp` — 14-tool STDIO MCP server
 
 Drop into Cursor, Claude Desktop, Cline, Continue, ChatGPT-MCP, or any
 host that speaks Model Context Protocol over STDIO. Settlement happens
 in-process — `leash_pay_payment_link` actually signs + submits with
 the local executive keypair and returns the on-chain receipt.
 
-| Tool name                      | What it does                                                                                    |
-| ------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `leash_register_agent`         | Two-step provisioning (generate / import executive → fund → mint + delegate + record).          |
-| `leash_get_identity`           | Self-introspection: agent mint, treasury PDA, executive pubkey, network.                        |
-| `leash_check_treasury_balance` | List SOL + SPL stable balances on the treasury PDA.                                             |
-| `leash_create_payment_link`    | Mint a hosted x402 paywall (`/v1/payment-links`).                                               |
-| `leash_pay_payment_link`       | Probe → policy-check → sign → settle → finalise receipt for an x402 URL.                        |
-| `leash_withdraw_treasury`      | Owner-driven SOL or stable withdrawal via `mpl-core::Execute`.                                  |
-| `leash_set_spend_limit`        | Update the SPL `Approve` delegation (unlimited / amount / revoke).                              |
-| `leash_get_spend_limit`        | Read the live delegation + treasury balance for an SPL stable.                                  |
-| `leash_receipts`               | Paginated receipts feed for the active agent.                                                   |
-| `leash_get_receipt`            | Look up a single ReceiptV1 by `receipt_hash` (the `/receipt/{hash}` blob the explorer renders). |
-| `leash_transaction_history`    | All earn + spend receipts in the last N days (default 7) with USD totals.                       |
-| `leash_daily_transactions`     | Per-day buckets for the same window (`{ date, sent_usd, received_usd, net_usd, ... }`).         |
-| `leash_discover`               | Public marketplace search (`/v1/discover`).                                                     |
-| `leash_reputation`             | Reputation snapshot for any agent mint (`/v1/agents/:mint/reputation`).                         |
+| Tool name                      | What it does                                                                                                                                                                                                                                                                                 |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `leash_register_agent`         | Two-step provisioning (generate / import executive → fund → mint + delegate + record).                                                                                                                                                                                                       |
+| `leash_get_identity`           | Self-introspection: agent mint, treasury PDA, executive pubkey, network.                                                                                                                                                                                                                     |
+| `leash_check_treasury_balance` | List SOL + SPL stable balances on the treasury PDA.                                                                                                                                                                                                                                          |
+| `leash_create_payment_link`    | Mint a hosted x402 paywall (`/v1/payment-links`).                                                                                                                                                                                                                                            |
+| `leash_pay_payment_link`       | Probe → policy-check → sign → settle → finalise receipt for an x402 URL.                                                                                                                                                                                                                     |
+| `leash_withdraw_treasury`      | Owner-driven SOL or stable withdrawal via `mpl-core::Execute`.                                                                                                                                                                                                                               |
+| `leash_set_spend_limit`        | Update the SPL `Approve` delegation (unlimited / amount / revoke).                                                                                                                                                                                                                           |
+| `leash_get_spend_limit`        | Read the live delegation + treasury balance for an SPL stable.                                                                                                                                                                                                                               |
+| `leash_receipts`               | Paginated receipts feed for the active agent.                                                                                                                                                                                                                                                |
+| `leash_get_receipt`            | Look up a single ReceiptV1 by `receipt_hash` (the `/receipt/{hash}` blob the explorer renders).                                                                                                                                                                                              |
+| `leash_transaction_history`    | All earn + spend receipts in the last N days (default 7) with USD totals.                                                                                                                                                                                                                    |
+| `leash_daily_transactions`     | Per-day buckets for the same window (`{ date, sent_usd, received_usd, net_usd, ... }`).                                                                                                                                                                                                      |
+| `leash_discover`               | Public unified search (`/v1/discover`) — merges the Leash marketplace with the Solana Foundation `pay-skills` registry. Each item has a `source: 'leash' \| 'pay-skills'` tag.                                                                                                               |
+| `leash_pay_skills_endpoints`   | Expand a `pay-skills` discover item into its individual paid endpoints (`/v1/discover/pay-skills/{fqn}`). Returns `{ method, url, pricing, protocol, supported_usd, probe_status }[]`. The recommended agent flow is `leash_discover → leash_pay_skills_endpoints → leash_pay_payment_link`. |
+| `leash_reputation`             | Reputation snapshot for any agent mint (`/v1/agents/:mint/reputation`).                                                                                                                                                                                                                      |
 
 Install:
 
 ```bash
-npx -y @leash/mcp@latest doctor    # one-shot config check
-npx -y @leash/mcp@latest run       # bind to STDIO
+npx -y @leashmarket/mcp@latest doctor    # one-shot config check
+npx -y @leashmarket/mcp@latest run       # bind to STDIO
 ```
 
 Provision an agent end-to-end (no human in the loop):
 
 ```bash
-npx -y @leash/mcp@latest run         # in your MCP host's config
+npx -y @leashmarket/mcp@latest run         # in your MCP host's config
 # then ask the agent: "Use leash_register_agent to mint a fresh agent"
 # → returns funding_required with a generated executive pubkey
 # (LLM walks the user through funding, then re-calls the tool)
 ```
 
-### `@leash/cli` — `leash` terminal wrapper
+### `@leashmarket/cli` — `leash` terminal wrapper
 
 Same `LeashHost`, plain-text output. Designed to be the "git/gh/aws"
 of the Leash agent economy. Pass `--json` on any command for a
@@ -98,7 +99,8 @@ leash treasury balance
 leash treasury withdraw --to W --amount N --token SOL|USDC|USDG|USDT
 leash treasury limit [--token USDC|USDG|USDT]
 leash treasury set-limit [--token T] (--unlimited | --revoke | --amount N)
-leash discover [-q QUERY] [--max-price N] [--pricing-type T] [--limit N]
+leash discover [-q QUERY] [--max-price N] [--pricing-type T] [--source leash|pay-skills|all] [--limit N]
+leash discover endpoints <fqn>             # expand a pay-skills provider into its paid URLs
 leash reputation <agent_mint> [--network solana-devnet|solana-mainnet]
 leash receipts [--limit N] [--direction outgoing|incoming|both]
 leash receipt <receipt_hash>
@@ -108,13 +110,13 @@ leash pay <link-url>
 leash doctor
 ```
 
-### `@leash/sdk` — typed API client
+### `@leashmarket/sdk` — typed API client
 
 Anonymous reads, agent-signed writes (X-Leash-Sig), legacy bearer-key
 auth for endpoints that haven't migrated yet. Browser/Bun/Deno-friendly.
 
 ```ts
-import { LeashClient } from '@leash/sdk';
+import { LeashClient } from '@leashmarket/sdk';
 const leash = new LeashClient({ apiKey: process.env.LEASH_API_KEY });
 
 // Single receipt by hash → full ReceiptV1.
@@ -146,7 +148,7 @@ All three surfaces enforce the same network binding as the API: a
    then signs x402 `TransferChecked`s up to that allowance. Owner
    revokes by re-approving 0.
 4. **Policy (`RulesV1`).** Pure JSON — daily budget, per-call cap,
-   allowed hosts, triggers. Evaluated by `@leash/core` before any
+   allowed hosts, triggers. Evaluated by `@leashmarket/core` before any
    payment leaves the wallet.
 5. **Receipt (`ReceiptV1`).** Hash-chained JSONL row written for every
    gated call. `prev_receipt_hash` chains, `tx_sig` is the on-chain
@@ -215,7 +217,7 @@ want.
 1. **Decide buyer / seller / merged.** Buyer pays endpoints; seller hosts
    them; merged is one mint that does both. Default to merged if unsure.
 2. **Mint the agent** (one tx). SDK: `createAgent` from
-   `@leash/registry-utils`. API: `POST /v1/agents/prepare` →
+   `@leashmarket/registry-utils`. API: `POST /v1/agents/prepare` →
    `POST /v1/submit`.
 3. **Provision treasury ATAs** for any stable you'll accept/spend
    (`POST /v1/agents/{mint}/treasury/provision/prepare` → submit). USDC
@@ -259,7 +261,7 @@ Numbers and pubkeys you can rely on:
   this owner's ATA for whatever mint the seller quoted in.
 - **Wire shape.** Sellers stamp `paymentRequirements.extra['leash.fee']`
   with `{ v: '1', bps, feeAuthority }`. Buyers parse it, derive the
-  destination ATA via `getLeashFeeAtaFor` from `@leash/core`, and append
+  destination ATA via `getLeashFeeAtaFor` from `@leashmarket/core`, and append
   the fee `TransferChecked` to the same buyer-signed transaction.
 - **Quoting.** Sellers _always_ quote net (`amount`). The buyer signs
   `gross = amount + fee`. Receipts carry both: `price.amount` (net),

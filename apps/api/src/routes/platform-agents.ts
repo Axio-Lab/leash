@@ -23,7 +23,7 @@ import { adminAuth } from '../auth/admin.js';
 import { markKeyRevoked } from '../auth/api-key.js';
 import type { LeashApiConfig } from '../config.js';
 import { ApiErrorSchema, NetworkSchema, PubkeySchema } from '../openapi/common.js';
-import { encryptSecret } from '@leash/platform-auth/encryption';
+import { encryptSecret } from '@leashmarket/platform-auth/encryption';
 import {
   createPlatformAgent,
   disablePlatformAgent,

@@ -1,17 +1,17 @@
 {
-  "name": "@leash/facilitator-app",
+  "name": "@leashmarket/facilitator-app",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "leash-facilitator",
     "dev": "node --env-file-if-exists=.env --import tsx ./src/dev.ts",
-    "build": "echo 'no build — uses @leash/facilitator binary'",
+    "build": "echo 'no build — uses @leashmarket/facilitator binary'",
     "lint": "echo lint:facilitator-app",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
-    "@leash/facilitator": "workspace:*"
+    "@leashmarket/facilitator": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.19.2",

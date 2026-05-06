@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import type { Context as UmiContext } from '@metaplex-foundation/umi';
-import type { ReceiptV1 } from '@leash/schemas';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 import {
   buildLeashFeeExtra,
   computeFeeAtoms as computeFeeAtomsHelper,
@@ -14,7 +14,7 @@ import {
   type KnownStableSymbol,
   type LeashFeeExtra,
   type TokenNetwork,
-} from '@leash/core';
+} from '@leashmarket/core';
 import { paymentMiddlewareFromHTTPServer } from '@x402/hono';
 import { x402HTTPResourceServer } from '@x402/core/server';
 import type {
@@ -48,7 +48,7 @@ export type SellerRouteConfig = {
   /**
    * Settlement currency for the price. Must be a Leash-known stablecoin
    * (`USDC` / `USDT` / `USDG`) so the seller-kit can resolve a real mint via
-   * `@leash/core/tokens`. Defaults to `'USDC'`.
+   * `@leashmarket/core/tokens`. Defaults to `'USDC'`.
    */
   currency?: KnownStableSymbol;
   /**
@@ -129,7 +129,7 @@ type SellerState = {
 /**
  * Wires real x402-on-Solana payment enforcement onto a Hono app. For each
  * route entry (`'METHOD /path'`), 402 responses include a proper
- * `paymentRequirements[]` JSON; clients (e.g. `@leash/buyer-kit` or any
+ * `paymentRequirements[]` JSON; clients (e.g. `@leashmarket/buyer-kit` or any
  * `@x402/fetch` consumer) sign an SPL `TransferChecked` to the agent's
  * Asset Signer PDA and replay the request with `X-PAYMENT`. The configured
  * facilitator verifies + settles the transaction on-chain, and `onReceipt`
@@ -412,7 +412,7 @@ async function emitEarnReceipt(args: {
 }
 
 /**
- * Resolver shared with `@leash/buyer-kit`. Lives here as a small inline
+ * Resolver shared with `@leashmarket/buyer-kit`. Lives here as a small inline
  * copy (instead of importing from buyer-kit) so the seller package stays
  * server-only and doesn't pull in the buyer's `@solana/kit` dependency.
  */

@@ -1,5 +1,5 @@
 {
-  "name": "@leash/marketplace",
+  "name": "@leashmarket/marketplace",
   "private": true,
   "scripts": {
     "dev": "next dev -p 4200",
@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@leash/platform-auth": "workspace:*",
+    "@leashmarket/platform-auth": "workspace:*",
     "@libsql/client": "^0.14.0",
     "@privy-io/react-auth": "^2.7.0",
     "@privy-io/server-auth": "^1.18.0",

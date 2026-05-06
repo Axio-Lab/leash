@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
-import { ReceiptV1Schema, type ReceiptV1 } from '@leash/schemas';
+import { ReceiptV1Schema, type ReceiptV1 } from '@leashmarket/schemas';
 import type { PaymentRequirements } from '@x402/core/types';
 import { SOLANA_DEVNET_CAIP2 } from '@x402/svm';
 import { createSeller } from '../src/hono/create-seller.js';
@@ -224,7 +224,7 @@ describe('createSeller — PAYMENT-RESPONSE header', () => {
    * Regression: the upstream `@x402/hono` middleware encodes only
    * `{ success, transaction, payer, network, … }` into PAYMENT-RESPONSE
    * — it does NOT include the matched `paymentRequirements`. That left
-   * `@leash/buyer-kit`'s `parseSettlement` unable to recover the price
+   * `@leashmarket/buyer-kit`'s `parseSettlement` unable to recover the price
    * for a successful settlement, so spend receipts were stamped with
    * `price: null` even when the trade went through.
    *
@@ -262,7 +262,7 @@ describe('createSeller — PAYMENT-RESPONSE header', () => {
 });
 
 describe('parsePrice', () => {
-  // Devnet USDC mint — must match `@leash/core/tokens` so format helpers
+  // Devnet USDC mint — must match `@leashmarket/core/tokens` so format helpers
   // can reverse-resolve decimals correctly.
   const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
   const USDT_DEVNET = 'EcFc2cMyZxaKBkFK1XooxiyDyCPneLXiMwSJiVY6eTad';

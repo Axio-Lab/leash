@@ -24,7 +24,7 @@
  * `getExtra()` behaviour intact.
  *
  * Three operating modes (set per network via env — see
- * {@link resolveLeashFeeEnforcement} in `@leash/core`):
+ * {@link resolveLeashFeeEnforcement} in `@leashmarket/core`):
  *
  *   - `off`     → behave exactly like upstream. Even if the seller
  *                 stamps a fee block we ignore it. Tests / local dev only.
@@ -68,7 +68,7 @@ import {
   resolveLeashFeeEnforcement,
   type LeashFeeEnforcement,
   type LeashFeeExtra,
-} from '@leash/core';
+} from '@leashmarket/core';
 import {
   decodeTransactionFromPayload,
   LIGHTHOUSE_PROGRAM_ADDRESS,

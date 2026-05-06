@@ -12,7 +12,7 @@ private key.
 import { Hono } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
-import { createSeller } from '@leash/seller-kit';
+import { createSeller } from '@leashmarket/seller-kit';
 
 const umi = createUmi(process.env.SOLANA_RPC ?? 'https://api.devnet.solana.com').use(mplCore());
 const app = new Hono();

@@ -1,5 +1,8 @@
 {
-  "name": "@leash/mcp-core",
+  "publishConfig": {
+    "access": "public"
+  },
+  "name": "@leashmarket/mcp-core",
   "version": "0.1.0",
   "private": false,
   "type": "module",

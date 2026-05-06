@@ -1,6 +1,6 @@
 /**
- * CAIP-2 chain identifiers for Solana, used by `@leash/buyer-kit`,
- * `@leash/seller-kit`, registry documents, and `ReceiptV1.price.network`.
+ * CAIP-2 chain identifiers for Solana, used by `@leashmarket/buyer-kit`,
+ * `@leashmarket/seller-kit`, registry documents, and `ReceiptV1.price.network`.
  *
  * Values match `@x402/svm` (`SOLANA_*_CAIP2`) so receipts and
  * `paymentRequirements` are byte-equivalent across the wire.

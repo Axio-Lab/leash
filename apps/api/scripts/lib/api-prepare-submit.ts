@@ -1,6 +1,6 @@
 /**
  * Shared helpers for `apps/api/scripts/*` that drive the public
- * `prepare → sign → submit → track` lifecycle exposed by `@leash/api`.
+ * `prepare → sign → submit → track` lifecycle exposed by `@leashmarket/api`.
  *
  * Every state-changing route on the API returns one of two shapes:
  *

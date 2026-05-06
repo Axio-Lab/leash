@@ -14,7 +14,7 @@
  * merchant URL must not stall the worker.
  */
 
-import { ReceiptV1Schema } from '@leash/schemas';
+import { ReceiptV1Schema } from '@leashmarket/schemas';
 
 import type { DbClient } from '../storage/turso.js';
 import { execute } from '../storage/turso.js';

@@ -3,7 +3,7 @@ title: Bring your own keypair
 description: Mint and run an agent without Privy — using a local Solana keypair, a server-side env var, or a generated operator keypair.
 ---
 
-The web playground (`apps/playground`) signs everything with a connected Privy embedded wallet because that's the lowest-friction path for trying Leash from a browser. The SDK itself has no Privy dependency — `@leash/registry-utils` only cares that `umi.identity` can sign Solana transactions. This guide shows the three production-grade alternatives.
+The web playground (`apps/playground`) signs everything with a connected Privy embedded wallet because that's the lowest-friction path for trying Leash from a browser. The SDK itself has no Privy dependency — `@leashmarket/registry-utils` only cares that `umi.identity` can sign Solana transactions. This guide shows the three production-grade alternatives.
 
 ## Pick a signer style
 
@@ -14,7 +14,7 @@ The web playground (`apps/playground`) signs everything with a connected Privy e
 | **Server-side env var** (`LEASH_DEV_PAYER_SECRET_KEY`) | The Node process holds it in memory | Whatever your secret manager provides | Cron jobs, internal tools, the playground's headless `POST` routes |
 | **KMS / TEE / hardware wallet**                        | A managed signer service            | Provider-specific                     | Production agents managing real money                              |
 
-The first three all reduce to the same SDK pattern: build a Umi, install a `keypairIdentity` plugin, then call `@leash/registry-utils` exactly the same way. Only the source of bytes differs.
+The first three all reduce to the same SDK pattern: build a Umi, install a `keypairIdentity` plugin, then call `@leashmarket/registry-utils` exactly the same way. Only the source of bytes differs.
 
 ## BYO local keypair
 
@@ -22,7 +22,7 @@ Generate one with the Solana CLI (`solana-keygen new -o agent-owner.json`) or wi
 
 ```ts
 import { writeFileSync } from 'node:fs';
-import { generateOperatorKeypair, exportOperatorJson } from '@leash/registry-utils';
+import { generateOperatorKeypair, exportOperatorJson } from '@leashmarket/registry-utils';
 
 const kp = generateOperatorKeypair();
 writeFileSync('agent-owner.json', exportOperatorJson(kp));
@@ -40,7 +40,7 @@ import { readFileSync } from 'node:fs';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { keypairIdentity } from '@metaplex-foundation/umi';
 import { mplAgentIdentity } from '@metaplex-foundation/mpl-agent-registry';
-import { createAgent, importOperatorJson } from '@leash/registry-utils';
+import { createAgent, importOperatorJson } from '@leashmarket/registry-utils';
 
 const owner = importOperatorJson(readFileSync('agent-owner.json', 'utf-8'));
 
@@ -110,7 +110,7 @@ After step 4 the executive can settle x402 calls without the owner ever signing 
 The owner / executive split above covers funds. The **operator** is a separate concern — the agent's own off-chain signing identity. You generate it the same way and optionally advertise it on-chain inside the agent's metadata:
 
 ```ts
-import { generateOperatorKeypair, operatorRegistration } from '@leash/registry-utils';
+import { generateOperatorKeypair, operatorRegistration } from '@leashmarket/registry-utils';
 
 const operator = generateOperatorKeypair();
 
@@ -134,7 +134,7 @@ The agent process loads `operator.json` at boot, signs receipts and attestations
 When `umi.identity` is a hardware wallet or you need to add priority fees / custom retries, swap the one-shot helpers for their `prepare*` siblings:
 
 ```ts
-import { prepareAgentMint, sendPreparedAgentMint } from '@leash/registry-utils';
+import { prepareAgentMint, sendPreparedAgentMint } from '@leashmarket/registry-utils';
 
 const prepared = await prepareAgentMint(umi, {
   /* same input */
@@ -143,7 +143,7 @@ const prepared = await prepareAgentMint(umi, {
 const signature = await sendPreparedAgentMint(umi, prepared);
 ```
 
-Every mutating helper in `@leash/registry-utils` ships a matching `prepare*` function that returns an unsigned `TransactionBuilder` plus echo fields, so you can sign and submit on your own terms. See the [Prepare/Send split](/sdk/registry-utils#preparesend-split) section in the SDK reference for the full list — this is the same surface the upcoming HTTP API speaks.
+Every mutating helper in `@leashmarket/registry-utils` ships a matching `prepare*` function that returns an unsigned `TransactionBuilder` plus echo fields, so you can sign and submit on your own terms. See the [Prepare/Send split](/sdk/registry-utils#preparesend-split) section in the SDK reference for the full list — this is the same surface the upcoming HTTP API speaks.
 
 ## See also
 

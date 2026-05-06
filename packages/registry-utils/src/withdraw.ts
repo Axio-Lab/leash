@@ -20,10 +20,10 @@
  *     decimals on chain, the program aborts with a clear error instead
  *     of silently moving the wrong amount.
  *
- * Why this lives in `@leash/registry-utils` (and not `@leash/core/treasury`)?
+ * Why this lives in `@leashmarket/registry-utils` (and not `@leashmarket/core/treasury`)?
  *
  *   Mirrors `./delegation.ts` (same mpl-core/mpl-toolbox dependency
- *   surface), which keeps `@leash/core` free of mpl-core to stay
+ *   surface), which keeps `@leashmarket/core` free of mpl-core to stay
  *   bundleable in browser-only buyer/seller contexts.
  */
 

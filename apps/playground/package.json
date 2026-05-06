@@ -1,5 +1,5 @@
 {
-  "name": "@leash/playground",
+  "name": "@leashmarket/playground",
   "private": true,
   "scripts": {
     "dev": "next dev -p 4000",
@@ -11,12 +11,12 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
-    "@leash/buyer-kit": "workspace:*",
-    "@leash/core": "workspace:*",
-    "@leash/registry-utils": "workspace:*",
-    "@leash/runner": "workspace:*",
-    "@leash/schemas": "workspace:*",
-    "@leash/seller-kit": "workspace:*",
+    "@leashmarket/buyer-kit": "workspace:*",
+    "@leashmarket/core": "workspace:*",
+    "@leashmarket/registry-utils": "workspace:*",
+    "@leashmarket/runner": "workspace:*",
+    "@leashmarket/schemas": "workspace:*",
+    "@leashmarket/seller-kit": "workspace:*",
     "@metaplex-foundation/mpl-agent-registry": "^0.2.5",
     "@metaplex-foundation/mpl-core": "^1.10.0",
     "@metaplex-foundation/mpl-toolbox": "^0.10.0",

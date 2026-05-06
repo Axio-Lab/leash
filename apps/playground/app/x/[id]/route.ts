@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { Hono, type Context } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
 import { mplCore } from '@metaplex-foundation/mpl-core';
-import { createSeller, networkAlias, resolveSellerPayTo } from '@leash/seller-kit';
+import { createSeller, networkAlias, resolveSellerPayTo } from '@leashmarket/seller-kit';
 import {
   LEASH_CALLBACK_HEADER,
   buildLeashEnvelope,
@@ -11,9 +11,9 @@ import {
   buildPaymentLinkMeta,
   buildWebhookPayload,
   type PaymentLinkMeta,
-} from '@leash/core';
-import { createRunnerClient } from '@leash/runner';
-import type { EndpointV1, ReceiptV1 } from '@leash/schemas';
+} from '@leashmarket/core';
+import { createRunnerClient } from '@leashmarket/runner';
+import type { EndpointV1, ReceiptV1 } from '@leashmarket/schemas';
 import { FACILITATOR_URL, RUNNER_URL, SOLANA_RPC } from '@/lib/env';
 
 export const runtime = 'nodejs';
@@ -23,21 +23,21 @@ export const dynamic = 'force-dynamic';
  * Public, shareable x402 paywall.
  *
  * Resolves an `EndpointV1` from the runner by id, then mounts the real
- * `@leash/seller-kit` `createSeller` middleware on a one-shot Hono app to
+ * `@leashmarket/seller-kit` `createSeller` middleware on a one-shot Hono app to
  * gate the request. On success the configured response template is
  * returned, an `earn` `ReceiptV1` is shipped to the runner, and the
  * response is post-processed according to the endpoint config:
  *
  *   - `wrap_receipt`  → JSON body becomes `{ data: <user-body>, _leash: {...} }`
  *   - `webhook_url`   → fire-and-forget POST of `WebhookPayload` to the URL
- *                       after settlement (built via `@leash/core`)
+ *                       after settlement (built via `@leashmarket/core`)
  *   - `x-leash-callback` request header → same webhook behaviour, but
  *                       buyer-supplied (per-call). Fired in addition to
  *                       `webhook_url` if both are set.
  *   - `X-Leash-*` response headers stamped on every successful settlement
  *
  * Every wire concern (envelope shape, header names, webhook payload) lives
- * in `@leash/core` so the producer + consumer share a single contract.
+ * in `@leashmarket/core` so the producer + consumer share a single contract.
  */
 
 type ReceiptHolder = { receipt: ReceiptV1 | null };
@@ -178,7 +178,7 @@ function buildApp(endpoint: EndpointV1, pathname: string): Hono {
  * doesn't match the configured `endpoint.method` (typically a browser GET to
  * a POST-only paywall) or any browser-like Accept.
  *
- * Delegates to {@link buildPaymentLinkMeta} from `@leash/core` so the wire
+ * Delegates to {@link buildPaymentLinkMeta} from `@leashmarket/core` so the wire
  * shape stays in sync with the SDK consumer ({@link fetchPaymentLinkMeta}).
  */
 function buildDiscoveryPayload(req: Request, endpoint: EndpointV1): PaymentLinkMeta {

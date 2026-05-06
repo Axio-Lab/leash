@@ -2,6 +2,8 @@
 
 import * as React from 'react';
 
+import { useSelectedNetwork } from '@/lib/network-preference';
+
 export type CreatedKey = {
   id: string;
   prefix: string;
@@ -20,8 +22,9 @@ export function CreateKeyDialog({
   onCreated: (k: CreatedKey) => void;
   defaultScopes?: string[];
 }) {
+  const [defaultNetwork] = useSelectedNetwork();
   const [name, setName] = React.useState('');
-  const [network, setNetwork] = React.useState<'solana-devnet' | 'solana-mainnet'>('solana-devnet');
+  const [network, setNetwork] = React.useState<'solana-devnet' | 'solana-mainnet'>(defaultNetwork);
   const [scopes, setScopes] = React.useState<string[]>(defaultScopes);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -29,11 +32,11 @@ export function CreateKeyDialog({
   React.useEffect(() => {
     if (open) {
       setName('');
-      setNetwork('solana-devnet');
+      setNetwork(defaultNetwork);
       setScopes(defaultScopes);
       setError(null);
     }
-  }, [open, defaultScopes]);
+  }, [open, defaultScopes, defaultNetwork]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

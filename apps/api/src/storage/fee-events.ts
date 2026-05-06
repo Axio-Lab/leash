@@ -22,7 +22,7 @@
  * route. Errors are logged via the optional `log` callback.
  */
 
-import type { ReceiptV1 } from '@leash/schemas';
+import type { ReceiptV1 } from '@leashmarket/schemas';
 
 import type { DbClient } from './turso.js';
 import { execute } from './turso.js';
