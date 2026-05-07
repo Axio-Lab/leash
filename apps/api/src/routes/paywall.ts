@@ -117,12 +117,6 @@ export function buildPaywallRoutes(deps: PaywallRoutesDeps): Hono {
   app.all('/x/:id', async (c) => {
     const id = c.req.param('id');
     const queryNetwork = c.req.query('network');
-    // Resolution order:
-    //   1. `?network=` is honoured verbatim when present.
-    //   2. Otherwise we look the slug up on BOTH networks and serve
-    //      whichever one exists. Slugs are unique enough in practice
-    //      that this is unambiguous; if a slug somehow exists on both
-    //      we prefer mainnet.
     let link = null as Awaited<ReturnType<typeof getPaymentLink>> | null;
     let network: SvmNetwork;
     if (queryNetwork) {
@@ -137,8 +131,6 @@ export function buildPaywallRoutes(deps: PaywallRoutesDeps): Hono {
       network = mainnet ? 'solana-mainnet' : 'solana-devnet';
     }
     if (!link) {
-      // If the user asked for an explicit network and it didn't match,
-      // surface the sibling so they can fix the URL.
       if (queryNetwork) {
         const sibling = network === 'solana-mainnet' ? 'solana-devnet' : 'solana-mainnet';
         const onSibling = await getPaymentLink(deps.db, sibling, id);
@@ -189,12 +181,6 @@ export function buildPaywallRoutes(deps: PaywallRoutesDeps): Hono {
     }
 
     const sellerApp = buildSellerSubApp(deps, link, mppFeePayer);
-    // AsyncLocalStorage scope so the seller's `onReceipt` callback can
-    // stash the canonical receipt where this outer handler can read it
-    // and stamp `X-Leash-*` headers on the settled response. Without
-    // this the buyer-kit can only see its own locally-computed receipt
-    // hash (which differs from the seller's by `nonce`/`ts`), so the
-    // chat UI ends up linking to a hash the explorer doesn't have.
     const holder: ReceiptHolder = { receipt: null };
     const res = await receiptStore.run(holder, () => sellerApp.fetch(c.req.raw));
     return finalizeResponse(res, holder.receipt, link, deps.config.publicOrigin);
@@ -323,15 +309,6 @@ function buildSellerSubApp(
 }
 
 /**
- * Persist a settled receipt (v0.1 or v0.2) and emit the matching event timeline:
- *   1. `ingestReceipt` (idempotent on receipt_hash)
- *   2. `recordSettlement` bumps `settled_count` + last_tx_sig
- *   3. `receipt.published` event for the explorer's receipt feed
- *   4. `payment_link.served` event for the paywall traffic timeline
- *   5. `payment_link.settled` event for revenue dashboards
- *   6. Best-effort indexer watchlist enrollment so the seller's agent
- *      lights up on-chain activity in the explorer too.
- *
  * Exported so paywall tests can drive the post-settlement flow without
  * standing up a real x402 facilitator.
  */
@@ -404,9 +381,6 @@ export async function ingestPaywallReceipt(
       tx_sig: txSig,
       currency: receipt.price?.currency ?? null,
       receipt_hash: receipt.receipt_hash,
-      // Fee context lets revenue dashboards split gross vs. net without
-      // re-deriving from the receipt blob. Optional — vanilla x402
-      // settlements (no Leash facilitator) leave these undefined.
       ...(receipt.price?.fee ? { fee_amount: receipt.price.fee } : {}),
       ...(receipt.price?.gross ? { gross_amount: receipt.price.gross } : {}),
       ...(receipt.price?.feeBps != null ? { fee_bps: receipt.price.feeBps } : {}),
