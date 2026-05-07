@@ -129,16 +129,49 @@ export function importExecutive(secretRaw: string): ExecutiveKeypair {
 }
 
 /**
- * Read the executive's current SOL balance via RPC. Single-shot
- * read, no retry — callers compose this with their own polling.
+ * Read the executive's current SOL balance via RPC (`getBalance`).
+ *
+ * Uses HTTP JSON-RPC and `globalThis.fetch` so unit tests can stub
+ * `fetch` deterministically. (Umi's Web3.js path does not reliably
+ * honor a mocked `fetch`, which caused register-agent tests to hit
+ * real public RPCs and time out.)
  */
 export async function getExecutiveBalanceLamports(args: {
   rpcUrl: string;
   pubkey: string;
+  fetchImpl?: typeof globalThis.fetch;
 }): Promise<bigint> {
-  const umi = createUmi(args.rpcUrl);
-  const sol = await umi.rpc.getBalance(publicKey(args.pubkey));
-  return BigInt(sol.basisPoints.toString());
+  const fetchImpl = args.fetchImpl ?? globalThis.fetch;
+  const res = await fetchImpl(args.rpcUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getBalance',
+      params: [args.pubkey],
+    }),
+  });
+  const text = await res.text();
+  let parsed: {
+    error?: { message?: string };
+    result?: { context?: { slot?: number }; value?: number } | number;
+  };
+  try {
+    parsed = JSON.parse(text) as typeof parsed;
+  } catch {
+    throw new Error(`getBalance: invalid JSON from RPC (${res.status}): ${text.slice(0, 200)}`);
+  }
+  if (!res.ok || parsed.error) {
+    const msg = parsed.error?.message ?? `HTTP ${res.status}`;
+    throw new Error(`getBalance failed: ${msg}`);
+  }
+  const raw = parsed.result;
+  const lamports = typeof raw === 'number' ? raw : raw?.value;
+  if (typeof lamports !== 'number' || !Number.isFinite(lamports)) {
+    throw new Error(`getBalance: unexpected result shape: ${text.slice(0, 200)}`);
+  }
+  return BigInt(lamports);
 }
 
 export type MintLocallyArgs = {
