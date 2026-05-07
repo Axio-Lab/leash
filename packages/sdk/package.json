@@ -3,7 +3,7 @@
     "access": "public"
   },
   "name": "@leashmarket/sdk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Typed Leash API client for app developers. Discover services, vet counterparties, manage agent webhooks, and ingest receipts in any TypeScript runtime.",
   "private": false,
   "type": "module",

@@ -19,10 +19,12 @@
  *   4. the public paywall on `/x/{id}` returns 402 with `payment-required`
  *      to anonymous probes, and 200 with `PAYMENT-RESPONSE` after a real
  *      x402 settlement,
- *   5. each settlement bumps `payment_links.{call_count,settled_count}`,
+ *   5. a **second** hosted link with `protocol: "mpp"` gets 402 with
+ *      `application/problem+json`, then settles via `buyer.fetch` (MPP
+ *      facilitator `POST /mpp/settle`), producing **ReceiptV02** spend rows,
+ *   6. each settlement bumps `payment_links.{call_count,settled_count}`,
  *      ingests both the seller-side `earn` and the buyer-side `spend`
- *      `ReceiptV1` (the latter via `createBuyer({ onReceipt })` POSTing
- *      to `/v1/receipts/{agent}`), and emits the matching
+ *      receipts (v0.1 x402 or v0.2 MPP), and emits the matching
  *      `payment_link.served`, `payment_link.settled`, `receipt.published`
  *      events that the explorer + indexer pages read.
  *
@@ -41,6 +43,11 @@
  *
  * Optional env
  * ------------
+ *   LEASH_E2E_PUBLIC_ORIGIN    Prefix for payment-link `share_url` (no trailing
+ *                              slash). Defaults to `LEASH_E2E_API_URL`. Set this
+ *                              to match the API's `LEASH_API_PUBLIC_ORIGIN` when
+ *                              the script talks to `http://localhost:…` but hosted
+ *                              links are built for a tunnel or other public origin.
  *   LEASH_E2E_RPC              Devnet RPC (default: https://api.devnet.solana.com)
  *   LEASH_E2E_USDC_MINT        Default: Circle's devnet USDC.
  *   LEASH_E2E_USDG_MINT        Default: Paxos devnet USDG (Token-2022).
@@ -63,16 +70,14 @@
  *                              allowance. Default: 5_000_000.
  *   LEASH_E2E_KEEP_LINK        "1" to skip cleanup at the end so you can
  *                              poke the link in the explorer manually.
- *   LEASH_E2E_MPP              "1" to additionally run a hosted **MPP** payment
- *                              link (`protocol: "mpp"`) through the same API:
- *                              create link → 402 `problem+json` probe → real
- *                              `buyer.fetch` settlement on devnet (requires a
- *                              facilitator that supports `POST /mpp/settle`).
+ *   LEASH_E2E_SKIP_MPP         "1" to skip the hosted **MPP** paywall leg (x402
+ *                              only). Default is to run MPP alongside x402; the
+ *                              facilitator must support `POST /mpp/settle`.
  *
  * Usage
  * -----
  *   pnpm --filter @leashmarket/api e2e:devnet
- *   pnpm --filter @leashmarket/api e2e:devnet:mpp   # same as above + MPP link (LEASH_E2E_MPP=1)
+ *   pnpm --filter @leashmarket/api e2e:devnet:mpp   # alias — same script (MPP included)
  * or:
  *   cd apps/api && node --env-file=.env.e2e --import tsx ./scripts/e2e-devnet.ts
  */
@@ -119,6 +124,10 @@ import {
 // ────────────────────────────────────────────────────────────────────────────
 
 const API_URL = (process.env.LEASH_E2E_API_URL ?? 'http://localhost:8801').replace(/\/+$/, '');
+const SHARE_URL_ORIGIN = (process.env.LEASH_E2E_PUBLIC_ORIGIN?.trim() || API_URL).replace(
+  /\/+$/,
+  '',
+);
 const API_KEY = required('LEASH_E2E_API_KEY');
 const OWNER_SECRET = required('LEASH_E2E_OWNER_SECRET');
 const RPC = process.env.LEASH_E2E_RPC ?? 'https://api.devnet.solana.com';
@@ -222,16 +231,24 @@ async function api<T = unknown>(path: string, init: ApiInit = {}): Promise<T> {
 
 async function main(): Promise<void> {
   let mppLinkId: string | undefined;
+  let mppShareUrlForLog: string | undefined;
+  let mppSettlementSigForLog: string | undefined;
+  let usdgLinkId: string | undefined;
   console.log('============================================================');
   console.log('Leash API end-to-end devnet test');
   console.log('============================================================');
   console.log(`api      : ${API_URL}`);
+  if (SHARE_URL_ORIGIN !== API_URL) {
+    console.log(`share_url: ${SHARE_URL_ORIGIN} (LEASH_E2E_PUBLIC_ORIGIN)`);
+  }
   console.log(`rpc      : ${RPC}`);
   console.log(`api key  : ${API_KEY.slice(0, 16)}…${API_KEY.slice(-4)}`);
   console.log(`usdc mint: ${USDC_MINT}`);
   console.log(`usdg mint: ${USDG_MINT}`);
   console.log(`price    : ${PRICE}`);
-  console.log(`mpp pass : ${process.env.LEASH_E2E_MPP === '1' ? 'yes (LEASH_E2E_MPP=1)' : 'no'}`);
+  console.log(
+    `mpp leg  : ${process.env.LEASH_E2E_SKIP_MPP === '1' ? 'skipped (LEASH_E2E_SKIP_MPP=1)' : 'yes (hosted protocol=mpp)'}`,
+  );
 
   // ───── 1. health ─────
   step('GET /v1/health');
@@ -593,9 +610,10 @@ async function main(): Promise<void> {
   ok(`payment link url  : ${link.share_url}`);
   ok(`payment link payTo: ${link.pay_to}`);
   assert(
-    link.share_url.startsWith(API_URL),
-    `share_url ${link.share_url} should start with API_URL ${API_URL}; ` +
-      'set LEASH_API_PUBLIC_ORIGIN to match.',
+    link.share_url.startsWith(SHARE_URL_ORIGIN),
+    `share_url ${link.share_url} should start with ${SHARE_URL_ORIGIN} ` +
+      `(LEASH_E2E_PUBLIC_ORIGIN or LEASH_E2E_API_URL); align with the API's ` +
+      'LEASH_API_PUBLIC_ORIGIN.',
   );
   assert(link.counters.call_count === 0 && link.counters.settled_count === 0, 'fresh counters');
   const linkId = link.id;
@@ -618,7 +636,7 @@ async function main(): Promise<void> {
     requirements_hash: string;
   }>('/v1/buyer/quote', {
     method: 'POST',
-    body: { url: `${shareUrl}?network=solana-devnet`, method: 'GET' },
+    body: { url: shareUrl, method: 'GET' },
   });
   assert(quote.status === 402, `quote should see a 402; got ${quote.status}`);
   assert(quote.chosen !== null, 'quote.chosen is null — wrong network on the API key?');
@@ -631,7 +649,7 @@ async function main(): Promise<void> {
 
   // ───── 14. anonymous probe of the paywall returns 402 directly ─────
   step('GET /x/{id} — anonymous probe must return 402');
-  const probeRes = await fetch(`${shareUrl}?network=solana-devnet`, {
+  const probeRes = await fetch(shareUrl, {
     method: 'GET',
     headers: { accept: 'application/json' },
   });
@@ -676,7 +694,7 @@ async function main(): Promise<void> {
   });
 
   const before = await getSpendDelegation(umi, { agentAsset: buyerAgent, mint: USDC_MINT });
-  const callResult = await buyer.fetch(`${shareUrl}?network=solana-devnet`, { method: 'GET' });
+  const callResult = await buyer.fetch(shareUrl, { method: 'GET' });
   if (!callResult.receipt.tx_sig) {
     fatal(
       `settlement failed; reason=${callResult.failureReason ?? '(none)'}\n` +
@@ -694,10 +712,41 @@ async function main(): Promise<void> {
     `buyer balance before/after: ${before.balance.toString()} / ${after.balance.toString()} (debited ${debited.toString()})`,
   );
 
-  // ───── 15b. USDG settlement (if buyer has enough USDG + delegation) ─────
+  // ───── 15b. USDG settlement on a *fresh* paywall (Token-2022) ─────
+  // Reusing the USDC-settled URL can yield a second settlement path that
+  // overwrites `last_tx_sig` on the primary link with a sig that does not
+  // match the USDC `callResult`. A duplicate link isolates USDG.
   let usdgTxSig: string | undefined;
   if (usdgFunded && usdgDelegation.delegate === ownerPubkey) {
-    step('createBuyer.fetch(share_url) — USDG settlement on devnet (Token-2022)');
+    step('POST /v1/payment-links — create hosted paywall for USDG leg');
+    const usdgLink = await api<{
+      id: string;
+      share_url: string;
+    }>('/v1/payment-links', {
+      method: 'POST',
+      body: {
+        label: `e2e-usdg-${Date.now()}`,
+        owner_agent: sellerAgent,
+        method: 'GET',
+        price: PRICE,
+        currency: 'USDC',
+        accepts_currencies: ['USDC', 'USDG'],
+        response: {
+          status: 200,
+          mimeType: 'application/json',
+          body: { ok: true, message: 'paid via e2e usdg' },
+        },
+        metadata: { source: 'apps/api/scripts/e2e-devnet.ts', leg: 'usdg' },
+      },
+    });
+    usdgLinkId = usdgLink.id;
+    assert(
+      usdgLink.share_url.startsWith(SHARE_URL_ORIGIN),
+      `usdg share_url ${usdgLink.share_url} should start with ${SHARE_URL_ORIGIN}`,
+    );
+    ok(`USDG payment link id: ${usdgLink.id}`);
+
+    step('createBuyer.fetch(usdg share_url) — USDG settlement on devnet (Token-2022)');
     const usdgBuyer = createBuyer({
       agent: buyerAgent,
       rules: {
@@ -728,7 +777,7 @@ async function main(): Promise<void> {
       mint: USDG_MINT,
       tokenProgram: TOKEN_2022_PROGRAM_ID,
     });
-    const usdgResult = await usdgBuyer.fetch(`${shareUrl}?network=solana-devnet`, {
+    const usdgResult = await usdgBuyer.fetch(usdgLink.share_url, {
       method: 'GET',
     });
     if (!usdgResult.receipt.tx_sig) {
@@ -822,7 +871,7 @@ async function main(): Promise<void> {
     },
   });
 
-  const failResult = await failBuyer.fetch(`${failLink.share_url}?network=solana-devnet`, {
+  const failResult = await failBuyer.fetch(failLink.share_url, {
     method: 'GET',
   });
   assert(
@@ -877,9 +926,8 @@ async function main(): Promise<void> {
     bumped = await api(`/v1/payment-links/${linkId}`);
   }
   assert(bumped.counters.settled_count >= 1, 'settled_count never bumped');
-  // The USDG settlement (when it ran) overwrites `last_tx_sig` with its own
-  // signature, so accept either the USDC or USDG tx as the last_tx_sig.
-  const validLastTxSigs = [callResult.receipt.tx_sig, usdgTxSig].filter(Boolean) as string[];
+  // Primary link only receives the USDC settlement; USDG uses `usdgLinkId`.
+  const validLastTxSigs = [callResult.receipt.tx_sig].filter(Boolean) as string[];
   assert(
     bumped.counters.last_tx_sig != null && validLastTxSigs.includes(bumped.counters.last_tx_sig),
     `last_tx_sig (${bumped.counters.last_tx_sig}) should match one of ${validLastTxSigs.join(', ')}`,
@@ -943,8 +991,10 @@ async function main(): Promise<void> {
   assert(byHash.receipt_hash === earnReceipt.receipt_hash, 'by-hash lookup mismatch');
   ok(`by-hash lookup OK (kind=${byHash.kind}, tx=${byHash.tx_sig})`);
 
-  // ───── 19b. optional hosted MPP paywall (same buyer + delegation) ─────
-  if (process.env.LEASH_E2E_MPP === '1') {
+  // ───── 19b. hosted MPP paywall (same buyer + delegation; opt-out via LEASH_E2E_SKIP_MPP=1) ─────
+  if (process.env.LEASH_E2E_SKIP_MPP === '1') {
+    step('MPP hosted paywall — skipped (LEASH_E2E_SKIP_MPP=1)');
+  } else {
     step('POST /v1/payment-links — create MPP hosted paywall');
     const mppLink = await api<{
       id: string;
@@ -968,11 +1018,12 @@ async function main(): Promise<void> {
       },
     });
     mppLinkId = mppLink.id;
+    mppShareUrlForLog = mppLink.share_url;
     ok(`MPP payment link id: ${mppLink.id}`);
 
     step('GET /x/{mppId} — anonymous probe returns 402 problem+json');
     const mppShareUrl = mppLink.share_url;
-    const mppProbe = await fetch(`${mppShareUrl}?network=solana-devnet`, {
+    const mppProbe = await fetch(mppShareUrl, {
       method: 'GET',
       headers: { accept: 'application/json' },
     });
@@ -997,7 +1048,7 @@ async function main(): Promise<void> {
     ok(`MPP 402 challenge id: ${mppProbeJson.challengeId.slice(0, 12)}…`);
 
     step('createBuyer.fetch(mpp share_url) — real MPP settlement on devnet');
-    const mppResult = await buyer.fetch(`${mppShareUrl}?network=solana-devnet`, {
+    const mppResult = await buyer.fetch(mppShareUrl, {
       method: 'GET',
     });
     if (!isReceiptV02(mppResult.receipt) || mppResult.receipt.protocol !== 'mpp') {
@@ -1008,9 +1059,11 @@ async function main(): Promise<void> {
     const mppSig = mppSpend.mpp_settlement_tx || mppSpend.tx_sig;
     if (!mppSig || mppSig.length < 8) {
       fatal(
-        `MPP settlement failed; failureReason=${mppResult.failureReason ?? '(none)'} decision=${mppSpend.decision}`,
+        `MPP settlement failed; failureReason=${mppResult.failureReason ?? '(none)'} ` +
+          `decision=${mppSpend.decision} receipt.reason=${mppSpend.reason ?? '(none)'}`,
       );
     }
+    mppSettlementSigForLog = mppSig;
     assert(
       mppResult.response.status === 200,
       `MPP retry should 200, got ${mppResult.response.status}`,
@@ -1029,6 +1082,18 @@ async function main(): Promise<void> {
     }
     assert(mppSpendRow !== undefined, 'no spend receipt row for MPP settlement sig');
     ok(`MPP spend receipt hash: ${mppSpendRow.receipt_hash.slice(0, 16)}…`);
+
+    step('GET /v1/receipts/{seller} — MPP earn receipt visible');
+    let mppEarnRow: { kind: string; tx_sig: string | null; receipt_hash: string } | undefined;
+    for (let i = 0; i < 10 && mppEarnRow === undefined; i += 1) {
+      const sellerFeed = await api<{
+        items: Array<{ kind: string; tx_sig: string | null; receipt_hash: string }>;
+      }>(`/v1/receipts/${sellerAgent}?limit=10`);
+      mppEarnRow = sellerFeed.items.find((r) => r.kind === 'earn' && r.tx_sig === mppSig);
+      if (!mppEarnRow) await sleep(500);
+    }
+    assert(mppEarnRow !== undefined, 'no earn receipt row for MPP settlement sig');
+    ok(`MPP earn receipt hash: ${mppEarnRow.receipt_hash.slice(0, 16)}…`);
   }
 
   // ───── 20. indexer status is healthy ─────
@@ -1042,7 +1107,11 @@ async function main(): Promise<void> {
   assert(status.network === 'solana-devnet', `expected devnet, got ${status.network}`);
   assert(status.watchlist_size >= 1, 'watchlist should include at least the seller agent');
   const settledLastHour = status.events_last_hour['payment_link.settled'] ?? 0;
-  assert(settledLastHour >= 1, 'no payment_link.settled events in the last hour');
+  const minSettled = process.env.LEASH_E2E_SKIP_MPP === '1' ? 1 : 2;
+  assert(
+    settledLastHour >= minSettled,
+    `expected at least ${minSettled} payment_link.settled (1h), got ${settledLastHour}`,
+  );
   ok(
     `indexer healthy — watchlist=${status.watchlist_size}, cursors=${status.cursors.total}, settled (1h)=${settledLastHour}`,
   );
@@ -1052,10 +1121,19 @@ async function main(): Promise<void> {
     step('Cleanup skipped (LEASH_E2E_KEEP_LINK=1)');
     info(`probe the success link in the explorer: /payment-links/${linkId}`);
     info(`probe the failure link in the explorer: /payment-links/${failLink.id}`);
+    if (mppLinkId) {
+      info(`probe the MPP link in the explorer: /payment-links/${mppLinkId}`);
+    }
+    if (usdgLinkId) {
+      info(`probe the USDG leg link in the explorer: /payment-links/${usdgLinkId}`);
+    }
   } else {
     step('PATCH /v1/payment-links/{id} — soft-disable for cleanup');
     await api(`/v1/payment-links/${linkId}`, { method: 'PATCH', body: { disabled: true } });
     await api(`/v1/payment-links/${failLink.id}`, { method: 'PATCH', body: { disabled: true } });
+    if (usdgLinkId) {
+      await api(`/v1/payment-links/${usdgLinkId}`, { method: 'PATCH', body: { disabled: true } });
+    }
     if (mppLinkId) {
       await api(`/v1/payment-links/${mppLinkId}`, { method: 'PATCH', body: { disabled: true } });
     }
@@ -1072,8 +1150,17 @@ async function main(): Promise<void> {
   }
   console.log(`fail link     : ${failLink.share_url}`);
   console.log(`fail receipt  : ${failResult.receipt.receipt_hash} (decision=rejected)`);
+  if (mppShareUrlForLog && mppSettlementSigForLog) {
+    console.log(`mpp link      : ${mppShareUrlForLog}`);
+    console.log(`mpp tx        : https://solscan.io/tx/${mppSettlementSigForLog}?cluster=devnet`);
+  } else if (process.env.LEASH_E2E_SKIP_MPP === '1') {
+    console.log(`mpp link      : (skipped — LEASH_E2E_SKIP_MPP=1)`);
+  }
   console.log(`seller agent  : ${sellerAgent}`);
   console.log(`buyer  agent  : ${buyerAgent}`);
+  console.log(
+    `explorer      : http://localhost:3100  (receipts + payment-links when API .env matches DB)`,
+  );
 }
 
 // ────────────────────────────────────────────────────────────────────────────
