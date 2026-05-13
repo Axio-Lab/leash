@@ -5,9 +5,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { AuthButton } from '@/components/auth-button';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
-import { NEXT_PUBLIC_AGENTS_URL } from '@/lib/env';
+import { NEXT_PUBLIC_DOCS_URL } from '@/lib/env';
 
 /**
  * Public marketplace header used on the landing, browse, and listing
@@ -37,26 +36,35 @@ export function SiteHeader() {
         </Link>
         <nav className="hidden items-center gap-1 text-sm md:flex">
           {[
-            { href: '/browse', label: 'Browse' },
-            { href: '/creator', label: 'Creators' },
-            { href: '/creator/docs', label: 'Docs' },
-          ].map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'rounded-md px-3 py-1.5 text-fg-muted transition-colors hover:bg-bg-elev hover:text-fg',
-                isActive(item.href) && 'bg-bg-elev text-fg',
-              )}
-            >
-              {item.label}
-            </Link>
-          ))}
+            { href: '/browse', label: 'Browse', external: false },
+            { href: '/creator', label: 'Creators', external: false },
+            { href: NEXT_PUBLIC_DOCS_URL, label: 'Docs', external: true },
+          ].map((item) =>
+            item.external ? (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md px-3 py-1.5 text-fg-muted transition-colors hover:bg-bg-elev hover:text-fg"
+              >
+                {item.label}
+              </a>
+            ) : (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  'rounded-md px-3 py-1.5 text-fg-muted transition-colors hover:bg-bg-elev hover:text-fg',
+                  isActive(item.href) && 'bg-bg-elev text-fg',
+                )}
+              >
+                {item.label}
+              </Link>
+            ),
+          )}
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="ghost" size="sm" asChild className="hidden md:inline-flex">
-            <Link href={NEXT_PUBLIC_AGENTS_URL}>Open agent dashboard →</Link>
-          </Button>
           <AuthButton />
         </div>
       </div>
