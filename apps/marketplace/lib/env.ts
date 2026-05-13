@@ -3,6 +3,14 @@ export const NEXT_PUBLIC_PRIVY_APP_ID: string = process.env.NEXT_PUBLIC_PRIVY_AP
 export const NEXT_PUBLIC_AGENTS_URL: string =
   process.env.NEXT_PUBLIC_AGENTS_URL ?? 'http://localhost:4100';
 
+/** Hosted agent product (footer “Agent platform”). */
+export const NEXT_PUBLIC_AGENT_PLATFORM_URL: string =
+  process.env.NEXT_PUBLIC_AGENT_PLATFORM_URL ?? 'https://agent.leash.market';
+
+/** Public docs site (`docs.leash.market` in prod). */
+export const NEXT_PUBLIC_DOCS_URL: string =
+  process.env.NEXT_PUBLIC_DOCS_URL ?? 'https://docs.leash.market';
+
 export const SOLANA_RPC: string =
   process.env.NEXT_PUBLIC_SOLANA_RPC ?? 'https://api.devnet.solana.com';
 

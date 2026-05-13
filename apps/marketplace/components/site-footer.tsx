@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { NEXT_PUBLIC_AGENTS_URL } from '@/lib/env';
+import { NEXT_PUBLIC_AGENT_PLATFORM_URL, NEXT_PUBLIC_DOCS_URL } from '@/lib/env';
 
 export function SiteFooter() {
   return (
@@ -11,7 +11,7 @@ export function SiteFooter() {
             leash<span className="text-fg-muted">.market</span>
           </p>
           <p className="text-xs text-fg-subtle max-w-sm">
-            The open registry for agent tools. Stablecoin rails for autonomous agents.
+            The open registry for autonomous buyers. Payment rails for AI agents.
           </p>
         </div>
         <nav className="grid grid-cols-2 gap-x-12 gap-y-2 text-xs text-fg-muted md:grid-cols-3">
@@ -21,9 +21,9 @@ export function SiteFooter() {
           <Link href="/creator" className="hover:text-fg">
             For creators
           </Link>
-          <Link href="/creator/docs" className="hover:text-fg">
+          <a href={NEXT_PUBLIC_DOCS_URL} className="hover:text-fg" target="_blank" rel="noreferrer">
             Docs
-          </Link>
+          </a>
           <Link href="/creator/list" className="hover:text-fg">
             List a tool
           </Link>
@@ -31,7 +31,7 @@ export function SiteFooter() {
             API keys
           </Link>
           <a
-            href={NEXT_PUBLIC_AGENTS_URL}
+            href={NEXT_PUBLIC_AGENT_PLATFORM_URL}
             className="hover:text-fg"
             target="_blank"
             rel="noreferrer"
