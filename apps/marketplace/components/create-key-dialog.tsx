@@ -83,7 +83,7 @@ export function CreateKeyDialog({
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Create API key</h2>
           <p className="mt-1 text-xs text-fg-muted">
-            The plaintext value is shown once after creation. Store it in your secret manager.
+            You&apos;ll see the full key right after creation. You can also reveal it later.
           </p>
         </div>
 

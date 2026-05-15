@@ -24,7 +24,7 @@ export function ShowKeyOnceModal({
           <div>
             <h2 className="text-base font-semibold">Save this key now</h2>
             <p className="mt-0.5 text-xs text-fg-muted">
-              We'll never show the plaintext again. Store it in a password manager or secret store.
+              Copy it now if you need it elsewhere. You can reveal it later.
             </p>
           </div>
         </div>

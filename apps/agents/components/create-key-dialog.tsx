@@ -79,7 +79,8 @@ export function CreateKeyDialog({
         <div>
           <h2 className="text-base font-medium">Create API key</h2>
           <p className="text-xs text-fg-muted mt-1">
-            The plaintext value is shown once after creation. Copy it then.
+            You&apos;ll see the full key right after creation. You can also reveal it later from
+            this page while signed in.
           </p>
         </div>
         <label className="block text-sm">
