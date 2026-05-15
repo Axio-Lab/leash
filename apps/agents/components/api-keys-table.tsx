@@ -29,16 +29,30 @@ const fetcher = async (url: string) => {
   return (await res.json()) as { items: ApiKeyItem[]; warning?: string };
 };
 
+/** Same pattern as `settings/connections` (connector toolkits grid). */
+const PER_PAGE = 10;
+
 export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
   const { data, error, isLoading, mutate } = useSWR<{
     items: ApiKeyItem[];
     warning?: string;
   }>('/api/keys', fetcher);
 
+  const [page, setPage] = React.useState(1);
   const [revokingId, setRevokingId] = React.useState<string | null>(null);
   const [revealedKeys, setRevealedKeys] = React.useState<Record<string, string>>({});
   const [revealingId, setRevealingId] = React.useState<string | null>(null);
-  const offline = data?.items.some((k) => k._offline);
+  const offline = data?.items?.some((k) => k._offline) ?? false;
+  const items = data?.items ?? [];
+  const totalPages = Math.max(1, Math.ceil(items.length / PER_PAGE));
+
+  React.useEffect(() => {
+    setPage((p) => Math.min(p, totalPages));
+  }, [totalPages]);
+
+  const clampedPage = Math.min(page, totalPages);
+  const start = (clampedPage - 1) * PER_PAGE;
+  const visible = items.slice(start, start + PER_PAGE);
 
   async function reissueLegacyKey(item: ApiKeyItem) {
     try {
@@ -88,7 +102,7 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
         message?: string;
       };
       if (!res.ok || !j.plaintext) {
-        const key = data?.items.find((k) => k.id === id);
+        const key = items.find((k) => k.id === id);
         const isLegacy = (j.message ?? '').toLowerCase().includes('issued before encrypted');
         toast.error('Could not reveal key', {
           description:
@@ -182,7 +196,7 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
         </div>
       ) : error ? (
         <div className="px-4 py-8 text-danger text-sm">{(error as Error).message}</div>
-      ) : !data || data.items.length === 0 ? (
+      ) : items.length === 0 ? (
         <div className="px-4 py-10 text-fg-muted text-sm text-center space-y-1">
           <p>No keys yet.</p>
           <p className="text-xs">
@@ -200,127 +214,162 @@ export function ApiKeysTable({ onCreate }: { onCreate: () => void }) {
           </p>
         </div>
       ) : (
-        /* Horizontally scrollable on mobile */
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[640px]">
-            <thead className="text-xs text-fg-muted uppercase tracking-wide bg-bg-elev/50">
-              <tr>
-                <th className="text-left px-4 py-2">Key</th>
-                <th className="text-left px-4 py-2">Name</th>
-                <th className="text-left px-4 py-2">Source</th>
-                <th className="text-left px-4 py-2">Network</th>
-                <th className="text-left px-4 py-2">Scopes</th>
-                <th className="text-left px-4 py-2">Created</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.map((k) => (
-                <tr
-                  key={k.id}
-                  className="border-t border-border hover:bg-bg-elev/50 transition-colors"
-                >
-                  <td className="px-4 py-3 font-mono text-xs text-fg-muted">
-                    {k._offline ? (
-                      <span className="text-fg-subtle italic">limited info</span>
-                    ) : revealedKeys[k.id] ? (
-                      <div className="flex items-center gap-1.5">
-                        <span className="break-all max-w-[260px]">{revealedKeys[k.id]}</span>
-                        <button
-                          type="button"
-                          onClick={() => copyKey(revealedKeys[k.id]!)}
-                          className="shrink-0 rounded-md p-1 text-fg-subtle hover:bg-bg-elev hover:text-fg"
-                          aria-label="Copy key"
-                        >
-                          <CopyIcon className="size-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5">
-                        <span>
-                          {k.prefix}…{k.last4}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => void reveal(k.id)}
-                          disabled={revealingId === k.id || !!k.disabled_at}
-                          className="shrink-0 rounded-md p-1 text-fg-subtle hover:bg-bg-elev hover:text-fg disabled:opacity-40"
-                          title="Reveal full key"
-                          aria-label="Reveal full key"
-                        >
-                          {revealingId === k.id ? (
-                            <Spinner size="xs" />
-                          ) : (
-                            <EyeIcon className="size-3" />
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">{k.name}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={cn(
-                        'rounded-full px-2 py-0.5 text-xs',
-                        k.source === 'agents'
-                          ? 'bg-brand/20 text-brand'
-                          : k.source === 'marketplace'
-                            ? 'bg-violet-950/40 text-violet-300'
-                            : k.source === 'shared'
-                              ? 'bg-sky-950/40 text-sky-300'
-                              : 'bg-bg text-fg-subtle',
+        <>
+          <div className="flex items-center justify-between px-4 py-2 border-b border-border text-xs text-fg-muted bg-bg-elev/30">
+            <span>
+              {items.length} key{items.length !== 1 ? 's' : ''}
+            </span>
+            {totalPages > 1 ? (
+              <span>
+                Page {clampedPage} / {totalPages}
+              </span>
+            ) : null}
+          </div>
+          {/* Horizontally scrollable on mobile */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[640px]">
+              <thead className="text-xs text-fg-muted uppercase tracking-wide bg-bg-elev/50">
+                <tr>
+                  <th className="text-left px-4 py-2">Key</th>
+                  <th className="text-left px-4 py-2">Name</th>
+                  <th className="text-left px-4 py-2">Source</th>
+                  <th className="text-left px-4 py-2">Network</th>
+                  <th className="text-left px-4 py-2">Scopes</th>
+                  <th className="text-left px-4 py-2">Created</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((k) => (
+                  <tr
+                    key={k.id}
+                    className="border-t border-border hover:bg-bg-elev/50 transition-colors"
+                  >
+                    <td className="px-4 py-3 font-mono text-xs text-fg-muted">
+                      {k._offline ? (
+                        <span className="text-fg-subtle italic">limited info</span>
+                      ) : revealedKeys[k.id] ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="break-all max-w-[260px]">{revealedKeys[k.id]}</span>
+                          <button
+                            type="button"
+                            onClick={() => copyKey(revealedKeys[k.id]!)}
+                            className="shrink-0 rounded-md p-1 text-fg-subtle hover:bg-bg-elev hover:text-fg"
+                            aria-label="Copy key"
+                          >
+                            <CopyIcon className="size-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <span>
+                            {k.prefix}…{k.last4}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => void reveal(k.id)}
+                            disabled={revealingId === k.id || !!k.disabled_at}
+                            className="shrink-0 rounded-md p-1 text-fg-subtle hover:bg-bg-elev hover:text-fg disabled:opacity-40"
+                            title="Reveal full key"
+                            aria-label="Reveal full key"
+                          >
+                            {revealingId === k.id ? (
+                              <Spinner size="xs" />
+                            ) : (
+                              <EyeIcon className="size-3" />
+                            )}
+                          </button>
+                        </div>
                       )}
-                    >
-                      {k.source ?? 'unknown'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {k._offline ? (
-                      <span className="text-fg-subtle text-xs italic">—</span>
-                    ) : (
+                    </td>
+                    <td className="px-4 py-3">{k.name}</td>
+                    <td className="px-4 py-3">
                       <span
                         className={cn(
                           'rounded-full px-2 py-0.5 text-xs',
-                          k.network === 'solana-devnet'
-                            ? 'bg-amber-950/40 text-amber-300'
-                            : 'bg-emerald-950/40 text-emerald-300',
+                          k.source === 'agents'
+                            ? 'bg-brand/20 text-brand'
+                            : k.source === 'marketplace'
+                              ? 'bg-violet-950/40 text-violet-300'
+                              : k.source === 'shared'
+                                ? 'bg-sky-950/40 text-sky-300'
+                                : 'bg-bg text-fg-subtle',
                         )}
                       >
-                        {k.network === 'solana-devnet' ? 'Devnet' : 'Mainnet'}
+                        {k.source ?? 'unknown'}
                       </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-fg-muted text-xs">
-                    {k.scopes.length > 0 ? k.scopes.join(', ') : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-fg-muted text-xs">
-                    {k._offline ? '—' : new Date(k.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {k._offline ? null : k.disabled_at ? (
-                      <span className="text-xs text-fg-subtle">revoked</span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => revoke(k.id)}
-                        disabled={revokingId === k.id}
-                        className="inline-flex items-center gap-1.5 text-xs text-danger hover:underline disabled:opacity-60"
-                      >
-                        {revokingId === k.id ? (
-                          <>
-                            <Spinner size="xs" /> Revoking
-                          </>
-                        ) : (
-                          'Revoke'
-                        )}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {k._offline ? (
+                        <span className="text-fg-subtle text-xs italic">—</span>
+                      ) : (
+                        <span
+                          className={cn(
+                            'rounded-full px-2 py-0.5 text-xs',
+                            k.network === 'solana-devnet'
+                              ? 'bg-amber-950/40 text-amber-300'
+                              : 'bg-emerald-950/40 text-emerald-300',
+                          )}
+                        >
+                          {k.network === 'solana-devnet' ? 'Devnet' : 'Mainnet'}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-fg-muted text-xs">
+                      {k.scopes.length > 0 ? k.scopes.join(', ') : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-fg-muted text-xs">
+                      {k._offline ? '—' : new Date(k.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {k._offline ? null : k.disabled_at ? (
+                        <span className="text-xs text-fg-subtle">revoked</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => revoke(k.id)}
+                          disabled={revokingId === k.id}
+                          className="inline-flex items-center gap-1.5 text-xs text-danger hover:underline disabled:opacity-60"
+                        >
+                          {revokingId === k.id ? (
+                            <>
+                              <Spinner size="xs" /> Revoking
+                            </>
+                          ) : (
+                            'Revoke'
+                          )}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {totalPages > 1 ? (
+            <div className="flex items-center justify-center gap-2 border-t border-border py-3 px-4">
+              <button
+                type="button"
+                className="rounded-md border border-border px-3 py-1.5 text-sm disabled:opacity-50 hover:border-border-strong"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={clampedPage <= 1}
+              >
+                Prev
+              </button>
+              <span className="text-xs text-fg-muted px-2">
+                {clampedPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                className="rounded-md border border-border px-3 py-1.5 text-sm disabled:opacity-50 hover:border-border-strong"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={clampedPage >= totalPages}
+              >
+                Next
+              </button>
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );

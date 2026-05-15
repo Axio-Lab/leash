@@ -23,8 +23,8 @@ export default function ApiKeysPage() {
         <p className="mt-1 max-w-2xl text-sm text-fg-muted">
           <code className="font-mono text-fg">lsh_*</code> keys with{' '}
           <code className="font-mono text-fg">marketplace</code> scope let you manage your listings
-          programmatically. The plaintext value is shown once after creation — store it in your
-          secret manager.
+          programmatically. You&apos;ll see the full key after each creation and can reveal it
+          again.
         </p>
       </div>
       <ApiKeysTable onCreate={() => setOpen(true)} />

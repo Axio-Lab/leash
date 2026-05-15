@@ -17,7 +17,7 @@ export function ShowKeyOnceModal({
         <div>
           <h2 className="text-base font-medium">Save this key now</h2>
           <p className="text-xs text-fg-muted mt-1">
-            We'll never show the plaintext again. Store it somewhere safe.
+            Copy it now if you need it elsewhere. You can reveal it later.
           </p>
         </div>
         <pre className="rounded-md border bg-bg px-3 py-2 font-mono text-sm overflow-x-auto select-all">
