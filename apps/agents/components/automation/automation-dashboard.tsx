@@ -5,7 +5,6 @@ import * as React from 'react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
 import {
-  AlertTriangleIcon,
   BellIcon,
   CalendarClockIcon,
   Clock3Icon,
@@ -14,7 +13,6 @@ import {
   MoreHorizontalIcon,
   PauseIcon,
   PlayIcon,
-  PlusIcon,
   SaveIcon,
   ShieldCheckIcon,
   Trash2Icon,
@@ -465,7 +463,7 @@ export function AutomationDashboard() {
   return (
     <div className="flex-1 overflow-y-auto scrollbar-thin">
       <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <header className="border-b border-border pb-4">
           <div className="min-w-0">
             <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-brand/30 bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand">
               <WorkflowIcon className="size-3.5" aria-hidden="true" />
@@ -477,10 +475,6 @@ export function AutomationDashboard() {
               optional report delivery.
             </p>
           </div>
-          <Button type="button" onClick={resetForm} className="min-h-10">
-            <PlusIcon className="size-4" aria-hidden="true" />
-            New automation
-          </Button>
         </header>
 
         <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="Automation scope">
@@ -539,7 +533,7 @@ export function AutomationDashboard() {
                   Could not load automations: {(automationsError as Error).message}
                 </div>
               ) : automations.length === 0 ? (
-                <EmptyAutomationState onCreate={resetForm} />
+                <EmptyAutomationState />
               ) : (
                 <ul className="divide-y divide-border">
                   {automations.map((row) => {
@@ -641,7 +635,7 @@ export function AutomationDashboard() {
   );
 }
 
-function EmptyAutomationState({ onCreate }: { onCreate: () => void }) {
+function EmptyAutomationState() {
   return (
     <div className="grid min-h-[280px] place-items-center px-4 py-10 text-center">
       <div className="max-w-md">
@@ -653,10 +647,9 @@ function EmptyAutomationState({ onCreate }: { onCreate: () => void }) {
           Start with a schedule, webhook, or event trigger, then choose which connections the agent
           can read and where reports should go.
         </p>
-        <Button type="button" onClick={onCreate} className="mt-5 min-h-10">
-          <PlusIcon className="size-4" aria-hidden="true" />
-          New automation
-        </Button>
+        <p className="mt-3 text-xs leading-5 text-fg-subtle">
+          Use the form on this page to save the first automation.
+        </p>
       </div>
     </div>
   );
@@ -1058,17 +1051,6 @@ function RunHistoryPanel({
           ))}
         </ul>
       )}
-
-      <div className="mt-4 rounded-md border border-warning/35 bg-warning/8 px-3 py-2.5 text-xs leading-5 text-fg-muted">
-        <div className="flex items-center gap-2 font-medium text-warning">
-          <AlertTriangleIcon className="size-3.5" aria-hidden="true" />
-          Missing pieces tracked
-        </div>
-        <p className="mt-1">
-          Scheduler claims, webhook signatures, event dedupe, delivery attempts, spend receipts,
-          retention pruning, and kill-switch behavior are planned as separate tested commits.
-        </p>
-      </div>
     </div>
   );
 }
