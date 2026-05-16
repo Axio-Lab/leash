@@ -14,6 +14,7 @@ import {
   SquarePen,
   Trash2Icon,
   UserRoundIcon,
+  WorkflowIcon,
 } from 'lucide-react';
 
 import {
@@ -170,8 +171,20 @@ export function ChatSidebar({
 
   return (
     <aside className="w-[224px] shrink-0 border-r border-border bg-bg-elev/95 flex flex-col h-full overflow-hidden">
-      {/* New chat — primary action at the very top */}
-      <div className="shrink-0 px-3 pt-3 pb-3">
+      {/* Automation + New chat — primary destinations at the top */}
+      <div className="shrink-0 px-3 pt-3 pb-2 space-y-2">
+        <Link
+          href="/agents/automation"
+          onClick={onNavigate}
+          className={`flex min-h-10 items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors ${
+            pathname?.startsWith('/agents/automation')
+              ? 'bg-brand/15 text-fg shadow-[inset_0_0_0_1px_oklch(0.66_0.19_268/0.4)]'
+              : 'text-fg-muted hover:bg-bg-elev hover:text-fg'
+          }`}
+        >
+          <WorkflowIcon className="size-4 text-fg-subtle" />
+          <span className="flex-1">Automation</span>
+        </Link>
         <Button
           type="button"
           onClick={onNewChat}

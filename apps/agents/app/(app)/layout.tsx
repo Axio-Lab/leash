@@ -34,7 +34,7 @@ function Inner({ children }: { children: React.ReactNode }) {
     const parts = pathname.split('/').filter(Boolean);
     if (parts[0] !== 'agents' || parts.length !== 2) return false;
     const seg = parts[1]!;
-    const reserved = new Set(['onboarding']);
+    const reserved = new Set(['automation', 'onboarding']);
     return !reserved.has(seg);
   }, [pathname]);
 
