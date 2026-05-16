@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 16;
+const SCHEMA_VERSION = 17;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -379,7 +379,7 @@ const SCHEMA_SQL: readonly string[] = [
   `CREATE INDEX IF NOT EXISTS idx_activities_task ON task_activities(task_id, created_at)`,
 
   // ─────────────────────────────────────────────────────────────────────
-  // Automations (v16) — persistent background jobs owned by a Privy user
+  // Automations (v17) — persistent background jobs owned by a Privy user
   // and executed by the user's on-chain agent. Triggers and connection
   // permissions are JSON so schedules, webhooks, and app events can share
   // one table without schema churn.
@@ -389,6 +389,7 @@ const SCHEMA_SQL: readonly string[] = [
     agent_mint           TEXT NOT NULL,
     name                 TEXT NOT NULL,
     description          TEXT,
+    instructions         TEXT NOT NULL DEFAULT '',
     status               TEXT NOT NULL DEFAULT 'paused'
                            CHECK (status IN ('enabled','paused')),
     trigger_type         TEXT NOT NULL
@@ -405,6 +406,8 @@ const SCHEMA_SQL: readonly string[] = [
     last_run_at          TEXT,
     last_status          TEXT,
     failure_count        INTEGER NOT NULL DEFAULT 0,
+    locked_by            TEXT,
+    locked_until         TEXT,
     retention_days       INTEGER NOT NULL DEFAULT 30,
     deleted_at           TEXT,
     created_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -413,6 +416,7 @@ const SCHEMA_SQL: readonly string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_automations_owner_updated ON automations(owner_privy_id, updated_at DESC) WHERE deleted_at IS NULL`,
   `CREATE INDEX IF NOT EXISTS idx_automations_due ON automations(next_run_at) WHERE deleted_at IS NULL AND status = 'enabled'`,
+  `CREATE INDEX IF NOT EXISTS idx_automations_lock ON automations(locked_until) WHERE deleted_at IS NULL AND status = 'enabled'`,
 
   `CREATE TABLE IF NOT EXISTS automation_runs (
     id                   TEXT PRIMARY KEY,
@@ -736,12 +740,22 @@ export async function runMigrations(db: Client): Promise<void> {
     await migrateWebhooksAgentMint(db);
   }
 
+  // v17: automations become executable. Adds explicit run
+  // instructions plus a lightweight worker lease (`locked_by`,
+  // `locked_until`) used by the scheduler to claim due rows safely.
+  if (currentVersion < 17) {
+    await migrateExecutableAutomations(db);
+  }
+
   // Always-on index assertions. These run after every boot — they're
   // cheap (`IF NOT EXISTS`) and idempotent, and they cover the case
   // where a brand-new DB takes the latest `SCHEMA_SQL` directly and
   // every versioned migration short-circuits.
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_webhooks_agent_mint ON webhooks(agent_mint) WHERE disabled_at IS NULL`,
+  );
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_automations_lock ON automations(locked_until) WHERE deleted_at IS NULL AND status = 'enabled'`,
   );
 
   if (currentVersion < SCHEMA_VERSION) {
@@ -914,6 +928,23 @@ async function migrateWebhooksAgentMint(db: Client): Promise<void> {
   );
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_webhooks_agent_mint ON webhooks(agent_mint) WHERE disabled_at IS NULL`,
+  );
+}
+
+async function migrateExecutableAutomations(db: Client): Promise<void> {
+  const info = await db.execute('PRAGMA table_info(automations)');
+  const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
+  if (!names.has('instructions')) {
+    await db.execute(`ALTER TABLE automations ADD COLUMN instructions TEXT NOT NULL DEFAULT ''`);
+  }
+  if (!names.has('locked_by')) {
+    await db.execute('ALTER TABLE automations ADD COLUMN locked_by TEXT');
+  }
+  if (!names.has('locked_until')) {
+    await db.execute('ALTER TABLE automations ADD COLUMN locked_until TEXT');
+  }
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_automations_lock ON automations(locked_until) WHERE deleted_at IS NULL AND status = 'enabled'`,
   );
 }
 

@@ -8,6 +8,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 
 import { adminAuth } from '../auth/admin.js';
+import { computeNextRunAt } from '../automations/schedule.js';
 import type { LeashApiConfig } from '../config.js';
 import { ApiErrorSchema, PubkeySchema } from '../openapi/common.js';
 import {
@@ -49,6 +50,7 @@ const AutomationSchema = z
     agent_mint: PubkeySchema,
     name: z.string(),
     description: z.string().nullable(),
+    instructions: z.string(),
     status: StatusSchema,
     trigger_type: TriggerTypeSchema,
     trigger_config: JsonObjectSchema,
@@ -97,6 +99,7 @@ const CreateAutomationBody = z.object({
   agent_mint: PubkeySchema,
   name: z.string().min(1).max(120),
   description: z.string().max(1000).optional().nullable(),
+  instructions: z.string().max(8000).default(''),
   status: StatusSchema.default('paused'),
   trigger_type: TriggerTypeSchema,
   trigger_config: JsonObjectSchema.default({}),
@@ -121,6 +124,7 @@ function automationToWire(row: AutomationRow) {
     agent_mint: row.agentMint,
     name: row.name,
     description: row.description,
+    instructions: row.instructions,
     status: row.status,
     trigger_type: row.triggerType,
     trigger_config: row.triggerConfig,
@@ -169,6 +173,16 @@ function assertBudget(value: string, field: string): void {
   if (!Number.isFinite(n) || n < 0) {
     throw invalidRequest(`${field} must be a non-negative number`);
   }
+}
+
+function initialNextRunAt(body: z.infer<typeof CreateAutomationBody>): string | null {
+  if (body.next_run_at !== undefined) return body.next_run_at ?? null;
+  if (body.status !== 'enabled' || body.trigger_type !== 'schedule') return null;
+  return computeNextRunAt({
+    triggerType: body.trigger_type,
+    triggerConfig: body.trigger_config,
+    timezone: body.timezone,
+  });
 }
 
 async function assertAgentOwned(deps: PlatformAutomationDeps, ownerPrivyId: string, mint: string) {
@@ -250,6 +264,7 @@ export function buildPlatformAutomationRoutes(deps: PlatformAutomationDeps): Ope
         agentMint: body.agent_mint,
         name: body.name.trim(),
         description: body.description?.trim() || null,
+        instructions: body.instructions.trim(),
         status: body.status,
         triggerType: body.trigger_type,
         triggerConfig: body.trigger_config,
@@ -259,7 +274,7 @@ export function buildPlatformAutomationRoutes(deps: PlatformAutomationDeps): Ope
         budgetPerRun: body.budget_per_run,
         budgetPerDay: body.budget_per_day,
         timezone: body.timezone,
-        nextRunAt: body.next_run_at ?? null,
+        nextRunAt: initialNextRunAt(body),
         retentionDays: body.retention_days,
       });
       return c.json(automationToWire(row), 200);
@@ -325,12 +340,35 @@ export function buildPlatformAutomationRoutes(deps: PlatformAutomationDeps): Ope
       if (body.budget_per_run !== undefined) assertBudget(body.budget_per_run, 'budget_per_run');
       if (body.budget_per_day !== undefined) assertBudget(body.budget_per_day, 'budget_per_day');
       if (body.agent_mint) await assertAgentOwned(deps, owner, body.agent_mint);
+      const current = await getAutomationForOwner(deps.db, owner, id);
+      if (!current) throw notFound('automation not found');
+      const nextStatus = body.status ?? current.status;
+      const nextTriggerType = body.trigger_type ?? current.triggerType;
+      const nextTriggerConfig = body.trigger_config ?? current.triggerConfig;
+      const nextTimezone = body.timezone ?? current.timezone;
+      const nextRunAt =
+        body.next_run_at !== undefined
+          ? (body.next_run_at ?? null)
+          : nextStatus === 'paused'
+            ? null
+            : nextTriggerType === 'schedule' &&
+                (current.nextRunAt == null ||
+                  body.status === 'enabled' ||
+                  body.trigger_config !== undefined ||
+                  body.timezone !== undefined)
+              ? computeNextRunAt({
+                  triggerType: nextTriggerType,
+                  triggerConfig: nextTriggerConfig,
+                  timezone: nextTimezone,
+                })
+              : undefined;
       const row = await updateAutomationForOwner(deps.db, owner, id, {
         ...(body.agent_mint !== undefined ? { agentMint: body.agent_mint } : {}),
         ...(body.name !== undefined ? { name: body.name.trim() } : {}),
         ...(body.description !== undefined
           ? { description: body.description?.trim() || null }
           : {}),
+        ...(body.instructions !== undefined ? { instructions: body.instructions.trim() } : {}),
         ...(body.status !== undefined ? { status: body.status } : {}),
         ...(body.trigger_type !== undefined ? { triggerType: body.trigger_type } : {}),
         ...(body.trigger_config !== undefined ? { triggerConfig: body.trigger_config } : {}),
@@ -340,7 +378,7 @@ export function buildPlatformAutomationRoutes(deps: PlatformAutomationDeps): Ope
         ...(body.budget_per_run !== undefined ? { budgetPerRun: body.budget_per_run } : {}),
         ...(body.budget_per_day !== undefined ? { budgetPerDay: body.budget_per_day } : {}),
         ...(body.timezone !== undefined ? { timezone: body.timezone } : {}),
-        ...(body.next_run_at !== undefined ? { nextRunAt: body.next_run_at ?? null } : {}),
+        ...(nextRunAt !== undefined ? { nextRunAt } : {}),
         ...(body.retention_days !== undefined ? { retentionDays: body.retention_days } : {}),
       });
       if (!row) throw notFound('automation not found');

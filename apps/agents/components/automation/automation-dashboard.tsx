@@ -34,6 +34,7 @@ type Automation = {
   agent_mint: string;
   name: string;
   description: string | null;
+  instructions: string;
   status: AutomationStatus;
   trigger_type: TriggerType;
   trigger_config: Record<string, unknown>;
@@ -119,10 +120,13 @@ type Draft = {
   id: string | null;
   name: string;
   description: string;
+  instructions: string;
   status: AutomationStatus;
   triggerType: TriggerType;
   scheduleKind: 'daily' | 'weekly' | 'interval';
   scheduleTime: string;
+  scheduleWeekday: string;
+  intervalMinutes: string;
   eventName: string;
   webhookLabel: string;
   toolkitSlugs: string[];
@@ -137,10 +141,13 @@ function emptyDraft(): Draft {
     id: null,
     name: '',
     description: '',
+    instructions: '',
     status: 'paused',
     triggerType: 'schedule',
     scheduleKind: 'daily',
     scheduleTime: '09:00',
+    scheduleWeekday: '1',
+    intervalMinutes: '60',
     eventName: 'treasury.low_balance',
     webhookLabel: 'Inbound webhook',
     toolkitSlugs: [],
@@ -163,10 +170,23 @@ function draftFromAutomation(row: Automation): Draft {
     id: row.id,
     name: row.name,
     description: row.description ?? '',
+    instructions: row.instructions ?? '',
     status: row.status,
     triggerType: row.trigger_type,
     scheduleKind,
     scheduleTime: typeof row.trigger_config.time === 'string' ? row.trigger_config.time : '09:00',
+    scheduleWeekday:
+      typeof row.trigger_config.weekday === 'number'
+        ? String(row.trigger_config.weekday)
+        : typeof row.trigger_config.weekday === 'string'
+          ? row.trigger_config.weekday
+          : '1',
+    intervalMinutes:
+      typeof row.trigger_config.interval_minutes === 'number'
+        ? String(row.trigger_config.interval_minutes)
+        : typeof row.trigger_config.interval_minutes === 'string'
+          ? row.trigger_config.interval_minutes
+          : '60',
     eventName:
       typeof row.trigger_config.event === 'string'
         ? row.trigger_config.event
@@ -191,6 +211,13 @@ function triggerLabel(row: Pick<Automation, 'trigger_type' | 'trigger_config'>):
   if (row.trigger_type === 'schedule') {
     const kind =
       typeof row.trigger_config.schedule === 'string' ? row.trigger_config.schedule : 'daily';
+    if (kind === 'interval') {
+      const minutes =
+        typeof row.trigger_config.interval_minutes === 'number'
+          ? row.trigger_config.interval_minutes
+          : Number.parseInt(String(row.trigger_config.interval_minutes ?? '60'), 10) || 60;
+      return `every ${minutes} min`;
+    }
     const time = typeof row.trigger_config.time === 'string' ? row.trigger_config.time : '09:00';
     return `${kind} at ${time}`;
   }
@@ -269,7 +296,19 @@ export function AutomationDashboard() {
 
   function buildTriggerConfig(): Record<string, unknown> {
     if (draft.triggerType === 'schedule') {
-      return { schedule: draft.scheduleKind, time: draft.scheduleTime };
+      if (draft.scheduleKind === 'interval') {
+        return {
+          schedule: 'interval',
+          interval_minutes: Number.parseInt(draft.intervalMinutes, 10) || 60,
+        };
+      }
+      return {
+        schedule: draft.scheduleKind,
+        time: draft.scheduleTime,
+        ...(draft.scheduleKind === 'weekly'
+          ? { weekday: Number.parseInt(draft.scheduleWeekday, 10) || 1 }
+          : {}),
+      };
     }
     if (draft.triggerType === 'webhook') {
       return { label: draft.webhookLabel.trim() || 'Inbound webhook', signature_required: true };
@@ -290,6 +329,13 @@ export function AutomationDashboard() {
       toast.error('Name is required');
       return;
     }
+    const instructions = draft.instructions.trim();
+    if (!instructions) {
+      toast.error('Instructions are required', {
+        description: 'Tell the agent what the automation should do when it runs.',
+      });
+      return;
+    }
     const perRun = Number.parseFloat(draft.budgetPerRun);
     const perDay = Number.parseFloat(draft.budgetPerDay);
     if (!Number.isFinite(perRun) || perRun < 0 || !Number.isFinite(perDay) || perDay < 0) {
@@ -303,6 +349,7 @@ export function AutomationDashboard() {
         agent_mint: primaryAgent.mint,
         name,
         description: draft.description.trim() || null,
+        instructions,
         status: draft.status,
         trigger_type: draft.triggerType,
         trigger_config: buildTriggerConfig(),
@@ -612,7 +659,11 @@ function AutomationEditor({
   onToggleToolkit: (slug: string, checked: boolean) => void;
 }) {
   return (
-    <form onSubmit={onSave} className="rounded-lg border border-border bg-bg-elev/70 p-4">
+    <form
+      onSubmit={onSave}
+      aria-busy={saving ? 'true' : undefined}
+      className="rounded-lg border border-border bg-bg-elev/70 p-4"
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-medium">{draft.id ? 'Edit automation' : 'New automation'}</h2>
@@ -638,6 +689,7 @@ function AutomationEditor({
             value={draft.name}
             onChange={(e) => onDraft('name', e.target.value)}
             placeholder="Morning operator brief"
+            autoComplete="off"
             className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand/70"
           />
         </Field>
@@ -648,6 +700,15 @@ function AutomationEditor({
             rows={3}
             placeholder="Summarize priority inboxes and flag anything that needs action."
             className="w-full resize-none rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand/70"
+          />
+        </Field>
+        <Field label="Run instructions">
+          <textarea
+            value={draft.instructions}
+            onChange={(e) => onDraft('instructions', e.target.value)}
+            rows={5}
+            placeholder="Check connected inboxes, summarize urgent items, and include recommended next actions."
+            className="w-full resize-y rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand/70"
           />
         </Field>
 
@@ -683,14 +744,44 @@ function AutomationEditor({
                 <option value="interval">Interval</option>
               </select>
             </Field>
-            <Field label="Time">
-              <input
-                type="time"
-                value={draft.scheduleTime}
-                onChange={(e) => onDraft('scheduleTime', e.target.value)}
-                className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-brand/70"
-              />
-            </Field>
+            {draft.scheduleKind === 'interval' ? (
+              <Field label="Every minutes">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={draft.intervalMinutes}
+                  onChange={(e) => onDraft('intervalMinutes', e.target.value)}
+                  className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-brand/70"
+                />
+              </Field>
+            ) : (
+              <Field label="Time">
+                <input
+                  type="time"
+                  value={draft.scheduleTime}
+                  onChange={(e) => onDraft('scheduleTime', e.target.value)}
+                  className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-brand/70"
+                />
+              </Field>
+            )}
+            {draft.scheduleKind === 'weekly' ? (
+              <Field label="Weekday">
+                <select
+                  value={draft.scheduleWeekday}
+                  onChange={(e) => onDraft('scheduleWeekday', e.target.value)}
+                  className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-brand/70"
+                >
+                  <option value="1">Monday</option>
+                  <option value="2">Tuesday</option>
+                  <option value="3">Wednesday</option>
+                  <option value="4">Thursday</option>
+                  <option value="5">Friday</option>
+                  <option value="6">Saturday</option>
+                  <option value="0">Sunday</option>
+                </select>
+              </Field>
+            ) : null}
           </div>
         ) : draft.triggerType === 'webhook' ? (
           <Field label="Webhook label">
@@ -765,9 +856,7 @@ function AutomationEditor({
         <div className="grid grid-cols-2 gap-2">
           <Field label="Cap per run">
             <input
-              type="number"
-              min="0"
-              step="0.01"
+              type="text"
               inputMode="decimal"
               value={draft.budgetPerRun}
               onChange={(e) => onDraft('budgetPerRun', e.target.value)}
@@ -776,9 +865,7 @@ function AutomationEditor({
           </Field>
           <Field label="Cap per day">
             <input
-              type="number"
-              min="0"
-              step="0.01"
+              type="text"
               inputMode="decimal"
               value={draft.budgetPerDay}
               onChange={(e) => onDraft('budgetPerDay', e.target.value)}
@@ -789,10 +876,9 @@ function AutomationEditor({
 
         <Field label="Run retention">
           <input
-            type="number"
-            min="1"
-            max="365"
+            type="text"
             inputMode="numeric"
+            pattern="[0-9]*"
             value={draft.retentionDays}
             onChange={(e) => onDraft('retentionDays', e.target.value)}
             className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-brand/70"
@@ -888,7 +974,8 @@ function RunHistoryPanel({
         </div>
       ) : runs.length === 0 ? (
         <div className="mt-4 rounded-md border border-border bg-bg px-3 py-3 text-xs leading-5 text-fg-muted">
-          No runs recorded yet. Scheduled workers and webhook execution land in the next phases.
+          No runs recorded yet. Enabled scheduled automations will appear here after the worker
+          claims and finishes them.
         </div>
       ) : (
         <ul className="mt-4 divide-y divide-border overflow-hidden rounded-md border border-border bg-bg">

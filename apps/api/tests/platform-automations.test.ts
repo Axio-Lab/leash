@@ -55,6 +55,7 @@ function createBody(overrides: Record<string, unknown> = {}) {
     agent_mint: MINT,
     name: 'Morning operator brief',
     description: 'Summarize connected inboxes before standup.',
+    instructions: 'Check the connected inboxes and write a concise operator brief.',
     status: 'paused',
     trigger_type: 'schedule',
     trigger_config: { schedule: 'daily', time: '09:00' },
@@ -84,10 +85,14 @@ describe('platform automation endpoints', () => {
     const automation = (await create.json()) as {
       id: string;
       name: string;
+      instructions: string;
       trigger_type: string;
       source_config: { toolkit_slugs?: string[] };
     };
     expect(automation.name).toBe('Morning operator brief');
+    expect(automation.instructions).toBe(
+      'Check the connected inboxes and write a concise operator brief.',
+    );
     expect(automation.trigger_type).toBe('schedule');
     expect(automation.source_config.toolkit_slugs).toEqual(['gmail']);
 
@@ -111,14 +116,20 @@ describe('platform automation endpoints', () => {
             status: 'enabled',
             delivery_policy: 'on_failure',
             budget_per_run: '0.50',
+            instructions: 'Only report items that need direct operator action.',
           }),
         },
       ),
     );
     expect(patch.status).toBe(200);
-    const patched = (await patch.json()) as { status: string; delivery_policy: string };
+    const patched = (await patch.json()) as {
+      status: string;
+      delivery_policy: string;
+      instructions: string;
+    };
     expect(patched.status).toBe('enabled');
     expect(patched.delivery_policy).toBe('on_failure');
+    expect(patched.instructions).toBe('Only report items that need direct operator action.');
 
     const del = await rig.app.fetch(
       new Request(

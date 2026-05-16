@@ -126,6 +126,8 @@ export async function createTestRig(overrides: CreateTestRigOverrides = {}): Pro
     facilitatorUrlDevnet: 'https://facilitator.test.invalid',
     publicOrigin: 'http://test.local',
     explorerPublicOrigin: 'https://explorer.test.invalid',
+    automationsEnabled: false,
+    automationPollMs: 15_000,
     ...configOverrides,
   };
   const config: LeashApiConfig = {

@@ -27,6 +27,7 @@ export type AutomationRow = {
   agentMint: string;
   name: string;
   description: string | null;
+  instructions: string;
   status: AutomationStatus;
   triggerType: AutomationTriggerType;
   triggerConfig: Record<string, unknown>;
@@ -40,6 +41,8 @@ export type AutomationRow = {
   lastRunAt: string | null;
   lastStatus: string | null;
   failureCount: number;
+  lockedBy: string | null;
+  lockedUntil: string | null;
   retentionDays: number;
   deletedAt: string | null;
   createdAt: string;
@@ -123,6 +126,7 @@ function rowToAutomation(row: Record<string, unknown>): AutomationRow {
     agentMint: String(row.agent_mint),
     name: String(row.name),
     description: row.description == null ? null : String(row.description),
+    instructions: row.instructions == null ? '' : String(row.instructions),
     status,
     triggerType,
     triggerConfig: parseObject(row.trigger_config),
@@ -136,6 +140,8 @@ function rowToAutomation(row: Record<string, unknown>): AutomationRow {
     lastRunAt: row.last_run_at == null ? null : String(row.last_run_at),
     lastStatus: row.last_status == null ? null : String(row.last_status),
     failureCount: Number(row.failure_count ?? 0),
+    lockedBy: row.locked_by == null ? null : String(row.locked_by),
+    lockedUntil: row.locked_until == null ? null : String(row.locked_until),
     retentionDays: Number(row.retention_days ?? 30),
     deletedAt: row.deleted_at == null ? null : String(row.deleted_at),
     createdAt: String(row.created_at),
@@ -176,6 +182,7 @@ export async function createAutomation(
     agentMint: string;
     name: string;
     description?: string | null;
+    instructions?: string;
     status?: AutomationStatus;
     triggerType: AutomationTriggerType;
     triggerConfig?: Record<string, unknown>;
@@ -193,17 +200,18 @@ export async function createAutomation(
   await execute(
     db,
     `INSERT INTO automations (
-      id, owner_privy_id, agent_mint, name, description, status,
+      id, owner_privy_id, agent_mint, name, description, instructions, status,
       trigger_type, trigger_config, source_config,
       delivery_policy, delivery_config,
       budget_per_run, budget_per_day, timezone, next_run_at, retention_days
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.ownerPrivyId,
       input.agentMint,
       input.name,
       input.description ?? null,
+      input.instructions ?? '',
       input.status ?? 'paused',
       input.triggerType,
       JSON.stringify(input.triggerConfig ?? {}),
@@ -254,6 +262,18 @@ export async function getAutomationForOwner(
   return row ? rowToAutomation(row as Record<string, unknown>) : null;
 }
 
+export async function getAutomationById(db: DbClient, id: string): Promise<AutomationRow | null> {
+  const res = await execute(
+    db,
+    `SELECT * FROM automations
+     WHERE id = ? AND deleted_at IS NULL
+     LIMIT 1`,
+    [id],
+  );
+  const row = res.rows[0];
+  return row ? rowToAutomation(row as Record<string, unknown>) : null;
+}
+
 export async function updateAutomationForOwner(
   db: DbClient,
   ownerPrivyId: string,
@@ -262,6 +282,7 @@ export async function updateAutomationForOwner(
     agentMint: string;
     name: string;
     description: string | null;
+    instructions: string;
     status: AutomationStatus;
     triggerType: AutomationTriggerType;
     triggerConfig: Record<string, unknown>;
@@ -284,6 +305,7 @@ export async function updateAutomationForOwner(
   if (patch.agentMint !== undefined) add('agent_mint = ?', patch.agentMint);
   if (patch.name !== undefined) add('name = ?', patch.name);
   if (patch.description !== undefined) add('description = ?', patch.description);
+  if (patch.instructions !== undefined) add('instructions = ?', patch.instructions);
   if (patch.status !== undefined) add('status = ?', patch.status);
   if (patch.triggerType !== undefined) add('trigger_type = ?', patch.triggerType);
   if (patch.triggerConfig !== undefined) {
@@ -347,4 +369,200 @@ export async function listAutomationRunsForOwner(
     [automationId, ownerPrivyId, limit],
   );
   return res.rows.map((r) => rowToRun(r as Record<string, unknown>));
+}
+
+export async function getAutomationRunById(
+  db: DbClient,
+  id: string,
+): Promise<AutomationRunRow | null> {
+  const res = await execute(db, `SELECT * FROM automation_runs WHERE id = ? LIMIT 1`, [id]);
+  const row = res.rows[0];
+  return row ? rowToRun(row as Record<string, unknown>) : null;
+}
+
+export async function createAutomationRun(
+  db: DbClient,
+  input: {
+    id?: string;
+    automationId: string;
+    ownerPrivyId: string;
+    agentMint: string;
+    triggerType: AutomationTriggerType;
+    triggerPayload?: Record<string, unknown>;
+    status?: AutomationRunStatus;
+    sourceSummary?: Record<string, unknown>;
+    spendUsd?: string;
+    receipts?: unknown[];
+    idempotencyKey?: string | null;
+    claimedBy?: string | null;
+    startedAt?: string | null;
+  },
+): Promise<AutomationRunRow> {
+  if (input.idempotencyKey) {
+    const existing = await execute(
+      db,
+      `SELECT * FROM automation_runs
+       WHERE automation_id = ? AND idempotency_key = ?
+       LIMIT 1`,
+      [input.automationId, input.idempotencyKey],
+    );
+    const row = existing.rows[0];
+    if (row) return rowToRun(row as Record<string, unknown>);
+  }
+
+  const id = input.id ?? ulid();
+  const status = input.status ?? 'queued';
+  const startedAt =
+    input.startedAt !== undefined
+      ? input.startedAt
+      : status === 'running'
+        ? new Date().toISOString()
+        : null;
+  await execute(
+    db,
+    `INSERT INTO automation_runs (
+      id, automation_id, owner_privy_id, agent_mint, trigger_type,
+      trigger_payload, status, source_summary, spend_usd, receipts,
+      idempotency_key, claimed_by, started_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      input.automationId,
+      input.ownerPrivyId,
+      input.agentMint,
+      input.triggerType,
+      JSON.stringify(input.triggerPayload ?? {}),
+      status,
+      JSON.stringify(input.sourceSummary ?? {}),
+      input.spendUsd ?? '0',
+      JSON.stringify(input.receipts ?? []),
+      input.idempotencyKey ?? null,
+      input.claimedBy ?? null,
+      startedAt,
+    ],
+  );
+  const created = await getAutomationRunById(db, id);
+  if (!created) throw new Error('automation run insert succeeded but lookup failed');
+  return created;
+}
+
+export async function finishAutomationRun(
+  db: DbClient,
+  input: {
+    runId: string;
+    automationId: string;
+    status: Extract<AutomationRunStatus, 'succeeded' | 'failed' | 'skipped' | 'cancelled'>;
+    outputText?: string | null;
+    error?: string | null;
+    sourceSummary?: Record<string, unknown>;
+    deliveryStatus?: string | null;
+    deliveryResult?: Record<string, unknown>;
+    spendUsd?: string;
+    receipts?: unknown[];
+    nextRunAt?: string | null;
+    finishedAt?: string;
+  },
+): Promise<AutomationRunRow | null> {
+  const finishedAt = input.finishedAt ?? new Date().toISOString();
+  await execute(
+    db,
+    `UPDATE automation_runs
+     SET status = ?,
+         output_text = ?,
+         error = ?,
+         source_summary = ?,
+         delivery_status = ?,
+         delivery_result = ?,
+         spend_usd = ?,
+         receipts = ?,
+         finished_at = ?
+     WHERE id = ? AND automation_id = ?`,
+    [
+      input.status,
+      input.outputText ?? null,
+      input.error ?? null,
+      JSON.stringify(input.sourceSummary ?? {}),
+      input.deliveryStatus ?? null,
+      JSON.stringify(input.deliveryResult ?? {}),
+      input.spendUsd ?? '0',
+      JSON.stringify(input.receipts ?? []),
+      finishedAt,
+      input.runId,
+      input.automationId,
+    ],
+  );
+  await execute(
+    db,
+    `UPDATE automations
+     SET last_run_at = ?,
+         last_status = ?,
+         failure_count = CASE WHEN ? = 'succeeded' THEN 0 ELSE failure_count + 1 END,
+         next_run_at = ?,
+         locked_by = NULL,
+         locked_until = NULL,
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+     WHERE id = ?`,
+    [finishedAt, input.status, input.status, input.nextRunAt ?? null, input.automationId],
+  );
+  return getAutomationRunById(db, input.runId);
+}
+
+export async function claimNextDueAutomation(
+  db: DbClient,
+  input: {
+    workerId: string;
+    now?: string;
+    lockMs?: number;
+  },
+): Promise<AutomationRow | null> {
+  const now = input.now ?? new Date().toISOString();
+  const lockMs = input.lockMs ?? 5 * 60 * 1000;
+  const lockedUntil = new Date(new Date(now).getTime() + lockMs).toISOString();
+  const due = await execute(
+    db,
+    `SELECT id FROM automations
+     WHERE deleted_at IS NULL
+       AND status = 'enabled'
+       AND trigger_type = 'schedule'
+       AND (next_run_at IS NULL OR next_run_at <= ?)
+       AND (locked_until IS NULL OR locked_until <= ?)
+     ORDER BY COALESCE(next_run_at, created_at) ASC
+     LIMIT 1`,
+    [now, now],
+  );
+  const id = due.rows[0] ? String((due.rows[0] as Record<string, unknown>).id) : null;
+  if (!id) return null;
+
+  const claimed = await execute(
+    db,
+    `UPDATE automations
+     SET locked_by = ?,
+         locked_until = ?,
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+     WHERE id = ?
+       AND deleted_at IS NULL
+       AND status = 'enabled'
+       AND trigger_type = 'schedule'
+       AND (next_run_at IS NULL OR next_run_at <= ?)
+       AND (locked_until IS NULL OR locked_until <= ?)`,
+    [input.workerId, lockedUntil, id, now, now],
+  );
+  if (claimed.rowsAffected < 1) return null;
+  return getAutomationById(db, id);
+}
+
+export async function releaseAutomationClaim(
+  db: DbClient,
+  automationId: string,
+  workerId: string,
+): Promise<void> {
+  await execute(
+    db,
+    `UPDATE automations
+     SET locked_by = NULL,
+         locked_until = NULL,
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+     WHERE id = ? AND locked_by = ?`,
+    [automationId, workerId],
+  );
 }

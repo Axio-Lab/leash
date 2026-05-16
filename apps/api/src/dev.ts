@@ -11,6 +11,7 @@ import { serve } from '@hono/node-server';
 import { boot } from './bootstrap.js';
 import { createConfig } from './config.js';
 import { createLeashApiApp } from './server.js';
+import { startAutomationWorker } from './automations/runner.js';
 import { setEventPublisherCache } from './storage/events-pubsub.js';
 import { getCache, pingCache } from './storage/redis.js';
 import { getDb } from './storage/turso.js';
@@ -29,6 +30,7 @@ setEventPublisherCache(cache);
 
 const app = createLeashApiApp({ config, db, cache });
 const webhookHandle = startWebhookWorker(db);
+const automationHandle = startAutomationWorker(db, config);
 
 serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
   // eslint-disable-next-line no-console
@@ -37,10 +39,15 @@ serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => 
   console.log(`[leash-api] OpenAPI:  http://${config.host}:${info.port}/openapi.json`);
   // eslint-disable-next-line no-console
   console.log(`[leash-api] webhook delivery worker started (every 2s)`);
+  if (config.automationsEnabled) {
+    // eslint-disable-next-line no-console
+    console.log(`[leash-api] automation worker started (every ${config.automationPollMs}ms)`);
+  }
 });
 
 const shutdown = () => {
   webhookHandle.stop();
+  automationHandle.stop();
   process.exit(0);
 };
 process.on('SIGINT', shutdown);
