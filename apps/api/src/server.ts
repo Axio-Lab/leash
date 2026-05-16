@@ -37,6 +37,7 @@ import { buildMetricsRoutes } from './routes/metrics.js';
 import { buildAdminRoutes } from './routes/admin.js';
 import { buildMarketplaceRoutes } from './routes/marketplace.js';
 import { buildPlatformAgentRoutes } from './routes/platform-agents.js';
+import { buildPlatformAutomationRoutes } from './routes/platform-automations.js';
 import { buildPlatformTaskRoutes } from './routes/platform-tasks.js';
 import { buildAgentSelfRegisterRoutes } from './routes/agent-self-register.js';
 import { buildDiscoverReputationRoutes } from './routes/discover-reputation.js';
@@ -96,6 +97,10 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   // doesn't intercept admin requests.
   app.route('/', buildAdminRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   app.route('/', buildPlatformAgentRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
+  app.route(
+    '/',
+    buildPlatformAutomationRoutes({ config: deps.config, db: deps.db, cache: deps.cache }),
+  );
   app.route('/', buildPlatformTaskRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   // External chat bridges (Telegram + WhatsApp). The admin-gated CRUD
   // sub-app is mounted alongside the other platform routes; the public

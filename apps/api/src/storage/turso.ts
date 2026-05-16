@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 15;
+const SCHEMA_VERSION = 16;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -377,6 +377,68 @@ const SCHEMA_SQL: readonly string[] = [
     FOREIGN KEY (task_id) REFERENCES tasks(id)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_activities_task ON task_activities(task_id, created_at)`,
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Automations (v16) — persistent background jobs owned by a Privy user
+  // and executed by the user's on-chain agent. Triggers and connection
+  // permissions are JSON so schedules, webhooks, and app events can share
+  // one table without schema churn.
+  `CREATE TABLE IF NOT EXISTS automations (
+    id                   TEXT PRIMARY KEY,
+    owner_privy_id       TEXT NOT NULL,
+    agent_mint           TEXT NOT NULL,
+    name                 TEXT NOT NULL,
+    description          TEXT,
+    status               TEXT NOT NULL DEFAULT 'paused'
+                           CHECK (status IN ('enabled','paused')),
+    trigger_type         TEXT NOT NULL
+                           CHECK (trigger_type IN ('schedule','webhook','event')),
+    trigger_config       TEXT NOT NULL DEFAULT '{}',
+    source_config        TEXT NOT NULL DEFAULT '{}',
+    delivery_policy      TEXT NOT NULL DEFAULT 'history_only'
+                           CHECK (delivery_policy IN ('history_only','every_run','on_failure','on_condition','silent')),
+    delivery_config      TEXT NOT NULL DEFAULT '{}',
+    budget_per_run       TEXT NOT NULL DEFAULT '0',
+    budget_per_day       TEXT NOT NULL DEFAULT '0',
+    timezone             TEXT NOT NULL DEFAULT 'UTC',
+    next_run_at          TEXT,
+    last_run_at          TEXT,
+    last_status          TEXT,
+    failure_count        INTEGER NOT NULL DEFAULT 0,
+    retention_days       INTEGER NOT NULL DEFAULT 30,
+    deleted_at           TEXT,
+    created_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (agent_mint) REFERENCES agents(mint)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_automations_owner_updated ON automations(owner_privy_id, updated_at DESC) WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_automations_due ON automations(next_run_at) WHERE deleted_at IS NULL AND status = 'enabled'`,
+
+  `CREATE TABLE IF NOT EXISTS automation_runs (
+    id                   TEXT PRIMARY KEY,
+    automation_id        TEXT NOT NULL,
+    owner_privy_id       TEXT NOT NULL,
+    agent_mint           TEXT NOT NULL,
+    trigger_type         TEXT NOT NULL,
+    trigger_payload      TEXT NOT NULL DEFAULT '{}',
+    status               TEXT NOT NULL DEFAULT 'queued'
+                           CHECK (status IN ('queued','running','succeeded','failed','skipped','cancelled')),
+    output_text          TEXT,
+    error                TEXT,
+    source_summary       TEXT NOT NULL DEFAULT '{}',
+    delivery_status      TEXT,
+    delivery_result      TEXT NOT NULL DEFAULT '{}',
+    spend_usd            TEXT NOT NULL DEFAULT '0',
+    receipts             TEXT NOT NULL DEFAULT '[]',
+    idempotency_key      TEXT,
+    claimed_by           TEXT,
+    started_at           TEXT,
+    finished_at          TEXT,
+    created_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (automation_id) REFERENCES automations(id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_automation_runs_auto_created ON automation_runs(automation_id, created_at DESC)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_automation_runs_idempotency ON automation_runs(automation_id, idempotency_key) WHERE idempotency_key IS NOT NULL`,
 
   // ─────────────────────────────────────────────────────────────────────
   // Marketplace listings (v9) — third-party MCP servers published on
