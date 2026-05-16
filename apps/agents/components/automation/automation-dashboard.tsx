@@ -129,6 +129,7 @@ type Draft = {
   intervalMinutes: string;
   eventName: string;
   webhookLabel: string;
+  webhookSecret: string;
   toolkitSlugs: string[];
   deliveryPolicy: DeliveryPolicy;
   budgetPerRun: string;
@@ -150,6 +151,7 @@ function emptyDraft(): Draft {
     intervalMinutes: '60',
     eventName: 'treasury.low_balance',
     webhookLabel: 'Inbound webhook',
+    webhookSecret: '',
     toolkitSlugs: [],
     deliveryPolicy: 'history_only',
     budgetPerRun: '0.25',
@@ -193,6 +195,7 @@ function draftFromAutomation(row: Automation): Draft {
         : 'treasury.low_balance',
     webhookLabel:
       typeof row.trigger_config.label === 'string' ? row.trigger_config.label : 'Inbound webhook',
+    webhookSecret: typeof row.trigger_config.secret === 'string' ? row.trigger_config.secret : '',
     toolkitSlugs,
     deliveryPolicy: row.delivery_policy,
     budgetPerRun: row.budget_per_run,
@@ -784,13 +787,31 @@ function AutomationEditor({
             ) : null}
           </div>
         ) : draft.triggerType === 'webhook' ? (
-          <Field label="Webhook label">
-            <input
-              value={draft.webhookLabel}
-              onChange={(e) => onDraft('webhookLabel', e.target.value)}
-              className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-brand/70"
-            />
-          </Field>
+          <div className="space-y-2">
+            <Field label="Webhook label">
+              <input
+                value={draft.webhookLabel}
+                onChange={(e) => onDraft('webhookLabel', e.target.value)}
+                className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-brand/70"
+              />
+            </Field>
+            <Field label="Endpoint path">
+              <input
+                readOnly
+                value={draft.id ? `/v1/automation-hooks/${draft.id}` : 'Saved after create'}
+                className="w-full rounded-md border border-border bg-bg px-3 py-2 font-mono text-xs text-fg-muted focus:outline-none focus:ring-2 focus:ring-brand/70"
+              />
+            </Field>
+            {draft.webhookSecret ? (
+              <Field label="Signing secret">
+                <input
+                  readOnly
+                  value={draft.webhookSecret}
+                  className="w-full rounded-md border border-border bg-bg px-3 py-2 font-mono text-xs text-fg-muted focus:outline-none focus:ring-2 focus:ring-brand/70"
+                />
+              </Field>
+            ) : null}
+          </div>
         ) : (
           <Field label="Event">
             <select

@@ -246,6 +246,28 @@ export async function listAutomationsForOwner(
   return res.rows.map((r) => rowToAutomation(r as Record<string, unknown>));
 }
 
+export async function listEnabledEventAutomations(
+  db: DbClient,
+  eventName: string,
+  ownerPrivyId?: string,
+  limit = 100,
+): Promise<AutomationRow[]> {
+  const res = await execute(
+    db,
+    `SELECT * FROM automations
+     WHERE deleted_at IS NULL
+       AND status = 'enabled'
+       AND trigger_type = 'event'
+       ${ownerPrivyId ? 'AND owner_privy_id = ?' : ''}
+     ORDER BY updated_at DESC
+     LIMIT ?`,
+    ownerPrivyId ? [ownerPrivyId, limit] : [limit],
+  );
+  return res.rows
+    .map((r) => rowToAutomation(r as Record<string, unknown>))
+    .filter((row) => row.triggerConfig.event === eventName);
+}
+
 export async function getAutomationForOwner(
   db: DbClient,
   ownerPrivyId: string,
@@ -398,6 +420,28 @@ export async function createAutomationRun(
     startedAt?: string | null;
   },
 ): Promise<AutomationRunRow> {
+  const result = await createAutomationRunWithState(db, input);
+  return result.run;
+}
+
+export async function createAutomationRunWithState(
+  db: DbClient,
+  input: {
+    id?: string;
+    automationId: string;
+    ownerPrivyId: string;
+    agentMint: string;
+    triggerType: AutomationTriggerType;
+    triggerPayload?: Record<string, unknown>;
+    status?: AutomationRunStatus;
+    sourceSummary?: Record<string, unknown>;
+    spendUsd?: string;
+    receipts?: unknown[];
+    idempotencyKey?: string | null;
+    claimedBy?: string | null;
+    startedAt?: string | null;
+  },
+): Promise<{ run: AutomationRunRow; created: boolean }> {
   if (input.idempotencyKey) {
     const existing = await execute(
       db,
@@ -407,7 +451,7 @@ export async function createAutomationRun(
       [input.automationId, input.idempotencyKey],
     );
     const row = existing.rows[0];
-    if (row) return rowToRun(row as Record<string, unknown>);
+    if (row) return { run: rowToRun(row as Record<string, unknown>), created: false };
   }
 
   const id = input.id ?? ulid();
@@ -443,7 +487,7 @@ export async function createAutomationRun(
   );
   const created = await getAutomationRunById(db, id);
   if (!created) throw new Error('automation run insert succeeded but lookup failed');
-  return created;
+  return { run: created, created: true };
 }
 
 export async function finishAutomationRun(

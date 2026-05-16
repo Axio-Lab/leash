@@ -1,11 +1,12 @@
 import type { LeashApiConfig } from '../config.js';
 import {
   claimNextDueAutomation,
-  createAutomationRun,
+  createAutomationRunWithState,
   finishAutomationRun,
   releaseAutomationClaim,
   type AutomationDeliveryPolicy,
   type AutomationRow,
+  type AutomationRunStatus,
 } from '../storage/automations.js';
 import type { DbClient } from '../storage/turso.js';
 import { computeNextRunAt } from './schedule.js';
@@ -22,8 +23,17 @@ export type AutomationSchedulerResult = {
   claimed: boolean;
   automationId?: string;
   runId?: string;
-  status?: 'succeeded' | 'failed';
+  status?: 'succeeded' | 'failed' | 'skipped';
   error?: string;
+};
+
+export type AutomationRunNowOptions = {
+  triggerPayload?: Record<string, unknown>;
+  idempotencyKey?: string | null;
+  claimedBy?: string | null;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  nextRunAt?: string | null;
 };
 
 export type AutomationWorkerHandle = {
@@ -115,36 +125,40 @@ async function invokeAutomationBff(args: {
   }
 }
 
-export async function runAutomationSchedulerOnce(
+function terminalStatus(status: AutomationRunStatus): 'succeeded' | 'failed' | 'skipped' | null {
+  if (status === 'succeeded') return 'succeeded';
+  if (status === 'failed') return 'failed';
+  if (status === 'skipped' || status === 'cancelled') return 'skipped';
+  return null;
+}
+
+export async function runAutomationNow(
   db: DbClient,
   config: LeashApiConfig,
-  options: AutomationSchedulerOptions = {},
-): Promise<AutomationSchedulerResult> {
-  const now = options.now ?? new Date();
-  const workerId = options.workerId ?? `automation-worker:${process.pid}`;
-  const automation = await claimNextDueAutomation(db, {
-    workerId,
-    now: now.toISOString(),
-    lockMs: options.lockMs,
-  });
-  if (!automation) return { claimed: false };
-
+  automation: AutomationRow,
+  options: AutomationRunNowOptions = {},
+): Promise<Omit<AutomationSchedulerResult, 'claimed'> & { duplicate: boolean }> {
   let runId: string | undefined;
   try {
-    const run = await createAutomationRun(db, {
+    const { run, created } = await createAutomationRunWithState(db, {
       automationId: automation.id,
       ownerPrivyId: automation.ownerPrivyId,
       agentMint: automation.agentMint,
       triggerType: automation.triggerType,
-      triggerPayload: {
-        scheduled_for: automation.nextRunAt,
-        claimed_at: now.toISOString(),
-      },
+      triggerPayload: options.triggerPayload ?? {},
       status: 'running',
-      idempotencyKey: `schedule:${automation.nextRunAt ?? now.toISOString()}`,
-      claimedBy: workerId,
+      idempotencyKey: options.idempotencyKey ?? null,
+      claimedBy: options.claimedBy ?? null,
     });
     runId = run.id;
+    if (!created) {
+      return {
+        automationId: automation.id,
+        runId,
+        status: terminalStatus(run.status) ?? 'skipped',
+        duplicate: true,
+      };
+    }
 
     const bff = await invokeAutomationBff({
       config,
@@ -154,7 +168,10 @@ export async function runAutomationSchedulerOnce(
       timeoutMs: options.timeoutMs ?? 60_000,
     });
     const finishedAt = new Date();
-    const nextRunAt = computeNextRunAt(automation, finishedAt);
+    const nextRunAt =
+      options.nextRunAt !== undefined
+        ? options.nextRunAt
+        : computeNextRunAt(automation, finishedAt);
     await finishAutomationRun(db, {
       runId,
       automationId: automation.id,
@@ -171,11 +188,15 @@ export async function runAutomationSchedulerOnce(
       nextRunAt,
       finishedAt: finishedAt.toISOString(),
     });
-    return { claimed: true, automationId: automation.id, runId, status: 'succeeded' };
+    return { automationId: automation.id, runId, status: 'succeeded', duplicate: false };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (runId) {
       const finishedAt = new Date();
+      const nextRunAt =
+        options.nextRunAt !== undefined
+          ? options.nextRunAt
+          : computeNextRunAt(automation, finishedAt);
       await finishAutomationRun(db, {
         runId,
         automationId: automation.id,
@@ -187,14 +208,48 @@ export async function runAutomationSchedulerOnce(
             ? 'pending'
             : deliveryStatusFor(automation.deliveryPolicy),
         deliveryResult: { policy: automation.deliveryPolicy },
-        nextRunAt: computeNextRunAt(automation, finishedAt),
+        nextRunAt,
         finishedAt: finishedAt.toISOString(),
       });
-    } else {
-      await releaseAutomationClaim(db, automation.id, workerId);
     }
-    return { claimed: true, automationId: automation.id, runId, status: 'failed', error: message };
+    return {
+      automationId: automation.id,
+      runId,
+      status: 'failed',
+      error: message,
+      duplicate: false,
+    };
   }
+}
+
+export async function runAutomationSchedulerOnce(
+  db: DbClient,
+  config: LeashApiConfig,
+  options: AutomationSchedulerOptions = {},
+): Promise<AutomationSchedulerResult> {
+  const now = options.now ?? new Date();
+  const workerId = options.workerId ?? `automation-worker:${process.pid}`;
+  const automation = await claimNextDueAutomation(db, {
+    workerId,
+    now: now.toISOString(),
+    lockMs: options.lockMs,
+  });
+  if (!automation) return { claimed: false };
+
+  const result = await runAutomationNow(db, config, automation, {
+    triggerPayload: {
+      scheduled_for: automation.nextRunAt,
+      claimed_at: now.toISOString(),
+    },
+    idempotencyKey: `schedule:${automation.nextRunAt ?? now.toISOString()}`,
+    claimedBy: workerId,
+    fetchImpl: options.fetchImpl,
+    timeoutMs: options.timeoutMs,
+  });
+  if (result.status === 'skipped' || !result.runId) {
+    await releaseAutomationClaim(db, automation.id, workerId);
+  }
+  return { claimed: true, ...result };
 }
 
 export function startAutomationWorker(

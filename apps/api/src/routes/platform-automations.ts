@@ -5,16 +5,21 @@
  * read/write stays scoped to that owner.
  */
 
+import { createHash, randomBytes } from 'node:crypto';
+
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 
 import { adminAuth } from '../auth/admin.js';
+import { runAutomationNow } from '../automations/runner.js';
 import { computeNextRunAt } from '../automations/schedule.js';
 import type { LeashApiConfig } from '../config.js';
 import { ApiErrorSchema, PubkeySchema } from '../openapi/common.js';
 import {
   createAutomation,
   deleteAutomationForOwner,
+  getAutomationById,
   getAutomationForOwner,
+  listEnabledEventAutomations,
   listAutomationRunsForOwner,
   listAutomationsForOwner,
   updateAutomationForOwner,
@@ -25,6 +30,7 @@ import { getPlatformAgent } from '../storage/platform-agents.js';
 import type { CacheClient } from '../storage/redis.js';
 import type { DbClient } from '../storage/turso.js';
 import { invalidRequest, notFound } from '../util/errors.js';
+import { verifySignature } from '../webhooks/sign.js';
 
 export type PlatformAutomationDeps = {
   config: LeashApiConfig;
@@ -117,6 +123,13 @@ const PatchAutomationBody = CreateAutomationBody.omit({ owner_privy_id: true })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'at least one field is required' });
 
+const EventTriggerBody = z.object({
+  owner_privy_id: z.string().min(1).optional(),
+  event: z.string().min(1).max(120),
+  payload: JsonObjectSchema.default({}),
+  idempotency_key: z.string().min(1).max(240).optional(),
+});
+
 function automationToWire(row: AutomationRow) {
   return {
     id: row.id,
@@ -175,6 +188,28 @@ function assertBudget(value: string, field: string): void {
   }
 }
 
+function createWebhookSecret(): string {
+  return `whauto_${randomBytes(24).toString('base64url')}`;
+}
+
+function triggerConfigWithDefaults(
+  triggerType: z.infer<typeof TriggerTypeSchema>,
+  triggerConfig: Record<string, unknown>,
+  previous?: AutomationRow,
+): Record<string, unknown> {
+  if (triggerType !== 'webhook') return triggerConfig;
+  return {
+    ...triggerConfig,
+    signature_required: triggerConfig.signature_required !== false,
+    secret:
+      typeof triggerConfig.secret === 'string' && triggerConfig.secret.length > 0
+        ? triggerConfig.secret
+        : typeof previous?.triggerConfig.secret === 'string'
+          ? previous.triggerConfig.secret
+          : createWebhookSecret(),
+  };
+}
+
 function initialNextRunAt(body: z.infer<typeof CreateAutomationBody>): string | null {
   if (body.next_run_at !== undefined) return body.next_run_at ?? null;
   if (body.status !== 'enabled' || body.trigger_type !== 'schedule') return null;
@@ -183,6 +218,31 @@ function initialNextRunAt(body: z.infer<typeof CreateAutomationBody>): string | 
     triggerConfig: body.trigger_config,
     timezone: body.timezone,
   });
+}
+
+function parseJsonObject(raw: string): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function hashBody(raw: string): string {
+  return createHash('sha256').update(raw).digest('hex');
+}
+
+function requestIdempotencyKey(headers: Headers, rawBody: string): string {
+  return (
+    headers.get('idempotency-key')?.trim() ||
+    headers.get('x-idempotency-key')?.trim() ||
+    headers.get('x-leash-idempotency-key')?.trim() ||
+    hashBody(rawBody)
+  );
 }
 
 async function assertAgentOwned(deps: PlatformAutomationDeps, ownerPrivyId: string, mint: string) {
@@ -198,6 +258,47 @@ function ownerFromQuery(owner: string | undefined): string {
 
 export function buildPlatformAutomationRoutes(deps: PlatformAutomationDeps): OpenAPIHono {
   const app = new OpenAPIHono();
+
+  app.post('/v1/automation-hooks/:id', async (c) => {
+    const id = c.req.param('id');
+    const automation = await getAutomationById(deps.db, id);
+    if (!automation || automation.status !== 'enabled' || automation.triggerType !== 'webhook') {
+      throw notFound('automation hook not found');
+    }
+
+    const rawBody = await c.req.text();
+    if (automation.triggerConfig.signature_required !== false) {
+      const secret = automation.triggerConfig.secret;
+      const signature = c.req.header('x-leash-signature') ?? '';
+      if (typeof secret !== 'string' || !verifySignature(secret, rawBody, signature)) {
+        return c.json({ error: 'invalid_signature' }, 401);
+      }
+    }
+
+    const idempotency = requestIdempotencyKey(c.req.raw.headers, rawBody);
+    const result = await runAutomationNow(deps.db, deps.config, automation, {
+      triggerPayload: {
+        received_at: new Date().toISOString(),
+        body: parseJsonObject(rawBody),
+      },
+      idempotencyKey: `webhook:${automation.id}:${idempotency}`,
+      claimedBy: `webhook:${automation.id}`,
+      nextRunAt: null,
+    });
+
+    return c.json(
+      {
+        ok: result.status !== 'failed',
+        automation_id: automation.id,
+        run_id: result.runId,
+        status: result.status,
+        duplicate: result.duplicate,
+        error: result.error,
+      },
+      200,
+    );
+  });
+
   app.use('/v1/platform/*', adminAuth(deps.config.adminSecret));
 
   app.openapi(
@@ -267,7 +368,7 @@ export function buildPlatformAutomationRoutes(deps: PlatformAutomationDeps): Ope
         instructions: body.instructions.trim(),
         status: body.status,
         triggerType: body.trigger_type,
-        triggerConfig: body.trigger_config,
+        triggerConfig: triggerConfigWithDefaults(body.trigger_type, body.trigger_config),
         sourceConfig: body.source_config,
         deliveryPolicy: body.delivery_policy,
         deliveryConfig: body.delivery_config,
@@ -344,7 +445,11 @@ export function buildPlatformAutomationRoutes(deps: PlatformAutomationDeps): Ope
       if (!current) throw notFound('automation not found');
       const nextStatus = body.status ?? current.status;
       const nextTriggerType = body.trigger_type ?? current.triggerType;
-      const nextTriggerConfig = body.trigger_config ?? current.triggerConfig;
+      const nextTriggerConfig = triggerConfigWithDefaults(
+        nextTriggerType,
+        body.trigger_config ?? current.triggerConfig,
+        current,
+      );
       const nextTimezone = body.timezone ?? current.timezone;
       const nextRunAt =
         body.next_run_at !== undefined
@@ -371,7 +476,9 @@ export function buildPlatformAutomationRoutes(deps: PlatformAutomationDeps): Ope
         ...(body.instructions !== undefined ? { instructions: body.instructions.trim() } : {}),
         ...(body.status !== undefined ? { status: body.status } : {}),
         ...(body.trigger_type !== undefined ? { triggerType: body.trigger_type } : {}),
-        ...(body.trigger_config !== undefined ? { triggerConfig: body.trigger_config } : {}),
+        ...(body.trigger_config !== undefined || body.trigger_type === 'webhook'
+          ? { triggerConfig: nextTriggerConfig }
+          : {}),
         ...(body.source_config !== undefined ? { sourceConfig: body.source_config } : {}),
         ...(body.delivery_policy !== undefined ? { deliveryPolicy: body.delivery_policy } : {}),
         ...(body.delivery_config !== undefined ? { deliveryConfig: body.delivery_config } : {}),
@@ -445,6 +552,69 @@ export function buildPlatformAutomationRoutes(deps: PlatformAutomationDeps): Ope
       const q = c.req.valid('query');
       const items = await listAutomationRunsForOwner(deps.db, q.owner_privy_id, id, q.limit ?? 50);
       return c.json({ items: items.map(runToWire) }, 200);
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/v1/platform/automations/events',
+      tags: ['platform'],
+      summary: 'Fire an internal automation event',
+      security: [{ AdminSecret: [] }],
+      request: {
+        body: { required: true, content: { 'application/json': { schema: EventTriggerBody } } },
+      },
+      responses: {
+        200: {
+          description: 'ok',
+          content: {
+            'application/json': {
+              schema: z.object({
+                items: z.array(
+                  z.object({
+                    automation_id: z.string(),
+                    run_id: z.string().optional(),
+                    status: z.string().optional(),
+                    duplicate: z.boolean(),
+                    error: z.string().optional(),
+                  }),
+                ),
+              }),
+            },
+          },
+        },
+      },
+    }),
+    async (c) => {
+      const body = c.req.valid('json');
+      const automations = await listEnabledEventAutomations(
+        deps.db,
+        body.event,
+        body.owner_privy_id,
+      );
+      const items = [];
+      const idempotency = body.idempotency_key ?? hashBody(JSON.stringify(body.payload));
+      for (const automation of automations) {
+        const result = await runAutomationNow(deps.db, deps.config, automation, {
+          triggerPayload: {
+            event: body.event,
+            fired_at: new Date().toISOString(),
+            payload: body.payload,
+          },
+          idempotencyKey: `event:${automation.id}:${body.event}:${idempotency}`,
+          claimedBy: `event:${body.event}`,
+          nextRunAt: null,
+        });
+        items.push({
+          automation_id: automation.id,
+          run_id: result.runId,
+          status: result.status,
+          duplicate: result.duplicate,
+          error: result.error,
+        });
+      }
+      return c.json({ items }, 200);
     },
   );
 
