@@ -3,12 +3,14 @@ import {
   claimNextDueAutomation,
   createAutomationRunWithState,
   finishAutomationRun,
+  pruneExpiredAutomationRuns,
   releaseAutomationClaim,
   type AutomationDeliveryPolicy,
   type AutomationRow,
   type AutomationRunStatus,
 } from '../storage/automations.js';
 import type { DbClient } from '../storage/turso.js';
+import { deliverAutomationReport } from './reports.js';
 import { computeNextRunAt } from './schedule.js';
 
 export type AutomationSchedulerOptions = {
@@ -172,6 +174,17 @@ export async function runAutomationNow(
       options.nextRunAt !== undefined
         ? options.nextRunAt
         : computeNextRunAt(automation, finishedAt);
+    const delivery = await deliverAutomationReport(
+      {
+        automation,
+        runId,
+        status: 'succeeded',
+        outputText: bff.text,
+        triggerPayload: options.triggerPayload,
+        artifacts: bff.artifacts,
+      },
+      { fetchImpl: options.fetchImpl },
+    );
     await finishAutomationRun(db, {
       runId,
       automationId: automation.id,
@@ -182,8 +195,8 @@ export async function runAutomationNow(
         model: bff.model ?? null,
         warnings: bff.warnings,
       },
-      deliveryStatus: deliveryStatusFor(automation.deliveryPolicy),
-      deliveryResult: { policy: automation.deliveryPolicy },
+      deliveryStatus: delivery.status || deliveryStatusFor(automation.deliveryPolicy),
+      deliveryResult: delivery.result,
       receipts: bff.artifacts,
       nextRunAt,
       finishedAt: finishedAt.toISOString(),
@@ -197,17 +210,24 @@ export async function runAutomationNow(
         options.nextRunAt !== undefined
           ? options.nextRunAt
           : computeNextRunAt(automation, finishedAt);
+      const delivery = await deliverAutomationReport(
+        {
+          automation,
+          runId,
+          status: 'failed',
+          error: message,
+          triggerPayload: options.triggerPayload,
+        },
+        { fetchImpl: options.fetchImpl },
+      );
       await finishAutomationRun(db, {
         runId,
         automationId: automation.id,
         status: 'failed',
         error: message,
         sourceSummary: { toolkits: selectedToolkits(automation) },
-        deliveryStatus:
-          automation.deliveryPolicy === 'on_failure' || automation.deliveryPolicy === 'every_run'
-            ? 'pending'
-            : deliveryStatusFor(automation.deliveryPolicy),
-        deliveryResult: { policy: automation.deliveryPolicy },
+        deliveryStatus: delivery.status || deliveryStatusFor(automation.deliveryPolicy),
+        deliveryResult: delivery.result,
         nextRunAt,
         finishedAt: finishedAt.toISOString(),
       });
@@ -266,6 +286,7 @@ export function startAutomationWorker(
     if (stopped) return;
     try {
       await runAutomationSchedulerOnce(db, config, options);
+      await pruneExpiredAutomationRuns(db);
     } catch {
       // Keep the worker alive; individual run failures are persisted.
     }

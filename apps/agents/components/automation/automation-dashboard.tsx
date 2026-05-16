@@ -132,6 +132,8 @@ type Draft = {
   webhookSecret: string;
   toolkitSlugs: string[];
   deliveryPolicy: DeliveryPolicy;
+  reportWebhookUrl: string;
+  reportSigningSecret: string;
   budgetPerRun: string;
   budgetPerDay: string;
   retentionDays: string;
@@ -154,6 +156,8 @@ function emptyDraft(): Draft {
     webhookSecret: '',
     toolkitSlugs: [],
     deliveryPolicy: 'history_only',
+    reportWebhookUrl: '',
+    reportSigningSecret: '',
     budgetPerRun: '0.25',
     budgetPerDay: '2',
     retentionDays: '30',
@@ -198,6 +202,10 @@ function draftFromAutomation(row: Automation): Draft {
     webhookSecret: typeof row.trigger_config.secret === 'string' ? row.trigger_config.secret : '',
     toolkitSlugs,
     deliveryPolicy: row.delivery_policy,
+    reportWebhookUrl:
+      typeof row.delivery_config.webhook_url === 'string' ? row.delivery_config.webhook_url : '',
+    reportSigningSecret:
+      typeof row.delivery_config.secret === 'string' ? row.delivery_config.secret : '',
     budgetPerRun: row.budget_per_run,
     budgetPerDay: row.budget_per_day,
     retentionDays: String(row.retention_days),
@@ -358,7 +366,17 @@ export function AutomationDashboard() {
         trigger_config: buildTriggerConfig(),
         source_config: { toolkit_slugs: draft.toolkitSlugs },
         delivery_policy: draft.deliveryPolicy,
-        delivery_config: {},
+        delivery_config:
+          draft.deliveryPolicy === 'history_only' || draft.deliveryPolicy === 'silent'
+            ? {}
+            : {
+                ...(draft.reportWebhookUrl.trim()
+                  ? { webhook_url: draft.reportWebhookUrl.trim() }
+                  : {}),
+                ...(draft.reportSigningSecret.trim()
+                  ? { secret: draft.reportSigningSecret.trim() }
+                  : {}),
+              },
         budget_per_run: draft.budgetPerRun,
         budget_per_day: draft.budgetPerDay,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
@@ -873,6 +891,30 @@ function AutomationEditor({
             ))}
           </select>
         </Field>
+
+        {draft.deliveryPolicy !== 'history_only' && draft.deliveryPolicy !== 'silent' ? (
+          <div className="grid gap-2">
+            <Field label="Report webhook URL">
+              <input
+                type="url"
+                inputMode="url"
+                value={draft.reportWebhookUrl}
+                onChange={(e) => onDraft('reportWebhookUrl', e.target.value)}
+                placeholder="https://example.com/leash-report"
+                className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand/70"
+              />
+            </Field>
+            <Field label="Report signing secret">
+              <input
+                value={draft.reportSigningSecret}
+                onChange={(e) => onDraft('reportSigningSecret', e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+                className="w-full rounded-md border border-border bg-bg px-3 py-2 font-mono text-xs text-fg focus:outline-none focus:ring-2 focus:ring-brand/70"
+              />
+            </Field>
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-2">
           <Field label="Cap per run">

@@ -610,3 +610,30 @@ export async function releaseAutomationClaim(
     [automationId, workerId],
   );
 }
+
+export async function pruneExpiredAutomationRuns(
+  db: DbClient,
+  now = new Date(),
+): Promise<{ deleted: number }> {
+  const automations = await execute(
+    db,
+    `SELECT id, retention_days FROM automations
+     WHERE deleted_at IS NULL AND retention_days > 0`,
+  );
+  let deleted = 0;
+  for (const row of automations.rows) {
+    const record = row as Record<string, unknown>;
+    const id = String(record.id);
+    const retentionDays = Number(record.retention_days ?? 30);
+    if (!Number.isFinite(retentionDays) || retentionDays <= 0) continue;
+    const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60_000).toISOString();
+    const res = await execute(
+      db,
+      `DELETE FROM automation_runs
+       WHERE automation_id = ? AND created_at < ?`,
+      [id, cutoff],
+    );
+    deleted += Number(res.rowsAffected ?? 0);
+  }
+  return { deleted };
+}
