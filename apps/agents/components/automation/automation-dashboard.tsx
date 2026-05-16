@@ -958,11 +958,11 @@ function AutomationEditor({
           <ul className="mt-3 space-y-2 text-xs leading-5 text-fg-muted">
             <li className="flex gap-2">
               <span className="mt-2 size-1.5 shrink-0 rounded-full bg-success" />
-              Tool and API payments can run automatically only under configured caps.
+              Payment requests are checked against run and day caps before any settlement path.
             </li>
             <li className="flex gap-2">
               <span className="mt-2 size-1.5 shrink-0 rounded-full bg-warning" />
-              Withdrawals, delegation changes, and cap changes require approval.
+              Withdrawals, delegation changes, cap changes, and settlement signing require approval.
             </li>
           </ul>
         </div>

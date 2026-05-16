@@ -10,6 +10,7 @@ import {
   type AutomationRunStatus,
 } from '../storage/automations.js';
 import type { DbClient } from '../storage/turso.js';
+import { evaluateAutomationPayments } from './payments.js';
 import { deliverAutomationReport } from './reports.js';
 import { computeNextRunAt } from './schedule.js';
 
@@ -174,12 +175,20 @@ export async function runAutomationNow(
       options.nextRunAt !== undefined
         ? options.nextRunAt
         : computeNextRunAt(automation, finishedAt);
+    const payment = await evaluateAutomationPayments(db, automation, bff.artifacts, finishedAt);
+    const runStatus = payment.status === 'blocked' ? 'failed' : 'succeeded';
+    const runError = payment.status === 'blocked' ? (payment.message ?? 'Payment blocked') : null;
+    const outputText =
+      payment.status === 'requires_approval'
+        ? `${bff.text}\n\nPayment requests are under caps but require approval before settlement.`
+        : bff.text;
     const delivery = await deliverAutomationReport(
       {
         automation,
         runId,
-        status: 'succeeded',
-        outputText: bff.text,
+        status: runStatus,
+        outputText,
+        error: runError,
         triggerPayload: options.triggerPayload,
         artifacts: bff.artifacts,
       },
@@ -188,20 +197,29 @@ export async function runAutomationNow(
     await finishAutomationRun(db, {
       runId,
       automationId: automation.id,
-      status: 'succeeded',
-      outputText: bff.text,
+      status: runStatus,
+      outputText,
+      error: runError,
       sourceSummary: {
         toolkits: selectedToolkits(automation),
         model: bff.model ?? null,
         warnings: bff.warnings,
+        payment,
       },
       deliveryStatus: delivery.status || deliveryStatusFor(automation.deliveryPolicy),
       deliveryResult: delivery.result,
       receipts: bff.artifacts,
+      spendUsd: '0',
       nextRunAt,
       finishedAt: finishedAt.toISOString(),
     });
-    return { automationId: automation.id, runId, status: 'succeeded', duplicate: false };
+    return {
+      automationId: automation.id,
+      runId,
+      status: runStatus,
+      ...(runError ? { error: runError } : {}),
+      duplicate: false,
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (runId) {
