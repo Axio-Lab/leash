@@ -38,6 +38,7 @@ import { buildAdminRoutes } from './routes/admin.js';
 import { buildMarketplaceRoutes } from './routes/marketplace.js';
 import { buildPlatformAgentRoutes } from './routes/platform-agents.js';
 import { buildPlatformAutomationRoutes } from './routes/platform-automations.js';
+import { setAutomationExternalChatDeliveryDeps } from './automations/reports.js';
 import { buildPlatformTaskRoutes } from './routes/platform-tasks.js';
 import { buildAgentSelfRegisterRoutes } from './routes/agent-self-register.js';
 import { buildDiscoverReputationRoutes } from './routes/discover-reputation.js';
@@ -159,6 +160,14 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
       : {}),
     ...(whatsappManager ? { whatsapp: whatsappManager } : {}),
   };
+  setAutomationExternalChatDeliveryDeps({
+    config: deps.config,
+    db: deps.db,
+    ...(whatsappManager ? { whatsapp: whatsappManager } : {}),
+    ...(deps.externalDispatcherTelegramClientFactory
+      ? { telegramClientFactory: deps.externalDispatcherTelegramClientFactory }
+      : {}),
+  });
   app.route('/', buildExternalRoutes(externalDeps));
   app.route('/', buildExternalPublicRoutes(externalDeps));
   // Public agent-onboarding routes — `/v1/agents/self-register`,

@@ -11,7 +11,7 @@ import {
 } from '../storage/automations.js';
 import type { DbClient } from '../storage/turso.js';
 import { evaluateAutomationPayments } from './payments.js';
-import { deliverAutomationReport } from './reports.js';
+import { deliverAutomationReport, type ExternalChatDeliveryDeps } from './reports.js';
 import { computeNextRunAt } from './schedule.js';
 
 export type AutomationSchedulerOptions = {
@@ -19,6 +19,7 @@ export type AutomationSchedulerOptions = {
   lockMs?: number;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  reportDelivery?: ExternalChatDeliveryDeps;
   now?: Date;
 };
 
@@ -35,6 +36,7 @@ export type AutomationRunNowOptions = {
   idempotencyKey?: string | null;
   claimedBy?: string | null;
   fetchImpl?: typeof fetch;
+  reportDelivery?: ExternalChatDeliveryDeps;
   timeoutMs?: number;
   nextRunAt?: string | null;
 };
@@ -192,7 +194,7 @@ export async function runAutomationNow(
         triggerPayload: options.triggerPayload,
         artifacts: bff.artifacts,
       },
-      { fetchImpl: options.fetchImpl },
+      { fetchImpl: options.fetchImpl, externalChat: options.reportDelivery },
     );
     await finishAutomationRun(db, {
       runId,
@@ -236,7 +238,7 @@ export async function runAutomationNow(
           error: message,
           triggerPayload: options.triggerPayload,
         },
-        { fetchImpl: options.fetchImpl },
+        { fetchImpl: options.fetchImpl, externalChat: options.reportDelivery },
       );
       await finishAutomationRun(db, {
         runId,
@@ -283,6 +285,7 @@ export async function runAutomationSchedulerOnce(
     claimedBy: workerId,
     fetchImpl: options.fetchImpl,
     timeoutMs: options.timeoutMs,
+    reportDelivery: options.reportDelivery,
   });
   if (result.status === 'skipped' || !result.runId) {
     await releaseAutomationClaim(db, automation.id, workerId);

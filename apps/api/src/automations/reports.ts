@@ -3,6 +3,12 @@ import type {
   AutomationRow,
   AutomationRunStatus,
 } from '../storage/automations.js';
+import { getExternalConnection, recordExternalMessage } from '../storage/external-connections.js';
+import type { LeashApiConfig } from '../config.js';
+import type { DbClient } from '../storage/turso.js';
+import { decryptSecret } from '@leashmarket/platform-auth/encryption';
+import { createTelegramClient, type TelegramClient } from '../external/telegram-client.js';
+import type { WhatsAppManager } from '../external/whatsapp-manager.js';
 import { signPayload } from '../webhooks/sign.js';
 
 export type ReportDeliveryInput = {
@@ -18,12 +24,26 @@ export type ReportDeliveryInput = {
 export type ReportDeliveryOptions = {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  externalChat?: ExternalChatDeliveryDeps;
 };
 
 export type ReportDeliveryResult = {
   status: string;
   result: Record<string, unknown>;
 };
+
+export type ExternalChatDeliveryDeps = {
+  config: LeashApiConfig;
+  db: DbClient;
+  whatsapp?: Pick<WhatsAppManager, 'sendOutboundText'>;
+  telegramClientFactory?: (botToken: string) => TelegramClient;
+};
+
+let configuredExternalChatDelivery: ExternalChatDeliveryDeps | null = null;
+
+export function setAutomationExternalChatDeliveryDeps(deps: ExternalChatDeliveryDeps | null): void {
+  configuredExternalChatDelivery = deps;
+}
 
 function policyApplies(policy: AutomationDeliveryPolicy, status: ReportDeliveryInput['status']) {
   switch (policy) {
@@ -47,6 +67,94 @@ function deliveryUrl(config: Record<string, unknown>): string | null {
   return typeof url === 'string' && /^https?:\/\//i.test(url) ? url : null;
 }
 
+function externalChatConfig(config: Record<string, unknown>): {
+  connectionId: string;
+  channel: 'telegram' | 'whatsapp';
+} | null {
+  if (config.kind !== 'external_chat') return null;
+  const connectionId = config.connection_id;
+  const channel = config.channel;
+  if (typeof connectionId !== 'string') return null;
+  if (channel !== 'telegram' && channel !== 'whatsapp') return null;
+  return { connectionId, channel };
+}
+
+function formatExternalChatReport(input: ReportDeliveryInput): string {
+  return [
+    `Automation report: ${input.automation.name}`,
+    `Status: ${input.status}`,
+    input.outputText ? `\n${input.outputText}` : null,
+    input.error ? `\nError: ${input.error}` : null,
+    `\nRun: ${input.runId}`,
+  ]
+    .filter((line): line is string => line != null && line.length > 0)
+    .join('\n');
+}
+
+async function deliverExternalChatReport(
+  input: ReportDeliveryInput,
+  config: { connectionId: string; channel: 'telegram' | 'whatsapp' },
+  deps: ExternalChatDeliveryDeps | null,
+): Promise<ReportDeliveryResult> {
+  const base = {
+    policy: input.automation.deliveryPolicy,
+    kind: 'external_chat',
+    connection_id: config.connectionId,
+    channel: config.channel,
+  };
+  if (!deps) {
+    return {
+      status: 'failed',
+      result: { ...base, error: 'external_chat_delivery_not_configured' },
+    };
+  }
+  const conn = await getExternalConnection(deps.db, config.connectionId);
+  if (!conn || conn.status !== 'connected' || conn.channel !== config.channel) {
+    return { status: 'failed', result: { ...base, error: 'external_connection_unavailable' } };
+  }
+  const text = formatExternalChatReport(input);
+  try {
+    if (conn.channel === 'whatsapp') {
+      const ok = deps.whatsapp ? await deps.whatsapp.sendOutboundText(conn.id, text) : false;
+      if (!ok) return { status: 'failed', result: { ...base, error: 'whatsapp_unavailable' } };
+    } else {
+      if (!conn.encryptedCredential || !deps.config.encryptionKey || !conn.boundChatId) {
+        return { status: 'failed', result: { ...base, error: 'telegram_unavailable' } };
+      }
+      const botToken = decryptSecret(conn.encryptedCredential, deps.config.encryptionKey);
+      const telegram = deps.telegramClientFactory?.(botToken) ?? createTelegramClient({ botToken });
+      const sent = await telegram.sendMessage({
+        chatId: conn.boundChatId,
+        text,
+        disableWebPagePreview: false,
+      });
+      if (!sent.ok) {
+        return {
+          status: 'failed',
+          result: { ...base, error: 'telegram_send_failed', response_status: sent.status },
+        };
+      }
+    }
+    await recordExternalMessage(deps.db, {
+      connectionId: conn.id,
+      direction: 'outbound',
+      payload: {
+        kind: 'automation_report',
+        automation_id: input.automation.id,
+        run_id: input.runId,
+        status: input.status,
+        len: text.length,
+      },
+    });
+    return { status: 'delivered', result: { ...base } };
+  } catch (err) {
+    return {
+      status: 'failed',
+      result: { ...base, error: err instanceof Error ? err.message : String(err) },
+    };
+  }
+}
+
 export async function deliverAutomationReport(
   input: ReportDeliveryInput,
   options: ReportDeliveryOptions = {},
@@ -54,6 +162,15 @@ export async function deliverAutomationReport(
   const policy = input.automation.deliveryPolicy;
   if (policy === 'silent') return { status: 'suppressed', result: { policy } };
   if (!policyApplies(policy, input.status)) return { status: 'history_only', result: { policy } };
+
+  const externalChat = externalChatConfig(input.automation.deliveryConfig);
+  if (externalChat) {
+    return deliverExternalChatReport(
+      input,
+      externalChat,
+      options.externalChat ?? configuredExternalChatDelivery,
+    );
+  }
 
   const url = deliveryUrl(input.automation.deliveryConfig);
   if (!url) return { status: 'no_destination', result: { policy } };

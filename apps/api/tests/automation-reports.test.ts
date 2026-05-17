@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { encryptSecret } from '@leashmarket/platform-auth/encryption';
 
 import { runAutomationSchedulerOnce } from '../src/automations/runner.js';
 import {
@@ -6,6 +7,11 @@ import {
   listAutomationRunsForOwner,
   pruneExpiredAutomationRuns,
 } from '../src/storage/automations.js';
+import {
+  bindExternalConnection,
+  createExternalConnection,
+} from '../src/storage/external-connections.js';
+import type { TelegramClient } from '../src/external/telegram-client.js';
 import { verifySignature } from '../src/webhooks/sign.js';
 import { createTestRig } from './helpers.js';
 
@@ -15,6 +21,7 @@ const PRIVY_ID = 'did:privy:auto-reports';
 const WALLET = 'FFvPUNGYsQa4vjLAcCJ4zx8vZ4BSqQoCbMMyG3VNuEnd';
 const MINT = '4Nd1mWcYWYn7Z9wsCSKwa5e2W7Lo23Yp8h2gEHn8oAB7';
 const TREASURY = 'FZQ4SyEUxGRgTwT7DvKi8b8tqezZbTnpVvPm9wgL2Lz3';
+const BOT_TOKEN = '123456789:ABCdef-ghi_jklmnopqrstuvwxyz12345678';
 
 beforeAll(() => {
   process.env.ENCRYPTION_KEY = ENC_KEY;
@@ -148,6 +155,114 @@ describe('automation report delivery', () => {
     const runs = await listAutomationRunsForOwner(rig.db, PRIVY_ID, automation.id);
     expect(runs[0]!.deliveryStatus).toBe('no_destination');
     expect(runs[0]!.deliveryResult.policy).toBe('on_failure');
+  });
+
+  it('delivers automation reports to the configured Telegram chat', async () => {
+    const rig = await createTestRig({
+      adminSecret: ADMIN_SECRET,
+      encryptionKey: ENC_KEY,
+      agentsBffUrl: 'http://agents-bff.test',
+      agentsBffSecret: 'secret'.repeat(8),
+    });
+    await seedAgent(rig);
+    const conn = await createExternalConnection(rig.db, {
+      ownerPrivyId: PRIVY_ID,
+      channel: 'telegram',
+      displayName: 'Telegram',
+      encryptedCredential: encryptSecret(BOT_TOKEN, ENC_KEY),
+      routingId: 'telegram-route',
+      botUsername: 'leash_bot',
+    });
+    await bindExternalConnection(rig.db, { id: conn.id, boundChatId: 'chat-123' });
+    const automation = await seedScheduledAutomation(rig, {
+      deliveryPolicy: 'every_run',
+      deliveryConfig: { kind: 'external_chat', connection_id: conn.id, channel: 'telegram' },
+    });
+    const sent: Array<{ chatId: string; text: string }> = [];
+    const telegram: TelegramClient = {
+      async sendMessage(args) {
+        sent.push({ chatId: args.chatId, text: args.text });
+        return { ok: true, status: 200, body: '{"ok":true}' };
+      },
+      async getMe() {
+        return { id: 1, is_bot: true, username: 'leash_bot' };
+      },
+    };
+    const fetchImpl = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          text: 'Report sent to chat.',
+          artifacts: [],
+          errors: [],
+          warnings: [],
+          model: 'claude-test',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+
+    const result = await runAutomationSchedulerOnce(rig.db, rig.config, {
+      fetchImpl: fetchImpl as typeof fetch,
+      now: new Date('2026-05-16T08:00:00.000Z'),
+      workerId: 'worker-a',
+      reportDelivery: {
+        config: rig.config,
+        db: rig.db,
+        telegramClientFactory: () => telegram,
+      },
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.chatId).toBe('chat-123');
+    expect(sent[0]!.text).toContain('Automation report');
+    expect(sent[0]!.text).toContain('Report sent to chat.');
+    const runs = await listAutomationRunsForOwner(rig.db, PRIVY_ID, automation.id);
+    expect(runs[0]!.deliveryStatus).toBe('delivered');
+    expect(runs[0]!.deliveryResult.kind).toBe('external_chat');
+  });
+
+  it('records failed delivery when a WhatsApp report target has no live manager', async () => {
+    const rig = await createTestRig({
+      adminSecret: ADMIN_SECRET,
+      agentsBffUrl: 'http://agents-bff.test',
+      agentsBffSecret: 'secret'.repeat(8),
+    });
+    await seedAgent(rig);
+    const conn = await createExternalConnection(rig.db, {
+      ownerPrivyId: PRIVY_ID,
+      channel: 'whatsapp',
+      displayName: 'WhatsApp',
+    });
+    await bindExternalConnection(rig.db, { id: conn.id, boundChatId: '15551234567' });
+    const automation = await seedScheduledAutomation(rig, {
+      deliveryPolicy: 'every_run',
+      deliveryConfig: { kind: 'external_chat', connection_id: conn.id, channel: 'whatsapp' },
+    });
+    const fetchImpl = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          text: 'WhatsApp report body.',
+          artifacts: [],
+          errors: [],
+          warnings: [],
+          model: 'claude-test',
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+
+    const result = await runAutomationSchedulerOnce(rig.db, rig.config, {
+      fetchImpl: fetchImpl as typeof fetch,
+      now: new Date('2026-05-16T08:00:00.000Z'),
+      workerId: 'worker-a',
+      reportDelivery: { config: rig.config, db: rig.db },
+    });
+
+    expect(result.status).toBe('succeeded');
+    const runs = await listAutomationRunsForOwner(rig.db, PRIVY_ID, automation.id);
+    expect(runs[0]!.deliveryStatus).toBe('failed');
+    expect(runs[0]!.deliveryResult.error).toBe('whatsapp_unavailable');
   });
 
   it('prunes run history past each automation retention window', async () => {
