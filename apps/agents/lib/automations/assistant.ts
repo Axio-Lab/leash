@@ -281,6 +281,9 @@ export function buildAutomationPlannerPrompt(input: DraftPlannerInput): string {
     `User timezone: ${input.timezone}`,
     `Available connected toolkits: ${toolkitLine}`,
     `Channel: ${input.channel}`,
+    input.externalConnectionId && input.channel !== 'web'
+      ? `Default report delivery: use delivery_policy "every_run" and delivery_config {"kind":"external_chat","connection_id":"${input.externalConnectionId}","channel":"${input.channel}"} unless the user explicitly asks for history only or silence.`
+      : 'Default report delivery: use delivery_policy "history_only" unless the user asks for a webhook or silent mode.',
     `User request: ${input.message}`,
   ].join('\n');
 }
@@ -601,10 +604,10 @@ export async function handleAutomationAssistantTurn(
     return executePending(deps, input.ownerPrivyId, pending);
   }
   if (intent === 'confirm') {
-    return { handled: true, text: 'There is no pending automation change to confirm.' };
+    return null;
   }
   if (intent === 'cancel') {
-    return { handled: true, text: 'There is no pending automation change to cancel.' };
+    return null;
   }
   if (!intent) return null;
   if (!input.agentMint && intent === 'create') {
