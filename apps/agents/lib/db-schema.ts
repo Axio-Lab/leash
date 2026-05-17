@@ -36,5 +36,18 @@ export async function ensureAgentChatTables(db: Client): Promise<void> {
       model_tier TEXT NOT NULL DEFAULT 'sonnet',
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS automation_pending_actions (
+      id TEXT PRIMARY KEY,
+      owner_privy_id TEXT NOT NULL,
+      context_key TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('create','patch','delete')),
+      payload TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_automation_pending_context
+      ON automation_pending_actions(owner_privy_id, context_key, created_at DESC);
   `);
 }
