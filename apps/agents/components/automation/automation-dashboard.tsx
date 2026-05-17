@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import * as React from 'react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
 import {
+  ArrowLeftIcon,
   BellIcon,
   CalendarClockIcon,
   Clock3Icon,
@@ -13,6 +15,7 @@ import {
   MoreHorizontalIcon,
   PauseIcon,
   PlayIcon,
+  PlusIcon,
   SaveIcon,
   ShieldCheckIcon,
   Trash2Icon,
@@ -112,6 +115,23 @@ const deliveryLabels: Record<DeliveryPolicy, string> = {
   on_failure: 'Failure only',
   on_condition: 'Conditional',
   silent: 'No report',
+};
+
+const deliveryHelp: Record<DeliveryPolicy, string> = {
+  history_only: 'Keep the report in run history only. Nothing is pushed to an external URL.',
+  every_run: 'Send a report after every run, whether it succeeds or fails.',
+  on_failure: 'Send a report only when the run fails or payment/cap checks block it.',
+  on_condition:
+    'Reserve for conditional reporting rules. Until conditions are expanded, it behaves like an important-run report path.',
+  silent: 'Do not deliver a report. The run can still be audited from stored history.',
+};
+
+const eventHelp: Record<string, string> = {
+  'treasury.low_balance':
+    'Fires when Leash emits an internal low-balance signal for the agent treasury.',
+  'receipt.settled': 'Fires after a Leash payment receipt is settled and recorded.',
+  'connection.message':
+    'Fires when a supported connected channel produces a message event for the agent.',
 };
 
 type Draft = {
@@ -247,7 +267,17 @@ function formatShortDate(value: string | null): string {
   }).format(d);
 }
 
-export function AutomationDashboard() {
+type AutomationDashboardProps = {
+  mode?: 'index' | 'form';
+  automationId?: string | null;
+};
+
+export function AutomationDashboard({
+  mode = 'index',
+  automationId = null,
+}: AutomationDashboardProps = {}) {
+  const router = useRouter();
+  const isFormMode = mode === 'form';
   const [draft, setDraft] = React.useState<Draft>(() => emptyDraft());
   const [saving, setSaving] = React.useState(false);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -267,7 +297,9 @@ export function AutomationDashboard() {
 
   const automations = automationsData?.items ?? [];
   const primaryAgent = agentsData?.items?.find((a) => a.mint) ?? null;
-  const selected = automations.find((a) => a.id === selectedId) ?? automations[0] ?? null;
+  const selected = isFormMode
+    ? (automations.find((a) => a.id === automationId) ?? null)
+    : (automations.find((a) => a.id === selectedId) ?? automations[0] ?? null);
   const { data: runsData, isLoading: runsLoading } = useSWR(
     selected ? `/api/automations/${encodeURIComponent(selected.id)}/runs?limit=8` : null,
     fetcher<RunsList>,
@@ -278,16 +310,26 @@ export function AutomationDashboard() {
   );
 
   React.useEffect(() => {
+    if (isFormMode) return;
     if (!selectedId && automations[0]) setSelectedId(automations[0].id);
-  }, [automations, selectedId]);
+  }, [automations, isFormMode, selectedId]);
+
+  React.useEffect(() => {
+    if (!isFormMode) return;
+    if (!automationId) {
+      setDraft(emptyDraft());
+      setSelectedId(null);
+      return;
+    }
+    const row = automations.find((a) => a.id === automationId);
+    if (row) {
+      setDraft(draftFromAutomation(row));
+      setSelectedId(row.id);
+    }
+  }, [automationId, automations, isFormMode]);
 
   function resetForm() {
     setDraft(emptyDraft());
-  }
-
-  function edit(row: Automation) {
-    setDraft(draftFromAutomation(row));
-    setSelectedId(row.id);
   }
 
   function updateDraft<K extends keyof Draft>(key: K, value: Draft[K]) {
@@ -396,6 +438,9 @@ export function AutomationDashboard() {
       setDraft(draftFromAutomation(saved));
       await mutateAutomations();
       toast.success(draft.id ? 'Automation updated' : 'Automation created');
+      if (isFormMode && !draft.id) {
+        router.replace(`/agents/automation/${encodeURIComponent(saved.id)}`);
+      }
     } catch (err) {
       toast.error('Could not save automation', {
         description: err instanceof Error ? err.message : 'unknown error',
@@ -460,10 +505,72 @@ export function AutomationDashboard() {
     },
   ] as const;
 
+  if (isFormMode) {
+    const loadingExisting = Boolean(automationId) && automationsLoading && !selected;
+    const missingExisting = Boolean(automationId) && !automationsLoading && !selected;
+    const title = automationId ? 'Edit automation' : 'New automation';
+
+    return (
+      <div className="flex-1 overflow-y-auto scrollbar-thin">
+        <div className="mx-auto flex w-full max-w-[1040px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
+          <header className="flex flex-col gap-3 border-b border-border pb-4">
+            <Link
+              href="/agents/automation"
+              className="inline-flex min-h-10 w-fit items-center gap-2 rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg-muted hover:border-border-strong hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+            >
+              <ArrowLeftIcon className="size-4" aria-hidden="true" />
+              Automations
+            </Link>
+            <div className="min-w-0">
+              <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-brand/30 bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand">
+                <WorkflowIcon className="size-3.5" aria-hidden="true" />
+                Automation
+              </div>
+              <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
+                Configure when the agent runs, which connections it can use, and how the result is
+                stored or reported.
+              </p>
+            </div>
+          </header>
+
+          {automationsData?.warning ? (
+            <div className="rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
+              {automationsData.warning}
+            </div>
+          ) : null}
+
+          {loadingExisting ? (
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-bg-elev/70 px-4 py-8 text-sm text-fg-muted">
+              <Spinner size="sm" /> Loading automation
+            </div>
+          ) : missingExisting ? (
+            <div className="rounded-lg border border-border bg-bg-elev/70 px-4 py-8 text-sm text-fg-muted">
+              Automation not found.
+            </div>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <AutomationEditor
+                draft={draft}
+                activeToolkits={activeToolkits}
+                saving={saving}
+                hasAgent={Boolean(primaryAgent?.mint)}
+                onSave={save}
+                onDraft={updateDraft}
+                onToggleToolkit={toggleToolkit}
+              />
+              <AutomationHelpPanel />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 overflow-y-auto scrollbar-thin">
       <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
-        <header className="border-b border-border pb-4">
+        <header className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-brand/30 bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand">
               <WorkflowIcon className="size-3.5" aria-hidden="true" />
@@ -475,29 +582,13 @@ export function AutomationDashboard() {
               optional report delivery.
             </p>
           </div>
+          <Button asChild className="min-h-10">
+            <Link href="/agents/automation/new">
+              <PlusIcon className="size-4" aria-hidden="true" />
+              New automation
+            </Link>
+          </Button>
         </header>
-
-        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="Automation scope">
-          {capabilityCards.map((card) => {
-            const Icon = card.icon;
-            return (
-              <div key={card.label} className="rounded-lg border border-border bg-bg-elev/70 p-4">
-                <div className="flex items-start gap-3">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-md border border-border bg-bg">
-                    <Icon className="size-4 text-brand" aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="text-xs font-mono uppercase tracking-widest text-fg-subtle">
-                      {card.label}
-                    </div>
-                    <div className="mt-1 text-sm font-medium text-fg">{card.value}</div>
-                  </div>
-                </div>
-                <p className="mt-3 text-xs leading-5 text-fg-muted">{card.detail}</p>
-              </div>
-            );
-          })}
-        </section>
 
         {automationsData?.warning ? (
           <div className="rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning">
@@ -506,128 +597,110 @@ export function AutomationDashboard() {
         ) : null}
 
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="space-y-4">
-            <div className="rounded-lg border border-border bg-bg-elev/70">
-              <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-sm font-medium">Automations</h2>
-                  <p className="mt-0.5 text-xs text-fg-muted">
-                    {automations.length} saved ·{' '}
-                    {automations.filter((a) => a.status === 'enabled').length} enabled
-                  </p>
-                </div>
-                <Link
-                  href="/settings/connections"
-                  className="inline-flex min-h-10 items-center justify-center rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg-muted hover:border-border-strong hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg-elev"
-                >
-                  Manage connections
-                </Link>
+          <div className="rounded-lg border border-border bg-bg-elev/70">
+            <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-medium">Automations</h2>
+                <p className="mt-0.5 text-xs text-fg-muted">
+                  {automations.length} saved ·{' '}
+                  {automations.filter((a) => a.status === 'enabled').length} enabled
+                </p>
               </div>
-
-              {automationsLoading ? (
-                <div className="flex items-center gap-2 px-4 py-8 text-sm text-fg-muted">
-                  <Spinner size="sm" /> Loading automations
-                </div>
-              ) : automationsError ? (
-                <div className="px-4 py-8 text-sm text-danger">
-                  Could not load automations: {(automationsError as Error).message}
-                </div>
-              ) : automations.length === 0 ? (
-                <EmptyAutomationState />
-              ) : (
-                <ul className="divide-y divide-border">
-                  {automations.map((row) => {
-                    const active = selected?.id === row.id;
-                    return (
-                      <li key={row.id} className={active ? 'bg-brand/8' : undefined}>
-                        <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedId(row.id);
-                              edit(row);
-                            }}
-                            className="min-w-0 flex-1 rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg-elev"
-                          >
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="truncate text-sm font-medium text-fg">
-                                {row.name}
-                              </span>
-                              <StatusBadge status={row.status} />
-                              <TriggerBadge trigger={row.trigger_type} />
-                            </div>
-                            <div className="mt-1 line-clamp-1 text-xs text-fg-muted">
-                              {row.description || triggerLabel(row)}
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-fg-subtle">
-                              <span>
-                                {sourceCount(row)} source{sourceCount(row) === 1 ? '' : 's'}
-                              </span>
-                              <span>{deliveryLabels[row.delivery_policy]}</span>
-                              <span>
-                                ${row.budget_per_run}/run · ${row.budget_per_day}/day
-                              </span>
-                              <span>Last {formatShortDate(row.last_run_at)}</span>
-                            </div>
-                          </button>
-                          <div className="flex items-center gap-2 lg:justify-end">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                patchStatus(row, row.status === 'enabled' ? 'paused' : 'enabled')
-                              }
-                            >
-                              {row.status === 'enabled' ? (
-                                <PauseIcon className="size-3.5" aria-hidden="true" />
-                              ) : (
-                                <PlayIcon className="size-3.5" aria-hidden="true" />
-                              )}
-                              {row.status === 'enabled' ? 'Pause' : 'Enable'}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => edit(row)}
-                            >
-                              <MoreHorizontalIcon className="size-3.5" aria-hidden="true" />
-                              Edit
-                            </Button>
-                            <button
-                              type="button"
-                              onClick={() => remove(row)}
-                              className="grid min-h-10 min-w-10 place-items-center rounded-md text-fg-subtle hover:bg-danger/10 hover:text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2 focus-visible:ring-offset-bg-elev"
-                              aria-label={`Delete ${row.name}`}
-                            >
-                              <Trash2Icon className="size-4" aria-hidden="true" />
-                            </button>
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+              <Link
+                href="/settings/connections"
+                className="inline-flex min-h-10 items-center justify-center rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg-muted hover:border-border-strong hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg-elev"
+              >
+                Manage connections
+              </Link>
             </div>
 
-            <RunHistoryPanel
-              selected={selected}
-              runs={runs}
-              isLoading={runsLoading}
-              runStates={runStates}
-            />
+            {automationsLoading ? (
+              <div className="flex items-center gap-2 px-4 py-8 text-sm text-fg-muted">
+                <Spinner size="sm" /> Loading automations
+              </div>
+            ) : automationsError ? (
+              <div className="px-4 py-8 text-sm text-danger">
+                Could not load automations: {(automationsError as Error).message}
+              </div>
+            ) : automations.length === 0 ? (
+              <EmptyAutomationState />
+            ) : (
+              <ul className="divide-y divide-border">
+                {automations.map((row) => {
+                  const active = selected?.id === row.id;
+                  return (
+                    <li key={row.id} className={active ? 'bg-brand/8' : undefined}>
+                      <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedId(row.id);
+                          }}
+                          className="min-w-0 flex-1 rounded-md text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg-elev"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate text-sm font-medium text-fg">{row.name}</span>
+                            <StatusBadge status={row.status} />
+                            <TriggerBadge trigger={row.trigger_type} />
+                          </div>
+                          <div className="mt-1 line-clamp-1 text-xs text-fg-muted">
+                            {row.description || triggerLabel(row)}
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-fg-subtle">
+                            <span>
+                              {sourceCount(row)} source{sourceCount(row) === 1 ? '' : 's'}
+                            </span>
+                            <span>{deliveryLabels[row.delivery_policy]}</span>
+                            <span>
+                              ${row.budget_per_run}/run · ${row.budget_per_day}/day
+                            </span>
+                            <span>Last {formatShortDate(row.last_run_at)}</span>
+                          </div>
+                        </button>
+                        <div className="flex items-center gap-2 lg:justify-end">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              patchStatus(row, row.status === 'enabled' ? 'paused' : 'enabled')
+                            }
+                          >
+                            {row.status === 'enabled' ? (
+                              <PauseIcon className="size-3.5" aria-hidden="true" />
+                            ) : (
+                              <PlayIcon className="size-3.5" aria-hidden="true" />
+                            )}
+                            {row.status === 'enabled' ? 'Pause' : 'Enable'}
+                          </Button>
+                          <Button asChild size="sm" variant="ghost">
+                            <Link href={`/agents/automation/${encodeURIComponent(row.id)}`}>
+                              <MoreHorizontalIcon className="size-3.5" aria-hidden="true" />
+                              Edit
+                            </Link>
+                          </Button>
+                          <button
+                            type="button"
+                            onClick={() => remove(row)}
+                            className="grid min-h-10 min-w-10 place-items-center rounded-md text-fg-subtle hover:bg-danger/10 hover:text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2 focus-visible:ring-offset-bg-elev"
+                            aria-label={`Delete ${row.name}`}
+                          >
+                            <Trash2Icon className="size-4" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
 
-          <AutomationEditor
-            draft={draft}
-            activeToolkits={activeToolkits}
-            saving={saving}
-            hasAgent={Boolean(primaryAgent?.mint)}
-            onSave={save}
-            onDraft={updateDraft}
-            onToggleToolkit={toggleToolkit}
+          <RunHistoryPanel
+            selected={selected}
+            runs={runs}
+            isLoading={runsLoading}
+            runStates={runStates}
           />
         </section>
       </div>
@@ -647,11 +720,53 @@ function EmptyAutomationState() {
           Start with a schedule, webhook, or event trigger, then choose which connections the agent
           can read and where reports should go.
         </p>
-        <p className="mt-3 text-xs leading-5 text-fg-subtle">
-          Use the form on this page to save the first automation.
-        </p>
+        <Button asChild className="mt-5 min-h-10">
+          <Link href="/agents/automation/new">
+            <PlusIcon className="size-4" aria-hidden="true" />
+            New automation
+          </Link>
+        </Button>
       </div>
     </div>
+  );
+}
+
+function AutomationHelpPanel() {
+  return (
+    <aside className="space-y-3">
+      <div className="rounded-lg border border-border bg-bg-elev/70 p-4">
+        <h2 className="text-sm font-medium">How automations run</h2>
+        <div className="mt-4 space-y-3">
+          {capabilityCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <div key={card.label} className="flex gap-3">
+                <span className="grid size-8 shrink-0 place-items-center rounded-md border border-border bg-bg">
+                  <Icon className="size-4 text-brand" aria-hidden="true" />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-fg">{card.label}</div>
+                  <p className="mt-0.5 text-xs leading-5 text-fg-muted">{card.detail}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-bg p-4">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <ShieldCheckIcon className="size-4 text-success" aria-hidden="true" />
+          Safety defaults
+        </div>
+        <ul className="mt-3 space-y-2 text-xs leading-5 text-fg-muted">
+          <li>Payment requests are checked against run and day caps before settlement.</li>
+          <li>
+            Withdrawals, delegation changes, cap changes, and settlement signing require approval.
+          </li>
+        </ul>
+      </div>
+    </aside>
   );
 }
 
@@ -716,7 +831,10 @@ function AutomationEditor({
             className="w-full resize-none rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand/70"
           />
         </Field>
-        <Field label="Run instructions">
+        <Field
+          label="Run instructions"
+          hint="The exact job the agent should complete each time this automation runs."
+        >
           <textarea
             value={draft.instructions}
             onChange={(e) => onDraft('instructions', e.target.value)}
@@ -726,7 +844,10 @@ function AutomationEditor({
           />
         </Field>
 
-        <Field label="Trigger">
+        <Field
+          label="Trigger"
+          hint="Schedule runs on time, webhook runs from an external POST, and event listens to internal Leash signals."
+        >
           <div className="grid grid-cols-3 gap-1.5">
             {(['schedule', 'webhook', 'event'] as const).map((type) => (
               <button
@@ -806,7 +927,10 @@ function AutomationEditor({
                 className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-brand/70"
               />
             </Field>
-            <Field label="Endpoint path">
+            <Field
+              label="Endpoint path"
+              hint="Send a signed POST to this apps/api path after saving."
+            >
               <input
                 readOnly
                 value={draft.id ? `/v1/automation-hooks/${draft.id}` : 'Saved after create'}
@@ -824,7 +948,10 @@ function AutomationEditor({
             ) : null}
           </div>
         ) : (
-          <Field label="Event">
+          <Field
+            label="Event"
+            hint={eventHelp[draft.eventName] ?? 'Runs when the selected internal event is fired.'}
+          >
             <select
               value={draft.eventName}
               onChange={(e) => onDraft('eventName', e.target.value)}
@@ -837,7 +964,10 @@ function AutomationEditor({
           </Field>
         )}
 
-        <Field label="Data sources">
+        <Field
+          label="Data sources"
+          hint="Only selected connected toolkits are exposed to this automation run."
+        >
           {activeToolkits.length === 0 ? (
             <div className="rounded-md border border-border bg-bg px-3 py-3 text-xs leading-5 text-fg-muted">
               No connected toolkits yet.{' '}
@@ -871,7 +1001,7 @@ function AutomationEditor({
           )}
         </Field>
 
-        <Field label="Report policy">
+        <Field label="Report policy" hint={deliveryHelp[draft.deliveryPolicy]}>
           <select
             value={draft.deliveryPolicy}
             onChange={(e) => onDraft('deliveryPolicy', e.target.value as DeliveryPolicy)}
@@ -887,7 +1017,10 @@ function AutomationEditor({
 
         {draft.deliveryPolicy !== 'history_only' && draft.deliveryPolicy !== 'silent' ? (
           <div className="grid gap-2">
-            <Field label="Report webhook URL">
+            <Field
+              label="Report webhook URL"
+              hint="Where Leash should POST the run report when this policy delivers one."
+            >
               <input
                 type="url"
                 inputMode="url"
@@ -897,7 +1030,10 @@ function AutomationEditor({
                 className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand/70"
               />
             </Field>
-            <Field label="Report signing secret">
+            <Field
+              label="Report signing secret"
+              hint="Optional HMAC secret used to sign report delivery payloads."
+            >
               <input
                 value={draft.reportSigningSecret}
                 onChange={(e) => onDraft('reportSigningSecret', e.target.value)}
@@ -910,7 +1046,10 @@ function AutomationEditor({
         ) : null}
 
         <div className="grid grid-cols-2 gap-2">
-          <Field label="Cap per run">
+          <Field
+            label="Cap per run"
+            hint="Maximum payment-request value for one run. 0.25 means $0.25 USDC-equivalent."
+          >
             <input
               type="text"
               inputMode="decimal"
@@ -919,7 +1058,10 @@ function AutomationEditor({
               className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-brand/70"
             />
           </Field>
-          <Field label="Cap per day">
+          <Field
+            label="Cap per day"
+            hint="Maximum payment-request value across all runs in one UTC day. 2 means $2 USDC-equivalent."
+          >
             <input
               type="text"
               inputMode="decimal"
@@ -930,7 +1072,10 @@ function AutomationEditor({
           </Field>
         </div>
 
-        <Field label="Run retention">
+        <Field
+          label="Run retention"
+          hint="How many days to keep run history before old runs are pruned. 30 means one month of history."
+        >
           <input
             type="text"
             inputMode="numeric"
@@ -941,34 +1086,24 @@ function AutomationEditor({
           />
         </Field>
       </div>
-
-      <div className="mt-5 space-y-3">
-        <div className="rounded-lg border border-border bg-bg p-3">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <ShieldCheckIcon className="size-4 text-success" aria-hidden="true" />
-            Safety defaults
-          </div>
-          <ul className="mt-3 space-y-2 text-xs leading-5 text-fg-muted">
-            <li className="flex gap-2">
-              <span className="mt-2 size-1.5 shrink-0 rounded-full bg-success" />
-              Payment requests are checked against run and day caps before any settlement path.
-            </li>
-            <li className="flex gap-2">
-              <span className="mt-2 size-1.5 shrink-0 rounded-full bg-warning" />
-              Withdrawals, delegation changes, cap changes, and settlement signing require approval.
-            </li>
-          </ul>
-        </div>
-      </div>
     </form>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block space-y-1.5">
       <span className="text-xs font-medium text-fg-muted">{label}</span>
       {children}
+      {hint ? <span className="block text-xs leading-5 text-fg-subtle">{hint}</span> : null}
     </label>
   );
 }
