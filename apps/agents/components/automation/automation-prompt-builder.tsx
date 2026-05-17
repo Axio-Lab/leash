@@ -63,6 +63,16 @@ export function AutomationPromptBuilder() {
     await send(message);
   }
 
+  if (advanced) {
+    return (
+      <AutomationDashboard
+        mode="form"
+        onPromptMode={() => setAdvanced(false)}
+        showFormEyebrow={false}
+      />
+    );
+  }
+
   return (
     <div className="flex-1 overflow-y-auto scrollbar-thin">
       <div className="mx-auto flex w-full max-w-[1040px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
@@ -75,10 +85,6 @@ export function AutomationPromptBuilder() {
             Automations
           </Link>
           <div className="min-w-0">
-            <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-brand/30 bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand">
-              <SparklesIcon className="size-3.5" aria-hidden="true" />
-              Guided setup
-            </div>
             <h1 className="text-2xl font-semibold tracking-tight">New automation</h1>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
               Tell the agent what should happen. It will draft the trigger, sources, caps, and
@@ -112,7 +118,7 @@ export function AutomationPromptBuilder() {
                   type="button"
                   variant="ghost"
                   className="min-h-10"
-                  onClick={() => setAdvanced((v) => !v)}
+                  onClick={() => setAdvanced(true)}
                 >
                   <SlidersHorizontalIcon className="size-4" aria-hidden="true" />
                   Advanced settings
@@ -187,12 +193,6 @@ export function AutomationPromptBuilder() {
             </div>
           </aside>
         </section>
-
-        {advanced ? (
-          <div className="border-t border-border pt-5">
-            <AutomationDashboard mode="form" />
-          </div>
-        ) : null}
       </div>
     </div>
   );

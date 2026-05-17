@@ -18,6 +18,7 @@ import {
   PlusIcon,
   SaveIcon,
   ShieldCheckIcon,
+  SparklesIcon,
   Trash2Icon,
   WebhookIcon,
   WorkflowIcon,
@@ -75,6 +76,10 @@ type ToolkitConnections = {
     toolkit_name?: string;
   }>;
 };
+
+const EMPTY_AUTOMATIONS: Automation[] = [];
+const EMPTY_RUNS: AutomationRun[] = [];
+const EMPTY_TOOLKIT_CONNECTIONS: NonNullable<ToolkitConnections['items']> = [];
 
 const fetcher = async <T,>(url: string): Promise<T> => {
   const res = await fetch(url, { credentials: 'include' });
@@ -182,6 +187,35 @@ function emptyDraft(): Draft {
   };
 }
 
+function stringArraysEqual(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function draftsEqual(a: Draft, b: Draft): boolean {
+  return (
+    a.id === b.id &&
+    a.name === b.name &&
+    a.description === b.description &&
+    a.instructions === b.instructions &&
+    a.status === b.status &&
+    a.triggerType === b.triggerType &&
+    a.scheduleKind === b.scheduleKind &&
+    a.scheduleTime === b.scheduleTime &&
+    a.scheduleWeekday === b.scheduleWeekday &&
+    a.intervalMinutes === b.intervalMinutes &&
+    a.eventName === b.eventName &&
+    a.webhookLabel === b.webhookLabel &&
+    a.webhookSecret === b.webhookSecret &&
+    stringArraysEqual(a.toolkitSlugs, b.toolkitSlugs) &&
+    a.deliveryPolicy === b.deliveryPolicy &&
+    a.reportWebhookUrl === b.reportWebhookUrl &&
+    a.reportSigningSecret === b.reportSigningSecret &&
+    a.budgetPerRun === b.budgetPerRun &&
+    a.budgetPerDay === b.budgetPerDay &&
+    a.retentionDays === b.retentionDays
+  );
+}
+
 function draftFromAutomation(row: Automation): Draft {
   const toolkitSlugs = Array.isArray(row.source_config.toolkit_slugs)
     ? row.source_config.toolkit_slugs.map(String)
@@ -270,11 +304,15 @@ function formatShortDate(value: string | null): string {
 type AutomationDashboardProps = {
   mode?: 'index' | 'form';
   automationId?: string | null;
+  onPromptMode?: () => void;
+  showFormEyebrow?: boolean;
 };
 
 export function AutomationDashboard({
   mode = 'index',
   automationId = null,
+  onPromptMode,
+  showFormEyebrow = true,
 }: AutomationDashboardProps = {}) {
   const router = useRouter();
   const isFormMode = mode === 'form';
@@ -295,7 +333,7 @@ export function AutomationDashboard({
     revalidateOnFocus: false,
   });
 
-  const automations = automationsData?.items ?? [];
+  const automations = automationsData?.items ?? EMPTY_AUTOMATIONS;
   const primaryAgent = agentsData?.items?.find((a) => a.mint) ?? null;
   const selected = isFormMode
     ? (automations.find((a) => a.id === automationId) ?? null)
@@ -304,9 +342,11 @@ export function AutomationDashboard({
     selected ? `/api/automations/${encodeURIComponent(selected.id)}/runs?limit=8` : null,
     fetcher<RunsList>,
   );
-  const runs = runsData?.items ?? [];
-  const activeToolkits = (toolkitData?.items ?? []).filter(
-    (c) => c.status === 'ACTIVE' && c.toolkit_slug,
+  const runs = runsData?.items ?? EMPTY_RUNS;
+  const toolkitConnections = toolkitData?.items ?? EMPTY_TOOLKIT_CONNECTIONS;
+  const activeToolkits = React.useMemo(
+    () => toolkitConnections.filter((c) => c.status === 'ACTIVE' && c.toolkit_slug),
+    [toolkitConnections],
   );
 
   React.useEffect(() => {
@@ -315,25 +355,31 @@ export function AutomationDashboard({
   }, [automations, isFormMode, selectedId]);
 
   React.useEffect(() => {
-    if (!isFormMode) return;
-    if (!automationId) {
-      setDraft(emptyDraft());
-      setSelectedId(null);
-      return;
-    }
+    if (!isFormMode || automationId) return;
+    const nextDraft = emptyDraft();
+    setDraft((prev) => (draftsEqual(prev, nextDraft) ? prev : nextDraft));
+    setSelectedId((prev) => (prev === null ? prev : null));
+  }, [automationId, isFormMode]);
+
+  React.useEffect(() => {
+    if (!isFormMode || !automationId) return;
     const row = automations.find((a) => a.id === automationId);
-    if (row) {
-      setDraft(draftFromAutomation(row));
-      setSelectedId(row.id);
-    }
+    if (!row) return;
+    const nextDraft = draftFromAutomation(row);
+    setDraft((prev) => (draftsEqual(prev, nextDraft) ? prev : nextDraft));
+    setSelectedId((prev) => (prev === row.id ? prev : row.id));
   }, [automationId, automations, isFormMode]);
 
   function resetForm() {
-    setDraft(emptyDraft());
+    const nextDraft = emptyDraft();
+    setDraft((prev) => (draftsEqual(prev, nextDraft) ? prev : nextDraft));
   }
 
   function updateDraft<K extends keyof Draft>(key: K, value: Draft[K]) {
-    setDraft((prev) => ({ ...prev, [key]: value }));
+    setDraft((prev) => {
+      if (prev[key] === value) return prev;
+      return { ...prev, [key]: value };
+    });
   }
 
   function toggleToolkit(slug: string, checked: boolean) {
@@ -341,7 +387,9 @@ export function AutomationDashboard({
       const set = new Set(prev.toolkitSlugs);
       if (checked) set.add(slug);
       else set.delete(slug);
-      return { ...prev, toolkitSlugs: [...set].sort() };
+      const toolkitSlugs = [...set].sort();
+      if (stringArraysEqual(prev.toolkitSlugs, toolkitSlugs)) return prev;
+      return { ...prev, toolkitSlugs };
     });
   }
 
@@ -521,16 +569,31 @@ export function AutomationDashboard({
               <ArrowLeftIcon className="size-4" aria-hidden="true" />
               Automations
             </Link>
-            <div className="min-w-0">
-              <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-brand/30 bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand">
-                <WorkflowIcon className="size-3.5" aria-hidden="true" />
-                Automation
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                {showFormEyebrow ? (
+                  <div className="mb-2 inline-flex items-center gap-2 rounded-md border border-brand/30 bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand">
+                    <WorkflowIcon className="size-3.5" aria-hidden="true" />
+                    Automation
+                  </div>
+                ) : null}
+                <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
+                  Configure when the agent runs, which connections it can use, and how the result is
+                  stored or reported.
+                </p>
               </div>
-              <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-              <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
-                Configure when the agent runs, which connections it can use, and how the result is
-                stored or reported.
-              </p>
+              {onPromptMode ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="min-h-10 w-fit shrink-0 border-brand/60 hover:border-brand"
+                  onClick={onPromptMode}
+                >
+                  <SparklesIcon className="size-4" aria-hidden="true" />
+                  Prompt automation
+                </Button>
+              ) : null}
             </div>
           </header>
 
