@@ -36,7 +36,7 @@ type AgentItem = {
 };
 
 const EMPTY_AGENTS: AgentItem[] = [];
-const AGENTS_PER_PAGE = 1;
+const AGENTS_PER_PAGE = 2;
 
 const agentsFetcher = async (url: string) => {
   const res = await fetch(url, { credentials: 'include' });
@@ -318,17 +318,6 @@ function AgentSelector({
           <PlusIcon className="size-3.5" />
           New agent
         </Button>
-      </div>
-
-      <div className="mt-4 flex items-center justify-between text-xs text-fg-muted">
-        <span>
-          {agents.length} agent{agents.length === 1 ? '' : 's'}
-        </span>
-        {totalPages > 1 ? (
-          <span>
-            Page {clampedPage} / {totalPages}
-          </span>
-        ) : null}
       </div>
 
       <div className="mt-4 grid gap-2 md:grid-cols-2">
