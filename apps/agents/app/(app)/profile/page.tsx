@@ -1,22 +1,17 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import useSWR from 'swr';
 import { usePrivy } from '@privy-io/react-auth';
 import { toast } from 'sonner';
-import {
-  AlertTriangleIcon,
-  BotIcon,
-  CheckCircle2Icon,
-  CopyIcon,
-  MailIcon,
-  WalletIcon,
-} from 'lucide-react';
+import { AlertTriangleIcon, CheckCircle2Icon, CopyIcon, MailIcon, WalletIcon } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { useSelectedNetwork } from '@/lib/network-preference';
+import {
+  ACTIVE_AGENT_EVENT,
+  ACTIVE_AGENT_STORAGE_KEY,
+  getStoredActiveAgentMint,
+} from '@/lib/active-agent';
 
 type AgentItem = {
   mint?: string;
@@ -39,7 +34,7 @@ function copy(value: string | undefined, label = 'Copied') {
 
 export default function ProfileOverviewPage() {
   const { user } = usePrivy();
-  const [selectedNetwork, setSelectedNetwork] = useSelectedNetwork();
+  const [activeMint, setActiveMint] = React.useState<string | null>(null);
 
   type Account = {
     type?: string;
@@ -57,8 +52,26 @@ export default function ProfileOverviewPage() {
     '/api/agents',
     agentsFetcher,
   );
-  const primary = data?.items?.[0] ?? null;
+  const agents = data?.items ?? [];
+  const primary = agents.find((agent) => agent.mint === activeMint) ?? agents[0] ?? null;
   const hasAgent = Boolean(primary?.mint);
+
+  React.useEffect(() => {
+    setActiveMint(getStoredActiveAgentMint());
+
+    function onActiveAgent(e: Event) {
+      setActiveMint((e as CustomEvent<string | null>).detail ?? null);
+    }
+    function onStorage(e: StorageEvent) {
+      if (e.key === ACTIVE_AGENT_STORAGE_KEY) setActiveMint(e.newValue);
+    }
+    window.addEventListener(ACTIVE_AGENT_EVENT, onActiveAgent);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(ACTIVE_AGENT_EVENT, onActiveAgent);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -112,34 +125,6 @@ export default function ProfileOverviewPage() {
               The MPL-Core asset, stablecoin treasury, and spend delegation that power your chats.
             </p>
           </div>
-          <div className="shrink-0 rounded-md border border-border bg-bg/40 p-1">
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setSelectedNetwork('solana-mainnet')}
-                className={`min-h-10 rounded-sm px-2.5 text-[10px] font-medium uppercase tracking-widest transition ${
-                  selectedNetwork === 'solana-mainnet'
-                    ? 'bg-bg-elev-2 text-fg shadow-[inset_0_0_0_1px_oklch(0.66_0.19_268/0.4)]'
-                    : 'text-fg-muted hover:text-fg hover:bg-bg-elev/60'
-                }`}
-                aria-pressed={selectedNetwork === 'solana-mainnet'}
-              >
-                Mainnet
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedNetwork('solana-devnet')}
-                className={`min-h-10 rounded-sm px-2.5 text-[10px] font-medium uppercase tracking-widest transition ${
-                  selectedNetwork === 'solana-devnet'
-                    ? 'bg-bg-elev-2 text-fg shadow-[inset_0_0_0_1px_oklch(0.66_0.19_268/0.4)]'
-                    : 'text-fg-muted hover:text-fg hover:bg-bg-elev/60'
-                }`}
-                aria-pressed={selectedNetwork === 'solana-devnet'}
-              >
-                Devnet
-              </button>
-            </div>
-          </div>
           {isLoading ? (
             <Spinner size="sm" />
           ) : hasAgent ? (
@@ -156,32 +141,34 @@ export default function ProfileOverviewPage() {
         </div>
 
         {!isLoading && hasAgent && primary ? (
-          <dl className="grid gap-3 sm:grid-cols-2">
-            <Field label="Name" value={primary.name ?? '—'} />
-            <Field label="Network" value={selectedNetwork} mono />
-            <Field label="Mint" value={primary.mint ?? '—'} fullValue={primary.mint} mono />
-            <Field
-              label="Treasury"
-              value={primary.treasury ?? '—'}
-              fullValue={primary.treasury}
-              mono
-            />
-          </dl>
+          <div className="space-y-3">
+            <div className="rounded-lg border border-border/60 bg-bg/40 p-3">
+              <div className="min-w-0">
+                <div className="text-[11px] uppercase tracking-widest text-fg-subtle">Agent</div>
+                <div className="mt-1 truncate text-sm font-medium text-fg">
+                  {primary.name ?? 'Untitled agent'}
+                </div>
+              </div>
+            </div>
+
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <Field label="Network" value={primary.network ?? '—'} mono />
+              <Field label="Mint" value={primary.mint ?? '—'} fullValue={primary.mint} mono />
+              <Field
+                label="Treasury"
+                value={primary.treasury ?? '—'}
+                fullValue={primary.treasury}
+                mono
+              />
+            </dl>
+          </div>
         ) : null}
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button asChild variant={hasAgent ? 'secondary' : 'default'}>
-            <Link href="/profile/agent">
-              <BotIcon className="size-4" />
-              {hasAgent ? 'Manage agent' : 'Set up your agent'}
-            </Link>
-          </Button>
-          {!hasAgent ? (
-            <p className="text-xs text-fg-subtle self-center">
-              Mint an agent to unlock treasury spend and marketplace tools.
-            </p>
-          ) : null}
-        </div>
+        {!isLoading && !hasAgent ? (
+          <p className="mt-4 text-xs text-fg-subtle">
+            Mint an agent from the Agent tab to unlock treasury spend and marketplace tools.
+          </p>
+        ) : null}
       </section>
     </div>
   );
