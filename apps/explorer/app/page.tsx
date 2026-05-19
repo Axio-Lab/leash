@@ -69,8 +69,7 @@ export default async function HomePage() {
         <AgentNetworkBackground />
         <div className="relative">
           <h1 className="mx-auto max-w-[22rem] text-center text-base font-semibold leading-snug tracking-tight sm:max-w-4xl sm:whitespace-nowrap sm:text-2xl md:text-3xl">
-            The public explorer for <span className="text-brand">agent identities</span> and their
-            proof trails.
+            The receipt engine trail for <span className="text-brand">agent identities</span>
           </h1>
         </div>
       </section>
