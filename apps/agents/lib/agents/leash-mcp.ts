@@ -39,6 +39,7 @@ import {
   type CreatePaymentLinkArgs,
   type DiscoverArgs,
   type IdentitySelectorArgs,
+  type IdentityVerifyArgs,
   type LeashHost,
   type LeashTool,
   type LeashToolResult,
@@ -382,7 +383,7 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
       });
     },
 
-    async verifyIdentity(args: IdentitySelectorArgs): Promise<LeashToolResult> {
+    async verifyIdentity(args: IdentityVerifyArgs): Promise<LeashToolResult> {
       return fetchIdentityVerify({
         apiBaseUrl: env.leashApiUrl,
         query: args,

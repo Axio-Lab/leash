@@ -159,6 +159,41 @@ describe('LeashClient (public reads)', () => {
     expect(calls[1]!.url).toBe('https://api.test/v1/identity/verify?domain=demo.example');
   });
 
+  it('identity decision helper posts trust-verdict requests', async () => {
+    const { fetch, calls } = makeFetch(() => ({
+      status: 200,
+      body: {
+        verdict: 'allow',
+        resolved_mint: 'M',
+        network: 'solana-devnet',
+        score: 100,
+        checks: [{ name: 'selector_resolves', passed: true, severity: 'info', detail: 'ok' }],
+        profile: {
+          mint: 'M',
+          handle: 'demo',
+          name: 'Demo',
+          verified_domains: ['demo.example'],
+          reputation: { settled_calls: 1, denied_calls: 0, rating: 0.5 },
+          capability_cards_count: 1,
+          claims_count: 1,
+        },
+      },
+    }));
+    const client = new LeashClient({ baseUrl: 'https://api.test', fetchImpl: fetch });
+    await client.verifyIdentityDecision({
+      selector: { handle: 'demo' },
+      intent: 'pay',
+      capability: { slug: 'agentmail/email', protocol: 'x402' },
+    });
+    expect(calls[0]!.url).toBe('https://api.test/v1/identity/verify');
+    expect(calls[0]!.method).toBe('POST');
+    expect(JSON.parse(calls[0]!.body!)).toMatchObject({
+      selector: { handle: 'demo' },
+      intent: 'pay',
+      capability: { slug: 'agentmail/email', protocol: 'x402' },
+    });
+  });
+
   it('throws LeashError on non-2xx with the parsed body', async () => {
     const { fetch } = makeFetch(() => ({
       status: 503,

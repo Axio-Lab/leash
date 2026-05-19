@@ -27,6 +27,8 @@ import type {
   DailyTransactionsResponse,
   DailyTxBucket,
   DiscoverResponse,
+  IdentityVerificationDecision,
+  IdentityVerificationDecisionRequest,
   IdentityVerifyResponse,
   PaymentLink,
   PaymentLinkCreateInput,
@@ -177,6 +179,12 @@ export class LeashClient {
     if (args.handle) params.set('handle', args.handle);
     if (args.domain) params.set('domain', args.domain);
     return this.requestJson<IdentityVerifyResponse>('GET', `/v1/identity/verify?${params}`);
+  }
+
+  async verifyIdentityDecision(
+    args: IdentityVerificationDecisionRequest,
+  ): Promise<IdentityVerificationDecision> {
+    return this.requestJson<IdentityVerificationDecision>('POST', '/v1/identity/verify', args);
   }
 
   // ── agent recording (public) ──────────────────────────────────────

@@ -27,6 +27,7 @@ export type {
   RegisterAgentArgs,
   GetIdentityArgs,
   IdentitySelectorArgs,
+  IdentityVerifyArgs,
   ReceiptsArgs,
   DiscoverArgs,
   PaySkillsProviderArgs,

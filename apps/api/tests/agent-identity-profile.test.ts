@@ -231,4 +231,110 @@ describe('agent identity profile endpoints', () => {
       { phase: 'confirmed', delegate: DELEGATE, token_mint: USDC_MINT },
     ]);
   });
+
+  it('returns an allow trust verdict when domain, claims, and capability match', async () => {
+    const rig = await createAgent();
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ mint: MINT, network: 'solana-devnet' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })) as typeof globalThis.fetch;
+
+    await rig.app.fetch(
+      new Request(`http://test.local/v1/platform/agents/${MINT}/identity`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          handle: 'payce-demo',
+          capability_cards: [
+            {
+              kind: 'pay_skills',
+              title: 'Email sender',
+              source: 'pay-skills',
+              slug: 'agentmail/email',
+              endpoint: 'https://agentmail.example/send',
+              protocols: ['x402'],
+              visibility: 'public',
+            },
+          ],
+        }),
+      }),
+    );
+    await rig.app.fetch(
+      new Request(`http://test.local/v1/platform/agents/${MINT}/identity/domains/verify`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ domain: 'payce.example' }),
+      }),
+    );
+    await rig.app.fetch(
+      new Request(`http://test.local/v1/platform/agents/${MINT}/identity/claims`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          issuer: 'Leash Labs',
+          type: 'verified_builder',
+          value: 'true',
+          signature: 'sig_1234567890123456',
+        }),
+      }),
+    );
+
+    const verify = await rig.app.fetch(
+      new Request('http://test.local/v1/identity/verify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          selector: { handle: 'payce-demo' },
+          intent: 'trust_claim',
+          capability: { slug: 'agentmail/email', protocol: 'x402' },
+          thresholds: {
+            require_verified_domain: true,
+            required_claim_types: ['verified_builder'],
+          },
+        }),
+      }),
+    );
+    expect(verify.status).toBe(200);
+    const body = (await verify.json()) as {
+      verdict: string;
+      resolved_mint: string;
+      checks: Array<{ name: string; passed: boolean }>;
+    };
+    expect(body.verdict).toBe('allow');
+    expect(body.resolved_mint).toBe(MINT);
+    expect(body.checks.every((check) => check.passed)).toBe(true);
+  });
+
+  it('returns a deny trust verdict for missing capability or reputation threshold', async () => {
+    const rig = await createAgent();
+    const verify = await rig.app.fetch(
+      new Request('http://test.local/v1/identity/verify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          selector: { mint: MINT },
+          intent: 'call_capability',
+          capability: { slug: 'missing/provider' },
+          thresholds: { min_rating: 0.5 },
+        }),
+      }),
+    );
+    expect(verify.status).toBe(200);
+    const body = (await verify.json()) as {
+      verdict: string;
+      checks: Array<{ name: string; passed: boolean; severity: string }>;
+    };
+    expect(body.verdict).toBe('deny');
+    expect(body.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'capability_match', passed: false, severity: 'deny' }),
+        expect.objectContaining({
+          name: 'reputation_threshold',
+          passed: false,
+          severity: 'deny',
+        }),
+      ]),
+    );
+  });
 });

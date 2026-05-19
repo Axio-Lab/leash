@@ -52,6 +52,7 @@ import {
   type DiscoverArgs,
   type GetIdentityArgs,
   type IdentitySelectorArgs,
+  type IdentityVerifyArgs,
   type GetReceiptArgs,
   type GetSpendLimitArgs,
   type LeashHost,
@@ -288,7 +289,7 @@ export class HostRef implements LeashHost {
   resolveIdentity(args: IdentitySelectorArgs): Promise<LeashToolResult> {
     return this.inner.resolveIdentity(args);
   }
-  verifyIdentity(args: IdentitySelectorArgs): Promise<LeashToolResult> {
+  verifyIdentity(args: IdentityVerifyArgs): Promise<LeashToolResult> {
     return this.inner.verifyIdentity(args);
   }
   paySkillsProvider(args: PaySkillsProviderArgs): Promise<LeashToolResult> {

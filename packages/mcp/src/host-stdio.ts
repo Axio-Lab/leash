@@ -46,6 +46,7 @@ import {
   type DiscoverArgs,
   type GetIdentityArgs,
   type IdentitySelectorArgs,
+  type IdentityVerifyArgs,
   type GetReceiptArgs,
   type GetSpendLimitArgs,
   type LeashHost,
@@ -564,7 +565,7 @@ class StdioHost implements LeashHost {
     });
   }
 
-  async verifyIdentity(args: IdentitySelectorArgs): Promise<LeashToolResult> {
+  async verifyIdentity(args: IdentityVerifyArgs): Promise<LeashToolResult> {
     return fetchIdentityVerify({
       apiBaseUrl: this.apiBaseUrl,
       query: args,

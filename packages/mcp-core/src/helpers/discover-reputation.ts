@@ -13,6 +13,7 @@ import { jsonResult } from '../tool.js';
 import type {
   DiscoverArgs,
   IdentitySelectorArgs,
+  IdentityVerifyArgs,
   PaySkillsProviderArgs,
   ReputationArgs,
   SvmNetwork,
@@ -335,7 +336,7 @@ export async function fetchIdentityProfile(args: {
 
 export async function fetchIdentityVerify(args: {
   apiBaseUrl: string;
-  query: IdentitySelectorArgs;
+  query: IdentityVerifyArgs;
   fetchImpl?: typeof globalThis.fetch;
 }): Promise<LeashToolResult> {
   const fetchImpl = args.fetchImpl ?? globalThis.fetch;
@@ -347,9 +348,19 @@ export async function fetchIdentityVerify(args: {
       message: 'provide exactly one of: mint, handle, domain',
     });
   }
-  const url = `${args.apiBaseUrl.replace(/\/+$/, '')}/v1/identity/verify?${params}`;
+  const wantsDecision = args.query.intent || args.query.capability || args.query.thresholds;
+  const url = `${args.apiBaseUrl.replace(/\/+$/, '')}/v1/identity/verify${wantsDecision ? '' : `?${params}`}`;
   try {
-    const res = await fetchImpl(url);
+    const res = await fetchImpl(
+      url,
+      wantsDecision
+        ? {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(args.query),
+          }
+        : undefined,
+    );
     const text = await res.text();
     if (!res.ok) {
       return jsonResult({

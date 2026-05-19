@@ -132,6 +132,80 @@ const VerifyResponseSchema = z
   })
   .openapi('AgentIdentityVerifyResponse');
 
+const IdentitySelectorSchema = z
+  .object({
+    mint: PubkeySchema.optional(),
+    handle: z.string().optional(),
+    domain: z.string().optional(),
+  })
+  .refine((value) => [value.mint, value.handle, value.domain].filter(Boolean).length === 1, {
+    message: 'provide exactly one of: mint, handle, domain',
+  });
+
+const VerificationIntentSchema = z.enum(['pay', 'call_capability', 'trust_claim', 'inspect']);
+
+const VerificationCapabilitySchema = z.object({
+  kind: CapabilityCardSchema.shape.kind.optional(),
+  slug: z.string().max(200).optional(),
+  endpoint: z.string().url().max(800).optional(),
+  protocol: z.enum(['x402', 'mpp']).optional(),
+});
+
+const VerificationThresholdsSchema = z.object({
+  min_rating: z.number().min(0).max(1).optional(),
+  required_claim_types: z.array(z.string().min(1).max(120)).default([]),
+  require_verified_domain: z.boolean().default(false),
+});
+
+const VerificationDecisionRequestSchema = z
+  .object({
+    selector: IdentitySelectorSchema.optional(),
+    mint: PubkeySchema.optional(),
+    handle: z.string().optional(),
+    domain: z.string().optional(),
+    intent: VerificationIntentSchema.default('inspect'),
+    capability: VerificationCapabilitySchema.optional(),
+    thresholds: VerificationThresholdsSchema.default({}),
+  })
+  .refine(
+    (value) =>
+      value.selector != null ||
+      [value.mint, value.handle, value.domain].filter(Boolean).length === 1,
+    'provide selector or exactly one top-level mint, handle, domain',
+  );
+
+const VerificationCheckSchema = z.object({
+  name: z.string(),
+  passed: z.boolean(),
+  severity: z.enum(['info', 'warn', 'deny']),
+  detail: z.string(),
+});
+
+const VerificationDecisionResponseSchema = z
+  .object({
+    verdict: z.enum(['allow', 'warn', 'deny']),
+    resolved_mint: PubkeySchema.nullable(),
+    network: NetworkSchema.nullable(),
+    score: z.number().min(0).max(100),
+    checks: z.array(VerificationCheckSchema),
+    profile: z
+      .object({
+        mint: PubkeySchema,
+        handle: z.string().nullable(),
+        name: z.string(),
+        verified_domains: z.array(z.string()),
+        reputation: z.object({
+          settled_calls: z.number().int(),
+          denied_calls: z.number().int(),
+          rating: z.number(),
+        }),
+        capability_cards_count: z.number().int(),
+        claims_count: z.number().int(),
+      })
+      .nullable(),
+  })
+  .openapi('AgentIdentityVerificationDecision');
+
 function normalizeHandle(input: string): string {
   const handle = input.trim().replace(/^@+/, '').toLowerCase();
   const parsed = HandleSchema.safeParse(handle);
@@ -298,6 +372,213 @@ async function adminProfile(db: DbClient, mint: string) {
   };
 }
 
+type PublicProfile = Awaited<ReturnType<typeof publicProfile>>;
+type VerificationCheck = z.infer<typeof VerificationCheckSchema>;
+
+function resolveDecisionSelector(body: z.infer<typeof VerificationDecisionRequestSchema>) {
+  return body.selector ?? { mint: body.mint, handle: body.handle, domain: body.domain };
+}
+
+function capabilityMatches(
+  card: PublicProfile['capability_cards'][number],
+  capability: z.infer<typeof VerificationCapabilitySchema>,
+): boolean {
+  if (capability.kind && card.kind !== capability.kind) return false;
+  if (capability.slug && card.slug !== capability.slug) return false;
+  if (capability.endpoint && card.endpoint !== capability.endpoint) return false;
+  if (capability.protocol && !card.protocols.includes(capability.protocol)) return false;
+  return true;
+}
+
+function operatorHealthCheck(
+  profile: PublicProfile,
+  intent: z.infer<typeof VerificationIntentSchema>,
+): VerificationCheck {
+  const requiresSpendDelegation = intent === 'pay' || intent === 'call_capability';
+  if (!requiresSpendDelegation) {
+    return {
+      name: 'operator_health',
+      passed: true,
+      severity: 'info',
+      detail: 'operator delegation is not required for this intent',
+    };
+  }
+  const delegationEvents = profile.operator_history.filter(
+    (entry) => entry.kind === 'delegation_set' || entry.kind === 'delegation_revoke',
+  );
+  if (delegationEvents.length === 0) {
+    return {
+      name: 'operator_health',
+      passed: false,
+      severity: 'warn',
+      detail: 'no confirmed spend delegation event is visible for this agent',
+    };
+  }
+  const latest = delegationEvents[0]!;
+  if (latest.kind === 'delegation_revoke') {
+    return {
+      name: 'operator_health',
+      passed: false,
+      severity: 'deny',
+      detail: 'latest public delegation event revoked spend authority',
+    };
+  }
+  return {
+    name: 'operator_health',
+    passed: true,
+    severity: 'info',
+    detail: 'latest public delegation event grants spend authority',
+  };
+}
+
+function verdictFromChecks(checks: VerificationCheck[]): 'allow' | 'warn' | 'deny' {
+  if (checks.some((check) => !check.passed && check.severity === 'deny')) return 'deny';
+  if (checks.some((check) => !check.passed && check.severity === 'warn')) return 'warn';
+  return 'allow';
+}
+
+function scoreFromChecks(checks: VerificationCheck[]): number {
+  let score = 100;
+  for (const check of checks) {
+    if (check.passed) continue;
+    score -= check.severity === 'deny' ? 50 : check.severity === 'warn' ? 15 : 0;
+  }
+  return Math.max(0, score);
+}
+
+async function verificationDecision(
+  db: DbClient,
+  body: z.infer<typeof VerificationDecisionRequestSchema>,
+) {
+  const selector = resolveDecisionSelector(body);
+  const checks: VerificationCheck[] = [];
+  let mint: string;
+  try {
+    mint = await resolveMint(db, selector);
+    checks.push({
+      name: 'selector_resolves',
+      passed: true,
+      severity: 'deny',
+      detail: 'selector resolved to an agent mint',
+    });
+  } catch (err) {
+    checks.push({
+      name: 'selector_resolves',
+      passed: false,
+      severity: 'deny',
+      detail: err instanceof Error ? err.message : 'selector did not resolve',
+    });
+    return {
+      verdict: 'deny' as const,
+      resolved_mint: null,
+      network: null,
+      score: scoreFromChecks(checks),
+      checks,
+      profile: null,
+    };
+  }
+
+  const agent = await getPlatformAgent(db, mint);
+  checks.push({
+    name: 'agent_exists',
+    passed: agent != null,
+    severity: 'deny',
+    detail: agent ? 'platform agent is active or recorded' : 'agent row not found',
+  });
+  if (!agent) {
+    return {
+      verdict: 'deny' as const,
+      resolved_mint: mint,
+      network: null,
+      score: scoreFromChecks(checks),
+      checks,
+      profile: null,
+    };
+  }
+
+  const profile = await publicProfile(db, mint);
+  const thresholds = body.thresholds;
+  const requiredClaimTypes = thresholds.required_claim_types ?? [];
+  const requireVerifiedDomain =
+    thresholds.require_verified_domain === true || selector.domain != null;
+
+  checks.push({
+    name: 'verified_domain',
+    passed: !requireVerifiedDomain || profile.verified_domains.length > 0,
+    severity: requireVerifiedDomain ? 'deny' : 'info',
+    detail:
+      profile.verified_domains.length > 0
+        ? `${profile.verified_domains.length} verified domain(s)`
+        : 'no verified domains on public profile',
+  });
+
+  if (requiredClaimTypes.length > 0) {
+    const claimTypes = new Set(profile.claims.map((claim) => claim.type));
+    const missing = requiredClaimTypes.filter((type) => !claimTypes.has(type));
+    checks.push({
+      name: 'required_claims',
+      passed: missing.length === 0,
+      severity: 'deny',
+      detail:
+        missing.length === 0
+          ? 'all required public claims are present'
+          : `missing required claim(s): ${missing.join(', ')}`,
+    });
+  }
+
+  if (body.capability) {
+    const matched = profile.capability_cards.some((card) =>
+      capabilityMatches(card, body.capability!),
+    );
+    checks.push({
+      name: 'capability_match',
+      passed: matched,
+      severity: body.intent === 'call_capability' || body.intent === 'pay' ? 'deny' : 'warn',
+      detail: matched
+        ? 'public capability card matches requested requirement'
+        : 'no public capability card matches requested requirement',
+    });
+  }
+
+  if (thresholds.min_rating != null) {
+    checks.push({
+      name: 'reputation_threshold',
+      passed: profile.reputation.rating >= thresholds.min_rating,
+      severity: 'deny',
+      detail: `rating ${profile.reputation.rating.toFixed(4)} vs required ${thresholds.min_rating.toFixed(4)}`,
+    });
+  } else if (body.intent === 'pay' || body.intent === 'call_capability') {
+    checks.push({
+      name: 'receipt_history',
+      passed: profile.reputation.settled_calls > 0,
+      severity: 'warn',
+      detail:
+        profile.reputation.settled_calls > 0
+          ? `${profile.reputation.settled_calls} settled call(s)`
+          : 'no settled receipt history yet',
+    });
+  }
+
+  checks.push(operatorHealthCheck(profile, body.intent));
+
+  return {
+    verdict: verdictFromChecks(checks),
+    resolved_mint: profile.mint,
+    network: profile.network,
+    score: scoreFromChecks(checks),
+    checks,
+    profile: {
+      mint: profile.mint,
+      handle: profile.handle,
+      name: profile.name,
+      verified_domains: profile.verified_domains,
+      reputation: profile.reputation,
+      capability_cards_count: profile.capability_cards.length,
+      claims_count: profile.claims.length,
+    },
+  };
+}
+
 async function resolveMint(
   db: DbClient,
   query: { mint?: string; handle?: string; domain?: string },
@@ -388,6 +669,28 @@ export function buildAgentIdentityProfileRoutes(deps: AgentIdentityProfileDeps):
       const mint = await resolveMint(deps.db, c.req.valid('query'));
       return c.json(await publicProfile(deps.db, mint), 200);
     },
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/v1/identity/verify',
+      tags: ['identity'],
+      summary: 'Return an agent-to-agent trust verdict for an identity selector.',
+      request: {
+        body: {
+          required: true,
+          content: { 'application/json': { schema: VerificationDecisionRequestSchema } },
+        },
+      },
+      responses: {
+        200: {
+          description: 'ok',
+          content: { 'application/json': { schema: VerificationDecisionResponseSchema } },
+        },
+      },
+    }),
+    async (c) => c.json(await verificationDecision(deps.db, c.req.valid('json')), 200),
   );
 
   app.openapi(

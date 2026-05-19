@@ -156,6 +156,21 @@ export type IdentitySelectorArgs = {
   domain?: string;
 };
 
+export type IdentityVerifyArgs = IdentitySelectorArgs & {
+  intent?: 'pay' | 'call_capability' | 'trust_claim' | 'inspect';
+  capability?: {
+    kind?: string;
+    slug?: string;
+    endpoint?: string;
+    protocol?: 'x402' | 'mpp';
+  };
+  thresholds?: {
+    min_rating?: number;
+    required_claim_types?: string[];
+    require_verified_domain?: boolean;
+  };
+};
+
 /**
  * Inputs for `leash_pay_skills_endpoints` — expand a chosen
  * `pay-skills` provider (returned by `leash_discover`) into its
@@ -343,7 +358,7 @@ export interface LeashHost {
    * Verify that a mint, handle, or domain resolves to a live agent
    * identity. Public — does not require the active agent to exist.
    */
-  verifyIdentity(args: IdentitySelectorArgs): Promise<LeashToolResult>;
+  verifyIdentity(args: IdentityVerifyArgs): Promise<LeashToolResult>;
 
   /**
    * Expand a `pay-skills` discover item into its paid endpoints.
