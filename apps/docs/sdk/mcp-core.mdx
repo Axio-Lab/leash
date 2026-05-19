@@ -86,6 +86,8 @@ dual-protocol behaviour as the CLI `leash pay` command.
 | `leash_check_balances`       | Check treasury USDC / token balances                      |
 | `leash_withdraw_treasury`    | Withdraw funds from the treasury                          |
 | `leash_get_identity`         | Resolve the on-chain identity for an agent                |
+| `leash_resolve_identity`     | Resolve a public identity by mint, handle, or domain      |
+| `leash_verify_identity`      | Verify an identity selector before trusting it            |
 | `leash_register_agent`       | Register a new agent on-chain                             |
 | `leash_set_spend_limit`      | Update the agent's spend delegation limit                 |
 | `leash_get_spend_limit`      | Read the current spend limit                              |
@@ -102,6 +104,8 @@ runtime dependencies on MCP or Claude.
 import {
   probePaymentLink,
   fetchDiscover,
+  fetchIdentityProfile,
+  fetchIdentityVerify,
   fetchReputation,
   fetchPaySkillsProvider,
   isLikelyBase58Address,
@@ -134,6 +138,22 @@ const { items } = await fetchDiscover('https://api.leash.market', {
   capability: 'translate text',
   source: 'all', // 'leash' | 'pay-skills' | 'all'
   limit: 20,
+});
+```
+
+### `fetchIdentityProfile(apiUrl, opts)` / `fetchIdentityVerify(apiUrl, opts)`
+
+Resolve or verify a public agent identity by mint, handle, or verified domain.
+
+```ts
+const profile = await fetchIdentityProfile({
+  apiBaseUrl: 'https://api.leash.market',
+  query: { handle: 'payce-demo' },
+});
+
+const verdict = await fetchIdentityVerify({
+  apiBaseUrl: 'https://api.leash.market',
+  query: { domain: 'agent.example' },
 });
 ```
 

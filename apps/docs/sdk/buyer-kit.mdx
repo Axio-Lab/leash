@@ -6,6 +6,19 @@ description: Scriptable buyer agents. createBuyer + dual-protocol paywall fetch 
 `@leashmarket/buyer-kit` wraps `@leashmarket/core` into the smallest possible "scriptable
 buyer". One call, one chained receipt, one real x402 SPL transfer.
 
+Before paying a seller you can verify its Leash identity selector with the
+lightweight helper exported from the same package:
+
+```ts
+import { verifyAgentIdentity } from '@leashmarket/buyer-kit';
+
+const verdict = await verifyAgentIdentity({
+  selector: { domain: 'seller.example' },
+});
+
+if (!verdict.verified) throw new Error('seller identity did not verify');
+```
+
 ```ts
 import { createBuyer } from '@leashmarket/buyer-kit';
 import { createKeyPairSignerFromBytes } from '@solana/kit';

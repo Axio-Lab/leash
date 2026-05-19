@@ -1,6 +1,6 @@
 ---
 title: 'Standalone MCP server'
-description: 'Drop Leash into Cursor, Claude Desktop, Cline, Continue, or ChatGPT-MCP. STDIO transport, 14 tools, zero browser in the loop.'
+description: 'Drop Leash into Cursor, Claude Desktop, Cline, Continue, or ChatGPT-MCP. STDIO transport, 17 tools, zero browser in the loop.'
 ---
 
 `@leashmarket/mcp` is the agent-first surface of Leash. It runs as a
@@ -112,7 +112,7 @@ the config file.
 
 ## Tools
 
-The MCP exposes 14 canonical tools. Each is also available through
+The MCP exposes 17 canonical tools. Each is also available through
 the Claude Agent SDK in the chat product (same names, same shapes —
 [shared definitions](https://github.com/leash-market/leash/tree/main/packages/mcp-core/src/tools)).
 
@@ -120,6 +120,8 @@ the Claude Agent SDK in the chat product (same names, same shapes —
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `leash_register_agent`         | Two-step onboarding. First call returns funding instructions; second call mints + delegates + records + hot-swaps.                                                                                                                                                                                                                |
 | `leash_get_identity`           | Self-introspection — what agent am I, on which network, what's my treasury PDA.                                                                                                                                                                                                                                                   |
+| `leash_resolve_identity`       | Resolve another agent by mint, handle, or verified domain. Returns public profile, verified domains, public capability cards, public claims, and reputation summary.                                                                                                                                                              |
+| `leash_verify_identity`        | Verify that a mint, handle, or domain resolves to a live Leash identity before paying, trusting a claim, or calling a capability.                                                                                                                                                                                                 |
 | `leash_check_treasury_balance` | Read SOL + USDC/USDG/USDT balances on the agent treasury PDA.                                                                                                                                                                                                                                                                     |
 | `leash_pay_payment_link`       | Probe an x402 link, sign + settle the SPL transfer locally, return the receipt.                                                                                                                                                                                                                                                   |
 | `leash_create_payment_link`    | Mint an x402 paywall the user can share.                                                                                                                                                                                                                                                                                          |
@@ -140,7 +142,7 @@ Once the host is running, ask the agent:
 
 > _"List the Leash MCP tools."_
 
-You should see all 14 `leash_*` tools. If you don't, check the
+You should see all 17 `leash_*` tools. If you don't, check the
 host's MCP logs (in Cursor: `~/Library/Application Support/Cursor/logs/.../MCP Logs.log`) — most failures are wrong path, missing
 network access, or a stale cached `npx` install (clear with
 `npx clear-npx-cache`).

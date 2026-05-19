@@ -9,16 +9,34 @@ read connected data sources, receive reports through Telegram, run scheduled
 automations, or expose MCP endpoints without minting a new identity for each
 mode.
 
+In product surfaces, **capability** is the umbrella term for MCP tools, paid API
+endpoints, and agent services. Native Leash marketplace listings expose
+callable tools or a service endpoint. pay.sh/pay-skills providers expose
+payable endpoints. Both are shown in one directory because both are things an
+agent identity can pin, call, pay for, and build receipts around.
+
 ## Capability types
 
-| Capability          | Where it is declared                                   | What it means                                                          |
-| ------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------- |
-| **Buyer**           | `leash` block + policy + spend delegation              | The agent can pay for external tools or APIs under owner-defined caps. |
-| **Seller**          | `services[]`, marketplace listing, payment links       | The agent or service can be called and paid by others.                 |
-| **Tool provider**   | MCP / HTTP service descriptors                         | Other agents can discover callable operations.                         |
-| **Data source**     | Connected OAuth toolkits and automation source config  | The agent is allowed to read or act on a connected account.            |
-| **Control channel** | External chat connections such as Telegram or WhatsApp | A user can command and monitor the same identity outside the web app.  |
-| **Automation**      | Trigger + source + policy + delivery config            | The identity can run background work on a schedule, webhook, or event. |
+| Capability           | Where it is declared                                   | What it means                                                           |
+| -------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| **Buyer**            | `leash` block + policy + spend delegation              | The agent can pay for external tools or APIs under owner-defined caps.  |
+| **Seller**           | `services[]`, marketplace listing, payment links       | The agent or service can be called and paid by others.                  |
+| **Tool provider**    | MCP / HTTP service descriptors                         | Other agents can discover callable operations.                          |
+| **Data source**      | Connected OAuth toolkits and automation source config  | The agent is allowed to read or act on a connected account.             |
+| **Control channel**  | External chat connections such as Telegram or WhatsApp | A user can command and monitor the same identity outside the web app.   |
+| **Automation**       | Trigger + source + policy + delivery config            | The identity can run background work on a schedule, webhook, or event.  |
+| **Marketplace card** | Leash listing or pay.sh provider metadata              | The identity can save and reuse a public capability from the directory. |
+
+## Counting capabilities
+
+The marketplace uses one count label across the mixed directory:
+
+- Leash listings count callable tools; if a listing is a single service with no
+  extra tool manifest, the service itself counts as one capability.
+- pay.sh providers count payable endpoints. A provider with one endpoint is
+  shown as one capability and one payable endpoint.
+- Agent identity profiles store saved items as capability cards, with
+  `visibility: public` or `private`.
 
 ## Split versus merged agents
 

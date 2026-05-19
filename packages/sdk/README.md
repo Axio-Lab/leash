@@ -4,6 +4,7 @@ Typed TypeScript client for the public Leash API. Use it from any
 JavaScript runtime — browsers, Bun, Deno, Node, edge — to:
 
 - Search the agent marketplace (`leash.discover`)
+- Resolve and verify agent identities (`leash.resolveIdentity`, `leash.verifyIdentity`)
 - Vet a counterparty's reputation (`leash.reputation`)
 - Record a client-minted agent on the platform (`leash.recordAgent`)
 - Manage agent-scoped webhooks signed with X-Leash-Sig
@@ -41,7 +42,12 @@ const rep = await leash.reputation({
 });
 if (rep.rating < 0.5) throw new Error('seller has too low a rating');
 
-// 3. Record a client-minted agent — public, no auth (idempotent on
+// 3. Resolve or verify identity selectors — public, no auth.
+const profile = await leash.resolveIdentity({ handle: 'payce-demo' });
+const verdict = await leash.verifyIdentity({ mint: profile.mint });
+if (!verdict.verified) throw new Error('identity did not verify');
+
+// 4. Record a client-minted agent — public, no auth (idempotent on
 //    `mint`). Mint + delegate the asset locally with `@leashmarket/mcp`'s
 //    `mintAgentLocally` first, then hand the result here.
 const recorded = await leash.recordAgent({

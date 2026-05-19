@@ -7,6 +7,20 @@ description: Hono integration. Asset Signer PDA payTo. Real x402 middleware on S
 `METHOD /path` routes and resolves `payTo` to the seller agent's Asset
 Signer PDA so funds land directly in the agent's treasury.
 
+If your seller route is also published as an identity capability, attach the
+same metadata to your app config with `buildSellerIdentityMetadata`:
+
+```ts
+import { buildSellerIdentityMetadata } from '@leashmarket/seller-kit';
+
+const identity = buildSellerIdentityMetadata({
+  agent_mint: '<seller agent mint>',
+  handle: 'quote-agent',
+  domain: 'seller.example',
+  capabilities: ['seller_api:sol-usd-quote', 'protocol:x402'],
+});
+```
+
 ```ts
 import { Hono } from 'hono';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';

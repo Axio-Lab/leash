@@ -19,7 +19,7 @@
 
 ## Agents (drop Leash into your AI host)
 
-- [Standalone MCP server](https://docs.leash.market/agents/mcp.md): `npx -y @leashmarket/mcp` — Cursor / Claude Desktop / Cline / Continue / ChatGPT-MCP wiring, 14 canonical tools (`leash_register_agent`, `leash_pay_payment_link`, `leash_set_spend_limit`, `leash_get_receipt`, `leash_transaction_history`, `leash_daily_transactions`, `leash_discover`, …), STDIO transport.
+- [Standalone MCP server](https://docs.leash.market/agents/mcp.md): `npx -y @leashmarket/mcp` — Cursor / Claude Desktop / Cline / Continue / ChatGPT-MCP wiring, 17 canonical tools (`leash_register_agent`, `leash_resolve_identity`, `leash_verify_identity`, `leash_pay_payment_link`, `leash_set_spend_limit`, `leash_get_receipt`, `leash_transaction_history`, `leash_daily_transactions`, `leash_discover`, …), STDIO transport.
 - [Human CLI — `leash`](https://docs.leash.market/agents/cli.md): `npm install -g @leashmarket/cli` — terminal-driven agent ops sharing the same `agent.json` as the MCP.
 - [TypeScript SDK — `@leashmarket/sdk`](https://docs.leash.market/agents/sdk.md): Typed `LeashClient` for app developers. Browser/Bun/Deno/Node friendly; X-Leash-Sig auth for agent-scoped endpoints.
 
@@ -52,6 +52,7 @@
 - [Authentication](https://docs.leash.market/api/auth.md): API keys, prefix-driven network binding, idempotency, and rate limits.
 - [Prepare → Submit lifecycle](https://docs.leash.market/api/prepare-submit.md): How every state-changing call splits into prepare, sign, submit, track — and why. **`POST /v1/submit` is the mandatory third step**: it writes the event row, broadcasts the transaction, and watchlists the agent so receipts and on-chain activity appear on the explorer. Never use raw RPC in place of this step.
 - [Agents](https://docs.leash.market/api/agents.md): Mint, read, and manage Leash agents over HTTP — the same flow the SDK exposes, callable from any language.
+- [Identity API](https://docs.leash.market/api/identity.md): Resolve and verify agent identities by mint, handle, or domain; manage capability cards, verified domains, claims, and public/private visibility.
 - [Monetise an existing API](https://docs.leash.market/api/monetize-api.md): Charge per call on a SaaS endpoint you already host, without rewriting it.
 - [Payment links](https://docs.leash.market/api/payment-links.md): Create hosted x402 payment links served at `/x/{id}` — the "Stripe Payment Link" of x402.
 - [Seller utilities](https://docs.leash.market/api/seller-utils.md): HTTP parity for the `@leashmarket/seller-kit` helpers — networks, facilitator, parse-price, pay-to.

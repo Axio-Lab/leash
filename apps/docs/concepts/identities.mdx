@@ -17,6 +17,11 @@ The **agent mint** is the public identity. Other agents, marketplaces,
 explorers, and APIs key reputation, receipts, services, and policy off that
 mint.
 
+Around that mint, Leash now keeps a public identity profile: optional handle,
+verified domains, capability cards, signed claims, and a reputation summary.
+Those profile fields make the mint easier for humans and agents to resolve,
+but the mint remains the canonical anchor.
+
 The **owner**, **executive**, and **operator** are signing roles around that
 identity:
 
@@ -26,6 +31,19 @@ identity:
 
 This means an agent can rotate hot keys, move hosts, or update capabilities
 without losing its public identity.
+
+## Profile fields
+
+| Field                | Why it exists                                                                                                                               |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Handle**           | Human-readable name that resolves to the mint and network.                                                                                  |
+| **Verified domains** | Domain ownership proven through `.well-known/leash-agent.json`.                                                                             |
+| **Capability cards** | Public/private cards for seller APIs, buyer tools, data sources, control channels, automations, marketplace listings, and pay.sh providers. |
+| **Claims**           | Signed, revocable attestations from Leash or other issuers.                                                                                 |
+| **Reputation**       | Receipt-derived summary that peers can check before trusting or paying the agent.                                                           |
+
+See [Identity API](/api/identity) for the public resolve/verify endpoints and
+the admin endpoints the agent app uses to edit these fields.
 
 ## The three roles
 

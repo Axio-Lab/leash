@@ -3,26 +3,26 @@ title: 'Roadmap'
 description: What ships next on top of the v1 API.
 ---
 
-The API surface today (v1) covers the entire prepare → submit →
-track → receipt → indexer → events → webhooks → metrics loop. The
-items below are **planned, not shipped** — when you see them
-referenced from other pages, treat them as forward-looking.
+The API surface today (v1) covers the prepare → submit → track → receipt →
+indexer → events → webhooks → metrics loop, plus the first identity-profile
+surface for handles, verified domains, capability cards, claims, and public
+verification.
 
 ## Identity primitive roadmap
 
-These items strengthen Leash as the identity layer for AI agents. They are
-planned identity features, not requirements for using the current API.
+These items strengthen Leash as the identity layer for AI agents. The first
+version of the identity primitive is available now through [Identity API](/api/identity).
 
-| Feature                             | What it adds                                                                                                              |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **Human-readable agent handles**    | Resolve names like `agent.example` or `@agent` to the underlying mint.                                                    |
-| **Verified domains**                | Bind an agent identity to a domain via DNS or `.well-known/leash-agent.json`.                                             |
-| **Signed claims and attestations**  | Attach revocable claims such as owner verified, model/provider claim, code repo, TEE proof, or endpoint ownership.        |
-| **Public reputation score**         | Summarise receipt history into a legible trust signal peers can check before interacting.                                 |
-| **Delegated operator history**      | Show executive rotations, revoked delegates, pause state, and operator changes over time.                                 |
-| **Agent capability cards**          | Render buyer, seller, tool, data-source, automation, and control-channel capabilities in a standard shape.                |
-| **Selective disclosure**            | Keep sensitive receipt bodies, data sources, or run details private while preserving public identity and aggregate proof. |
-| **Agent-to-agent verification API** | Resolve an agent, verify registration, check reputation/policy, and return a machine-readable trust decision.             |
+| Feature                             | Status     | What it adds                                                                                                                    |
+| ----------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| **Human-readable agent handles**    | v1 shipped | Resolve a handle to the underlying mint and network.                                                                            |
+| **Verified domains**                | v1 shipped | Bind an agent identity to a domain via `.well-known/leash-agent.json`.                                                          |
+| **Signed claims and attestations**  | v1 shipped | Attach revocable claims with issuer, subject, type, value, evidence, signature, expiration, and visibility.                     |
+| **Public reputation summary**       | v1 shipped | Summarise receipt history into a trust signal peers can check before interacting.                                               |
+| **Agent capability cards**          | v1 shipped | Render buyer, seller, tool, data-source, automation, control-channel, marketplace, and pay.sh capabilities in a standard shape. |
+| **Selective disclosure**            | v1 shipped | Public/private visibility controls for capability cards and claims.                                                             |
+| **Delegated operator history**      | next       | Show executive rotations, revoked delegates, pause state, and operator changes over time from indexed events.                   |
+| **Agent-to-agent verification API** | next       | Extend `/v1/identity/verify` into a richer policy/reputation decision for automated buyers.                                     |
 
 ## Refunds & cashback
 

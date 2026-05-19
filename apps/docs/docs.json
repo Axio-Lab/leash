@@ -71,6 +71,7 @@
               "api/auth",
               "api/prepare-submit",
               "api/agents",
+              "api/identity",
               "api/monetize-api",
               "api/payment-links",
               "api/seller-utils",
