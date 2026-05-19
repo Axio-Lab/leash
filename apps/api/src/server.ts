@@ -36,6 +36,7 @@ import { buildWebhookRoutes } from './routes/webhooks.js';
 import { buildMetricsRoutes } from './routes/metrics.js';
 import { buildAdminRoutes } from './routes/admin.js';
 import { buildMarketplaceRoutes } from './routes/marketplace.js';
+import { buildAgentIdentityProfileRoutes } from './routes/agent-identity-profile.js';
 import { buildPlatformAgentRoutes } from './routes/platform-agents.js';
 import { buildPlatformAutomationRoutes } from './routes/platform-automations.js';
 import { setAutomationExternalChatDeliveryDeps } from './automations/reports.js';
@@ -97,6 +98,10 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   // Mounted BEFORE the user-key sub-app so its API key middleware
   // doesn't intercept admin requests.
   app.route('/', buildAdminRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
+  app.route(
+    '/',
+    buildAgentIdentityProfileRoutes({ config: deps.config, db: deps.db, cache: deps.cache }),
+  );
   app.route('/', buildPlatformAgentRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   app.route(
     '/',

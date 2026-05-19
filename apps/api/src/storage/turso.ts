@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 17;
+const SCHEMA_VERSION = 18;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -338,6 +338,49 @@ const SCHEMA_SQL: readonly string[] = [
     created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
   )`,
   `CREATE INDEX IF NOT EXISTS idx_agents_owner ON agents(owner_privy_id)`,
+
+  `CREATE TABLE IF NOT EXISTS agent_identity_profiles (
+    agent_mint       TEXT PRIMARY KEY,
+    network          TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    handle           TEXT UNIQUE,
+    visibility       TEXT NOT NULL DEFAULT '{}',
+    capability_cards TEXT NOT NULL DEFAULT '[]',
+    created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (agent_mint) REFERENCES agents(mint)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_identity_profiles_handle ON agent_identity_profiles(handle) WHERE handle IS NOT NULL`,
+
+  `CREATE TABLE IF NOT EXISTS agent_identity_domains (
+    domain       TEXT PRIMARY KEY,
+    agent_mint   TEXT NOT NULL,
+    network      TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    status       TEXT NOT NULL CHECK (status IN ('pending','verified','failed')),
+    verified_at  TEXT,
+    last_error   TEXT,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (agent_mint) REFERENCES agents(mint)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_identity_domains_agent ON agent_identity_domains(agent_mint)`,
+
+  `CREATE TABLE IF NOT EXISTS agent_identity_claims (
+    id           TEXT PRIMARY KEY,
+    agent_mint   TEXT NOT NULL,
+    network      TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    issuer       TEXT NOT NULL,
+    subject_mint TEXT NOT NULL,
+    type         TEXT NOT NULL,
+    value        TEXT NOT NULL,
+    evidence_url TEXT,
+    signature    TEXT NOT NULL,
+    visibility   TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public','private')),
+    expires_at   TEXT,
+    revoked_at   TEXT,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (agent_mint) REFERENCES agents(mint)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_identity_claims_agent ON agent_identity_claims(agent_mint, visibility, revoked_at)`,
 
   // ─────────────────────────────────────────────────────────────────────
   // Tasks (v8) — one row per "do this" the agent is given. The
