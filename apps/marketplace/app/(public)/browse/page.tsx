@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import useSWR from 'swr';
 
@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/cn';
+
+const PER_PAGE = 9;
 
 const fetcher = async (url: string) => {
   const r = await fetch(url, { credentials: 'include' });
@@ -25,7 +27,6 @@ const SORTS = [
 ] as const;
 type Sort = (typeof SORTS)[number]['id'];
 
-const CATEGORIES = ['all', 'search', 'data', 'payments', 'compute', 'social', 'misc'] as const;
 const SOURCES = ['all', 'leash', 'pay-skills'] as const;
 
 type Source = (typeof SOURCES)[number];
@@ -77,9 +78,9 @@ function priceSortValue(listing: Listing): number {
 
 export default function BrowsePage() {
   const [q, setQ] = useState('');
-  const [category, setCategory] = useState<(typeof CATEGORIES)[number]>('all');
   const [source, setSource] = useState<Source>('all');
   const [sort, setSort] = useState<Sort>('relevant');
+  const [page, setPage] = useState(1);
   const params = new URLSearchParams();
   if (q.trim().length > 0) params.set('q', q.trim());
   if (source !== 'all') params.set('source', source);
@@ -92,14 +93,21 @@ export default function BrowsePage() {
   const items = useMemo(() => {
     return (data?.items ?? [])
       .map(normalizeListing)
-      .filter((item) => category === 'all' || item.category === category)
       .slice()
       .sort((a, b) => {
         if (sort === 'price') return priceSortValue(a) - priceSortValue(b);
         if (sort === 'rating') return (b.rating?.avg ?? 0) - (a.rating?.avg ?? 0);
         return 0;
       });
-  }, [category, data?.items, sort]);
+  }, [data?.items, sort]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [q, source, sort]);
+
+  const totalPages = Math.max(1, Math.ceil(items.length / PER_PAGE));
+  const clampedPage = Math.min(page, totalPages);
+  const visibleItems = items.slice((clampedPage - 1) * PER_PAGE, clampedPage * PER_PAGE);
 
   return (
     <div className="space-y-8">
@@ -148,23 +156,6 @@ export default function BrowsePage() {
       </div>
 
       <div className="-mx-1 flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
-        {CATEGORIES.map((c) => (
-          <button
-            key={c}
-            onClick={() => setCategory(c)}
-            className={cn(
-              'whitespace-nowrap rounded-full border px-3 py-1 text-xs uppercase tracking-wide transition-colors',
-              category === c
-                ? 'border-brand bg-brand/15 text-brand-strong'
-                : 'border-border text-fg-muted hover:border-border-strong',
-            )}
-          >
-            {c}
-          </button>
-        ))}
-      </div>
-
-      <div className="-mx-1 flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
         {SOURCES.map((s) => (
           <button
             key={s}
@@ -197,11 +188,48 @@ export default function BrowsePage() {
           </Link>
         </div>
       ) : (
-        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {items.map((l) => (
-            <ListingCard key={l.id} listing={l} />
-          ))}
-        </ul>
+        <>
+          <div className="flex items-center justify-between text-xs text-fg-muted">
+            <span>
+              {items.length} capabilit{items.length === 1 ? 'y' : 'ies'}
+            </span>
+            {totalPages > 1 ? (
+              <span>
+                Page {clampedPage} / {totalPages}
+              </span>
+            ) : null}
+          </div>
+          <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {visibleItems.map((l) => (
+              <ListingCard key={l.id} listing={l} />
+            ))}
+          </ul>
+          {totalPages > 1 ? (
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={clampedPage <= 1}
+              >
+                Previous
+              </Button>
+              <span className="px-2 text-xs text-fg-muted">
+                {clampedPage} / {totalPages}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={clampedPage >= totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );
