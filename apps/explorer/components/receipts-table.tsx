@@ -69,7 +69,7 @@ export function ReceiptsTable({
   rows,
   network,
   counterparties,
-  emptyTitle = 'No receipts yet.',
+  emptyTitle = 'No proof receipts yet.',
 }: {
   rows: ReceiptRow[];
   network: Network;
@@ -82,7 +82,7 @@ export function ReceiptsTable({
     return (
       <Empty
         title={emptyTitle}
-        description="Every gated x402 call lands a receipt — they'll surface here as soon as agents transact."
+        description="Every gated x402 call lands a proof receipt — they'll surface here as soon as agent identities transact."
       />
     );
   }

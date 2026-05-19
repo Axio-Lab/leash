@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic';
  */
 const KIND_OPTIONS = [
   { value: '', label: 'All' },
-  { value: 'receipt.published', label: 'Receipts' },
+  { value: 'receipt.published', label: 'Proof receipts' },
   { value: 'agent.treasury.withdraw', label: 'Withdraw' },
   { value: 'agent.treasury.fund', label: 'Fund' },
 ];

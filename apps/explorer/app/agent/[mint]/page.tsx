@@ -46,7 +46,7 @@ async function safeRpc<T>(fn: () => Promise<T>): Promise<Result<T>> {
   }
 }
 
-/** Best-effort counterparty join for the agent receipt feed. */
+/** Best-effort counterparty join for the agent proof trail. */
 async function safeCounterparties(network: Network, rows: ReceiptRow[]) {
   const sigs = rows
     .map((r) => settlementTxSig(r))
@@ -103,16 +103,20 @@ export default async function AgentPage({ params }: Props) {
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-2 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[--color-fg-muted] backdrop-blur-md">
             <Bot className="h-3 w-3 text-[--color-brand]" />
-            Agent · {networkToSlug(network)}
+            Agent identity · {networkToSlug(network)}
           </span>
         </div>
         <h1 className="break-all font-mono text-xl tracking-tight text-[--color-fg] sm:text-2xl">
           {mint}
         </h1>
+        <p className="max-w-2xl text-sm text-[--color-fg-muted]">
+          Canonical public page for this Leash identity: registration, treasury balances, event
+          timeline, and proof trail.
+        </p>
         {summaryRes.ok ? (
           <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-xs text-[--color-fg-muted]">
             <span>
-              Identity:{' '}
+              Registration:{' '}
               <span className="font-mono text-[--color-fg]">
                 {summaryRes.data.has_identity
                   ? `registered (${summaryRes.data.identity?.source})`
@@ -174,14 +178,14 @@ export default async function AgentPage({ params }: Props) {
       <section className="space-y-3">
         <h2 className="inline-flex items-center gap-2 text-lg font-semibold tracking-tight">
           <ReceiptIcon className="h-4 w-4 text-[--color-brand]" />
-          Receipt feed
+          Proof trail
         </h2>
         {receiptsRes.ok ? (
           <ReceiptsTable
             rows={receiptsRes.data.items}
             network={network}
             counterparties={await safeCounterparties(network, receiptsRes.data.items)}
-            emptyTitle="No receipts published for this agent yet."
+            emptyTitle="No proof receipts published for this identity yet."
           />
         ) : (
           <DbUnreachable network={network} message={receiptsRes.message} />

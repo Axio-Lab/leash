@@ -62,7 +62,7 @@ export default async function ReceiptPage({ params }: Props) {
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-2 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-[--color-fg-muted] backdrop-blur-md">
             <Hash className="h-3 w-3 text-[--color-brand]" />
-            Receipt · {networkToSlug(network)}
+            Proof receipt · {networkToSlug(network)}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -167,7 +167,7 @@ export default async function ReceiptPage({ params }: Props) {
           className="group inline-flex items-center gap-1.5 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1.5 text-xs text-[--color-fg-muted] backdrop-blur-md transition-all hover:border-[--color-border-strong] hover:text-[--color-fg]"
         >
           <ArrowLeft className="h-3 w-3 transition-transform group-hover:-translate-x-0.5" />
-          Back to receipts
+          Back to proof trail
         </Link>
         {txSig ? (
           <a

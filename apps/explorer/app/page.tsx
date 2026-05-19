@@ -70,7 +70,7 @@ export default async function HomePage() {
         <AgentNetworkBackground />
         <div className="relative">
           <h1 className="text-balance text-2xl font-semibold leading-[1.08] tracking-tight sm:text-4xl md:text-5xl">
-            The receipt engine for <span className="text-brand">agent-to-agent commerce</span>
+            The public explorer for <span className="text-brand">agent identities</span>
           </h1>
         </div>
       </section>
@@ -98,7 +98,7 @@ export default async function HomePage() {
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-          <h2 className="text-lg font-semibold tracking-tight">Recent receipts</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Recent proof trail</h2>
           <Link
             href="/receipts"
             className="group inline-flex items-center gap-1 rounded-full border border-[--color-border] bg-[--color-bg-elev]/60 px-3 py-1 text-xs text-[--color-fg-muted] backdrop-blur-md transition-colors hover:border-[--color-border-strong] hover:text-[--color-fg]"
