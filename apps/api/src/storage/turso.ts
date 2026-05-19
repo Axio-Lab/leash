@@ -406,6 +406,20 @@ const SCHEMA_SQL: readonly string[] = [
   `CREATE INDEX IF NOT EXISTS idx_agent_operator_history_agent ON agent_operator_history(agent_mint, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_agent_operator_history_public ON agent_operator_history(agent_mint, phase, created_at DESC)`,
 
+  `CREATE TABLE IF NOT EXISTS agent_identity_disclosures (
+    id             TEXT PRIMARY KEY,
+    agent_mint     TEXT NOT NULL,
+    network        TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    token_hash     TEXT NOT NULL UNIQUE,
+    resources_json TEXT NOT NULL DEFAULT '[]',
+    expires_at     TEXT NOT NULL,
+    revoked_at     TEXT,
+    created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (agent_mint) REFERENCES agents(mint)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_identity_disclosures_agent ON agent_identity_disclosures(agent_mint, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_identity_disclosures_token ON agent_identity_disclosures(token_hash)`,
+
   // ─────────────────────────────────────────────────────────────────────
   // Tasks (v8) — one row per "do this" the agent is given. The
   // agent-runtime worker claims pending tasks via UPDATE WHERE status

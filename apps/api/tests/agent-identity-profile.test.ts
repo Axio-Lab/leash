@@ -337,4 +337,113 @@ describe('agent identity profile endpoints', () => {
       ]),
     );
   });
+
+  it('creates revocable selective disclosures for private identity resources', async () => {
+    const rig = await createAgent();
+    const update = await rig.app.fetch(
+      new Request(`http://test.local/v1/platform/agents/${MINT}/identity`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          capability_cards: [
+            {
+              kind: 'data_source',
+              title: 'Private CRM',
+              source: 'connection',
+              visibility: 'private',
+            },
+          ],
+        }),
+      }),
+    );
+    expect(update.status).toBe(200);
+    const updateBody = (await update.json()) as {
+      capability_cards: Array<{ id: string; title: string }>;
+    };
+    const cardId = updateBody.capability_cards[0]!.id;
+
+    const claim = await rig.app.fetch(
+      new Request(`http://test.local/v1/platform/agents/${MINT}/identity/claims`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          issuer: 'Internal',
+          type: 'private_note',
+          value: 'hidden',
+          visibility: 'private',
+          signature: 'sig_1234567890123456',
+        }),
+      }),
+    );
+    expect(claim.status).toBe(200);
+    const claimBody = (await claim.json()) as { id: string };
+
+    const publicProfile = await rig.app.fetch(new Request(`http://test.local/v1/identity/${MINT}`));
+    const publicBody = (await publicProfile.json()) as {
+      capability_cards: unknown[];
+      claims: unknown[];
+    };
+    expect(publicBody.capability_cards).toEqual([]);
+    expect(publicBody.claims).toEqual([]);
+
+    const grant = await rig.app.fetch(
+      new Request(`http://test.local/v1/platform/agents/${MINT}/identity/disclosures`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          resources: [
+            { kind: 'capability_card', id: cardId },
+            { kind: 'claim', id: claimBody.id },
+          ],
+        }),
+      }),
+    );
+    expect(grant.status).toBe(200);
+    const grantBody = (await grant.json()) as { id: string; token: string };
+    expect(grantBody.token).toBeTruthy();
+
+    const disclosed = await rig.app.fetch(
+      new Request(`http://test.local/v1/identity/disclosures/${grantBody.token}`),
+    );
+    expect(disclosed.status).toBe(200);
+    const disclosedBody = (await disclosed.json()) as {
+      resources: {
+        capability_cards: Array<{ title: string; visibility: string }>;
+        claims: Array<{ type: string; visibility: string }>;
+      };
+    };
+    expect(disclosedBody.resources.capability_cards).toEqual([
+      expect.objectContaining({ title: 'Private CRM', visibility: 'private' }),
+    ]);
+    expect(disclosedBody.resources.claims).toEqual([
+      expect.objectContaining({ type: 'private_note', visibility: 'private' }),
+    ]);
+
+    const revoke = await rig.app.fetch(
+      new Request(
+        `http://test.local/v1/platform/agents/${MINT}/identity/disclosures/${grantBody.id}`,
+        { method: 'DELETE', headers: authHeaders() },
+      ),
+    );
+    expect(revoke.status).toBe(200);
+    const after = await rig.app.fetch(
+      new Request(`http://test.local/v1/identity/disclosures/${grantBody.token}`),
+    );
+    expect(after.status).toBe(404);
+  });
+
+  it('rejects disclosure grants beyond the 90 day maximum', async () => {
+    const rig = await createAgent();
+    const res = await rig.app.fetch(
+      new Request(`http://test.local/v1/platform/agents/${MINT}/identity/disclosures`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          resources: [{ kind: 'claim', id: 'claim-id' }],
+          expires_at: new Date(Date.now() + 91 * 24 * 60 * 60 * 1000).toISOString(),
+        }),
+      }),
+    );
+    expect(res.status).toBe(422);
+  });
 });

@@ -1,4 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
+import { createHash, randomBytes } from 'node:crypto';
 import { ulid } from 'ulid';
 
 import { adminAuth } from '../auth/admin.js';
@@ -17,8 +18,18 @@ import {
   upsertAgentIdentityProfile,
   type IdentityCapabilityCard,
 } from '../storage/agent-identity.js';
+import {
+  createIdentityDisclosure,
+  getIdentityDisclosure,
+  getIdentityDisclosureByTokenHash,
+  listIdentityDisclosures,
+  revokeIdentityDisclosure,
+  type IdentityDisclosureGrant,
+  type IdentityDisclosureResource,
+} from '../storage/identity-disclosures.js';
 import { listOperatorHistory, type OperatorHistoryRow } from '../storage/operator-history.js';
 import { getPlatformAgent } from '../storage/platform-agents.js';
+import { getReceiptByHash } from '../storage/receipts.js';
 import type { CacheClient } from '../storage/redis.js';
 import { execute, type DbClient } from '../storage/turso.js';
 import { conflict, invalidRequest, notFound } from '../util/errors.js';
@@ -205,6 +216,49 @@ const VerificationDecisionResponseSchema = z
       .nullable(),
   })
   .openapi('AgentIdentityVerificationDecision');
+
+const DisclosureResourceSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('capability_card'), id: z.string().min(1) }),
+  z.object({ kind: z.literal('claim'), id: z.string().min(1) }),
+  z.object({
+    kind: z.literal('receipt'),
+    receipt_hash: z.string().min(16).max(128),
+    fields: z.array(z.enum(['summary', 'request', 'price', 'response', 'tx'])).optional(),
+  }),
+]);
+
+const DisclosureGrantSchema = z.object({
+  id: z.string(),
+  agent_mint: PubkeySchema,
+  network: NetworkSchema,
+  resources: z.array(DisclosureResourceSchema),
+  expires_at: z.string(),
+  revoked_at: z.string().nullable(),
+  created_at: z.string(),
+});
+
+const CreateDisclosureResponseSchema = DisclosureGrantSchema.extend({
+  token: z.string(),
+  url: z.string(),
+});
+
+const DisclosureReadResponseSchema = z
+  .object({
+    id: z.string(),
+    agent: z.object({
+      mint: PubkeySchema,
+      network: NetworkSchema,
+      handle: z.string().nullable(),
+      name: z.string(),
+    }),
+    expires_at: z.string(),
+    resources: z.object({
+      capability_cards: z.array(CapabilityCardSchema),
+      claims: z.array(ClaimSchema),
+      receipts: z.array(z.record(z.unknown())),
+    }),
+  })
+  .openapi('IdentityDisclosureRead');
 
 function normalizeHandle(input: string): string {
   const handle = input.trim().replace(/^@+/, '').toLowerCase();
@@ -579,6 +633,139 @@ async function verificationDecision(
   };
 }
 
+function hashDisclosureToken(token: string): string {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+function newDisclosureToken(): string {
+  return randomBytes(32).toString('base64url');
+}
+
+function grantToWire(grant: IdentityDisclosureGrant) {
+  return {
+    id: grant.id,
+    agent_mint: grant.agentMint,
+    network: grant.network,
+    resources: grant.resources,
+    expires_at: grant.expiresAt,
+    revoked_at: grant.revokedAt,
+    created_at: grant.createdAt,
+  };
+}
+
+function disclosureExpiry(input?: string | null): string {
+  const now = Date.now();
+  const max = now + 90 * 24 * 60 * 60 * 1000;
+  const fallback = now + 7 * 24 * 60 * 60 * 1000;
+  const requested = input ? Date.parse(input) : fallback;
+  if (!Number.isFinite(requested) || requested <= now) {
+    throw invalidRequest('expires_at must be a future ISO timestamp');
+  }
+  if (requested > max) throw invalidRequest('expires_at cannot be more than 90 days out');
+  return new Date(requested).toISOString();
+}
+
+function redactReceipt(
+  receipt: Record<string, unknown>,
+  fields: Array<'summary' | 'request' | 'price' | 'response' | 'tx'>,
+) {
+  const out: Record<string, unknown> = {
+    receipt_hash: receipt.receipt_hash,
+    kind: receipt.kind,
+    decision: receipt.decision,
+    ts: receipt.ts,
+  };
+  const selected = new Set(fields.length > 0 ? fields : ['summary']);
+  if (selected.has('request')) out.request = receipt.request;
+  if (selected.has('price')) out.price = receipt.price;
+  if (selected.has('response')) out.response = receipt.response;
+  if (selected.has('tx')) {
+    out.tx_sig = receipt.tx_sig;
+    out.mpp_settlement_tx = receipt.mpp_settlement_tx;
+  }
+  return out;
+}
+
+async function readDisclosure(db: DbClient, token: string) {
+  const grant = await getIdentityDisclosureByTokenHash(db, hashDisclosureToken(token));
+  if (!grant || grant.revokedAt) throw notFound('disclosure not found');
+  if (Date.parse(grant.expiresAt) <= Date.now()) throw notFound('disclosure not found');
+
+  const agent = await getPlatformAgent(db, grant.agentMint);
+  if (!agent) throw notFound('agent identity not found');
+  const [profile, claims] = await Promise.all([
+    getAgentIdentityProfile(db, grant.agentMint),
+    listAgentIdentityClaims(db, grant.agentMint),
+  ]);
+  const cards = profile?.capabilityCards ?? [];
+  const now = Date.now();
+
+  const capabilityIds = new Set(
+    grant.resources
+      .filter(
+        (resource): resource is Extract<IdentityDisclosureResource, { kind: 'capability_card' }> =>
+          resource.kind === 'capability_card',
+      )
+      .map((resource) => resource.id),
+  );
+  const claimIds = new Set(
+    grant.resources
+      .filter(
+        (resource): resource is Extract<IdentityDisclosureResource, { kind: 'claim' }> =>
+          resource.kind === 'claim',
+      )
+      .map((resource) => resource.id),
+  );
+  const receiptResources = grant.resources.filter(
+    (resource): resource is Extract<IdentityDisclosureResource, { kind: 'receipt' }> =>
+      resource.kind === 'receipt',
+  );
+
+  const disclosedReceipts: Record<string, unknown>[] = [];
+  for (const resource of receiptResources) {
+    const row = await getReceiptByHash(db, grant.network, resource.receipt_hash);
+    if (!row || row.agent !== grant.agentMint) continue;
+    disclosedReceipts.push(
+      redactReceipt(row.raw as Record<string, unknown>, resource.fields ?? []),
+    );
+  }
+
+  const identityProfile = await getAgentIdentityProfile(db, grant.agentMint);
+  return {
+    id: grant.id,
+    agent: {
+      mint: agent.mint,
+      network: agent.network,
+      handle: identityProfile?.handle ?? null,
+      name: agent.name,
+    },
+    expires_at: grant.expiresAt,
+    resources: {
+      capability_cards: cards.filter((card) => capabilityIds.has(card.id)).map(cardToWire),
+      claims: claims
+        .filter((claim) => {
+          if (!claimIds.has(claim.id) || claim.revokedAt) return false;
+          if (claim.expiresAt && Date.parse(claim.expiresAt) <= now) return false;
+          return true;
+        })
+        .map((claim) => ({
+          id: claim.id,
+          issuer: claim.issuer,
+          subject_mint: claim.subjectMint,
+          type: claim.type,
+          value: claim.value,
+          evidence_url: claim.evidenceUrl,
+          signature: claim.signature,
+          visibility: claim.visibility,
+          expires_at: claim.expiresAt,
+          revoked_at: claim.revokedAt,
+          created_at: claim.createdAt,
+        })),
+      receipts: disclosedReceipts,
+    },
+  };
+}
+
 async function resolveMint(
   db: DbClient,
   query: { mint?: string; handle?: string; domain?: string },
@@ -777,6 +964,27 @@ export function buildAgentIdentityProfileRoutes(deps: AgentIdentityProfileDeps):
       },
     }),
     async (c) => c.json(await publicProfile(deps.db, c.req.valid('param').mint), 200),
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/v1/identity/disclosures/{token}',
+      tags: ['identity'],
+      summary: 'Read a shareable selective-disclosure grant by bearer token.',
+      request: { params: z.object({ token: z.string().min(16) }) },
+      responses: {
+        200: {
+          description: 'ok',
+          content: { 'application/json': { schema: DisclosureReadResponseSchema } },
+        },
+        404: {
+          description: 'not found',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+      },
+    }),
+    async (c) => c.json(await readDisclosure(deps.db, c.req.valid('param').token), 200),
   );
 
   app.openapi(
@@ -1023,6 +1231,114 @@ export function buildAgentIdentityProfileRoutes(deps: AgentIdentityProfileDeps):
       const claim = await getAgentIdentityClaim(deps.db, id);
       if (!claim || claim.agentMint !== mint) throw notFound('claim not found');
       await revokeAgentIdentityClaim(deps.db, id);
+      return c.json({ ok: true as const }, 200);
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/v1/platform/agents/{mint}/identity/disclosures',
+      tags: ['platform', 'identity'],
+      summary: 'List selective-disclosure grants for an agent identity.',
+      security: [{ AdminSecret: [] }],
+      request: { params: z.object({ mint: PubkeySchema }) },
+      responses: {
+        200: {
+          description: 'ok',
+          content: {
+            'application/json': {
+              schema: z.object({ items: z.array(DisclosureGrantSchema) }),
+            },
+          },
+        },
+      },
+    }),
+    async (c) => {
+      const { mint } = c.req.valid('param');
+      const agent = await getPlatformAgent(deps.db, mint);
+      if (!agent) throw notFound('agent not found');
+      const items = await listIdentityDisclosures(deps.db, mint);
+      return c.json({ items: items.map(grantToWire) }, 200);
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/v1/platform/agents/{mint}/identity/disclosures',
+      tags: ['platform', 'identity'],
+      summary: 'Create a shareable selective-disclosure grant.',
+      security: [{ AdminSecret: [] }],
+      request: {
+        params: z.object({ mint: PubkeySchema }),
+        body: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: z.object({
+                resources: z.array(DisclosureResourceSchema).min(1).max(50),
+                expires_at: z.string().optional().nullable(),
+              }),
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'ok',
+          content: { 'application/json': { schema: CreateDisclosureResponseSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const { mint } = c.req.valid('param');
+      const body = c.req.valid('json');
+      const agent = await getPlatformAgent(deps.db, mint);
+      if (!agent) throw notFound('agent not found');
+      const token = newDisclosureToken();
+      const grant = await createIdentityDisclosure(deps.db, {
+        agentMint: mint,
+        network: agent.network,
+        tokenHash: hashDisclosureToken(token),
+        resources: body.resources,
+        expiresAt: disclosureExpiry(body.expires_at),
+      });
+      return c.json(
+        {
+          ...grantToWire(grant),
+          token,
+          url: `${deps.config.publicOrigin.replace(/\/+$/, '')}/v1/identity/disclosures/${token}`,
+        },
+        200,
+      );
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: '/v1/platform/agents/{mint}/identity/disclosures/{id}',
+      tags: ['platform', 'identity'],
+      summary: 'Revoke a selective-disclosure grant.',
+      security: [{ AdminSecret: [] }],
+      request: { params: z.object({ mint: PubkeySchema, id: z.string().min(1) }) },
+      responses: {
+        200: {
+          description: 'ok',
+          content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
+        },
+        404: {
+          description: 'not found',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const { mint, id } = c.req.valid('param');
+      const grant = await getIdentityDisclosure(deps.db, id);
+      if (!grant || grant.agentMint !== mint) throw notFound('disclosure not found');
+      await revokeIdentityDisclosure(deps.db, id);
       return c.json({ ok: true as const }, 200);
     },
   );

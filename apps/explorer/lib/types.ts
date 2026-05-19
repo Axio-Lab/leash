@@ -94,6 +94,34 @@ export type PublicIdentityProfile = {
   };
 };
 
+export type IdentityDisclosureRead = {
+  id: string;
+  agent: {
+    mint: string;
+    network: 'solana-devnet' | 'solana-mainnet';
+    handle: string | null;
+    name: string;
+  };
+  expires_at: string;
+  resources: {
+    capability_cards: PublicIdentityProfile['capability_cards'];
+    claims: Array<{
+      id: string;
+      issuer: string;
+      subject_mint: string;
+      type: string;
+      value: string;
+      evidence_url: string | null;
+      signature: string;
+      visibility: 'public' | 'private';
+      expires_at: string | null;
+      revoked_at: string | null;
+      created_at: string;
+    }>;
+    receipts: Array<Record<string, unknown>>;
+  };
+};
+
 export type TreasuryBalances = {
   agent_asset: string;
   network: 'solana-devnet' | 'solana-mainnet';

@@ -25,6 +25,7 @@
  */
 
 import { createClient, type Client } from '@libsql/client';
+import { createHash } from 'node:crypto';
 import {
   getEventById as apiGetEventById,
   getIndexerStatus as apiGetIndexerStatus,
@@ -44,6 +45,7 @@ import type { Network } from './network';
 import { networkToSlug } from './network';
 import type {
   EventPage,
+  IdentityDisclosureRead,
   EventRow,
   IndexerStatus,
   PublicIdentityProfile,
@@ -139,6 +141,42 @@ function parseJsonArray<T>(value: unknown): T[] {
   } catch {
     return [];
   }
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(String(value ?? '{}'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function disclosureTokenHash(token: string): string {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+function redactDisclosureReceipt(
+  receipt: Record<string, unknown>,
+  fields: string[] | undefined,
+): Record<string, unknown> {
+  const selected = new Set(fields && fields.length > 0 ? fields : ['summary']);
+  const out: Record<string, unknown> = {
+    receipt_hash: receipt.receipt_hash,
+    kind: receipt.kind,
+    decision: receipt.decision,
+    ts: receipt.ts,
+  };
+  if (selected.has('request')) out.request = receipt.request;
+  if (selected.has('price')) out.price = receipt.price;
+  if (selected.has('response')) out.response = receipt.response;
+  if (selected.has('tx')) {
+    out.tx_sig = receipt.tx_sig;
+    out.mpp_settlement_tx = receipt.mpp_settlement_tx;
+  }
+  return out;
 }
 
 // --- page-facing reads ----------------------------------------------
@@ -276,6 +314,115 @@ export async function getPublicIdentityProfile(
         settled_calls: settled,
         denied_calls: denied,
         rating: Number(((1 - disputeRate) * weight).toFixed(4)),
+      },
+    };
+  });
+}
+
+export async function getIdentityDisclosureByToken(
+  token: string,
+): Promise<IdentityDisclosureRead | null> {
+  return withDb(async (db) => {
+    const grantRes = await db.execute({
+      sql: `SELECT * FROM agent_identity_disclosures WHERE token_hash = ? LIMIT 1`,
+      args: [disclosureTokenHash(token)],
+    });
+    const grant = grantRes.rows[0] as Record<string, unknown> | undefined;
+    if (!grant || grant.revoked_at != null) return null;
+    if (Date.parse(String(grant.expires_at)) <= Date.now()) return null;
+
+    const agentMint = String(grant.agent_mint);
+    const network = String(grant.network) as IdentityDisclosureRead['agent']['network'];
+    const resources = parseJsonArray<
+      | { kind: 'capability_card'; id: string }
+      | { kind: 'claim'; id: string }
+      | { kind: 'receipt'; receipt_hash: string; fields?: string[] }
+    >(grant.resources_json);
+
+    const agentRes = await db.execute({
+      sql: `SELECT mint, network, name
+              FROM agents
+             WHERE mint = ? AND network = ? AND status = 'active'
+             LIMIT 1`,
+      args: [agentMint, network],
+    });
+    const agent = agentRes.rows[0] as Record<string, unknown> | undefined;
+    if (!agent) return null;
+
+    const profileRes = await db.execute({
+      sql: `SELECT handle, capability_cards
+              FROM agent_identity_profiles
+             WHERE agent_mint = ?
+             LIMIT 1`,
+      args: [agentMint],
+    });
+    const profile = profileRes.rows[0] as Record<string, unknown> | undefined;
+    const cards = parseJsonArray<IdentityDisclosureRead['resources']['capability_cards'][number]>(
+      profile?.capability_cards,
+    );
+
+    const claimRes = await db.execute({
+      sql: `SELECT id, issuer, subject_mint, type, value, evidence_url, signature, visibility,
+                   expires_at, revoked_at, created_at
+              FROM agent_identity_claims
+             WHERE agent_mint = ?`,
+      args: [agentMint],
+    });
+
+    const cardIds = new Set(
+      resources
+        .filter((resource) => resource.kind === 'capability_card')
+        .map((resource) => resource.id),
+    );
+    const claimIds = new Set(
+      resources.filter((resource) => resource.kind === 'claim').map((resource) => resource.id),
+    );
+    const now = Date.now();
+    const receipts: Record<string, unknown>[] = [];
+    for (const resource of resources.filter((item) => item.kind === 'receipt')) {
+      const receiptRes = await db.execute({
+        sql: `SELECT raw_json FROM receipts
+               WHERE network = ? AND agent = ? AND receipt_hash = ?
+               LIMIT 1`,
+        args: [network, agentMint, resource.receipt_hash],
+      });
+      const receiptRow = receiptRes.rows[0] as Record<string, unknown> | undefined;
+      if (!receiptRow) continue;
+      receipts.push(redactDisclosureReceipt(parseJsonObject(receiptRow.raw_json), resource.fields));
+    }
+
+    return {
+      id: String(grant.id),
+      agent: {
+        mint: agentMint,
+        network,
+        handle: profile?.handle == null ? null : String(profile.handle),
+        name: String(agent.name),
+      },
+      expires_at: String(grant.expires_at),
+      resources: {
+        capability_cards: cards.filter((card) => cardIds.has(card.id)),
+        claims: claimRes.rows
+          .map((row) => row as Record<string, unknown>)
+          .filter((row) => {
+            if (!claimIds.has(String(row.id)) || row.revoked_at != null) return false;
+            if (row.expires_at != null && Date.parse(String(row.expires_at)) <= now) return false;
+            return true;
+          })
+          .map((row) => ({
+            id: String(row.id),
+            issuer: String(row.issuer),
+            subject_mint: String(row.subject_mint),
+            type: String(row.type),
+            value: String(row.value),
+            evidence_url: row.evidence_url == null ? null : String(row.evidence_url),
+            signature: String(row.signature),
+            visibility: String(row.visibility) as 'public' | 'private',
+            expires_at: row.expires_at == null ? null : String(row.expires_at),
+            revoked_at: row.revoked_at == null ? null : String(row.revoked_at),
+            created_at: String(row.created_at),
+          })),
+        receipts,
       },
     };
   });

@@ -7,6 +7,7 @@ import {
   BadgeCheckIcon,
   GlobeIcon,
   IdCardIcon,
+  LinkIcon,
   PlusIcon,
   ShieldCheckIcon,
   Trash2Icon,
@@ -63,6 +64,18 @@ type OperatorHistoryEntry = {
   failed_at: string | null;
 };
 
+type DisclosureGrant = {
+  id: string;
+  resources: Array<
+    | { kind: 'capability_card'; id: string }
+    | { kind: 'claim'; id: string }
+    | { kind: 'receipt'; receipt_hash: string; fields?: string[] }
+  >;
+  expires_at: string;
+  revoked_at: string | null;
+  created_at: string;
+};
+
 type IdentityProfile = {
   mint: string;
   handle: string | null;
@@ -86,10 +99,28 @@ const fetcher = async (url: string): Promise<IdentityProfile> => {
   return json as IdentityProfile;
 };
 
+const disclosureFetcher = async (url: string): Promise<{ items: DisclosureGrant[] }> => {
+  const res = await fetch(url, { credentials: 'include' });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) {
+    const message =
+      json && typeof json === 'object' && 'message' in json
+        ? String(json.message)
+        : `HTTP ${res.status}`;
+    throw new Error(message);
+  }
+  return json as { items: DisclosureGrant[] };
+};
+
 export function IdentityProfilePanel({ agentMint }: { agentMint: string }) {
   const { data, error, isLoading, mutate } = useSWR<IdentityProfile>(
     `/api/agents/${agentMint}/identity`,
     fetcher,
+    { revalidateOnFocus: false },
+  );
+  const { data: disclosureData, mutate: mutateDisclosures } = useSWR<{ items: DisclosureGrant[] }>(
+    `/api/agents/${agentMint}/identity/disclosures`,
+    disclosureFetcher,
     { revalidateOnFocus: false },
   );
   const [handle, setHandle] = React.useState('');
@@ -102,6 +133,8 @@ export function IdentityProfilePanel({ agentMint }: { agentMint: string }) {
   const [claimValue, setClaimValue] = React.useState('');
   const [claimSignature, setClaimSignature] = React.useState('');
   const [claimVisibility, setClaimVisibility] = React.useState<'public' | 'private'>('public');
+  const [disclosureReceiptHash, setDisclosureReceiptHash] = React.useState('');
+  const [lastDisclosureUrl, setLastDisclosureUrl] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -221,6 +254,47 @@ export function IdentityProfilePanel({ agentMint }: { agentMint: string }) {
       await mutate();
     } catch (err) {
       toast.error('Claim revoke failed', { description: (err as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function createDisclosure(resources: DisclosureGrant['resources']) {
+    setBusy('disclosure');
+    try {
+      const res = await fetch(`/api/agents/${agentMint}/identity/disclosures`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ resources }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.message ?? json?.detail ?? `HTTP ${res.status}`);
+      setLastDisclosureUrl(String(json.url));
+      toast.success('Disclosure link created');
+      await mutateDisclosures();
+    } catch (err) {
+      toast.error('Disclosure create failed', { description: (err as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function revokeDisclosure(id: string) {
+    setBusy(`disclosure:${id}`);
+    try {
+      const res = await fetch(`/api/agents/${agentMint}/identity/disclosures/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        throw new Error(json?.message ?? json?.detail ?? `HTTP ${res.status}`);
+      }
+      toast.success('Disclosure revoked');
+      await mutateDisclosures();
+    } catch (err) {
+      toast.error('Disclosure revoke failed', { description: (err as Error).message });
     } finally {
       setBusy(null);
     }
@@ -379,9 +453,20 @@ export function IdentityProfilePanel({ agentMint }: { agentMint: string }) {
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-medium">{card.title}</span>
-                  <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-brand">
-                    {card.visibility}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-brand">
+                      {card.visibility}
+                    </span>
+                    <button
+                      type="button"
+                      className="rounded-md p-1.5 text-fg-subtle hover:bg-brand/10 hover:text-brand"
+                      onClick={() => createDisclosure([{ kind: 'capability_card', id: card.id }])}
+                      disabled={busy === 'disclosure'}
+                      aria-label="Create disclosure link"
+                    >
+                      <LinkIcon className="size-3.5" />
+                    </button>
+                  </div>
                 </div>
                 <div className="mt-1 text-[11px] text-fg-muted">{card.kind}</div>
               </li>
@@ -446,6 +531,15 @@ export function IdentityProfilePanel({ agentMint }: { agentMint: string }) {
                   >
                     <Trash2Icon className="size-3.5" />
                   </button>
+                  <button
+                    type="button"
+                    className="rounded-md p-1.5 text-fg-subtle hover:bg-brand/10 hover:text-brand"
+                    onClick={() => createDisclosure([{ kind: 'claim', id: claim.id }])}
+                    disabled={busy === 'disclosure'}
+                    aria-label="Create disclosure link"
+                  >
+                    <LinkIcon className="size-3.5" />
+                  </button>
                 </div>
               </li>
             ))}
@@ -460,6 +554,73 @@ export function IdentityProfilePanel({ agentMint }: { agentMint: string }) {
         <Metric label="Settled calls" value={String(data?.reputation.settled_calls ?? 0)} />
         <Metric label="Denied calls" value={String(data?.reputation.denied_calls ?? 0)} />
         <Metric label="Reputation" value={(data?.reputation.rating ?? 0).toFixed(4)} />
+      </div>
+
+      <div className="rounded-lg border border-border/60 bg-bg/40 p-3 space-y-3">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-fg-subtle">
+          <LinkIcon className="size-3.5" />
+          Selective disclosures
+        </div>
+        {lastDisclosureUrl ? (
+          <div className="rounded-lg border border-success/25 bg-success/10 px-3 py-2 text-xs text-success">
+            {lastDisclosureUrl}
+          </div>
+        ) : null}
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            value={disclosureReceiptHash}
+            onChange={(event) => setDisclosureReceiptHash(event.target.value)}
+            placeholder="Receipt hash"
+            className="min-w-0 flex-1 rounded-lg border border-border bg-bg px-3 py-2 text-sm placeholder:text-fg-subtle focus:outline-none focus:ring-1 focus:ring-brand/40"
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={busy === 'disclosure' || !disclosureReceiptHash.trim()}
+            onClick={() =>
+              createDisclosure([
+                {
+                  kind: 'receipt',
+                  receipt_hash: disclosureReceiptHash.trim(),
+                  fields: ['summary', 'request', 'price', 'tx'],
+                },
+              ]).then(() => setDisclosureReceiptHash(''))
+            }
+          >
+            <LinkIcon className="size-3.5" />
+            Share receipt
+          </Button>
+        </div>
+        <ul className="space-y-2">
+          {(disclosureData?.items ?? []).map((grant) => (
+            <li key={grant.id} className="rounded-lg border border-border/60 bg-bg-elev/40 p-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 text-xs">
+                  <div className="font-medium text-fg">
+                    {grant.resources.length} resource{grant.resources.length === 1 ? '' : 's'}
+                  </div>
+                  <div className="text-fg-muted">
+                    Expires {new Date(grant.expires_at).toLocaleDateString()}
+                    {grant.revoked_at ? ' · revoked' : ''}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-md p-1.5 text-fg-subtle hover:bg-danger/10 hover:text-danger"
+                  onClick={() => revokeDisclosure(grant.id)}
+                  disabled={busy === `disclosure:${grant.id}` || grant.revoked_at != null}
+                  aria-label="Revoke disclosure"
+                >
+                  <Trash2Icon className="size-3.5" />
+                </button>
+              </div>
+            </li>
+          ))}
+          {(disclosureData?.items ?? []).length === 0 ? (
+            <li className="text-xs text-fg-muted">No disclosure links</li>
+          ) : null}
+        </ul>
       </div>
 
       <div className="rounded-lg border border-border/60 bg-bg/40 p-3">
