@@ -126,6 +126,39 @@ describe('LeashClient (public reads)', () => {
     expect(calls[0]!.url).toBe('https://api.test/v1/agents/M/reputation?network=solana-mainnet');
   });
 
+  it('identity helpers resolve and verify selectors', async () => {
+    const { fetch, calls } = makeFetch((req) => ({
+      status: 200,
+      body: req.url.includes('/verify')
+        ? {
+            verified: true,
+            resolved_mint: 'M',
+            network: 'solana-devnet',
+            checks: [{ name: 'selector_resolves', passed: true, detail: 'ok' }],
+          }
+        : {
+            mint: 'M',
+            network: 'solana-devnet',
+            handle: 'demo',
+            name: 'Demo',
+            description: null,
+            image_url: null,
+            treasury: 'T',
+            services: [],
+            verified_domains: [],
+            capability_cards: [],
+            claims: [],
+            operator_history: [],
+            reputation: { settled_calls: 0, denied_calls: 0, rating: 0 },
+          },
+    }));
+    const client = new LeashClient({ baseUrl: 'https://api.test', fetchImpl: fetch });
+    await client.resolveIdentity({ handle: 'demo' });
+    await client.verifyIdentity({ domain: 'demo.example' });
+    expect(calls[0]!.url).toBe('https://api.test/v1/identity/resolve?handle=demo');
+    expect(calls[1]!.url).toBe('https://api.test/v1/identity/verify?domain=demo.example');
+  });
+
   it('throws LeashError on non-2xx with the parsed body', async () => {
     const { fetch } = makeFetch(() => ({
       status: 503,

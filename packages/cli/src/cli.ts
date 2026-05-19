@@ -27,6 +27,8 @@
  *   leash treasury withdraw …       Owner-driven on-chain withdrawal.
  *   leash discover [-q QUERY] …     Search Leash + pay-skills (public).
  *   leash discover endpoints <fqn>  Expand a pay-skills provider into paid URLs.
+ *   leash identity resolve …        Resolve a mint / handle / verified domain.
+ *   leash identity verify …         Verify a mint / handle / verified domain.
  *   leash reputation <agent_mint>   Reputation snapshot (public).
  *   leash receipts [--limit N]      Recent receipts for the active agent.
  *   leash pay <link-url> [--method …]   Pay an x402 or MPP paywall (auto-detected).
@@ -75,6 +77,10 @@ async function main(): Promise<void> {
 
     case 'discover':
       await runDiscover(argv.slice(1));
+      return;
+
+    case 'identity':
+      await runIdentity(argv.slice(1));
       return;
 
     case 'reputation':
@@ -513,6 +519,49 @@ async function runReputation(args: string[]): Promise<void> {
   });
 }
 
+async function runIdentity(args: string[]): Promise<void> {
+  const sub = args[0];
+  if (sub !== 'resolve' && sub !== 'verify') {
+    process.stderr.write(
+      'usage: leash identity {resolve|verify} (--mint M | --handle H | --domain D) [--json]\n',
+    );
+    process.exit(2);
+  }
+  const selector = identitySelector(args.slice(1));
+  const { hostRef } = buildServerFromEnv();
+  const json = wantJson(args);
+  const result =
+    sub === 'resolve'
+      ? await hostRef.resolveIdentity(selector)
+      : await hostRef.verifyIdentity(selector);
+  printResult(result, json, (payload) => {
+    if (payload.status !== 'ok') return formatStatusError(payload);
+    if (sub === 'verify') {
+      const checks = (payload.checks ?? []) as Array<{
+        name: string;
+        passed: boolean;
+        detail: string;
+      }>;
+      return [
+        `verified: ${payload.verified ? 'yes' : 'no'}`,
+        `resolved_mint: ${payload.resolved_mint ?? '(none)'}`,
+        `network: ${payload.network ?? '(none)'}`,
+        ...checks.map((c) => `  ${c.passed ? 'ok' : 'fail'} ${c.name}: ${c.detail}`),
+      ].join('\n');
+    }
+    return [
+      `${payload.name ?? 'Agent'} (${payload.network})`,
+      `  mint:       ${payload.mint}`,
+      `  handle:     ${payload.handle ? `@${payload.handle}` : '(none)'}`,
+      `  treasury:   ${payload.treasury}`,
+      `  domains:    ${((payload.verified_domains as string[] | undefined) ?? []).join(', ') || '(none)'}`,
+      `  capability_cards: ${((payload.capability_cards as unknown[] | undefined) ?? []).length}`,
+      `  claims:           ${((payload.claims as unknown[] | undefined) ?? []).length}`,
+      `  reputation:       ${Number((payload.reputation as { rating?: number } | undefined)?.rating ?? 0).toFixed(4)}`,
+    ].join('\n');
+  });
+}
+
 async function runReceipts(args: string[]): Promise<void> {
   const { hostRef } = buildServerFromEnv();
   const json = wantJson(args);
@@ -883,6 +932,10 @@ function printHelp(): void {
       '  discover endpoints <fqn>           expand a pay-skills provider into its paid endpoint',
       '                                     URLs (mirrors `pay skills endpoints <fqn>`). Take the',
       '                                     <fqn> from the `(fqn: ...)` hint of `leash discover`.',
+      '  identity resolve (--mint M | --handle H | --domain D)',
+      '                                     resolve an agent identity profile',
+      '  identity verify (--mint M | --handle H | --domain D)',
+      '                                     verify an agent identity selector before trusting it',
       '  reputation <agent_mint> [--network solana-devnet|solana-mainnet]',
       '',
       'activity:',
@@ -917,4 +970,22 @@ function printHelp(): void {
       '',
     ].join('\n'),
   );
+}
+
+function identitySelector(args: string[]): { mint?: string; handle?: string; domain?: string } {
+  const mint = optArg(args, '--mint');
+  const handle = optArg(args, '--handle');
+  const domain = optArg(args, '--domain');
+  const count = [mint, handle, domain].filter(Boolean).length;
+  if (count !== 1) {
+    process.stderr.write(
+      'usage: leash identity {resolve|verify} (--mint M | --handle H | --domain D) [--json]\n',
+    );
+    process.exit(2);
+  }
+  return {
+    ...(mint ? { mint } : {}),
+    ...(handle ? { handle } : {}),
+    ...(domain ? { domain } : {}),
+  };
 }

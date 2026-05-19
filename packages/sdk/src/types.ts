@@ -36,6 +36,7 @@ export type DiscoverItem = {
   seller_wallet: string | null;
   rating: number | null;
   health_status: 'ok' | 'warn' | 'down' | null;
+  endpoint_count?: number;
   tags: string[];
   tools: Array<{ name: string; description: string }>;
 };
@@ -102,6 +103,54 @@ export type ReputationSnapshot = {
   oldest_receipt_at: string | null;
   newest_receipt_at: string | null;
   rating: number;
+};
+
+export type IdentityCapabilityCard = {
+  id: string;
+  kind: string;
+  title: string;
+  description?: string;
+  source?: string;
+  slug?: string;
+  endpoint?: string;
+  tags: string[];
+  protocols: string[];
+  visibility: 'public' | 'private';
+};
+
+export type PublicIdentityProfile = {
+  mint: string;
+  network: SvmNetwork;
+  handle: string | null;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  treasury: string;
+  services: Array<{ name: string; endpoint: string }>;
+  verified_domains: string[];
+  capability_cards: IdentityCapabilityCard[];
+  claims: Array<{
+    id: string;
+    issuer: string;
+    subject_mint: string;
+    type: string;
+    value: string;
+    evidence_url: string | null;
+    signature: string;
+    visibility: 'public' | 'private';
+    expires_at: string | null;
+    revoked_at: string | null;
+    created_at: string;
+  }>;
+  operator_history: unknown[];
+  reputation: { settled_calls: number; denied_calls: number; rating: number };
+};
+
+export type IdentityVerifyResponse = {
+  verified: boolean;
+  resolved_mint: string | null;
+  network: SvmNetwork | null;
+  checks: Array<{ name: string; passed: boolean; detail: string }>;
 };
 
 export type Receipt = {

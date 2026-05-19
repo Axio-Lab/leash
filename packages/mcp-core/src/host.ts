@@ -150,6 +150,12 @@ export type ReputationArgs = {
   network?: SvmNetwork;
 };
 
+export type IdentitySelectorArgs = {
+  mint?: string;
+  handle?: string;
+  domain?: string;
+};
+
 /**
  * Inputs for `leash_pay_skills_endpoints` — expand a chosen
  * `pay-skills` provider (returned by `leash_discover`) into its
@@ -326,6 +332,18 @@ export interface LeashHost {
    * — both hosts hit `GET /v1/agents/:mint/reputation` directly.
    */
   reputation(args: ReputationArgs): Promise<LeashToolResult>;
+
+  /**
+   * Resolve a Leash identity selector (mint, handle, or verified
+   * domain) to the public agent identity profile.
+   */
+  resolveIdentity(args: IdentitySelectorArgs): Promise<LeashToolResult>;
+
+  /**
+   * Verify that a mint, handle, or domain resolves to a live agent
+   * identity. Public — does not require the active agent to exist.
+   */
+  verifyIdentity(args: IdentitySelectorArgs): Promise<LeashToolResult>;
 
   /**
    * Expand a `pay-skills` discover item into its paid endpoints.

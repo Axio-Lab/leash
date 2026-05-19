@@ -26,6 +26,8 @@ import { z } from 'zod';
 import {
   LEASH_TOOLS,
   fetchDiscover,
+  fetchIdentityProfile,
+  fetchIdentityVerify,
   fetchPaySkillsProvider,
   fetchReputation,
   isLikelyBase58Address,
@@ -36,6 +38,7 @@ import {
   type CheckTreasuryBalanceArgs,
   type CreatePaymentLinkArgs,
   type DiscoverArgs,
+  type IdentitySelectorArgs,
   type LeashHost,
   type LeashTool,
   type LeashToolResult,
@@ -368,6 +371,20 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
       return fetchReputation({
         apiBaseUrl: env.leashApiUrl,
         network: SOLANA_NETWORK as LeashHost['network'],
+        query: args,
+      });
+    },
+
+    async resolveIdentity(args: IdentitySelectorArgs): Promise<LeashToolResult> {
+      return fetchIdentityProfile({
+        apiBaseUrl: env.leashApiUrl,
+        query: args,
+      });
+    },
+
+    async verifyIdentity(args: IdentitySelectorArgs): Promise<LeashToolResult> {
+      return fetchIdentityVerify({
+        apiBaseUrl: env.leashApiUrl,
         query: args,
       });
     },

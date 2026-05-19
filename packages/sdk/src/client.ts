@@ -27,11 +27,13 @@ import type {
   DailyTransactionsResponse,
   DailyTxBucket,
   DiscoverResponse,
+  IdentityVerifyResponse,
   PaymentLink,
   PaymentLinkCreateInput,
   PaymentLinkPatchInput,
   PaymentLinksListResponse,
   PaySkillsProvider,
+  PublicIdentityProfile,
   Receipt,
   RecordAgentInput,
   RecordAgentResponse,
@@ -151,6 +153,30 @@ export class LeashClient {
       'GET',
       `/v1/agents/${encodeURIComponent(args.agentMint)}/reputation${params.toString() ? `?${params}` : ''}`,
     );
+  }
+
+  async resolveIdentity(args: {
+    mint?: string;
+    handle?: string;
+    domain?: string;
+  }): Promise<PublicIdentityProfile> {
+    const params = new URLSearchParams();
+    if (args.mint) params.set('mint', args.mint);
+    if (args.handle) params.set('handle', args.handle);
+    if (args.domain) params.set('domain', args.domain);
+    return this.requestJson<PublicIdentityProfile>('GET', `/v1/identity/resolve?${params}`);
+  }
+
+  async verifyIdentity(args: {
+    mint?: string;
+    handle?: string;
+    domain?: string;
+  }): Promise<IdentityVerifyResponse> {
+    const params = new URLSearchParams();
+    if (args.mint) params.set('mint', args.mint);
+    if (args.handle) params.set('handle', args.handle);
+    if (args.domain) params.set('domain', args.domain);
+    return this.requestJson<IdentityVerifyResponse>('GET', `/v1/identity/verify?${params}`);
   }
 
   // ── agent recording (public) ──────────────────────────────────────

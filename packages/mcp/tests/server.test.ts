@@ -70,8 +70,10 @@ describe('@leashmarket/mcp server', () => {
       'leash_receipts',
       'leash_register_agent',
       'leash_reputation',
+      'leash_resolve_identity',
       'leash_set_spend_limit',
       'leash_transaction_history',
+      'leash_verify_identity',
       'leash_withdraw_treasury',
     ]);
 

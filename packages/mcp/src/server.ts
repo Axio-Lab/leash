@@ -42,6 +42,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   LEASH_TOOLS,
   fetchDiscover,
+  fetchIdentityProfile,
+  fetchIdentityVerify,
   fetchPaySkillsProvider,
   fetchReputation,
   type CheckTreasuryBalanceArgs,
@@ -49,6 +51,7 @@ import {
   type DailyTransactionsArgs,
   type DiscoverArgs,
   type GetIdentityArgs,
+  type IdentitySelectorArgs,
   type GetReceiptArgs,
   type GetSpendLimitArgs,
   type LeashHost,
@@ -281,6 +284,12 @@ export class HostRef implements LeashHost {
   }
   reputation(args: ReputationArgs): Promise<LeashToolResult> {
     return this.inner.reputation(args);
+  }
+  resolveIdentity(args: IdentitySelectorArgs): Promise<LeashToolResult> {
+    return this.inner.resolveIdentity(args);
+  }
+  verifyIdentity(args: IdentitySelectorArgs): Promise<LeashToolResult> {
+    return this.inner.verifyIdentity(args);
   }
   paySkillsProvider(args: PaySkillsProviderArgs): Promise<LeashToolResult> {
     return this.inner.paySkillsProvider(args);
@@ -591,6 +600,18 @@ function makePlaceholderHost(defaults: LeashHostDefaults): LeashHost {
       return fetchReputation({
         apiBaseUrl: defaults.apiBaseUrl,
         network: defaults.network,
+        query: args,
+      });
+    },
+    async resolveIdentity(args) {
+      return fetchIdentityProfile({
+        apiBaseUrl: defaults.apiBaseUrl,
+        query: args,
+      });
+    },
+    async verifyIdentity(args) {
+      return fetchIdentityVerify({
+        apiBaseUrl: defaults.apiBaseUrl,
         query: args,
       });
     },

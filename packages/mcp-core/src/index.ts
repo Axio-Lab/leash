@@ -26,6 +26,7 @@ export type {
   CheckTreasuryBalanceArgs,
   RegisterAgentArgs,
   GetIdentityArgs,
+  IdentitySelectorArgs,
   ReceiptsArgs,
   DiscoverArgs,
   PaySkillsProviderArgs,
@@ -59,8 +60,10 @@ export {
   receiptsTool,
   registerAgentTool,
   reputationTool,
+  resolveIdentityTool,
   setSpendLimitTool,
   transactionHistoryTool,
+  verifyIdentityTool,
   withdrawTreasuryTool,
 } from './tools/index.js';
 
@@ -71,6 +74,8 @@ export {
   decodeBase64Json,
   probePaymentLink,
   fetchDiscover,
+  fetchIdentityProfile,
+  fetchIdentityVerify,
   fetchPaySkillsProvider,
   fetchReputation,
   type TokenMeta,
@@ -78,7 +83,9 @@ export {
   type PaymentRequirementPreview,
   type DiscoverItem,
   type DiscoverSource,
+  type IdentityVerifyResponse,
   type PaySkillsEndpoint,
   type PaySkillsProvider,
+  type PublicIdentityProfile,
   type ReputationSnapshot,
 } from './helpers/index.js';
