@@ -5,9 +5,9 @@ import { Cpu, Star } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { capabilityCountLabel } from '@/lib/capabilities';
 import { cn } from '@/lib/cn';
 import { NEXT_PUBLIC_AGENTS_URL } from '@/lib/env';
+import { useCapabilityCount } from '@/lib/use-pay-skills-capability-count';
 
 export type Listing = {
   id: string;
@@ -34,7 +34,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
     source,
     q: listing.name || listing.slug,
   }).toString()}`;
-  const countLabel = capabilityCountLabel(listing);
+  const { count } = useCapabilityCount(listing);
 
   return (
     <li className="group relative flex flex-col rounded-xl border border-border bg-card transition-all hover:-translate-y-0.5 hover:border-border-strong">
@@ -66,7 +66,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
         <div className="mt-auto flex items-center gap-3 text-[11px] text-fg-subtle">
           <span className="inline-flex items-center gap-1">
             <Cpu className="size-3" />
-            {countLabel}
+            {count} capabilit{count === 1 ? 'y' : 'ies'}
           </span>
           {listing.rating && listing.rating.count > 0 ? (
             <span className="inline-flex items-center gap-1">

@@ -28,3 +28,13 @@ export function capabilityCountHint(item: CapabilityCountInput): string {
   }
   return '1 service endpoint';
 }
+
+export function paySkillsProviderPath(fqn: string): string {
+  const path = fqn
+    .split('/')
+    .map((seg) => seg.trim())
+    .filter(Boolean)
+    .map((seg) => encodeURIComponent(seg))
+    .join('/');
+  return `/api/pay-skills/${path}`;
+}

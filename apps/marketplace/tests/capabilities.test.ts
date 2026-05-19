@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { capabilityCount, capabilityCountHint, capabilityCountLabel } from '../lib/capabilities';
+import {
+  capabilityCount,
+  capabilityCountHint,
+  capabilityCountLabel,
+  paySkillsProviderPath,
+} from '../lib/capabilities';
 
 describe('capability labels', () => {
   it('counts pay.sh endpoints as capabilities', () => {
@@ -15,5 +20,12 @@ describe('capability labels', () => {
     expect(capabilityCount(item)).toBe(1);
     expect(capabilityCountLabel(item)).toBe('1 capability');
     expect(capabilityCountHint(item)).toBe('1 service endpoint');
+  });
+
+  it('builds a safe provider detail path for pay.sh FQNs', () => {
+    expect(paySkillsProviderPath('agentmail/email')).toBe('/api/pay-skills/agentmail/email');
+    expect(
+      paySkillsProviderPath('coinbase-cdp/coinbase-developer-platform/baseSepoliaWalletApi'),
+    ).toBe('/api/pay-skills/coinbase-cdp/coinbase-developer-platform/baseSepoliaWalletApi');
   });
 });

@@ -6,7 +6,7 @@ import useSWR from 'swr';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { capabilityCountLabel } from '@/lib/capabilities';
+import { useCapabilityCount } from '@/lib/use-pay-skills-capability-count';
 
 type Listing = {
   id: string;
@@ -110,7 +110,7 @@ function FeaturedCard({ listing }: { listing: Listing }) {
   const source = listing.source ?? 'leash';
   const detailHref =
     source === 'pay-skills' ? `/capability/pay-skills/${listing.slug}` : `/listing/${listing.slug}`;
-  const countLabel = capabilityCountLabel(listing);
+  const { count } = useCapabilityCount(listing);
 
   return (
     <Link
@@ -139,7 +139,9 @@ function FeaturedCard({ listing }: { listing: Listing }) {
         </div>
         <p className="line-clamp-2 text-xs text-fg-muted">{listing.description}</p>
         <div className="flex items-center gap-2 pt-1 text-[11px] text-fg-subtle">
-          <span>{countLabel}</span>
+          <span>
+            {count} capabilit{count === 1 ? 'y' : 'ies'}
+          </span>
           {listing.rating && listing.rating.count > 0 ? (
             <>
               <span>·</span>
