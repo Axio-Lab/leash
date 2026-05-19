@@ -52,6 +52,11 @@ export {
   type ReceiptRow,
   type ListReceiptsArgs,
 } from './storage/receipts.js';
+export {
+  listOperatorHistory,
+  type OperatorHistoryKind,
+  type OperatorHistoryRow,
+} from './storage/operator-history.js';
 export { getIndexerStatus, type IndexerStatus } from './storage/indexer-status.js';
 export {
   getAgentSummary,

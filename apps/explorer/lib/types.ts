@@ -71,6 +71,22 @@ export type PublicIdentityProfile = {
     signature: string;
     created_at: string;
   }>;
+  operator_history: Array<{
+    event_id: string;
+    kind: 'executive_register' | 'executive_delegate' | 'delegation_set' | 'delegation_revoke';
+    phase: 'prepared' | 'submitted' | 'confirmed' | 'failed';
+    actor: string | null;
+    delegate: string | null;
+    executive: string | null;
+    token_mint: string | null;
+    source_token_account: string | null;
+    delegated_amount: string | null;
+    signature: string | null;
+    event_source: string;
+    created_at: string;
+    confirmed_at: string | null;
+    failed_at: string | null;
+  }>;
   reputation: {
     settled_calls: number;
     denied_calls: number;

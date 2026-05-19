@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it, afterEach } from 'vitest';
 
 import { createTestRig } from './helpers.js';
+import { createPreparedEvent, markConfirmed } from '../src/storage/events.js';
 
 const ADMIN_SECRET = 'a'.repeat(48);
 const ENC_KEY = 'a'.repeat(64);
@@ -8,6 +9,9 @@ const PRIVY_ID = 'did:privy:identity-demo';
 const WALLET = 'FFvPUNGYsQa4vjLAcCJ4zx8vZ4BSqQoCbMMyG3VNuEnd';
 const MINT = '4Nd1mWcYWYn7Z9wsCSKwa5e2W7Lo23Yp8h2gEHn8oAB7';
 const TREASURY = 'FZQ4SyEUxGRgTwT7DvKi8b8tqezZbTnpVvPm9wgL2Lz3';
+const USDC_MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+const DELEGATE = 'B8A4PH5D7nPTDK1chrCHWRwszpxxi46HZ1sZ626iYWAw';
+const SOURCE_ATA = '8UYg8hiUkQUVQLzEnpxUktEowJrdGKYEwLZQCv5SpDpk';
 
 const realFetch = globalThis.fetch;
 
@@ -182,5 +186,49 @@ describe('agent identity profile endpoints', () => {
     const after = await rig.app.fetch(new Request(`http://test.local/v1/identity/${MINT}`));
     const afterBody = (await after.json()) as { claims: unknown[] };
     expect(afterBody.claims).toEqual([]);
+  });
+
+  it('returns full owner operator history and public confirmed history only', async () => {
+    const rig = await createAgent();
+    const eventId = await createPreparedEvent(rig.db, {
+      kind: 'agent.delegation.set',
+      network: 'solana-devnet',
+      apiKeyId: null,
+      agentAsset: MINT,
+      mint: USDC_MINT,
+      amountAtomic: '250000',
+      metadata: {
+        actor: WALLET,
+        delegate: DELEGATE,
+        source_token_account: SOURCE_ATA,
+        delegated_amount: '250000',
+      },
+    });
+
+    const ownerBefore = await rig.app.fetch(
+      new Request(`http://test.local/v1/platform/agents/${MINT}/identity`, {
+        headers: authHeaders(),
+      }),
+    );
+    expect(ownerBefore.status).toBe(200);
+    const ownerBeforeBody = (await ownerBefore.json()) as {
+      operator_history: Array<{ phase: string; delegate: string; delegated_amount: string }>;
+    };
+    expect(ownerBeforeBody.operator_history).toMatchObject([
+      { phase: 'prepared', delegate: DELEGATE, delegated_amount: '250000' },
+    ]);
+
+    const publicBefore = await rig.app.fetch(new Request(`http://test.local/v1/identity/${MINT}`));
+    const publicBeforeBody = (await publicBefore.json()) as { operator_history: unknown[] };
+    expect(publicBeforeBody.operator_history).toEqual([]);
+
+    await markConfirmed(rig.db, eventId);
+    const publicAfter = await rig.app.fetch(new Request(`http://test.local/v1/identity/${MINT}`));
+    const publicAfterBody = (await publicAfter.json()) as {
+      operator_history: Array<{ phase: string; delegate: string; token_mint: string }>;
+    };
+    expect(publicAfterBody.operator_history).toMatchObject([
+      { phase: 'confirmed', delegate: DELEGATE, token_mint: USDC_MINT },
+    ]);
   });
 });

@@ -17,6 +17,7 @@ import {
   upsertAgentIdentityProfile,
   type IdentityCapabilityCard,
 } from '../storage/agent-identity.js';
+import { listOperatorHistory, type OperatorHistoryRow } from '../storage/operator-history.js';
 import { getPlatformAgent } from '../storage/platform-agents.js';
 import type { CacheClient } from '../storage/redis.js';
 import { execute, type DbClient } from '../storage/turso.js';
@@ -76,6 +77,30 @@ const ClaimSchema = z
   })
   .openapi('IdentityClaim');
 
+const OperatorHistorySchema = z
+  .object({
+    event_id: z.string(),
+    kind: z.enum([
+      'executive_register',
+      'executive_delegate',
+      'delegation_set',
+      'delegation_revoke',
+    ]),
+    phase: z.enum(['prepared', 'submitted', 'confirmed', 'failed']),
+    actor: z.string().nullable(),
+    delegate: PubkeySchema.nullable(),
+    executive: PubkeySchema.nullable(),
+    token_mint: PubkeySchema.nullable(),
+    source_token_account: PubkeySchema.nullable(),
+    delegated_amount: z.string().nullable(),
+    signature: z.string().nullable(),
+    event_source: z.string(),
+    created_at: z.string(),
+    confirmed_at: z.string().nullable(),
+    failed_at: z.string().nullable(),
+  })
+  .openapi('OperatorHistoryEntry');
+
 const PublicIdentityProfileSchema = z
   .object({
     mint: PubkeySchema,
@@ -89,7 +114,7 @@ const PublicIdentityProfileSchema = z
     verified_domains: z.array(z.string()),
     capability_cards: z.array(CapabilityCardSchema),
     claims: z.array(ClaimSchema),
-    operator_history: z.array(z.unknown()),
+    operator_history: z.array(OperatorHistorySchema),
     reputation: z.object({
       settled_calls: z.number().int(),
       denied_calls: z.number().int(),
@@ -141,6 +166,26 @@ function cardToWire(card: IdentityCapabilityCard) {
   };
 }
 
+function operatorHistoryToWire(row: OperatorHistoryRow, opts: { publicView?: boolean } = {}) {
+  const actor = opts.publicView && row.actor?.startsWith('api_key:') ? null : row.actor;
+  return {
+    event_id: row.eventId,
+    kind: row.kind,
+    phase: row.phase,
+    actor,
+    delegate: row.delegate,
+    executive: row.executive,
+    token_mint: row.tokenMint,
+    source_token_account: row.sourceTokenAccount,
+    delegated_amount: row.delegatedAmount,
+    signature: row.signature,
+    event_source: row.eventSource,
+    created_at: row.createdAt,
+    confirmed_at: row.confirmedAt,
+    failed_at: row.failedAt,
+  };
+}
+
 async function reputationSummary(db: DbClient, mint: string, network: SvmNetwork) {
   const res = await execute(db, `SELECT decision FROM receipts WHERE network = ? AND agent = ?`, [
     network,
@@ -165,11 +210,12 @@ async function reputationSummary(db: DbClient, mint: string, network: SvmNetwork
 async function publicProfile(db: DbClient, mint: string) {
   const agent = await getPlatformAgent(db, mint);
   if (!agent) throw notFound('agent identity not found');
-  const [profile, domains, claims, reputation] = await Promise.all([
+  const [profile, domains, claims, reputation, operatorHistory] = await Promise.all([
     getAgentIdentityProfile(db, mint),
     listAgentIdentityDomains(db, mint),
     listAgentIdentityClaims(db, mint),
     reputationSummary(db, mint, agent.network),
+    listOperatorHistory(db, mint, { publicOnly: true }),
   ]);
   const now = Date.now();
   return {
@@ -204,7 +250,9 @@ async function publicProfile(db: DbClient, mint: string) {
         revoked_at: claim.revokedAt,
         created_at: claim.createdAt,
       })),
-    operator_history: [],
+    operator_history: operatorHistory.map((row) =>
+      operatorHistoryToWire(row, { publicView: true }),
+    ),
     reputation,
   };
 }
@@ -212,11 +260,12 @@ async function publicProfile(db: DbClient, mint: string) {
 async function adminProfile(db: DbClient, mint: string) {
   const agent = await getPlatformAgent(db, mint);
   if (!agent) throw notFound('agent identity not found');
-  const [profile, domains, claims, reputation] = await Promise.all([
+  const [profile, domains, claims, reputation, operatorHistory] = await Promise.all([
     getAgentIdentityProfile(db, mint),
     listAgentIdentityDomains(db, mint),
     listAgentIdentityClaims(db, mint),
     reputationSummary(db, mint, agent.network),
+    listOperatorHistory(db, mint),
   ]);
   return {
     mint: agent.mint,
@@ -244,7 +293,7 @@ async function adminProfile(db: DbClient, mint: string) {
         revoked_at: claim.revokedAt,
         created_at: claim.createdAt,
       })),
-    operator_history: [],
+    operator_history: operatorHistory.map((row) => operatorHistoryToWire(row)),
     reputation,
   };
 }

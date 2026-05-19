@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { settlementTxSig } from '@leashmarket/schemas';
-import { BadgeCheck, Bot, Coins, IdCard, Receipt as ReceiptIcon } from 'lucide-react';
+import { BadgeCheck, Bot, Coins, IdCard, Receipt as ReceiptIcon, ShieldCheck } from 'lucide-react';
 import {
   DbUnavailableError,
   getCounterpartiesForTxs,
@@ -309,10 +309,65 @@ function IdentityProfile({ data }: { data: PublicIdentityProfile }) {
               </ul>
             )}
           </div>
+
+          <div className="space-y-2 lg:col-span-2">
+            <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[--color-fg-subtle]">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Operator history
+            </h3>
+            {data.operator_history.length === 0 ? (
+              <p className="text-sm text-[--color-fg-muted]">
+                No public confirmed operator changes yet.
+              </p>
+            ) : (
+              <ul className="grid gap-2 lg:grid-cols-2">
+                {data.operator_history.map((entry) => (
+                  <li
+                    key={entry.event_id}
+                    className="rounded-xl border border-[--color-border] bg-[--color-bg-elev]/40 px-3 py-2"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-medium">
+                        {operatorHistoryLabel(entry.kind)}
+                      </span>
+                      <span className="rounded-full bg-[--color-brand-soft]/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-[--color-brand-strong]">
+                        {entry.phase}
+                      </span>
+                    </div>
+                    <div className="mt-1 grid gap-1 text-[11px] text-[--color-fg-muted] sm:grid-cols-2">
+                      {entry.delegate ? <span>Delegate {shortAddress(entry.delegate)}</span> : null}
+                      {entry.executive ? (
+                        <span>Executive {shortAddress(entry.executive)}</span>
+                      ) : null}
+                      {entry.token_mint ? <span>Mint {shortAddress(entry.token_mint)}</span> : null}
+                      {entry.signature ? <span>Tx {shortAddress(entry.signature)}</span> : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
     </section>
   );
+}
+
+function operatorHistoryLabel(kind: PublicIdentityProfile['operator_history'][number]['kind']) {
+  switch (kind) {
+    case 'executive_register':
+      return 'Executive registered';
+    case 'executive_delegate':
+      return 'Executive delegated';
+    case 'delegation_set':
+      return 'Spend delegation set';
+    case 'delegation_revoke':
+      return 'Spend delegation revoked';
+  }
+}
+
+function shortAddress(value: string): string {
+  return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value;
 }
 
 function ProfileMetric({ label, value }: { label: string; value: string }) {

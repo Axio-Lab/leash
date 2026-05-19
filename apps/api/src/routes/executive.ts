@@ -71,6 +71,12 @@ export function buildExecutiveRoutes(deps: {
         apiKeyId: apiKey.id,
         clientReference: body.client_reference ?? c.var.clientReference ?? null,
         agentAsset: mint,
+        metadata: {
+          actor: body.authority ?? body.payer,
+          payer: body.payer,
+          ...(body.authority ? { authority: body.authority } : {}),
+          profile: prepared.profile,
+        },
         builder: prepared.builder,
         echo: { profile: prepared.profile },
       });
@@ -137,6 +143,15 @@ export function buildExecutiveRoutes(deps: {
         apiKeyId: apiKey.id,
         clientReference: body.client_reference ?? c.var.clientReference ?? null,
         agentAsset: mint,
+        metadata: {
+          actor: body.authority ?? body.payer,
+          payer: body.payer,
+          ...(body.authority ? { authority: body.authority } : {}),
+          executive_authority: body.executive_authority,
+          delegate_record: prepared.delegateRecord,
+          agent_identity: prepared.agentIdentity,
+          executive_profile: prepared.executiveProfile,
+        },
         builder: prepared.builder,
         echo: {
           delegate_record: prepared.delegateRecord,

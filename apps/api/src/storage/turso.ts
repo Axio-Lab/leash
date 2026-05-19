@@ -382,6 +382,30 @@ const SCHEMA_SQL: readonly string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_agent_identity_claims_agent ON agent_identity_claims(agent_mint, visibility, revoked_at)`,
 
+  `CREATE TABLE IF NOT EXISTS agent_operator_history (
+    event_id             TEXT PRIMARY KEY,
+    agent_mint           TEXT NOT NULL,
+    network              TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    kind                 TEXT NOT NULL CHECK (kind IN ('executive_register','executive_delegate','delegation_set','delegation_revoke')),
+    phase                TEXT NOT NULL CHECK (phase IN ('prepared','submitted','confirmed','failed')),
+    actor                TEXT,
+    delegate             TEXT,
+    executive            TEXT,
+    token_mint           TEXT,
+    source_token_account TEXT,
+    delegated_amount     TEXT,
+    signature            TEXT,
+    event_source         TEXT NOT NULL DEFAULT 'api',
+    metadata_json        TEXT NOT NULL DEFAULT '{}',
+    created_at           TEXT NOT NULL,
+    confirmed_at         TEXT,
+    failed_at            TEXT,
+    updated_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (agent_mint) REFERENCES agents(mint)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_operator_history_agent ON agent_operator_history(agent_mint, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_operator_history_public ON agent_operator_history(agent_mint, phase, created_at DESC)`,
+
   // ─────────────────────────────────────────────────────────────────────
   // Tasks (v8) — one row per "do this" the agent is given. The
   // agent-runtime worker claims pending tasks via UPDATE WHERE status

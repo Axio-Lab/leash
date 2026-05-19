@@ -46,13 +46,30 @@ type IdentityClaim = {
   created_at: string;
 };
 
+type OperatorHistoryEntry = {
+  event_id: string;
+  kind: 'executive_register' | 'executive_delegate' | 'delegation_set' | 'delegation_revoke';
+  phase: 'prepared' | 'submitted' | 'confirmed' | 'failed';
+  actor: string | null;
+  delegate: string | null;
+  executive: string | null;
+  token_mint: string | null;
+  source_token_account: string | null;
+  delegated_amount: string | null;
+  signature: string | null;
+  event_source: string;
+  created_at: string;
+  confirmed_at: string | null;
+  failed_at: string | null;
+};
+
 type IdentityProfile = {
   mint: string;
   handle: string | null;
   verified_domains: string[];
   capability_cards: CapabilityCard[];
   claims: IdentityClaim[];
-  operator_history: unknown[];
+  operator_history: OperatorHistoryEntry[];
   reputation: { settled_calls: number; denied_calls: number; rating: number };
 };
 
@@ -450,10 +467,53 @@ export function IdentityProfilePanel({ agentMint }: { agentMint: string }) {
           <ShieldCheckIcon className="size-3.5" />
           Operator history
         </div>
-        <p className="mt-2 text-xs text-fg-muted">No delegated operator changes recorded yet.</p>
+        {(data?.operator_history ?? []).length === 0 ? (
+          <p className="mt-2 text-xs text-fg-muted">No delegated operator changes recorded yet.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {data!.operator_history.map((entry) => (
+              <li
+                key={entry.event_id}
+                className="rounded-lg border border-border/60 bg-bg-elev/40 px-3 py-2"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{operatorHistoryLabel(entry.kind)}</span>
+                  <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-brand">
+                    {entry.phase}
+                  </span>
+                </div>
+                <div className="mt-1 grid gap-1 text-[11px] text-fg-muted sm:grid-cols-2">
+                  {entry.delegate ? <span>Delegate {shortAddress(entry.delegate)}</span> : null}
+                  {entry.executive ? <span>Executive {shortAddress(entry.executive)}</span> : null}
+                  {entry.token_mint ? <span>Mint {shortAddress(entry.token_mint)}</span> : null}
+                  {entry.delegated_amount ? <span>Amount {entry.delegated_amount}</span> : null}
+                  {entry.signature ? <span>Tx {shortAddress(entry.signature)}</span> : null}
+                  <span>{new Date(entry.created_at).toLocaleString()}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </section>
   );
+}
+
+function operatorHistoryLabel(kind: OperatorHistoryEntry['kind']): string {
+  switch (kind) {
+    case 'executive_register':
+      return 'Executive registered';
+    case 'executive_delegate':
+      return 'Executive delegated';
+    case 'delegation_set':
+      return 'Spend delegation set';
+    case 'delegation_revoke':
+      return 'Spend delegation revoked';
+  }
+}
+
+function shortAddress(value: string): string {
+  return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

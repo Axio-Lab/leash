@@ -32,6 +32,7 @@ import {
   listRecentReceipts as apiListRecentReceipts,
   listEvents as apiListEvents,
   listEventsForSignature as apiListEventsForSignature,
+  listOperatorHistory as apiListOperatorHistory,
   listReceipts as apiListReceipts,
   runMigrations,
   type EventKind,
@@ -234,6 +235,7 @@ export async function getPublicIdentityProfile(
     const cards = parseJsonArray<PublicIdentityProfile['capability_cards'][number]>(
       profileRow?.capability_cards,
     ).filter((card) => card.visibility === 'public');
+    const operatorHistory = await apiListOperatorHistory(db, mint, { publicOnly: true });
 
     return {
       mint: String(agentRow.mint),
@@ -253,6 +255,22 @@ export async function getPublicIdentityProfile(
         evidence_url: row.evidence_url == null ? null : String(row.evidence_url),
         signature: String(row.signature),
         created_at: String(row.created_at),
+      })),
+      operator_history: operatorHistory.map((row) => ({
+        event_id: row.eventId,
+        kind: row.kind,
+        phase: row.phase,
+        actor: row.actor?.startsWith('api_key:') ? null : row.actor,
+        delegate: row.delegate,
+        executive: row.executive,
+        token_mint: row.tokenMint,
+        source_token_account: row.sourceTokenAccount,
+        delegated_amount: row.delegatedAmount,
+        signature: row.signature,
+        event_source: row.eventSource,
+        created_at: row.createdAt,
+        confirmed_at: row.confirmedAt,
+        failed_at: row.failedAt,
       })),
       reputation: {
         settled_calls: settled,

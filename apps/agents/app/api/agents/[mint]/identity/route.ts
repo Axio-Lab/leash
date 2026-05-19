@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { agentOwnerErrorResponse, loadAgentForOwner } from '@/lib/agent-ownership';
 import { getServerEnv } from '@/lib/env';
 import { requirePrivySession } from '@/lib/privy-server';
 
@@ -8,6 +9,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ min
   if (!session) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
   const { mint } = await params;
   const env = getServerEnv();
+  const ownership = await loadAgentForOwner({
+    mint,
+    privyId: session.privyId,
+    leashApiUrl: env.leashApiUrl,
+    adminSecret: env.leashApiAdminSecret,
+  });
+  if (!ownership.ok) return agentOwnerErrorResponse(ownership);
+
   try {
     const upstream = await fetch(
       `${env.leashApiUrl}/v1/platform/agents/${encodeURIComponent(mint)}/identity`,
@@ -36,6 +45,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ mint
   if (!body) return NextResponse.json({ error: 'invalid_request' }, { status: 400 });
 
   const env = getServerEnv();
+  const ownership = await loadAgentForOwner({
+    mint,
+    privyId: session.privyId,
+    leashApiUrl: env.leashApiUrl,
+    adminSecret: env.leashApiAdminSecret,
+  });
+  if (!ownership.ok) return agentOwnerErrorResponse(ownership);
+
   try {
     const upstream = await fetch(
       `${env.leashApiUrl}/v1/platform/agents/${encodeURIComponent(mint)}/identity`,
