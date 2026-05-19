@@ -102,7 +102,7 @@ const capabilityCards = [
   },
   {
     label: 'Sources',
-    value: 'Connections',
+    value: 'Data sources',
     detail: 'Use connected apps as the input layer for each automation.',
     icon: DatabaseIcon,
   },
@@ -579,8 +579,8 @@ export function AutomationDashboard({
                 ) : null}
                 <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
-                  Configure when the agent runs, which connections it can use, and how the result is
-                  stored or reported.
+                  Configure when the agent runs, which data sources it can use, and how the result
+                  is stored or reported.
                 </p>
               </div>
               {onPromptMode ? (
@@ -641,7 +641,7 @@ export function AutomationDashboard({
             </div>
             <h1 className="text-2xl font-semibold tracking-tight">Agent automations</h1>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-fg-muted">
-              Run scheduled, webhook, and event-triggered work with connected tools as sources and
+              Run scheduled, webhook, and event-triggered work with connected data sources and
               optional report delivery.
             </p>
           </div>
@@ -673,7 +673,7 @@ export function AutomationDashboard({
                 href="/settings/connections"
                 className="inline-flex min-h-10 items-center justify-center rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg-muted hover:border-border-strong hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg-elev"
               >
-                Manage connections
+                Manage data sources
               </Link>
             </div>
 
@@ -780,7 +780,7 @@ function EmptyAutomationState() {
         </span>
         <h3 className="mt-4 text-base font-medium">Build the first background run</h3>
         <p className="mt-2 text-sm leading-6 text-fg-muted">
-          Start with a schedule, webhook, or event trigger, then choose which connections the agent
+          Start with a schedule, webhook, or event trigger, then choose which data sources the agent
           can read and where reports should go.
         </p>
         <Button asChild className="mt-5 min-h-10">
@@ -1022,20 +1022,20 @@ function AutomationEditor({
             >
               <option value="treasury.low_balance">Treasury low balance</option>
               <option value="receipt.settled">Receipt settled</option>
-              <option value="connection.message">Connection message</option>
+              <option value="connection.message">Data source message</option>
             </select>
           </Field>
         )}
 
         <Field
           label="Data sources"
-          hint="Only selected connected toolkits are exposed to this automation run."
+          hint="Only selected connected data sources are exposed to this automation run."
         >
           {activeToolkits.length === 0 ? (
             <div className="rounded-md border border-border bg-bg px-3 py-3 text-xs leading-5 text-fg-muted">
-              No connected toolkits yet.{' '}
+              No connected data sources yet.{' '}
               <Link href="/settings/connections" className="text-brand hover:underline">
-                Add connections
+                Add data sources
               </Link>
             </div>
           ) : (

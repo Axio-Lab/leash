@@ -48,10 +48,10 @@ export function ExternalConnectionsTable({
     <div className="rounded-lg border border-border bg-bg-elev overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="font-medium text-sm">External connections</div>
+          <div className="font-medium text-sm">Control channels</div>
           <div className="mt-0.5 text-xs text-fg-muted">
-            Talk to your agent from Telegram or WhatsApp. One device per connection, bound to your
-            own chat.
+            Command your agent from Telegram or WhatsApp. One device per channel, bound to your own
+            chat.
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -72,13 +72,13 @@ export function ExternalConnectionsTable({
 
       {isLoading ? (
         <div className="flex items-center gap-2 px-4 py-8 text-sm text-fg-muted">
-          <Spinner size="sm" /> Loading connections
+          <Spinner size="sm" /> Loading channels
         </div>
       ) : error ? (
         <div className="px-4 py-8 text-sm text-danger">{(error as Error).message}</div>
       ) : items.length === 0 ? (
         <div className="space-y-1 px-4 py-10 text-center text-sm text-fg-muted">
-          <p>No external chat connections yet.</p>
+          <p>No control channels yet.</p>
         </div>
       ) : (
         <ul className="divide-y divide-border">

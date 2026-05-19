@@ -17,13 +17,13 @@ export function LiveStats() {
   const { data } = useSWR('/api/stats', fetcher, { refreshInterval: 30_000 });
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
-      <Stat label="Receipts" value={data ? data.receipts_total.toLocaleString() : '—'} />
+      <Stat label="Proof receipts" value={data ? data.receipts_total.toLocaleString() : '—'} />
       <Stat
         label="USDC settled"
         value={data ? `$${Math.round(Number(data.volume_total_usdc) || 0).toLocaleString()}` : '—'}
       />
       <Stat label="Active agents" value={data ? data.active_agents.toLocaleString() : '—'} />
-      <Stat label="Live tools" value={data ? data.active_listings.toLocaleString() : '—'} />
+      <Stat label="Live capabilities" value={data ? data.active_listings.toLocaleString() : '—'} />
     </div>
   );
 }

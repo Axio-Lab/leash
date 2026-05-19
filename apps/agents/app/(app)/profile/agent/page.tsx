@@ -210,12 +210,12 @@ export default function ProfileAgentPage() {
         </div>
       </section>
 
-      {/* On-chain identity */}
+      {/* Agent identity */}
       <section className="rounded-xl border border-border bg-bg-elev/60 p-4 sm:p-5 space-y-3">
         <div>
-          <h3 className="text-sm font-semibold tracking-tight">On-chain identity</h3>
+          <h3 className="text-sm font-semibold tracking-tight">Agent identity</h3>
           <p className="text-xs text-fg-muted mt-0.5">
-            The MPL-Core asset and the stablecoin treasury for this agent.
+            The MPL-Core identity and stablecoin treasury for this agent.
           </p>
         </div>
         <dl className="grid gap-3 sm:grid-cols-2">
