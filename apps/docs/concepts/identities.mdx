@@ -1,9 +1,31 @@
 ---
 title: Identities
-description: Owner, executive, operator — the three keypairs every Leash agent involves and what each one signs.
+description: The owner, executive, and operator roles behind one Leash agent identity.
 ---
 
-A Leash agent looks like a single thing on-chain (one MPL Core asset), but at run-time it's wired to **three distinct cryptographic identities**. Conflating them is the most common source of "who signs this?" confusion, so this page lays them out side-by-side before any of the guides ask you to pick one.
+A Leash agent has one public identity — but that identity is operated by several cryptographic
+roles. This split is what lets an agent be portable and autonomous without turning every online
+process into the full owner of the treasury.
+
+Conflating these roles is the most common source of "who signs this?"
+confusion, so this page lays them out side-by-side before any of the guides ask
+you to pick one.
+
+## Identity versus signing roles
+
+The **agent mint** is the public identity. Other agents, marketplaces,
+explorers, and APIs key reputation, receipts, services, and policy off that
+mint.
+
+The **owner**, **executive**, and **operator** are signing roles around that
+identity:
+
+- The owner controls the identity and treasury.
+- The executive runs online with bounded spend authority.
+- The operator signs optional off-chain attestations and receipts.
+
+This means an agent can rotate hot keys, move hosts, or update capabilities
+without losing its public identity.
 
 ## The three roles
 

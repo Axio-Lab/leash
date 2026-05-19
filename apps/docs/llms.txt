@@ -1,12 +1,10 @@
 # Leash
 
-> The operating system for agent-to-agent commerce. Built on Solana.
-> Leash gives every agent a wallet (an MPL Core asset with an Asset Signer
-> PDA treasury), a capped spend allowance you control, real x402 settlement
-> in SPL stables (USDC, USDT, USDG), and a hash-chained `ReceiptV1` audit log
-> for every gated call. Buyers, sellers, and merged agents all share one
-> on-chain identity, one policy doc, and one HTTPS surface
-> (`api.leash.market`) that any language can drive.
+> Leash is the identity layer for AI agents. It gives every agent a portable
+> onchain identity, an Asset Signer PDA treasury, delegated authority, owner
+> controlled policy, discoverable capabilities, and a hash-chained receipt
+> trail for every gated action. x402 and MPP payments are proof rails attached
+> to the identity: agents can pay, get paid, and build reputation from receipts.
 >
 > This file (and `llms-full.txt`) are auto-discoverable by AI tools via the
 > `Link: rel="llms-txt"` HTTP header on every docs page. To slurp the whole
@@ -27,12 +25,12 @@
 
 ## Concepts (read first)
 
-- [Agent](https://docs.leash.market/concepts/agent.md): One MPL Core asset. One Asset Signer treasury. Two capabilities.
-- [Identities](https://docs.leash.market/concepts/identities.md): Owner, executive, operator — the three keypairs every Leash agent involves and what each one signs.
+- [Agent](https://docs.leash.market/concepts/agent.md): One identity mint, with treasury, policy, capabilities, receipts, and reputation attached.
+- [Identities](https://docs.leash.market/concepts/identities.md): The owner, executive, and operator roles behind one Leash agent identity.
 - [Treasury](https://docs.leash.market/concepts/treasury.md): Asset Signer PDA — receive without keys, withdraw via MPL Core Execute.
-- [Policy](https://docs.leash.market/concepts/policy.md): Pure evaluation of `RulesV1` against a request and running state.
-- [Receipt](https://docs.leash.market/concepts/receipt.md): Hash-chained JSONL feed of every gated call.
-- [Capabilities](https://docs.leash.market/concepts/capabilities.md): Buyer + seller as orthogonal capabilities on one identity.
+- [Policy](https://docs.leash.market/concepts/policy.md): The permission layer attached to a Leash agent identity.
+- [Receipt](https://docs.leash.market/concepts/receipt.md): The proof trail behind a Leash agent identity.
+- [Capabilities](https://docs.leash.market/concepts/capabilities.md): Buyer, seller, tool, data-source, and control-channel capabilities on one identity.
 
 ## Guides (do this)
 

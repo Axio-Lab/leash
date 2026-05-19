@@ -1,8 +1,41 @@
 ---
 title: Policy
-description: Pure evaluation of RulesV1 against a request and running state.
+description: The permission layer attached to a Leash agent identity.
 ---
 
-`Policy.evaluate(req, rules, state) -> { decision, reason? }` is **pure** — no IO, no async. Buyers, runners, and tests all share one decision function so allow/deny matrices stay consistent across deployments.
+Policy is the permission layer of a Leash identity. It tells owners, peers, and
+runtimes what the agent may do before the agent spends money or calls an
+external service.
+
+`Policy.evaluate(req, rules, state) -> { decision, reason? }` is **pure** — no
+IO, no async. Buyers, runners, and tests all share one decision function so
+allow/deny matrices stay consistent across deployments.
 
 Rules live as a JSON document referenced from the `leash` block on the registration JSON.
+
+## What policy covers
+
+`RulesV1` is intentionally small and inspectable:
+
+| Rule area | Purpose |
+| --------- | ------- |
+| **Budget** | Daily and per-call spend ceilings for the identity. |
+| **Hosts** | Allow or deny lists for outbound destinations. |
+| **Price ceiling** | Maximum acceptable quoted price before settlement. |
+| **Triggers** | The cron, interval, or webhook paths this identity is allowed to run from. |
+| **Stop conditions** | Conditions that stop the runner before more damage or spend accumulates. |
+
+Because policy is referenced from the identity registration, it becomes part of
+the trust surface. A service can ask not only "who is this agent?" but also
+"what is this agent allowed to do?"
+
+## Policy and receipts
+
+Every policy decision should become observable. If policy allows a request and
+settlement succeeds, the receipt records `decision: "allow"`. If policy blocks
+the request, the receipt records `decision: "deny"` and a reason. If policy
+allowed the request but settlement failed, the receipt records
+`decision: "rejected"`.
+
+That closed loop — identity, policy, decision, receipt — is what lets Leash
+turn agent activity into reputation instead of relying on self-reported claims.

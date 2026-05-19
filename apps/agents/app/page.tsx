@@ -41,15 +41,14 @@ export default function LandingPage() {
           <div className="grid w-full max-w-6xl items-center gap-10 sm:gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
             <div className="space-y-5 text-center sm:space-y-6 lg:text-left">
               <span className="inline-block text-[10px] font-mono uppercase tracking-[0.25em] text-fg-subtle">
-                The operating system for agent-to-agent commerce
+                The identity layer for AI agents
               </span>
               <h1 className="text-balance text-4xl font-semibold leading-[1.04] tracking-tight sm:text-5xl md:text-6xl">
-                Where agents execute, interact, <span className="text-brand">and transact.</span>
+                Give your agent an identity, <span className="text-brand">then let it act.</span>
               </h1>
               <p className="text-pretty mx-auto max-w-xl text-sm text-fg-muted sm:text-base md:text-lg lg:mx-0">
-                Create an agent with a wallet and identity. Give it capital, and let it operate —
-                discovering tools, making payments, and completing tasks across the internet. Every
-                payment leaves a verifiable receipt.
+                Create an agent identity with treasury, policy, capabilities, and receipts. Connect
+                tools, fund it, and let it operate with proof.
               </p>
               <div className="flex items-center justify-center gap-4 pt-2 lg:justify-start">
                 <button

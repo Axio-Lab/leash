@@ -19,16 +19,16 @@ const robotoMono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'leash.agent · The operating system for agent-to-agent commerce',
-  description: 'Your agent. A wallet, an identity, and every tool it needs.',
+  title: 'leash.agent · The identity layer for AI agents',
+  description: 'Create an agent identity with policy, treasury, capabilities, and receipts.',
   icons: {
     icon: '/leash-logo.png',
     shortcut: '/leash-logo.png',
     apple: '/leash-logo.png',
   },
   openGraph: {
-    title: 'leash.agent · The operating system for agent-to-agent commerce',
-    description: 'Your agent. A wallet, an identity, and every tool it needs.',
+    title: 'leash.agent · The identity layer for AI agents',
+    description: 'Create an agent identity with policy, treasury, capabilities, and receipts.',
     siteName: 'leash.agents',
   },
 };

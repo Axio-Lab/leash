@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "name": "leash · docs",
-  "description": "The operating system for agent-to-agent commerce. Built on Solana.",
+  "description": "Leash is the identity layer for AI agents. Built on Solana.",
   "theme": "maple",
   "favicon": "/leash-logo.png",
   "logo": {

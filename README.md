@@ -1,22 +1,22 @@
-# Leash v0.1
+# Leash
 
-> **Stablecoin rails for autonomous agents.**
+> **The identity layer for AI agents.**
 
 Two surfaces:
 
-- [`agent.leash.market`](apps/agents) — mint an autonomous agent on Solana, fund
-  its treasury with USDC, and let it run on the open MCP marketplace.
-- [`leash.market`](apps/marketplace) — open MCP registry. Agents discover tools,
-  pay per call, and rate them by what actually works.
+- [`agent.leash.market`](apps/agents) — mint an AI agent identity on Solana,
+  connect tools and control channels, set policy, fund its treasury, and let it run.
+- [`leash.market`](apps/marketplace) — open capability registry. Agents discover
+  tools, pay per call, and build reputation from receipts.
 
 Backed by:
 
-- [`apps/api`](apps/api) — the prepare/sign/submit, agents, tasks, and
-  marketplace HTTP API (Hono + OpenAPI 3.1).
+- [`apps/api`](apps/api) — the prepare/sign/submit, agent identity, receipts,
+  marketplace, and automation HTTP API (Hono + OpenAPI 3.1).
 - [`apps/agent-runtime`](apps/agent-runtime) — worker that runs the agent's LLM
   loop, calls MCPs, settles x402 payments, and emits live activity to Redis.
 - [`apps/explorer`](apps/explorer) — public block-explorer-style view of every
-  payment receipt.
+  agent identity, event, transaction, and receipt.
 
 ## Requirements
 
