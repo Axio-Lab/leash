@@ -19,6 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { OnboardingGate } from '@/components/chat/onboarding-gate';
+import { IdentityProfilePanel } from '@/components/profile/identity-profile-panel';
 import { TreasuryPanel } from '@/components/profile/treasury-panel';
 import { getStoredActiveAgentMint, setStoredActiveAgentMint } from '@/lib/active-agent';
 import { NEXT_PUBLIC_EXPLORER_URL, SOLANA_NETWORK } from '@/lib/env';
@@ -231,6 +232,8 @@ export default function ProfileAgentPage() {
           />
         </dl>
       </section>
+
+      <IdentityProfilePanel agentMint={selected.mint!} />
 
       {/* Treasury balance + withdraw */}
       <TreasuryPanel agentMint={selected.mint!} ownerWallet={wallet} />

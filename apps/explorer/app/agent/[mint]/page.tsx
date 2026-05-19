@@ -1,12 +1,19 @@
 import { notFound } from 'next/navigation';
 import { settlementTxSig } from '@leashmarket/schemas';
-import { Bot, Coins, Receipt as ReceiptIcon } from 'lucide-react';
-import { DbUnavailableError, getCounterpartiesForTxs, listEvents, listReceipts } from '@/lib/db';
+import { BadgeCheck, Bot, Coins, IdCard, Receipt as ReceiptIcon } from 'lucide-react';
+import {
+  DbUnavailableError,
+  getCounterpartiesForTxs,
+  getPublicIdentityProfile,
+  listEvents,
+  listReceipts,
+} from '@/lib/db';
 import { probeAgentOnOtherNetwork } from '@/lib/cross-network';
 import { RpcUnavailableError, getAgentSummaryFor, getTreasuryBalancesFor } from '@/lib/rpc';
 import type {
   AgentSummary,
   EventPage,
+  PublicIdentityProfile,
   ReceiptPage,
   ReceiptRow,
   TreasuryBalances,
@@ -62,11 +69,12 @@ export default async function AgentPage({ params }: Props) {
   const { mint } = await params;
   const network = await getNetwork();
 
-  const [summaryRes, balancesRes, eventsRes, receiptsRes] = await Promise.all([
+  const [summaryRes, balancesRes, eventsRes, receiptsRes, identityRes] = await Promise.all([
     safeRpc<AgentSummary>(() => getAgentSummaryFor(network, mint)),
     safeRpc<TreasuryBalances>(() => getTreasuryBalancesFor(network, mint)),
     safeDb<EventPage>(() => listEvents({ network, agent: mint, limit: 25 })),
     safeDb<ReceiptPage>(() => listReceipts({ network, agent: mint, limit: 25 })),
+    safeDb<PublicIdentityProfile | null>(() => getPublicIdentityProfile(network, mint)),
   ]);
 
   if (!summaryRes.ok && !eventsRes.ok && !receiptsRes.ok) {
@@ -147,6 +155,8 @@ export default async function AgentPage({ params }: Props) {
         ) : null}
       </header>
 
+      {identityRes.ok && identityRes.data ? <IdentityProfile data={identityRes.data} /> : null}
+
       <section className="space-y-3">
         <h2 className="inline-flex items-center gap-2 text-lg font-semibold tracking-tight">
           <Coins className="h-4 w-4 text-[--color-brand]" />
@@ -191,6 +201,127 @@ export default async function AgentPage({ params }: Props) {
           <DbUnreachable network={network} message={receiptsRes.message} />
         )}
       </section>
+    </div>
+  );
+}
+
+function IdentityProfile({ data }: { data: PublicIdentityProfile }) {
+  return (
+    <section className="space-y-3">
+      <h2 className="inline-flex items-center gap-2 text-lg font-semibold tracking-tight">
+        <IdCard className="h-4 w-4 text-[--color-brand]" />
+        Public identity
+      </h2>
+      <div className="card-glow space-y-5 px-5 py-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              {data.image_url ? (
+                <img
+                  src={data.image_url}
+                  alt=""
+                  className="h-10 w-10 rounded-xl border border-[--color-border] object-cover"
+                />
+              ) : null}
+              <div>
+                <h3 className="text-base font-semibold tracking-tight">{data.name}</h3>
+                {data.handle ? (
+                  <p className="font-mono text-xs text-[--color-brand-strong]">@{data.handle}</p>
+                ) : null}
+              </div>
+            </div>
+            {data.description ? (
+              <p className="mt-3 max-w-2xl text-sm text-[--color-fg-muted]">{data.description}</p>
+            ) : null}
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <ProfileMetric label="Settled" value={String(data.reputation.settled_calls)} />
+            <ProfileMetric label="Denied" value={String(data.reputation.denied_calls)} />
+            <ProfileMetric label="Rating" value={data.reputation.rating.toFixed(4)} />
+          </div>
+        </div>
+
+        {data.verified_domains.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {data.verified_domains.map((domain) => (
+              <span
+                key={domain}
+                className="inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[11px] text-emerald-200"
+              >
+                <BadgeCheck className="h-3 w-3" />
+                {domain}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--color-fg-subtle]">
+              Capability cards
+            </h3>
+            {data.capability_cards.length === 0 ? (
+              <p className="text-sm text-[--color-fg-muted]">No public capability cards yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {data.capability_cards.map((card) => (
+                  <li
+                    key={card.id}
+                    className="rounded-xl border border-[--color-border] bg-[--color-bg-elev]/40 px-3 py-2"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{card.title}</span>
+                      <span className="rounded-full bg-[--color-brand-soft]/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-[--color-brand-strong]">
+                        {card.kind}
+                      </span>
+                    </div>
+                    {card.endpoint ? (
+                      <p className="mt-1 break-all font-mono text-[11px] text-[--color-fg-muted]">
+                        {card.endpoint}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-[--color-fg-subtle]">
+              Signed claims
+            </h3>
+            {data.claims.length === 0 ? (
+              <p className="text-sm text-[--color-fg-muted]">No public signed claims yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {data.claims.map((claim) => (
+                  <li
+                    key={claim.id}
+                    className="rounded-xl border border-[--color-border] bg-[--color-bg-elev]/40 px-3 py-2"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-medium">{claim.type}</span>
+                      <span className="text-[11px] text-[--color-fg-subtle]">{claim.issuer}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-[--color-fg-muted]">{claim.value}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ProfileMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-[--color-border] bg-[--color-bg-elev]/40 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-[0.16em] text-[--color-fg-subtle]">
+        {label}
+      </div>
+      <div className="mt-1 font-mono text-sm text-[--color-fg]">{value}</div>
     </div>
   );
 }

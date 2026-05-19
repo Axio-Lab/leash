@@ -91,7 +91,10 @@ describe('agent identity profile endpoints', () => {
       capability_cards: Array<{ title: string; visibility: string }>;
     };
     expect(profile.handle).toBe('payce-demo');
-    expect(profile.capability_cards.map((card) => card.title)).toEqual(['Email sender']);
+    expect(profile.capability_cards.map((card) => card.title)).toEqual([
+      'Email sender',
+      'Private CRM',
+    ]);
 
     const resolve = await rig.app.fetch(
       new Request('http://test.local/v1/identity/resolve?handle=payce-demo'),

@@ -41,6 +41,43 @@ export type AgentSummary = {
   token: { has_token: boolean; mint: string | null; source: 'v1' | 'v2' | 'none' };
 };
 
+export type PublicIdentityProfile = {
+  mint: string;
+  network: 'solana-devnet' | 'solana-mainnet';
+  handle: string | null;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  treasury: string;
+  verified_domains: string[];
+  capability_cards: Array<{
+    id: string;
+    kind: string;
+    title: string;
+    description?: string;
+    source?: string;
+    slug?: string;
+    endpoint?: string;
+    tags: string[];
+    protocols: string[];
+    visibility: 'public' | 'private';
+  }>;
+  claims: Array<{
+    id: string;
+    issuer: string;
+    type: string;
+    value: string;
+    evidence_url: string | null;
+    signature: string;
+    created_at: string;
+  }>;
+  reputation: {
+    settled_calls: number;
+    denied_calls: number;
+    rating: number;
+  };
+};
+
 export type TreasuryBalances = {
   agent_asset: string;
   network: 'solana-devnet' | 'solana-mainnet';

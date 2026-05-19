@@ -209,6 +209,46 @@ async function publicProfile(db: DbClient, mint: string) {
   };
 }
 
+async function adminProfile(db: DbClient, mint: string) {
+  const agent = await getPlatformAgent(db, mint);
+  if (!agent) throw notFound('agent identity not found');
+  const [profile, domains, claims, reputation] = await Promise.all([
+    getAgentIdentityProfile(db, mint),
+    listAgentIdentityDomains(db, mint),
+    listAgentIdentityClaims(db, mint),
+    reputationSummary(db, mint, agent.network),
+  ]);
+  return {
+    mint: agent.mint,
+    network: agent.network,
+    handle: profile?.handle ?? null,
+    name: agent.name,
+    description: agent.description,
+    image_url: agent.imageUrl,
+    treasury: agent.treasury,
+    services: agent.services,
+    verified_domains: domains.filter((d) => d.status === 'verified').map((d) => d.domain),
+    capability_cards: (profile?.capabilityCards ?? []).map(cardToWire),
+    claims: claims
+      .filter((claim) => !claim.revokedAt)
+      .map((claim) => ({
+        id: claim.id,
+        issuer: claim.issuer,
+        subject_mint: claim.subjectMint,
+        type: claim.type,
+        value: claim.value,
+        evidence_url: claim.evidenceUrl,
+        signature: claim.signature,
+        visibility: claim.visibility,
+        expires_at: claim.expiresAt,
+        revoked_at: claim.revokedAt,
+        created_at: claim.createdAt,
+      })),
+    operator_history: [],
+    reputation,
+  };
+}
+
 async function resolveMint(
   db: DbClient,
   query: { mint?: string; handle?: string; domain?: string },
@@ -447,8 +487,30 @@ export function buildAgentIdentityProfileRoutes(deps: AgentIdentityProfileDeps):
         }
         throw err;
       }
-      return c.json(await publicProfile(deps.db, mint), 200);
+      return c.json(await adminProfile(deps.db, mint), 200);
     },
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/v1/platform/agents/{mint}/identity',
+      tags: ['platform', 'identity'],
+      summary: 'Fetch the editable identity profile for an agent.',
+      security: [{ AdminSecret: [] }],
+      request: { params: z.object({ mint: PubkeySchema }) },
+      responses: {
+        200: {
+          description: 'ok',
+          content: { 'application/json': { schema: PublicIdentityProfileSchema } },
+        },
+        404: {
+          description: 'not found',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+      },
+    }),
+    async (c) => c.json(await adminProfile(deps.db, c.req.valid('param').mint), 200),
   );
 
   app.openapi(

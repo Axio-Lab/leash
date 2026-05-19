@@ -41,7 +41,14 @@ import {
 
 import type { Network } from './network';
 import { networkToSlug } from './network';
-import type { EventPage, EventRow, IndexerStatus, ReceiptPage, ReceiptRow } from './types';
+import type {
+  EventPage,
+  EventRow,
+  IndexerStatus,
+  PublicIdentityProfile,
+  ReceiptPage,
+  ReceiptRow,
+} from './types';
 
 let cached: Client | null = null;
 /** First-connection schema (same SQL as the API bootstrap). Idempotent. */
@@ -124,6 +131,15 @@ function receiptToRow(row: ApiReceiptRow): ReceiptRow {
   return row.raw;
 }
 
+function parseJsonArray<T>(value: unknown): T[] {
+  try {
+    const parsed = JSON.parse(String(value ?? '[]'));
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 // --- page-facing reads ----------------------------------------------
 
 export type ListEventsOptions = {
@@ -155,6 +171,96 @@ export async function getEventById(network: Network, id: string): Promise<EventR
   if (!row) return null;
   if (row.network !== networkToSlug(network)) return null;
   return eventToRow(row);
+}
+
+export async function getPublicIdentityProfile(
+  network: Network,
+  mint: string,
+): Promise<PublicIdentityProfile | null> {
+  const slug = networkToSlug(network);
+  return withDb(async (db) => {
+    const agent = await db.execute({
+      sql: `SELECT mint, network, name, description, image_url, treasury
+              FROM agents
+             WHERE mint = ? AND network = ? AND status = 'active'
+             LIMIT 1`,
+      args: [mint, slug],
+    });
+    const agentRow = agent.rows[0] as Record<string, unknown> | undefined;
+    if (!agentRow) return null;
+
+    const profile = await db.execute({
+      sql: `SELECT handle, capability_cards
+              FROM agent_identity_profiles
+             WHERE agent_mint = ?
+             LIMIT 1`,
+      args: [mint],
+    });
+    const profileRow = profile.rows[0] as Record<string, unknown> | undefined;
+
+    const domains = await db.execute({
+      sql: `SELECT domain
+              FROM agent_identity_domains
+             WHERE agent_mint = ? AND status = 'verified'
+             ORDER BY created_at ASC`,
+      args: [mint],
+    });
+
+    const claims = await db.execute({
+      sql: `SELECT id, issuer, type, value, evidence_url, signature, created_at
+              FROM agent_identity_claims
+             WHERE agent_mint = ?
+               AND visibility = 'public'
+               AND revoked_at IS NULL
+               AND (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+             ORDER BY created_at DESC`,
+      args: [mint],
+    });
+
+    const receipts = await db.execute({
+      sql: `SELECT decision FROM receipts WHERE network = ? AND agent = ?`,
+      args: [slug, mint],
+    });
+    let settled = 0;
+    let denied = 0;
+    for (const row of receipts.rows) {
+      if (String(row.decision) === 'allow') settled += 1;
+      else denied += 1;
+    }
+    const total = settled + denied;
+    const disputeRate = total === 0 ? 0 : denied / total;
+    const weight = Math.min(1, Math.log10(settled + 1) / 3);
+
+    const cards = parseJsonArray<PublicIdentityProfile['capability_cards'][number]>(
+      profileRow?.capability_cards,
+    ).filter((card) => card.visibility === 'public');
+
+    return {
+      mint: String(agentRow.mint),
+      network: slug,
+      handle: profileRow?.handle == null ? null : String(profileRow.handle),
+      name: String(agentRow.name),
+      description: agentRow.description == null ? null : String(agentRow.description),
+      image_url: agentRow.image_url == null ? null : String(agentRow.image_url),
+      treasury: String(agentRow.treasury),
+      verified_domains: domains.rows.map((row) => String(row.domain)),
+      capability_cards: cards,
+      claims: claims.rows.map((row) => ({
+        id: String(row.id),
+        issuer: String(row.issuer),
+        type: String(row.type),
+        value: String(row.value),
+        evidence_url: row.evidence_url == null ? null : String(row.evidence_url),
+        signature: String(row.signature),
+        created_at: String(row.created_at),
+      })),
+      reputation: {
+        settled_calls: settled,
+        denied_calls: denied,
+        rating: Number(((1 - disputeRate) * weight).toFixed(4)),
+      },
+    };
+  });
 }
 
 export async function listEventsForSignature(
