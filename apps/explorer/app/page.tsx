@@ -54,11 +54,10 @@ export default async function HomePage() {
     <div className="space-y-12">
       {/* Hero — compact card with the same agent-network animation used on
           apps/agents (drifting nodes + brand-coloured signal pulses). The
-          headline reads as plain bright foreground with a `text-brand`
-          accent on the punchline, mirroring the agents landing. No
-          eyebrow (network is already in the topbar) and no inline search
-          (the topbar carries one). */}
-      <section className="card-glow relative isolate overflow-hidden px-5 py-7 sm:px-10 sm:py-10">
+          headline stays restrained so the recent feeds remain the main
+          working surface. No eyebrow (network is already in the topbar)
+          and no inline search (the topbar carries one). */}
+      <section className="card-glow relative isolate overflow-hidden px-3 py-4 sm:px-7 sm:py-6">
         <div
           aria-hidden
           className="pointer-events-none absolute -left-24 -top-24 size-72 rounded-full bg-brand/15 blur-[100px]"
@@ -69,8 +68,9 @@ export default async function HomePage() {
         />
         <AgentNetworkBackground />
         <div className="relative">
-          <h1 className="text-balance text-2xl font-semibold leading-[1.08] tracking-tight sm:text-4xl md:text-5xl">
-            The public explorer for <span className="text-brand">agent identities</span>
+          <h1 className="mx-auto max-w-[22rem] text-center text-base font-semibold leading-snug tracking-tight sm:max-w-4xl sm:whitespace-nowrap sm:text-2xl md:text-3xl">
+            The public explorer for <span className="text-brand">agent identities</span> and their
+            proof trails.
           </h1>
         </div>
       </section>
