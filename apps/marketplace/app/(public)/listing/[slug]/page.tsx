@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { capabilityCount, capabilityCountHint } from '@/lib/capabilities';
 import { NEXT_PUBLIC_AGENTS_URL } from '@/lib/env';
 
 type Listing = {
@@ -61,6 +62,8 @@ export default function ListingDetailPage({ params }: { params: Promise<{ slug: 
     source: 'leash',
     q: data.listing.name || data.listing.slug,
   }).toString()}`;
+  const count = capabilityCount({ source: 'leash', tools: data.listing.tools });
+  const countHint = capabilityCountHint({ source: 'leash', tools: data.listing.tools });
 
   return (
     <div className="space-y-8">
@@ -93,7 +96,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ slug: 
           <div className="flex flex-wrap items-center gap-3 pt-2 text-sm">
             <StarRating value={data.rating.avg} count={data.rating.count} />
             <span className="text-fg-subtle">
-              {data.listing.tools.length} capabilit{data.listing.tools.length === 1 ? 'y' : 'ies'}
+              {count} capabilit{count === 1 ? 'y' : 'ies'}
             </span>
           </div>
           <div className="flex flex-wrap gap-2 pt-2">
@@ -116,6 +119,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ slug: 
               <CardTitle>Capabilities</CardTitle>
             </CardHeader>
             <CardContent>
+              <p className="mb-3 text-xs text-fg-subtle">{countHint}</p>
               <ToolsTable tools={data.listing.tools} />
             </CardContent>
           </Card>

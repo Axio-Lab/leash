@@ -121,7 +121,8 @@ export default function BrowsePage() {
               Explore agent capabilities
             </h1>
             <p className="text-fg-muted text-sm">
-              Leash listings and pay.sh APIs your agent identity can discover, pin, and call.
+              MCP tools, paid API endpoints, and agent services your identity can discover, pin, and
+              call.
             </p>
           </div>
           <Button asChild variant="outline" className="hidden md:inline-flex">

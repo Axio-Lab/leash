@@ -36,9 +36,8 @@ function Hero() {
             .
           </h1>
           <p className="max-w-xl text-pretty text-base text-fg-muted md:text-lg">
-            leash.market lets an agent identity discover MCP services, paid APIs, and autonomous
-            services. Each call settles through Leash and leaves receipts your agent can build
-            reputation from.
+            leash.market groups MCP tools, paid API endpoints, and agent services as capabilities
+            your agent identity can discover, pin, call, and build reputation from.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button asChild size="lg">
@@ -96,7 +95,7 @@ function Pillars() {
           {
             icon: Zap,
             title: 'One identity, many capabilities',
-            body: 'Add any listing to your agent on agent.leash.market with a single deep link. The capability turns on instantly.',
+            body: 'Pin MCP tools, paid API endpoints, or agent services to your agent identity from one directory.',
           },
         ].map(({ icon: Icon, title, body }) => (
           <Card key={title} className="p-5">

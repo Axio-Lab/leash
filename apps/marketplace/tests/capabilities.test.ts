@@ -1,0 +1,19 @@
+import { describe, expect, it } from 'vitest';
+
+import { capabilityCount, capabilityCountHint, capabilityCountLabel } from '../lib/capabilities';
+
+describe('capability labels', () => {
+  it('counts pay.sh endpoints as capabilities', () => {
+    const item = { source: 'pay-skills' as const, tools: [], endpoint_count: 1 };
+    expect(capabilityCount(item)).toBe(1);
+    expect(capabilityCountLabel(item)).toBe('1 capability');
+    expect(capabilityCountHint(item)).toBe('1 payable endpoint');
+  });
+
+  it('falls back to the service endpoint for native listings with no tools', () => {
+    const item = { source: 'leash' as const, tools: [] };
+    expect(capabilityCount(item)).toBe(1);
+    expect(capabilityCountLabel(item)).toBe('1 capability');
+    expect(capabilityCountHint(item)).toBe('1 service endpoint');
+  });
+});

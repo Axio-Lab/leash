@@ -5,6 +5,7 @@ import { Cpu, Star } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { capabilityCountLabel } from '@/lib/capabilities';
 import { cn } from '@/lib/cn';
 import { NEXT_PUBLIC_AGENTS_URL } from '@/lib/env';
 
@@ -33,7 +34,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
     source,
     q: listing.name || listing.slug,
   }).toString()}`;
-  const capabilityCount = listing.endpoint_count ?? listing.tools.length;
+  const countLabel = capabilityCountLabel(listing);
 
   return (
     <li className="group relative flex flex-col rounded-xl border border-border bg-card transition-all hover:-translate-y-0.5 hover:border-border-strong">
@@ -65,7 +66,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
         <div className="mt-auto flex items-center gap-3 text-[11px] text-fg-subtle">
           <span className="inline-flex items-center gap-1">
             <Cpu className="size-3" />
-            {capabilityCount} capabilit{capabilityCount === 1 ? 'y' : 'ies'}
+            {countLabel}
           </span>
           {listing.rating && listing.rating.count > 0 ? (
             <span className="inline-flex items-center gap-1">

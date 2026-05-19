@@ -173,6 +173,20 @@ function matchesQuery(p: PaySkillsProvider, q: string): boolean {
   return haystacks.some((h) => typeof h === 'string' && h.toLowerCase().includes(needle));
 }
 
+function endpointCountFromProvider(p: PaySkillsProvider): number {
+  if (typeof p.endpoint_count === 'number' && Number.isFinite(p.endpoint_count)) {
+    return Math.max(1, Math.floor(p.endpoint_count));
+  }
+  const raw = p as PaySkillsProvider & { endpoints?: unknown[]; endpoint_urls?: unknown[] };
+  if (Array.isArray(raw.endpoints)) return Math.max(1, raw.endpoints.length);
+  if (Array.isArray(raw.endpoint_urls)) return Math.max(1, raw.endpoint_urls.length);
+  // A pay-skills provider is itself a callable paid API. Some index
+  // rows omit endpoint_count even though the detail JSON expands to a
+  // single payable endpoint, so keep browse cards aligned with detail
+  // pages instead of rendering "0 capabilities".
+  return 1;
+}
+
 export function providerToItem(p: PaySkillsProvider): PaySkillsItem {
   const { pricing_type, price_usdc } = pricingFromProvider(p);
   return {
@@ -188,7 +202,7 @@ export function providerToItem(p: PaySkillsProvider): PaySkillsItem {
     seller_wallet: null,
     rating: null,
     health_status: null,
-    ...(typeof p.endpoint_count === 'number' ? { endpoint_count: p.endpoint_count } : {}),
+    endpoint_count: endpointCountFromProvider(p),
     tags: p.category ? [p.category] : [],
     tools: [],
   };

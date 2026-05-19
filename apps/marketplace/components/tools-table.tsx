@@ -8,7 +8,11 @@ export type Tool = {
 
 export function ToolsTable({ tools }: { tools: Tool[] }) {
   if (tools.length === 0) {
-    return <p className="text-fg-muted text-sm">No capabilities listed.</p>;
+    return (
+      <p className="text-fg-muted text-sm">
+        This listing is available as a service endpoint. No extra callable tools were published.
+      </p>
+    );
   }
   return (
     <ul className="divide-y">

@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { capabilityCountLabel } from '@/lib/capabilities';
 import { NEXT_PUBLIC_AGENTS_URL } from '@/lib/env';
 
 type PaySkillsEndpoint = {
@@ -75,6 +76,11 @@ export default function PaySkillsCapabilityPage({
     source: 'pay-skills',
     q: data.fqn,
   }).toString()}`;
+  const endpointCount = data.endpoints.length;
+  const countLabel = capabilityCountLabel({
+    source: 'pay-skills',
+    endpoint_count: endpointCount,
+  });
 
   return (
     <div className="space-y-8">
@@ -101,7 +107,10 @@ export default function PaySkillsCapabilityPage({
           </h1>
           <p className="max-w-2xl text-pretty text-fg-muted">{data.description}</p>
           <div className="flex flex-wrap items-center gap-3 pt-2 text-sm text-fg-subtle">
-            <span>{data.endpoints.length} payable endpoints</span>
+            <span>{countLabel}</span>
+            <span>
+              {endpointCount} payable endpoint{endpointCount === 1 ? '' : 's'}
+            </span>
             <span className="font-mono">{data.fqn}</span>
           </div>
           <div className="flex flex-wrap gap-2 pt-2">
