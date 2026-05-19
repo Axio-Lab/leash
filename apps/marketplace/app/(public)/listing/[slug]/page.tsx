@@ -89,7 +89,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ slug: 
           <div className="flex flex-wrap items-center gap-3 pt-2 text-sm">
             <StarRating value={data.rating.avg} count={data.rating.count} />
             <span className="text-fg-subtle">
-              {data.listing.tools.length} tool{data.listing.tools.length === 1 ? '' : 's'}
+              {data.listing.tools.length} capabilit{data.listing.tools.length === 1 ? 'y' : 'ies'}
             </span>
           </div>
           <div className="flex flex-wrap gap-2 pt-2">
@@ -97,7 +97,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ slug: 
               <Link
                 href={`${NEXT_PUBLIC_AGENTS_URL}/agents/new?add=${encodeURIComponent(data.listing.slug)}`}
               >
-                Add to agent
+                Add capability
               </Link>
             </Button>
             {data.listing.docs_url ? (
@@ -113,7 +113,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ slug: 
         <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
           <Card>
             <CardHeader>
-              <CardTitle>Tools</CardTitle>
+              <CardTitle>Capabilities</CardTitle>
             </CardHeader>
             <CardContent>
               <ToolsTable tools={data.listing.tools} />
@@ -128,8 +128,8 @@ export default function ListingDetailPage({ params }: { params: Promise<{ slug: 
                 {data.listing.endpoint}
               </code>
               <p className="mt-3 text-xs text-fg-subtle">
-                Agents call this URL via x402. Payment is settled per tool call before the upstream
-                handler runs.
+                Agent identities call this URL via x402. Payment is settled per capability call
+                before the upstream handler runs.
               </p>
             </CardContent>
           </Card>

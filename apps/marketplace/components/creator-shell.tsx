@@ -48,8 +48,8 @@ type NavItem = {
 
 const PRIMARY: NavItem[] = [
   { href: '/creator', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/creator/tools', label: 'My tools', icon: PackagePlus },
-  { href: '/creator/list', label: 'List a tool', icon: Sparkles, badge: 'New' },
+  { href: '/creator/tools', label: 'My capabilities', icon: PackagePlus },
+  { href: '/creator/list', label: 'List capability', icon: Sparkles, badge: 'New' },
   { href: '/creator/snippets', label: 'Seller kit', icon: Code2 },
 ];
 
@@ -151,7 +151,7 @@ function Inner({ children }: { children: React.ReactNode }) {
               onClick={() => router.push('/creator/list')}
               className="hidden sm:inline-flex"
             >
-              List a tool
+              List capability
             </Button>
           </div>
         </header>
@@ -271,7 +271,8 @@ function SignInGate({ onLogin }: { onLogin: () => void }) {
         <Shield className="size-7 mx-auto text-brand-strong" />
         <h2 className="text-xl font-semibold tracking-tight">Sign in as creator</h2>
         <p className="text-sm text-fg-muted">
-          Manage your tools, listings, API keys, and seller kit. Email or Solana wallet — your call.
+          Manage your capabilities, listings, API keys, and seller kit. Email or Solana wallet —
+          your call.
         </p>
         <Button onClick={onLogin} className="w-full" size="lg">
           Sign in
@@ -290,8 +291,8 @@ function SignInGate({ onLogin }: { onLogin: () => void }) {
 
 function titleForPath(p: string): string {
   if (p === '/creator') return 'Dashboard';
-  if (p.startsWith('/creator/tools')) return 'My tools';
-  if (p.startsWith('/creator/list')) return 'List a tool';
+  if (p.startsWith('/creator/tools')) return 'My capabilities';
+  if (p.startsWith('/creator/list')) return 'List capability';
   if (p.startsWith('/creator/snippets')) return 'Seller kit';
   if (p.startsWith('/creator/api-keys')) return 'API keys';
   if (p.startsWith('/creator/docs')) return 'How it works';

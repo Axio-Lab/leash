@@ -53,15 +53,17 @@ export default function BrowsePage() {
         <div className="flex items-end justify-between">
           <div>
             <Badge variant="outline" className="font-mono uppercase tracking-widest">
-              Marketplace
+              Capability registry
             </Badge>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">Explore agent tools</h1>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight">
+              Explore agent capabilities
+            </h1>
             <p className="text-fg-muted text-sm">
-              Open registry of MCP servers, paid APIs, and autonomous services.
+              MCP servers, paid APIs, and autonomous services tied to agent identities.
             </p>
           </div>
           <Button asChild variant="outline" className="hidden md:inline-flex">
-            <Link href="/creator/list">List your tool →</Link>
+            <Link href="/creator/list">List your capability →</Link>
           </Button>
         </div>
       </header>
@@ -73,7 +75,7 @@ export default function BrowsePage() {
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search tools (e.g. search, airtime, RPC)"
+            placeholder="Search capabilities (e.g. search, airtime, RPC)"
             className="pl-9"
           />
         </div>
@@ -120,7 +122,7 @@ export default function BrowsePage() {
         <div className="rounded-xl border border-dashed bg-bg-elev/40 p-14 text-center text-sm text-fg-muted">
           No listings match this filter.{' '}
           <Link href="/creator/list" className="text-brand hover:underline">
-            List one →
+            List a capability →
           </Link>
         </div>
       ) : (

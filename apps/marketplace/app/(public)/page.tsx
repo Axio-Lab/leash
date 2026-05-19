@@ -29,25 +29,25 @@ function Hero() {
       <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)] lg:gap-14">
         <div className="space-y-6">
           <Badge variant="outline" className="font-mono uppercase tracking-widest">
-            An open registry for autonomous buyers
+            Capability registry for agent identities
           </Badge>
           <h1 className="text-balance text-5xl font-semibold leading-[1.04] tracking-tight md:text-[3.5rem] lg:text-6xl">
-            Where agents discover, pay for, and use <span className="text-brand">the open web</span>
+            Where agent identities discover trusted <span className="text-brand">capabilities</span>
             .
           </h1>
           <p className="max-w-xl text-pretty text-base text-fg-muted md:text-lg">
-            leash.market is the marketplace your agent can shop on its own. Browse MCP services
-            priced by the call, settle in stablecoins, and keep a signed receipt for every action —
-            no API keys, no account opens, no babysitting.
+            leash.market lets an agent identity discover MCP services, paid APIs, and autonomous
+            services. Each call settles through Leash and leaves receipts your agent can build
+            reputation from.
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button asChild size="lg">
               <Link href="/browse">
-                Browse tools <ArrowRight className="size-4" />
+                Browse capabilities <ArrowRight className="size-4" />
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg">
-              <Link href="/creator/list">List a tool</Link>
+              <Link href="/creator/list">List a capability</Link>
             </Button>
           </div>
           <p className="pt-1 text-xs text-fg-subtle">
@@ -76,9 +76,9 @@ function Pillars() {
   return (
     <section className="space-y-6">
       <div className="text-center">
-        <h2 className="text-2xl font-semibold tracking-tight">Built for agent commerce</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">Built for agent identity</h2>
         <p className="text-sm text-fg-muted">
-          The basics every paid agent surface needs, baked into the registry.
+          The basics every discoverable capability needs, baked into the registry.
         </p>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -86,17 +86,17 @@ function Pillars() {
           {
             icon: Coins,
             title: 'Pay per call',
-            body: 'Free, per-call USDC, or variable. x402 settles before the tool runs — no API keys, no accounts, no chargebacks.',
+            body: 'Free, per-call USDC, or variable. x402 settles before the capability runs — no API keys, no accounts, no chargebacks.',
           },
           {
             icon: Sparkles,
-            title: 'Ranked by use',
-            body: 'Top tools surface based on real receipts and ratings — not paid placement. Reputation lives onchain.',
+            title: 'Receipts become trust',
+            body: 'Capabilities surface based on real receipts and ratings. Your agent identity keeps the proof trail.',
           },
           {
             icon: Zap,
-            title: 'One click in',
-            body: 'Add any listing to your agent on agent.leash.market with a single deep link. Capability turns on instantly.',
+            title: 'One identity, many capabilities',
+            body: 'Add any listing to your agent on agent.leash.market with a single deep link. The capability turns on instantly.',
           },
         ].map(({ icon: Icon, title, body }) => (
           <Card key={title} className="p-5">
@@ -119,10 +119,10 @@ function CreatorCta() {
         <Badge variant="outline" className="font-mono uppercase tracking-widest">
           For creators
         </Badge>
-        <h2 className="text-3xl font-semibold tracking-tight">Building an MCP?</h2>
+        <h2 className="text-3xl font-semibold tracking-tight">Building an agent capability?</h2>
         <p className="text-fg-muted">
           Drop in your <code className="font-mono text-fg">leash-mcp.json</code>, set a price, and
-          start collecting USDC from autonomous buyers within minutes.
+          let verified agent identities discover, call, and pay you within minutes.
         </p>
       </div>
 
@@ -130,7 +130,7 @@ function CreatorCta() {
         <Button asChild>
           <Link href="/creator/list">
             <Code2 className="size-4" />
-            Drop in your manifest
+            List your capability
           </Link>
         </Button>
         <Button variant="outline" asChild>

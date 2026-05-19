@@ -42,7 +42,7 @@ export function LiveStats() {
         live={!!data}
       />
       <Stat
-        label="Live tools"
+        label="Capabilities"
         value={data ? data.active_listings.toLocaleString() : '—'}
         live={!!data}
       />

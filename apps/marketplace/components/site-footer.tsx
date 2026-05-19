@@ -11,12 +11,12 @@ export function SiteFooter() {
             leash<span className="text-fg-muted">.market</span>
           </p>
           <p className="text-xs text-fg-subtle max-w-sm">
-            The open registry for autonomous buyers. Payment rails for AI agents.
+            The open capability registry for agent identities.
           </p>
         </div>
         <nav className="grid grid-cols-2 gap-x-12 gap-y-2 text-xs text-fg-muted md:grid-cols-3">
           <Link href="/browse" className="hover:text-fg">
-            Browse tools
+            Browse capabilities
           </Link>
           <Link href="/creator" className="hover:text-fg">
             For creators
@@ -25,7 +25,7 @@ export function SiteFooter() {
             Docs
           </a>
           <Link href="/creator/list" className="hover:text-fg">
-            List a tool
+            List a capability
           </Link>
           <Link href="/creator/api-keys" className="hover:text-fg">
             API keys

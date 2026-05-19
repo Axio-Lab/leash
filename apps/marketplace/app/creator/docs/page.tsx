@@ -29,12 +29,12 @@ export default function CreatorDocsPage() {
           <BookOpen className="size-3 mr-1.5" /> How it works
         </Badge>
         <h1 className="text-balance text-4xl font-semibold leading-tight tracking-tight">
-          List an agent tool on leash.market in three steps
+          List an agent capability on leash.market in three steps
         </h1>
         <p className="max-w-2xl text-fg-muted">
-          leash.market is the open registry where autonomous agents discover, pay for, and use
-          tools. If you operate an API, an MCP server, or even a single agent service, you can list
-          it here — free or paid — and start collecting USDC per call.
+          leash.market is the open registry where agent identities discover, pay for, and use
+          capabilities. If you operate an API, an MCP server, or even a single agent service, you
+          can list it here — free or paid — and start collecting USDC per call.
         </p>
       </header>
 
@@ -75,7 +75,7 @@ export default function CreatorDocsPage() {
       </section>
 
       <section className="space-y-4">
-        <SectionHead n={2} icon={PackagePlus} title="Describe your tool">
+        <SectionHead n={2} icon={PackagePlus} title="Describe your capability">
           A leash listing is a JSON document. You can paste a URL to a hosted manifest (recommended)
           or fill the fields by hand. Here's the canonical shape:
         </SectionHead>
@@ -114,15 +114,15 @@ export default function CreatorDocsPage() {
               </FieldDef>
               <FieldDef label="description">
                 One sentence written for an agent, not a human. Be specific about what input/output
-                shape your tool accepts.
+                shape your capability accepts.
               </FieldDef>
               <FieldDef label="category">
                 Free-form bucket — search, data, payments, compute, social, misc. Used for browse
                 filters.
               </FieldDef>
               <FieldDef label="endpoint">
-                Public HTTPS URL the agent will call. For an MCP server, this is the MCP endpoint.
-                For a paid REST API, the resource URL.
+                Public HTTPS URL the agent identity will call. For an MCP server, this is the MCP
+                endpoint. For a paid REST API, the resource URL.
               </FieldDef>
               <FieldDef label="pricing.type">
                 One of <code className="font-mono text-fg">free</code>,{' '}
@@ -137,16 +137,17 @@ export default function CreatorDocsPage() {
                 with x402 ecosystem rollouts.
               </FieldDef>
               <FieldDef label="tools[]">
-                List of callable tools. Each has <code className="font-mono text-fg">name</code>,{' '}
+                List of callable tools inside this capability. Each has{' '}
+                <code className="font-mono text-fg">name</code>,{' '}
                 <code className="font-mono text-fg">description</code>, and an optional{' '}
                 <code className="font-mono text-fg">inputSchema</code> (JSON Schema).
               </FieldDef>
               <FieldDef label="docs_url (optional)">
-                Where humans can read about your tool.
+                Where humans can read about your capability.
               </FieldDef>
               <FieldDef label="free_tier (optional)">
-                Calls per buyer per day before payment kicks in. Great for converting curious agents
-                into paying ones.
+                Calls per buyer per day before payment kicks in. Great for converting curious agent
+                identities into paying ones.
               </FieldDef>
             </dl>
           </CardContent>
@@ -181,7 +182,7 @@ export default function CreatorDocsPage() {
       <section className="rounded-xl border bg-aurora p-8 text-center space-y-3">
         <h3 className="text-2xl font-semibold tracking-tight">That's it.</h3>
         <p className="max-w-xl mx-auto text-fg-muted">
-          Once your listing is approved, every agent on{' '}
+          Once your listing is approved, every agent identity on{' '}
           <a
             href={NEXT_PUBLIC_AGENTS_URL}
             target="_blank"
@@ -195,7 +196,7 @@ export default function CreatorDocsPage() {
         </p>
         <div className="flex justify-center gap-2">
           <Button asChild>
-            <Link href="/creator/list">List a tool</Link>
+            <Link href="/creator/list">List a capability</Link>
           </Button>
           <Button asChild variant="outline">
             <Link href="/browse">Browse the registry</Link>

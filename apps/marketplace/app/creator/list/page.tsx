@@ -103,12 +103,12 @@ export default function CreatorListPage() {
     <div className="space-y-6 max-w-[1100px]">
       <header>
         <Badge variant="outline" className="font-mono uppercase tracking-widest">
-          <Sparkles className="size-3 mr-1.5" /> List a tool
+          <Sparkles className="size-3 mr-1.5" /> List capability
         </Badge>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">Add an agent tool</h1>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">Add an agent capability</h1>
         <p className="mt-1 max-w-2xl text-sm text-fg-muted">
-          Anything an agent can call by HTTP — an MCP server, a paid REST API, or a single tool —
-          can be listed here. Free or paid. Approval is manual today; expect ~24h.
+          Anything an agent identity can call by HTTP — an MCP server, a paid REST API, or a
+          callable tool — can be listed here. Free or paid. Approval is manual today; expect ~24h.
         </p>
       </header>
 
@@ -259,7 +259,7 @@ function ChooseStage({
             </div>
             <CardDescription>
               Don't have a manifest yet? Fill in the fields directly. You can host the manifest
-              later — agents only need the listing.
+              later — agent identities only need the listing.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -324,7 +324,7 @@ function ReviewStage({
           <CardTitle>Listing fields</CardTitle>
           <CardDescription>
             Review every field before submitting. Approval is manual today, but creators can fix
-            anything later from <strong>My tools</strong>.
+            anything later from <strong>My capabilities</strong>.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -442,7 +442,8 @@ function ReviewStage({
             <ul className="mt-2 divide-y divide-border rounded-md border bg-bg/40 text-xs">
               {draft.tools.length === 0 ? (
                 <li className="px-3 py-3 text-fg-subtle">
-                  No tools detected. Add at least one tool by hand below or re-import the manifest.
+                  No callable tools detected. Add at least one operation by hand below or re-import
+                  the manifest.
                 </li>
               ) : (
                 draft.tools.map((t, i) => (
@@ -501,7 +502,7 @@ function ReviewStage({
                 }))
               }
             >
-              + Add tool
+              + Add callable tool
             </Button>
           </div>
 
@@ -512,7 +513,7 @@ function ReviewStage({
       <Card className="lg:sticky lg:top-20 self-start">
         <CardHeader>
           <CardTitle>Preview</CardTitle>
-          <CardDescription>How this listing will look to autonomous buyers.</CardDescription>
+          <CardDescription>How this listing will look to agent identities.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="rounded-xl border bg-bg p-4 space-y-2">
@@ -526,12 +527,12 @@ function ReviewStage({
                   : `${draft.pricing.amount ?? '?'} ${draft.pricing.currency ?? 'USDC'}/call`}
               </Badge>
             </div>
-            <div className="font-semibold">{draft.name || 'Untitled tool'}</div>
+            <div className="font-semibold">{draft.name || 'Untitled capability'}</div>
             <p className="text-xs text-fg-muted line-clamp-3">
               {draft.description || 'Add a one-line description.'}
             </p>
             <div className="text-[11px] text-fg-subtle">
-              {draft.tools.length} tool{draft.tools.length === 1 ? '' : 's'}
+              {draft.tools.length} callable tool{draft.tools.length === 1 ? '' : 's'}
             </div>
           </div>
           <div className="mt-4 flex flex-col gap-2">
@@ -543,8 +544,8 @@ function ReviewStage({
             </Button>
             {!isDraftComplete(draft) ? (
               <p className="text-[11px] text-fg-subtle">
-                Add a name, slug (≥2 chars), description, endpoint, and at least one tool to enable
-                submit.
+                Add a name, slug (≥2 chars), description, endpoint, and at least one callable tool
+                to enable submit.
               </p>
             ) : null}
           </div>
@@ -603,7 +604,7 @@ function SubmittedStage({
 
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => router.push('/creator/tools')}>
-          Go to my tools <ArrowRight className="size-4" />
+          Go to my capabilities <ArrowRight className="size-4" />
         </Button>
         <Button variant="outline" onClick={() => router.push('/creator/docs')}>
           Read the full guide

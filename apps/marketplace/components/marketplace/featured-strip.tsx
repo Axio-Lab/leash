@@ -21,7 +21,7 @@ type Listing = {
 const fetcher = (url: string) => fetch(url).then((r) => r.json() as Promise<{ items: Listing[] }>);
 
 /**
- * Featured tools strip on the public landing. Pulls top approved
+ * Featured capabilities strip on the public landing. Pulls top approved
  * listings from the BFF and renders them as compact gradient cards.
  */
 export function FeaturedStrip() {
@@ -36,7 +36,7 @@ export function FeaturedStrip() {
         <div>
           <p className="text-xs uppercase tracking-widest text-fg-subtle">Trending</p>
           <h2 className="text-2xl font-semibold tracking-tight">
-            Tools agents are reaching for today
+            Capabilities agents are reaching for today
           </h2>
         </div>
         <Link href="/browse" className="text-sm text-fg-muted hover:text-fg">
@@ -51,7 +51,7 @@ export function FeaturedStrip() {
         </div>
       ) : !data || data.items.length === 0 ? (
         <Card className="p-10 text-center text-sm text-fg-muted">
-          No tools yet. Be the first to{' '}
+          No capabilities yet. Be the first to{' '}
           <Link href="/creator/list" className="text-brand hover:underline">
             list one
           </Link>
@@ -93,7 +93,7 @@ function FeaturedCard({ listing }: { listing: Listing }) {
         <p className="line-clamp-2 text-xs text-fg-muted">{listing.description}</p>
         <div className="flex items-center gap-2 pt-1 text-[11px] text-fg-subtle">
           <span>
-            {listing.tools.length} tool{listing.tools.length === 1 ? '' : 's'}
+            {listing.tools.length} capabilit{listing.tools.length === 1 ? 'y' : 'ies'}
           </span>
           {listing.rating && listing.rating.count > 0 ? (
             <>

@@ -43,7 +43,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
         <div className="mt-auto flex items-center gap-3 text-[11px] text-fg-subtle">
           <span className="inline-flex items-center gap-1">
             <Cpu className="size-3" />
-            {listing.tools.length} tool{listing.tools.length === 1 ? '' : 's'}
+            {listing.tools.length} capabilit{listing.tools.length === 1 ? 'y' : 'ies'}
           </span>
           {listing.rating && listing.rating.count > 0 ? (
             <span className="inline-flex items-center gap-1">
@@ -62,7 +62,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
           <Link
             href={`${NEXT_PUBLIC_AGENTS_URL}/agents/new?add=${encodeURIComponent(listing.slug)}`}
           >
-            Add to agent
+            Add capability
           </Link>
         </Button>
       </div>

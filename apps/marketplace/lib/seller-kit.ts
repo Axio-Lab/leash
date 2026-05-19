@@ -169,7 +169,7 @@ function manifestSnippet(p: Required<SnippetParams>): string {
     {
       name: capitalize(p.slug.replace(/-/g, ' ')),
       slug: p.slug,
-      description: 'One-line description of what your tool does for agents.',
+      description: 'One-line description of what your capability does for agents.',
       category: 'misc',
       endpoint: `https://your-domain.com/mcp`,
       pricing: {
@@ -180,7 +180,7 @@ function manifestSnippet(p: Required<SnippetParams>): string {
       tools: [
         {
           name: p.toolName,
-          description: 'What this tool does, in one sentence.',
+          description: 'What this callable tool does, in one sentence.',
           inputSchema: {
             type: 'object',
             properties: { query: { type: 'string' } },
