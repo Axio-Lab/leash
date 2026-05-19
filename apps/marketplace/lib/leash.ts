@@ -60,6 +60,15 @@ async function go<T>(path: string, init?: RequestInit, withAdmin = false): Promi
 }
 
 export const leashMarketplace = {
+  discover: (q: URLSearchParams) =>
+    go<{ items: unknown[]; next_cursor: string | null }>(`/v1/discover?${q.toString()}`),
+  paySkillsProvider: (fqn: string) =>
+    go<unknown>(
+      `/v1/discover/pay-skills/${fqn
+        .split('/')
+        .map((seg) => encodeURIComponent(seg))
+        .join('/')}`,
+    ),
   listListings: (q: URLSearchParams) =>
     go<{ items: unknown[] }>(`/v1/marketplace/listings?${q.toString()}`),
   getListing: (slug: string) =>

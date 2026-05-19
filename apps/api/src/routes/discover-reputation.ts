@@ -65,6 +65,10 @@ const DiscoverItemSchema = z
         'Aggregated rating in `[0, 1]`. Currently derived from the listing rating + seller dispute rate; null when neither signal exists. Always null for pay-skills entries.',
     }),
     health_status: z.enum(['ok', 'warn', 'down']).nullable(),
+    endpoint_count: z.number().int().min(0).optional().openapi({
+      description:
+        'Number of payable endpoints published by the provider when known. Most useful for pay-skills entries, where tools[] is intentionally empty until expanded.',
+    }),
     tags: z.array(z.string()),
     tools: z
       .array(

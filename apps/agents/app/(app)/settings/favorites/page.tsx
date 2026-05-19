@@ -127,6 +127,23 @@ export default function FavoritesSettingsPage() {
   const { data, isLoading } = useSWR(swrKey, searchFetcher, { revalidateOnFocus: false });
   const [local, setLocal] = React.useState<FavoriteEntry[]>([]);
   const [openProvider, setOpenProvider] = React.useState<DiscoverRow | null>(null);
+  const didReadQuery = React.useRef(false);
+
+  React.useEffect(() => {
+    if (didReadQuery.current || typeof window === 'undefined') return;
+    didReadQuery.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const nextQ = params.get('q')?.trim();
+    const nextSource = params.get('source');
+    const nextProtocol = params.get('protocol');
+    if (nextQ) setQ(nextQ);
+    if (nextSource === 'leash' || nextSource === 'pay-skills' || nextSource === 'all') {
+      setSourceFilter(nextSource);
+    }
+    if (nextProtocol === 'x402' || nextProtocol === 'mpp' || nextProtocol === 'all') {
+      setProtocolFilter(nextProtocol);
+    }
+  }, []);
 
   React.useEffect(() => {
     if (!pid) return;

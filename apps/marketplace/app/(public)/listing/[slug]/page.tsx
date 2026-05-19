@@ -57,6 +57,10 @@ export default function ListingDetailPage({ params }: { params: Promise<{ slug: 
   if (!data) return null;
 
   const isFree = data.listing.pricing.type === 'free';
+  const addHref = `${NEXT_PUBLIC_AGENTS_URL}/settings/favorites?${new URLSearchParams({
+    source: 'leash',
+    q: data.listing.name || data.listing.slug,
+  }).toString()}`;
 
   return (
     <div className="space-y-8">
@@ -94,11 +98,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ slug: 
           </div>
           <div className="flex flex-wrap gap-2 pt-2">
             <Button asChild>
-              <Link
-                href={`${NEXT_PUBLIC_AGENTS_URL}/agents/new?add=${encodeURIComponent(data.listing.slug)}`}
-              >
-                Add capability
-              </Link>
+              <Link href={addHref}>Add capability</Link>
             </Button>
             {data.listing.docs_url ? (
               <Button variant="outline" asChild>

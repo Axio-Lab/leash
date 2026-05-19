@@ -77,6 +77,7 @@ export type PaySkillsItem = {
   seller_wallet: null;
   rating: null;
   health_status: null;
+  endpoint_count?: number;
   tags: string[];
   tools: Array<{ name: string; description: string }>;
 };
@@ -187,6 +188,7 @@ export function providerToItem(p: PaySkillsProvider): PaySkillsItem {
     seller_wallet: null,
     rating: null,
     health_status: null,
+    ...(typeof p.endpoint_count === 'number' ? { endpoint_count: p.endpoint_count } : {}),
     tags: p.category ? [p.category] : [],
     tools: [],
   };
