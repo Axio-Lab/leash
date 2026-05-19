@@ -11,14 +11,14 @@ mode.
 
 ## Capability types
 
-| Capability | Where it is declared | What it means |
-| ---------- | -------------------- | ------------- |
-| **Buyer** | `leash` block + policy + spend delegation | The agent can pay for external tools or APIs under owner-defined caps. |
-| **Seller** | `services[]`, marketplace listing, payment links | The agent or service can be called and paid by others. |
-| **Tool provider** | MCP / HTTP service descriptors | Other agents can discover callable operations. |
-| **Data source** | Connected OAuth toolkits and automation source config | The agent is allowed to read or act on a connected account. |
-| **Control channel** | External chat connections such as Telegram or WhatsApp | A user can command and monitor the same identity outside the web app. |
-| **Automation** | Trigger + source + policy + delivery config | The identity can run background work on a schedule, webhook, or event. |
+| Capability          | Where it is declared                                   | What it means                                                          |
+| ------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------- |
+| **Buyer**           | `leash` block + policy + spend delegation              | The agent can pay for external tools or APIs under owner-defined caps. |
+| **Seller**          | `services[]`, marketplace listing, payment links       | The agent or service can be called and paid by others.                 |
+| **Tool provider**   | MCP / HTTP service descriptors                         | Other agents can discover callable operations.                         |
+| **Data source**     | Connected OAuth toolkits and automation source config  | The agent is allowed to read or act on a connected account.            |
+| **Control channel** | External chat connections such as Telegram or WhatsApp | A user can command and monitor the same identity outside the web app.  |
+| **Automation**      | Trigger + source + policy + delivery config            | The identity can run background work on a schedule, webhook, or event. |
 
 ## Split versus merged agents
 
@@ -26,9 +26,9 @@ Buyer and seller are capabilities, not separate object types. You can keep them
 on separate identities for teaching and accounting, or merge them into one
 production identity.
 
-| Mode   | Assets | Treasuries | Receipts feed     | Use case                                                     |
-| ------ | ------ | ---------- | ----------------- | ------------------------------------------------------------ |
-| Split  | 2      | 2          | 2 (one per asset) | Teaching, isolated accounting, separate trust surfaces.      |
+| Mode   | Assets | Treasuries | Receipts feed     | Use case                                                      |
+| ------ | ------ | ---------- | ----------------- | ------------------------------------------------------------- |
+| Split  | 2      | 2          | 2 (one per asset) | Teaching, isolated accounting, separate trust surfaces.       |
 | Merged | 1      | 1          | 1 (mixed `kind`)  | Production agents that consume APIs to produce paid services. |
 
 Both ship in v0.1: `docker compose up` (split, default) vs `docker compose --profile merged up` (merged).

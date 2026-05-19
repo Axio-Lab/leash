@@ -15,16 +15,16 @@ agents.
 
 ## What an identity includes
 
-| Piece | Source of truth | Purpose |
-| ----- | --------------- | ------- |
-| **Mint** | MPL Core asset address | The stable agent identifier peers reference. |
-| **Registration** | Agent Identity URI | Name, image, description, services, trust registrations, and the `leash` block. |
-| **Treasury** | Asset Signer PDA derived from the mint | Receives and holds SOL/SPL funds for the identity. |
-| **Delegation** | Owner-signed executive grants and SPL approvals | Lets an online process act with bounded authority. |
-| **Policy** | `RulesV1` referenced by the `leash` block | Defines budgets, hosts, triggers, and stop conditions. |
-| **Capabilities** | Registration services, marketplace listings, connections, and tools | Tells peers what this identity can do. |
-| **Receipts** | Hash-chained receipt feed | Proves the actions the identity took or earned from. |
-| **Reputation** | Derived from receipts and events | Lets peers decide whether to trust the identity. |
+| Piece            | Source of truth                                                     | Purpose                                                                         |
+| ---------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Mint**         | MPL Core asset address                                              | The stable agent identifier peers reference.                                    |
+| **Registration** | Agent Identity URI                                                  | Name, image, description, services, trust registrations, and the `leash` block. |
+| **Treasury**     | Asset Signer PDA derived from the mint                              | Receives and holds SOL/SPL funds for the identity.                              |
+| **Delegation**   | Owner-signed executive grants and SPL approvals                     | Lets an online process act with bounded authority.                              |
+| **Policy**       | `RulesV1` referenced by the `leash` block                           | Defines budgets, hosts, triggers, and stop conditions.                          |
+| **Capabilities** | Registration services, marketplace listings, connections, and tools | Tells peers what this identity can do.                                          |
+| **Receipts**     | Hash-chained receipt feed                                           | Proves the actions the identity took or earned from.                            |
+| **Reputation**   | Derived from receipts and events                                    | Lets peers decide whether to trust the identity.                                |
 
 Although the asset is one thing, three keypairs are wired to it at run-time — the **owner**, the **executive**, and the optional **operator**. Read [Identities](/concepts/identities) before working through the lifecycle below if you haven't seen that distinction yet; the rest of this page assumes it.
 

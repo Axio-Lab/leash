@@ -17,13 +17,13 @@ Rules live as a JSON document referenced from the `leash` block on the registrat
 
 `RulesV1` is intentionally small and inspectable:
 
-| Rule area | Purpose |
-| --------- | ------- |
-| **Budget** | Daily and per-call spend ceilings for the identity. |
-| **Hosts** | Allow or deny lists for outbound destinations. |
-| **Price ceiling** | Maximum acceptable quoted price before settlement. |
-| **Triggers** | The cron, interval, or webhook paths this identity is allowed to run from. |
-| **Stop conditions** | Conditions that stop the runner before more damage or spend accumulates. |
+| Rule area           | Purpose                                                                    |
+| ------------------- | -------------------------------------------------------------------------- |
+| **Budget**          | Daily and per-call spend ceilings for the identity.                        |
+| **Hosts**           | Allow or deny lists for outbound destinations.                             |
+| **Price ceiling**   | Maximum acceptable quoted price before settlement.                         |
+| **Triggers**        | The cron, interval, or webhook paths this identity is allowed to run from. |
+| **Stop conditions** | Conditions that stop the runner before more damage or spend accumulates.   |
 
 Because policy is referenced from the identity registration, it becomes part of
 the trust surface. A service can ask not only "who is this agent?" but also
