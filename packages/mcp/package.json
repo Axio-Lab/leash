@@ -3,7 +3,7 @@
     "access": "public"
   },
   "name": "@leashmarket/mcp",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Standalone Leash MCP server. STDIO transport. Drop into Cursor / Claude Desktop / Cline / Continue / ChatGPT-MCP.",
   "private": false,
   "type": "module",
