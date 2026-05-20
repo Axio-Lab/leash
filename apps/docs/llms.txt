@@ -90,6 +90,9 @@
 - [Leash Block V1](https://docs.leash.market/schemas/leash-block-v1.md): On-chain `leash` block embedded in registration metadata.
 - [Registration V1](https://docs.leash.market/schemas/registration-v1.md): Off-chain `AgentIdentity` JSON (HTTPS / IPFS / Arweave / object storage).
 - [Endpoint V1](https://docs.leash.market/schemas/endpoint-v1.md): Single endpoint manifest a seller agent advertises.
+- [Identity Profile V1](https://docs.leash.market/schemas/identity-profile-v1.md): Public agent identity profile with capabilities, claims, operator history, and reputation.
+- [Identity Verification Decision V1](https://docs.leash.market/schemas/identity-verification-decision-v1.md): Allow/warn/deny trust verdict response for agent-to-agent checks.
+- [Identity Disclosure V1](https://docs.leash.market/schemas/identity-disclosure-v1.md): Shareable selective-disclosure read response for private cards, claims, and redacted receipts.
 
 ## Standards
 

@@ -1,17 +1,11 @@
 import { ulid } from 'ulid';
+import type { IdentityDisclosureResource } from '@leashmarket/schemas';
 
 import type { SvmNetwork } from '../util/network.js';
 import type { DbClient } from './turso.js';
 import { execute } from './turso.js';
 
-export type IdentityDisclosureResource =
-  | { kind: 'capability_card'; id: string }
-  | { kind: 'claim'; id: string }
-  | {
-      kind: 'receipt';
-      receipt_hash: string;
-      fields?: Array<'summary' | 'request' | 'price' | 'response' | 'tx'>;
-    };
+export type { IdentityDisclosureResource } from '@leashmarket/schemas';
 
 export type IdentityDisclosureGrant = {
   id: string;

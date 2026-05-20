@@ -4,7 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import {
   EndpointV1Schema,
+  IdentityDisclosureReadSchema,
+  IdentityVerificationDecisionSchema,
   LeashBlockV1Schema,
+  PublicIdentityProfileSchema,
   ReceiptV02Schema,
   ReceiptV1Schema,
   RegistrationV1Schema,
@@ -23,6 +26,9 @@ const specs = [
   ['leash-block-v1', LeashBlockV1Schema],
   ['registration-v1', RegistrationV1Schema],
   ['endpoint-v1', EndpointV1Schema],
+  ['identity-profile-v1', PublicIdentityProfileSchema],
+  ['identity-verification-decision-v1', IdentityVerificationDecisionSchema],
+  ['identity-disclosure-v1', IdentityDisclosureReadSchema],
 ];
 
 for (const [name, schema] of specs) {

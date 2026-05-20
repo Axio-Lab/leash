@@ -17,6 +17,8 @@
  * implementer of this interface.
  */
 
+import type { IdentitySelector, IdentityVerificationDecisionRequest } from '@leashmarket/schemas';
+
 import type { LeashToolResult } from './tool.js';
 
 /** SVM cluster slugs as used by the Leash API + Metaplex SDK. */
@@ -150,26 +152,8 @@ export type ReputationArgs = {
   network?: SvmNetwork;
 };
 
-export type IdentitySelectorArgs = {
-  mint?: string;
-  handle?: string;
-  domain?: string;
-};
-
-export type IdentityVerifyArgs = IdentitySelectorArgs & {
-  intent?: 'pay' | 'call_capability' | 'trust_claim' | 'inspect';
-  capability?: {
-    kind?: string;
-    slug?: string;
-    endpoint?: string;
-    protocol?: 'x402' | 'mpp';
-  };
-  thresholds?: {
-    min_rating?: number;
-    required_claim_types?: string[];
-    require_verified_domain?: boolean;
-  };
-};
+export type IdentitySelectorArgs = IdentitySelector;
+export type IdentityVerifyArgs = IdentityVerificationDecisionRequest;
 
 /**
  * Inputs for `leash_pay_skills_endpoints` — expand a chosen

@@ -8,8 +8,13 @@
  * `LeashHost.discover` / `LeashHost.reputation` methods.
  */
 
-import type { LeashToolResult } from '../tool.js';
-import { jsonResult } from '../tool.js';
+import type {
+  IdentityVerificationDecision,
+  IdentityVerifyResponse,
+  OperatorHistoryEntry,
+  PublicIdentityProfile,
+} from '@leashmarket/schemas';
+
 import type {
   DiscoverArgs,
   IdentitySelectorArgs,
@@ -18,6 +23,15 @@ import type {
   ReputationArgs,
   SvmNetwork,
 } from '../host.js';
+import type { LeashToolResult } from '../tool.js';
+import { jsonResult } from '../tool.js';
+
+export type {
+  IdentityVerificationDecision,
+  IdentityVerifyResponse,
+  OperatorHistoryEntry,
+  PublicIdentityProfile,
+} from '@leashmarket/schemas';
 
 export type DiscoverSource = 'leash' | 'pay-skills';
 
@@ -57,83 +71,6 @@ export type ReputationSnapshot = {
   oldest_receipt_at: string | null;
   newest_receipt_at: string | null;
   rating: number;
-};
-
-export type PublicIdentityProfile = {
-  mint: string;
-  network: SvmNetwork;
-  handle: string | null;
-  name: string;
-  description: string | null;
-  image_url: string | null;
-  treasury: string;
-  services: Array<{ name: string; endpoint: string }>;
-  verified_domains: string[];
-  capability_cards: Array<{
-    id: string;
-    kind: string;
-    title: string;
-    description?: string;
-    source?: string;
-    slug?: string;
-    endpoint?: string;
-    tags: string[];
-    protocols: string[];
-    visibility: 'public' | 'private';
-  }>;
-  claims: Array<{
-    id: string;
-    issuer: string;
-    subject_mint: string;
-    type: string;
-    value: string;
-    evidence_url: string | null;
-    signature: string;
-    visibility: 'public' | 'private';
-    expires_at: string | null;
-    revoked_at: string | null;
-    created_at: string;
-  }>;
-  operator_history: OperatorHistoryEntry[];
-  reputation: { settled_calls: number; denied_calls: number; rating: number };
-};
-
-export type OperatorHistoryEntry = {
-  event_id: string;
-  kind: 'executive_register' | 'executive_delegate' | 'delegation_set' | 'delegation_revoke';
-  phase: 'prepared' | 'submitted' | 'confirmed' | 'failed';
-  actor: string | null;
-  delegate: string | null;
-  executive: string | null;
-  token_mint: string | null;
-  source_token_account: string | null;
-  delegated_amount: string | null;
-  signature: string | null;
-  event_source: string;
-  created_at: string;
-  confirmed_at: string | null;
-  failed_at: string | null;
-};
-
-export type IdentityVerifyResponse = {
-  verified: boolean;
-  resolved_mint: string | null;
-  network: SvmNetwork | null;
-  checks: Array<{ name: string; passed: boolean; detail: string }>;
-};
-
-export type IdentityVerificationDecision = {
-  verdict: 'allow' | 'warn' | 'deny';
-  resolved_mint: string | null;
-  network: SvmNetwork | null;
-  score: number;
-  checks: Array<{
-    name: string;
-    passed: boolean;
-    severity: 'info' | 'warn' | 'deny';
-    detail: string;
-  }>;
-  profile: unknown;
 };
 
 function identitySearchParams(selector: IdentitySelectorArgs): URLSearchParams {

@@ -1,31 +1,11 @@
 import { ulid } from 'ulid';
+import type { IdentityCapabilityCard, IdentityVisibility } from '@leashmarket/schemas';
 
 import type { SvmNetwork } from '../util/network.js';
 import type { DbClient } from './turso.js';
 import { execute } from './turso.js';
 
-export type IdentityVisibility = 'public' | 'private';
-
-export type IdentityCapabilityCard = {
-  id: string;
-  kind:
-    | 'seller_api'
-    | 'buyer_tool'
-    | 'data_source'
-    | 'control_channel'
-    | 'automation'
-    | 'marketplace'
-    | 'pay_skills'
-    | 'custom';
-  title: string;
-  description?: string;
-  source?: 'leash' | 'pay-skills' | 'manual' | 'connection' | 'automation';
-  slug?: string;
-  endpoint?: string;
-  tags: string[];
-  protocols: Array<'x402' | 'mpp'>;
-  visibility: IdentityVisibility;
-};
+export type { IdentityCapabilityCard, IdentityVisibility } from '@leashmarket/schemas';
 
 export type AgentIdentityProfile = {
   agentMint: string;

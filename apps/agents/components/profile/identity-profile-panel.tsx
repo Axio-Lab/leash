@@ -1,6 +1,12 @@
 'use client';
 
 import * as React from 'react';
+import type {
+  IdentityCapabilityCard as CapabilityCard,
+  IdentityDisclosureGrant as DisclosureGrant,
+  OperatorHistoryEntry,
+  PublicIdentityProfile as IdentityProfile,
+} from '@leashmarket/schemas';
 import useSWR from 'swr';
 import { toast } from 'sonner';
 import {
@@ -15,76 +21,6 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-
-type CapabilityCard = {
-  id: string;
-  kind:
-    | 'seller_api'
-    | 'buyer_tool'
-    | 'data_source'
-    | 'control_channel'
-    | 'automation'
-    | 'marketplace'
-    | 'pay_skills'
-    | 'custom';
-  title: string;
-  description?: string;
-  source?: 'leash' | 'pay-skills' | 'manual' | 'connection' | 'automation';
-  slug?: string;
-  endpoint?: string;
-  tags: string[];
-  protocols: Array<'x402' | 'mpp'>;
-  visibility: 'public' | 'private';
-};
-
-type IdentityClaim = {
-  id: string;
-  issuer: string;
-  type: string;
-  value: string;
-  visibility: 'public' | 'private';
-  signature: string;
-  created_at: string;
-};
-
-type OperatorHistoryEntry = {
-  event_id: string;
-  kind: 'executive_register' | 'executive_delegate' | 'delegation_set' | 'delegation_revoke';
-  phase: 'prepared' | 'submitted' | 'confirmed' | 'failed';
-  actor: string | null;
-  delegate: string | null;
-  executive: string | null;
-  token_mint: string | null;
-  source_token_account: string | null;
-  delegated_amount: string | null;
-  signature: string | null;
-  event_source: string;
-  created_at: string;
-  confirmed_at: string | null;
-  failed_at: string | null;
-};
-
-type DisclosureGrant = {
-  id: string;
-  resources: Array<
-    | { kind: 'capability_card'; id: string }
-    | { kind: 'claim'; id: string }
-    | { kind: 'receipt'; receipt_hash: string; fields?: string[] }
-  >;
-  expires_at: string;
-  revoked_at: string | null;
-  created_at: string;
-};
-
-type IdentityProfile = {
-  mint: string;
-  handle: string | null;
-  verified_domains: string[];
-  capability_cards: CapabilityCard[];
-  claims: IdentityClaim[];
-  operator_history: OperatorHistoryEntry[];
-  reputation: { settled_calls: number; denied_calls: number; rating: number };
-};
 
 const fetcher = async (url: string): Promise<IdentityProfile> => {
   const res = await fetch(url, { credentials: 'include' });

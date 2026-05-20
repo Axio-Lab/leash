@@ -219,7 +219,7 @@ export async function getPublicIdentityProfile(
   const slug = networkToSlug(network);
   return withDb(async (db) => {
     const agent = await db.execute({
-      sql: `SELECT mint, network, name, description, image_url, treasury
+      sql: `SELECT mint, network, name, description, image_url, treasury, services
               FROM agents
              WHERE mint = ? AND network = ? AND status = 'active'
              LIMIT 1`,
@@ -246,7 +246,8 @@ export async function getPublicIdentityProfile(
     });
 
     const claims = await db.execute({
-      sql: `SELECT id, issuer, type, value, evidence_url, signature, created_at
+      sql: `SELECT id, issuer, subject_mint, type, value, evidence_url, signature, visibility,
+                   expires_at, revoked_at, created_at
               FROM agent_identity_claims
              WHERE agent_mint = ?
                AND visibility = 'public'
@@ -283,15 +284,20 @@ export async function getPublicIdentityProfile(
       description: agentRow.description == null ? null : String(agentRow.description),
       image_url: agentRow.image_url == null ? null : String(agentRow.image_url),
       treasury: String(agentRow.treasury),
+      services: parseJsonArray<PublicIdentityProfile['services'][number]>(agentRow.services),
       verified_domains: domains.rows.map((row) => String(row.domain)),
       capability_cards: cards,
       claims: claims.rows.map((row) => ({
         id: String(row.id),
         issuer: String(row.issuer),
+        subject_mint: String(row.subject_mint),
         type: String(row.type),
         value: String(row.value),
         evidence_url: row.evidence_url == null ? null : String(row.evidence_url),
         signature: String(row.signature),
+        visibility: String(row.visibility) as 'public' | 'private',
+        expires_at: row.expires_at == null ? null : String(row.expires_at),
+        revoked_at: row.revoked_at == null ? null : String(row.revoked_at),
         created_at: String(row.created_at),
       })),
       operator_history: operatorHistory.map((row) => ({

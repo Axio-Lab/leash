@@ -1,48 +1,16 @@
-export type IdentitySelector = {
-  mint?: string;
-  handle?: string;
-  domain?: string;
-};
+import type {
+  IdentitySelector,
+  IdentityVerificationDecision,
+  IdentityVerificationDecisionRequest,
+  IdentityVerifyResponse,
+} from '@leashmarket/schemas';
 
-export type IdentityVerifyResponse = {
-  verified: boolean;
-  resolved_mint: string | null;
-  network: 'solana-devnet' | 'solana-mainnet' | null;
-  checks: Array<{ name: string; passed: boolean; detail: string }>;
-};
-
-export type IdentityVerificationDecisionRequest = {
-  selector?: IdentitySelector;
-  mint?: string;
-  handle?: string;
-  domain?: string;
-  intent?: 'pay' | 'call_capability' | 'trust_claim' | 'inspect';
-  capability?: {
-    kind?: string;
-    slug?: string;
-    endpoint?: string;
-    protocol?: 'x402' | 'mpp';
-  };
-  thresholds?: {
-    min_rating?: number;
-    required_claim_types?: string[];
-    require_verified_domain?: boolean;
-  };
-};
-
-export type IdentityVerificationDecision = {
-  verdict: 'allow' | 'warn' | 'deny';
-  resolved_mint: string | null;
-  network: 'solana-devnet' | 'solana-mainnet' | null;
-  score: number;
-  checks: Array<{
-    name: string;
-    passed: boolean;
-    severity: 'info' | 'warn' | 'deny';
-    detail: string;
-  }>;
-  profile: unknown;
-};
+export type {
+  IdentitySelector,
+  IdentityVerificationDecision,
+  IdentityVerificationDecisionRequest,
+  IdentityVerifyResponse,
+} from '@leashmarket/schemas';
 
 export async function verifyAgentIdentity(args: {
   apiBaseUrl?: string;

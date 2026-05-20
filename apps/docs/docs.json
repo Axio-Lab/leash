@@ -115,7 +115,10 @@
               "schemas/rules-v1",
               "schemas/leash-block-v1",
               "schemas/registration-v1",
-              "schemas/endpoint-v1"
+              "schemas/endpoint-v1",
+              "schemas/identity-profile-v1",
+              "schemas/identity-verification-decision-v1",
+              "schemas/identity-disclosure-v1"
             ]
           },
           {

@@ -4,6 +4,9 @@ import {
   ReceiptV1Schema,
   RegistrationV1Schema,
   RulesV1Schema,
+  IdentityDisclosureReadSchema,
+  IdentityVerificationDecisionSchema,
+  PublicIdentityProfileSchema,
   inferCapabilities,
 } from '../src/index.js';
 
@@ -121,5 +124,108 @@ describe('inferCapabilities', () => {
       leash: validLeash,
     });
     expect(inferCapabilities(doc)).toContain('buyer');
+  });
+});
+
+describe('Identity schemas', () => {
+  const profile = {
+    mint: 'Agnt...',
+    network: 'solana-devnet' as const,
+    handle: 'payce-demo',
+    name: 'Payce Demo',
+    description: 'Demo agent',
+    image_url: null,
+    treasury: 'Treasury...',
+    services: [{ name: 'api', endpoint: 'https://api.example.com' }],
+    verified_domains: ['agent.example'],
+    capability_cards: [
+      {
+        id: 'cap_1',
+        kind: 'seller_api' as const,
+        title: 'Quote API',
+        tags: ['quotes'],
+        protocols: ['x402' as const],
+        visibility: 'public' as const,
+      },
+    ],
+    claims: [
+      {
+        id: 'claim_1',
+        issuer: 'leash',
+        subject_mint: 'Agnt...',
+        type: 'domain-control',
+        value: 'agent.example',
+        evidence_url: null,
+        signature: 'sig',
+        visibility: 'public' as const,
+        expires_at: null,
+        revoked_at: null,
+        created_at: new Date().toISOString(),
+      },
+    ],
+    operator_history: [
+      {
+        event_id: 'evt_1',
+        kind: 'delegation_set' as const,
+        phase: 'confirmed' as const,
+        actor: null,
+        delegate: 'Delegate...',
+        executive: null,
+        token_mint: 'USDC...',
+        source_token_account: 'Ata...',
+        delegated_amount: '250000',
+        signature: 'tx',
+        event_source: 'api',
+        created_at: new Date().toISOString(),
+        confirmed_at: new Date().toISOString(),
+        failed_at: null,
+      },
+    ],
+    reputation: { settled_calls: 1, denied_calls: 0, rating: 1 },
+  };
+
+  it('parses public identity profiles', () => {
+    expect(PublicIdentityProfileSchema.parse(profile).capability_cards[0]?.kind).toBe('seller_api');
+  });
+
+  it('parses trust verdict decisions', () => {
+    expect(
+      IdentityVerificationDecisionSchema.parse({
+        verdict: 'allow',
+        resolved_mint: profile.mint,
+        network: profile.network,
+        score: 100,
+        checks: [{ name: 'selector_resolves', passed: true, severity: 'info', detail: 'ok' }],
+        profile: {
+          mint: profile.mint,
+          handle: profile.handle,
+          name: profile.name,
+          verified_domains: profile.verified_domains,
+          reputation: profile.reputation,
+          capability_cards_count: 1,
+          claims_count: 1,
+        },
+      }).verdict,
+    ).toBe('allow');
+  });
+
+  it('parses selective disclosure reads', () => {
+    expect(
+      IdentityDisclosureReadSchema.parse({
+        id: 'disc_1',
+        agent: {
+          mint: profile.mint,
+          network: profile.network,
+          handle: profile.handle,
+          name: profile.name,
+        },
+        expires_at: new Date(Date.now() + 1000).toISOString(),
+        resources: {
+          capability_cards: profile.capability_cards,
+          claims: profile.claims,
+          receipts: [{ receipt_hash: 'abc', kind: 'spend' }],
+        },
+      }).resources.claims,
+    ).toHaveLength(1);
   });
 });

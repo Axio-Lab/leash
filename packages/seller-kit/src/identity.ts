@@ -1,19 +1,9 @@
-export type SellerIdentityMetadata = {
-  agent_mint: string;
-  handle?: string;
-  domain?: string;
-  capabilities?: string[];
-  capability_cards?: Array<{
-    kind?: string;
-    slug?: string;
-    endpoint?: string;
-    protocol?: 'x402' | 'mpp';
-  }>;
-  claims?: string[];
-};
+import type { SellerIdentityMetadata, SellerIdentityMetadataEnvelope } from '@leashmarket/schemas';
 
-export function buildSellerIdentityMetadata(input: SellerIdentityMetadata): {
-  leash: { identity: SellerIdentityMetadata & { v: '0.1' } };
-} {
+export type { SellerIdentityMetadata, SellerIdentityMetadataEnvelope } from '@leashmarket/schemas';
+
+export function buildSellerIdentityMetadata(
+  input: SellerIdentityMetadata,
+): SellerIdentityMetadataEnvelope {
   return { leash: { identity: { v: '0.1', ...input } } };
 }
