@@ -3,11 +3,18 @@
   "version": "0.2.2",
   "private": false,
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
     "leash-runner": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "start": "node dist/cli.js",
     "build": "tsc -p tsconfig.build.json",
