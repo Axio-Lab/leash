@@ -4,9 +4,9 @@ description: What ships next on top of the v1 API.
 ---
 
 The API surface today (v1) covers the prepare → submit → track → receipt →
-indexer → events → webhooks → metrics loop, plus the first identity-profile
-surface for handles, verified domains, capability cards, claims, and public
-verification.
+indexer → events → webhooks → metrics loop, plus the identity-profile surface
+for handles, verified domains, capability cards, claims, operator history,
+trust-verdict verification, and selective disclosure.
 
 ## Identity primitive roadmap
 
@@ -20,9 +20,10 @@ version of the identity primitive is available now through [Identity API](/api/i
 | **Signed claims and attestations**  | v1 shipped | Attach revocable claims with issuer, subject, type, value, evidence, signature, expiration, and visibility.                     |
 | **Public reputation summary**       | v1 shipped | Summarise receipt history into a trust signal peers can check before interacting.                                               |
 | **Agent capability cards**          | v1 shipped | Render buyer, seller, tool, data-source, automation, control-channel, marketplace, and pay.sh capabilities in a standard shape. |
-| **Selective disclosure**            | v1 shipped | Public/private visibility controls for capability cards and claims.                                                             |
-| **Delegated operator history**      | next       | Show executive rotations, revoked delegates, pause state, and operator changes over time from indexed events.                   |
-| **Agent-to-agent verification API** | next       | Extend `/v1/identity/verify` into a richer policy/reputation decision for automated buyers.                                     |
+| **Selective disclosure**            | v1 shipped | Shareable, revocable disclosure links for private capability cards, private claims, and redacted receipt fields.                |
+| **Delegated operator history**      | v1 shipped | Show executive/delegation registration, set, revoke, failed, and confirmed operator changes over time from events.              |
+| **Agent-to-agent verification API** | v1 shipped | `POST /v1/identity/verify` returns allow/warn/deny decisions for automated buyers and capability callers.                       |
+| **Private proof systems**           | next       | Replace disclosure links with cryptographic/private-proof disclosure where the use case requires it.                            |
 
 ## Refunds & cashback
 

@@ -52,7 +52,7 @@
 - [Authentication](https://docs.leash.market/api/auth.md): API keys, prefix-driven network binding, idempotency, and rate limits.
 - [Prepare → Submit lifecycle](https://docs.leash.market/api/prepare-submit.md): How every state-changing call splits into prepare, sign, submit, track — and why. **`POST /v1/submit` is the mandatory third step**: it writes the event row, broadcasts the transaction, and watchlists the agent so receipts and on-chain activity appear on the explorer. Never use raw RPC in place of this step.
 - [Agents](https://docs.leash.market/api/agents.md): Mint, read, and manage Leash agents over HTTP — the same flow the SDK exposes, callable from any language.
-- [Identity API](https://docs.leash.market/api/identity.md): Resolve and verify agent identities by mint, handle, or domain; manage capability cards, verified domains, claims, and public/private visibility.
+- [Identity API](https://docs.leash.market/api/identity.md): Resolve identities by mint, handle, or domain; inspect operator history; request allow/warn/deny verification decisions; manage capability cards, verified domains, claims, and selective disclosure links.
 - [Monetise an existing API](https://docs.leash.market/api/monetize-api.md): Charge per call on a SaaS endpoint you already host, without rewriting it.
 - [Payment links](https://docs.leash.market/api/payment-links.md): Create hosted x402 payment links served at `/x/{id}` — the "Stripe Payment Link" of x402.
 - [Seller utilities](https://docs.leash.market/api/seller-utils.md): HTTP parity for the `@leashmarket/seller-kit` helpers — networks, facilitator, parse-price, pay-to.

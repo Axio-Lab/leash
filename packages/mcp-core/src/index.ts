@@ -85,6 +85,8 @@ export {
   type DiscoverItem,
   type DiscoverSource,
   type IdentityVerifyResponse,
+  type IdentityVerificationDecision,
+  type OperatorHistoryEntry,
   type PaySkillsEndpoint,
   type PaySkillsProvider,
   type PublicIdentityProfile,

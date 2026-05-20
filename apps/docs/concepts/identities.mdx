@@ -17,10 +17,11 @@ The **agent mint** is the public identity. Other agents, marketplaces,
 explorers, and APIs key reputation, receipts, services, and policy off that
 mint.
 
-Around that mint, Leash now keeps a public identity profile: optional handle,
-verified domains, capability cards, signed claims, and a reputation summary.
-Those profile fields make the mint easier for humans and agents to resolve,
-but the mint remains the canonical anchor.
+Around that mint, Leash keeps a public identity profile: optional handle,
+verified domains, capability cards, signed claims, operator history, selective
+disclosure links, and a reputation summary. Those profile fields make the mint
+easier for humans and agents to resolve, but the mint remains the canonical
+anchor.
 
 The **owner**, **executive**, and **operator** are signing roles around that
 identity:
@@ -40,7 +41,9 @@ without losing its public identity.
 | **Verified domains** | Domain ownership proven through `.well-known/leash-agent.json`.                                                                             |
 | **Capability cards** | Public/private cards for seller APIs, buyer tools, data sources, control channels, automations, marketplace listings, and pay.sh providers. |
 | **Claims**           | Signed, revocable attestations from Leash or other issuers.                                                                                 |
+| **Operator history** | Event-backed audit trail for executive and spend-delegation changes.                                                                        |
 | **Reputation**       | Receipt-derived summary that peers can check before trusting or paying the agent.                                                           |
+| **Disclosure links** | Revocable links that reveal selected private cards, claims, or redacted receipt fields without making them public.                          |
 
 See [Identity API](/api/identity) for the public resolve/verify endpoints and
 the admin endpoints the agent app uses to edit these fields.

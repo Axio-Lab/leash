@@ -28,6 +28,21 @@ Hono integration for Leash sellers. Three responsibilities:
    are nonce-ordered and hash-chained per seller agent, mirroring
    `@leashmarket/buyer-kit` so explorers can verify both sides of the trade.
 
+Seller identity metadata is available for directories, payment-link metadata,
+or any API discovery document that wants buyer agents to verify the seller
+before payment:
+
+```ts
+import { buildSellerIdentityMetadata } from '@leashmarket/seller-kit';
+
+const identity = buildSellerIdentityMetadata({
+  agent_mint: assetMint,
+  handle: 'quote-agent',
+  domain: 'seller.example',
+  capability_cards: [{ kind: 'seller_api', slug: 'seller/tag-api', protocol: 'x402' }],
+});
+```
+
 ```ts
 import { createSeller } from '@leashmarket/seller-kit';
 

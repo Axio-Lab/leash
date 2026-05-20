@@ -5,6 +5,7 @@ JavaScript runtime — browsers, Bun, Deno, Node, edge — to:
 
 - Search the agent marketplace (`leash.discover`)
 - Resolve and verify agent identities (`leash.resolveIdentity`, `leash.verifyIdentity`)
+- Ask for trust verdicts before agent-to-agent calls (`leash.verifyIdentityDecision`)
 - Vet a counterparty's reputation (`leash.reputation`)
 - Record a client-minted agent on the platform (`leash.recordAgent`)
 - Manage agent-scoped webhooks signed with X-Leash-Sig
@@ -46,6 +47,14 @@ if (rep.rating < 0.5) throw new Error('seller has too low a rating');
 const profile = await leash.resolveIdentity({ handle: 'payce-demo' });
 const verdict = await leash.verifyIdentity({ mint: profile.mint });
 if (!verdict.verified) throw new Error('identity did not verify');
+
+const decision = await leash.verifyIdentityDecision({
+  selector: { mint: profile.mint },
+  intent: 'pay',
+  capability: { slug: 'agentmail/email', protocol: 'x402' },
+  thresholds: { require_verified_domain: true },
+});
+if (decision.verdict === 'deny') throw new Error('seller did not pass trust checks');
 
 // 4. Record a client-minted agent — public, no auth (idempotent on
 //    `mint`). Mint + delegate the asset locally with `@leashmarket/mcp`'s

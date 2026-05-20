@@ -94,8 +94,25 @@ export type PublicIdentityProfile = {
     revoked_at: string | null;
     created_at: string;
   }>;
-  operator_history: unknown[];
+  operator_history: OperatorHistoryEntry[];
   reputation: { settled_calls: number; denied_calls: number; rating: number };
+};
+
+export type OperatorHistoryEntry = {
+  event_id: string;
+  kind: 'executive_register' | 'executive_delegate' | 'delegation_set' | 'delegation_revoke';
+  phase: 'prepared' | 'submitted' | 'confirmed' | 'failed';
+  actor: string | null;
+  delegate: string | null;
+  executive: string | null;
+  token_mint: string | null;
+  source_token_account: string | null;
+  delegated_amount: string | null;
+  signature: string | null;
+  event_source: string;
+  created_at: string;
+  confirmed_at: string | null;
+  failed_at: string | null;
 };
 
 export type IdentityVerifyResponse = {
@@ -103,6 +120,20 @@ export type IdentityVerifyResponse = {
   resolved_mint: string | null;
   network: SvmNetwork | null;
   checks: Array<{ name: string; passed: boolean; detail: string }>;
+};
+
+export type IdentityVerificationDecision = {
+  verdict: 'allow' | 'warn' | 'deny';
+  resolved_mint: string | null;
+  network: SvmNetwork | null;
+  score: number;
+  checks: Array<{
+    name: string;
+    passed: boolean;
+    severity: 'info' | 'warn' | 'deny';
+    detail: string;
+  }>;
+  profile: unknown;
 };
 
 function identitySearchParams(selector: IdentitySelectorArgs): URLSearchParams {
@@ -369,7 +400,7 @@ export async function fetchIdentityVerify(args: {
         message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
       });
     }
-    const payload = JSON.parse(text) as IdentityVerifyResponse;
+    const payload = JSON.parse(text) as IdentityVerifyResponse | IdentityVerificationDecision;
     return jsonResult({ kind: 'identity_verify', status: 'ok', ...payload });
   } catch (err) {
     return jsonResult({

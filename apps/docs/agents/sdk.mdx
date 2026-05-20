@@ -70,6 +70,16 @@ const identity = await leash.resolveIdentity({ handle: 'payce-demo' });
 const verdict = await leash.verifyIdentity({ mint: identity.mint });
 if (!verdict.verified) throw new Error('identity did not verify');
 
+// Ask for an opinionated allow/warn/deny decision before paying or
+// calling a capability.
+const decision = await leash.verifyIdentityDecision({
+  selector: { mint: identity.mint },
+  intent: 'call_capability',
+  capability: { slug: 'seller/quote-api', protocol: 'x402' },
+  thresholds: { min_rating: 0.7, require_verified_domain: true },
+});
+if (decision.verdict === 'deny') throw new Error('identity decision denied');
+
 // 2b. Expand a pay-skills item into its individual paid endpoints —
 //     mirrors `pay skills endpoints <fqn>` from the pay.sh CLI. The
 //     returned `endpoint.url` values are absolute and ready to pay

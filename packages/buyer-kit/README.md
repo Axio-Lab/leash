@@ -30,6 +30,11 @@ const buyer = createBuyer({
   signer, // @solana/kit TransactionPartialSigner
   networks: ['solana-devnet'],
   rpcUrl: 'https://api.devnet.solana.com',
+  identity: {
+    selector: { handle: 'seller-agent' },
+    capability: { slug: 'seller/tag-api', protocol: 'x402' },
+    thresholds: { require_verified_domain: true },
+  },
   onReceipt: (r) =>
     fetch(`${RUNNER}/a/${r.agent}/receipts`, {
       method: 'POST',
@@ -39,6 +44,10 @@ const buyer = createBuyer({
 
 const { response, receipt } = await buyer.fetch(url, init);
 ```
+
+When `identity` is set, buyer-kit calls Leash's trust-verdict verifier before
+payment. A `deny` verdict blocks the request and emits a denied spend receipt;
+`warn` is allowed unless `blockOnWarn: true` is set.
 
 On a `402 Payment Required`, the wrapped `paidFetch` (`@x402/fetch` +
 `ExactSvmScheme`) builds an SPL transfer matching the seller's

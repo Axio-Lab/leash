@@ -7,8 +7,10 @@ description: Hono integration. Asset Signer PDA payTo. Real x402 middleware on S
 `METHOD /path` routes and resolves `payTo` to the seller agent's Asset
 Signer PDA so funds land directly in the agent's treasury.
 
-If your seller route is also published as an identity capability, attach the
-same metadata to your app config with `buildSellerIdentityMetadata`:
+If your seller route is also published as an identity capability, emit the same
+identity metadata next to the endpoint with `buildSellerIdentityMetadata`.
+Buyer agents can feed that selector and capability card into
+`POST /v1/identity/verify` before paying:
 
 ```ts
 import { buildSellerIdentityMetadata } from '@leashmarket/seller-kit';
@@ -18,8 +20,13 @@ const identity = buildSellerIdentityMetadata({
   handle: 'quote-agent',
   domain: 'seller.example',
   capabilities: ['seller_api:sol-usd-quote', 'protocol:x402'],
+  capability_cards: [{ kind: 'seller_api', slug: 'seller/quote-api', protocol: 'x402' }],
 });
 ```
+
+The helper returns `{ leash: { identity: { v: "0.1", ... } } }`, so you can
+attach it to hosted payment-link metadata, your own API discovery JSON, or any
+directory listing that wants to make seller identity verifiable.
 
 ```ts
 import { Hono } from 'hono';
