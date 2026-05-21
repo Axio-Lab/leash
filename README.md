@@ -1,112 +1,183 @@
 # Leash
 
-> **The identity layer for AI agents.**
+> **Leash is the identity layer for AI agents.**
 
-Two surfaces:
+Leash gives every AI agent a portable onchain identity, a treasury it can
+receive into, delegated authority it can operate with, policy that constrains
+what it may do, capabilities other agents can discover, and receipts that prove
+what happened.
 
-- [`agent.leash.market`](apps/agents) — mint an AI agent identity on Solana,
-  connect tools and control channels, set policy, fund its treasury, and let it run.
-- [`leash.market`](apps/marketplace) — open capability registry. Agents discover
-  tools, pay per call, and build reputation from receipts.
+The identity is the primitive. Payments, marketplace listings, automations,
+external chat connectors, MCP tools, API endpoints, and proof trails are
+capabilities attached to that identity.
 
-Backed by:
+## What Leash Provides
 
-- [`apps/api`](apps/api) — the prepare/sign/submit, agent identity, receipts,
-  marketplace, and automation HTTP API (Hono + OpenAPI 3.1).
-- [`apps/agent-runtime`](apps/agent-runtime) — worker that runs the agent's LLM
-  loop, calls MCPs, settles x402 payments, and emits live activity to Redis.
-- [`apps/explorer`](apps/explorer) — public block-explorer-style view of every
-  agent identity, event, transaction, and receipt.
+| Layer          | What ships                                                                                                              |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Agent identity | MPL Core agent mint, registration metadata, handles, verified domains, claims, and public identity profiles.            |
+| Treasury       | Asset Signer PDA treasury for SOL and SPL stables, with owner-driven withdrawals and spend delegation.                  |
+| Policy         | Rules for budgets, hosts, triggers, limits, kill switches, and spend controls.                                          |
+| Capabilities   | Native Leash listings, pay.sh/pay-skills APIs, MCP tools, paid endpoints, data sources, connectors, and automations.    |
+| Verification   | Identity resolve, allow/warn/deny trust decisions, reputation checks, capability matching, and operator health signals. |
+| Proof trails   | Hash-chained receipts, events, operator history, delivery attempts, and explorer-visible activity.                      |
+| Privacy        | Product V1 selective disclosure links for private capability cards, claims, and redacted receipt details.               |
+
+## Product Surfaces
+
+| Surface         | Path                                       | Purpose                                                                                                                          |
+| --------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| Agent app       | [`apps/agents`](apps/agents)               | Create and manage agent identities, connect tools, set policy, chat, run automations, and control agents from WhatsApp/Telegram. |
+| Marketplace     | [`apps/marketplace`](apps/marketplace)     | Discover capabilities across native Leash listings and pay.sh/pay-skills APIs; list identity-backed paid services.               |
+| Explorer        | [`apps/explorer`](apps/explorer)           | Public explorer for agent identities, events, transactions, receipts, reputation, disclosures, and proof trails.                 |
+| API             | [`apps/api`](apps/api)                     | Hono + OpenAPI service for identity, marketplace, prepare/sign/submit, receipts, automations, webhooks, and platform data.       |
+| Docs            | [`apps/docs`](apps/docs)                   | Mintlify docs for concepts, API reference, SDKs, MCP, buyer/seller kits, schemas, and standards.                                 |
+| Playground      | [`apps/playground`](apps/playground)       | Interactive testbed for minting agents, x402 payments, buyer/seller flows, receipts, and schema validation.                      |
+| Facilitator app | [`apps/facilitator`](apps/facilitator)     | App/runtime surface for x402/MPP facilitation.                                                                                   |
+| Agent runtime   | [`apps/agent-runtime`](apps/agent-runtime) | Worker that runs agent loops, calls MCP tools, settles payments, and emits activity.                                             |
+
+## Published Packages
+
+| Package                                                  | Purpose                                                                                                                        |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| [`@leashmarket/sdk`](packages/sdk)                       | TypeScript client for identity lookup, discovery, verification, disclosures, webhooks, and API calls.                          |
+| [`@leashmarket/cli`](packages/cli)                       | Human CLI for minting, resolving, verifying, funding, paying, and operating agent identities.                                  |
+| [`@leashmarket/mcp`](packages/mcp)                       | Standalone MCP server that gives AI hosts Leash tools over STDIO.                                                              |
+| [`@leashmarket/mcp-core`](packages/mcp-core)             | Reusable MCP tool implementations and helpers.                                                                                 |
+| [`@leashmarket/schemas`](packages/schemas)               | Canonical schemas for receipts, rules, registration, identity profiles, verification decisions, disclosures, and capabilities. |
+| [`@leashmarket/core`](packages/core)                     | Low-level x402, MPP, policy, treasury, receipt, token, and explorer utilities.                                                 |
+| [`@leashmarket/registry-utils`](packages/registry-utils) | Metaplex agent identity creation, registration, delegation, operator, and treasury helpers.                                    |
+| [`@leashmarket/buyer-kit`](packages/buyer-kit)           | Buyer-side helpers for agent payments, identity preflight, and x402/MPP calls.                                                 |
+| [`@leashmarket/seller-kit`](packages/seller-kit)         | Seller-side middleware for identity-backed paid APIs and receipt creation.                                                     |
+| [`@leashmarket/facilitator`](packages/facilitator)       | x402/MPP facilitator server and settlement logic.                                                                              |
+| [`@leashmarket/runner`](packages/runner)                 | Local runner for receipt feeds, payment links, endpoints, and kill-switch behavior.                                            |
+| [`@leashmarket/testing`](packages/testing)               | Fixtures, conformance helpers, and mock facilitator/server utilities.                                                          |
 
 ## Requirements
 
-- Node **≥ 20**
+- Node **>= 20**
 - [pnpm](https://pnpm.io) **9**
 
-## Quick start
+## Quick Start
 
 ```bash
 pnpm install
+pnpm run ci
+```
+
+For a faster local loop:
+
+```bash
 pnpm turbo run build
 pnpm turbo run test typecheck lint
 ```
 
-### Local demo of the agent platform
+## Run The Main Stack Locally
 
 ```bash
-# 1. spin up Postgres-equivalent (Turso file DB, pre-seeded)
+# 1. Migrate and seed the local API database.
 pnpm --filter @leashmarket/api db:migrate
-pnpm --filter @leashmarket/api seed:demo       # 1 agent + 3 pending tasks
-# (Marketplace listings populate organically once sellers register —
-#  Favorites also surfaces the Solana Foundation pay-skills catalogue.)
+pnpm --filter @leashmarket/api seed:demo
 
-# 2. backend
-pnpm --filter @leashmarket/api dev                       # :8787
-pnpm --filter @leashmarket/agent-runtime dev             # picks up the demo tasks
+# 2. Start the backend and runtime.
+pnpm --filter @leashmarket/api dev             # :8787
+pnpm --filter @leashmarket/agent-runtime dev
 
-# 3. surfaces
-pnpm --filter @leashmarket/agents dev                    # agent.leash.market on :4100
-pnpm --filter @leashmarket/marketplace dev               # leash.market         on :4200
-pnpm --filter @leashmarket/explorer dev                  # receipts explorer    on :3000
+# 3. Start product surfaces.
+pnpm --filter @leashmarket/agents dev          # :4100
+pnpm --filter @leashmarket/marketplace dev     # :4200
+pnpm --filter @leashmarket/explorer dev        # :3000
+pnpm --filter @leashmarket/docs dev
+pnpm --filter @leashmarket/playground dev
 ```
 
-Sign in with Privy, watch the seeded agent run on `/agents/<mint>`, see
-each tool call leave a receipt on the explorer.
+Useful local URLs:
 
-### x402 demo (no platform)
+- Agent app: `http://localhost:4100`
+- Marketplace: `http://localhost:4200`
+- Explorer: `http://localhost:3000`
+- API health: `http://localhost:8787/health`
+- OpenAPI: `http://localhost:8787/openapi.json`
 
-1. **Seller** — `pnpm --filter @leashmarket/seller-demo start` (port `3001`).
-2. **Buyer** — `SELLER_URL=http://localhost:3001 pnpm --filter @leashmarket/buyer-demo start` (polls seller).
-3. **Runner** — `pnpm --filter @leashmarket/runner start` (JSONL feed on `:8787`).
-4. **Playground** — `pnpm --filter @leashmarket/playground dev` (interactive UI; proxies receipts to `LEASH_RUNNER_URL`).
+## x402 Demo Without The Hosted App
 
-Scripted outline: `pnpm exec tsx scripts/e2e-demo.ts` (expects seller on `SELLER_URL`).
+```bash
+# Terminal 1: seller API
+pnpm --filter @leashmarket/seller-demo start
 
-### Docs (Mintlify)
+# Terminal 2: buyer agent
+SELLER_URL=http://localhost:3001 pnpm --filter @leashmarket/buyer-demo start
+
+# Terminal 3: receipt runner
+pnpm --filter @leashmarket/runner start
+
+# Terminal 4: playground
+pnpm --filter @leashmarket/playground dev
+```
+
+Scripted outline:
+
+```bash
+pnpm exec tsx scripts/e2e-demo.ts
+```
+
+## Common Environment Variables
+
+| Variable                 | Purpose                                                           |
+| ------------------------ | ----------------------------------------------------------------- |
+| `SOLANA_RPC`             | RPC URL for demos, kits, and local chain reads.                   |
+| `LEASH_API_URL`          | API base URL used by apps/packages when not using the hosted API. |
+| `LEASH_API_ADMIN_SECRET` | Admin secret used by trusted BFF/API-to-API calls.                |
+| `LEASH_NETWORK`          | Runtime network, usually `solana-devnet` or `solana-mainnet`.     |
+| `LEASH_RUNNER_URL`       | Runner URL for receipt feeds and playground proxying.             |
+| `LEASH_FACILITATOR_URL`  | Facilitator URL for x402/MPP settlement.                          |
+| `LEASH_KILL`             | `1` enables the environment kill switch.                          |
+| `LEASH_ONCHAIN_PAUSED`   | `1` mirrors an onchain pause from an external watcher.            |
+| `AGENT_ASSET`            | Agent mint used by demos and local scripts.                       |
+
+App-specific variables live in each app/package README or `.env.example` where
+available.
+
+## Docs
 
 ```bash
 pnpm gen:docs
 pnpm --filter @leashmarket/docs dev
 ```
 
-## Environment
+The docs are also designed for coding agents:
 
-| Variable               | Purpose                                                               |
-| ---------------------- | --------------------------------------------------------------------- |
-| `LEASH_KILL`           | `1` — env kill-switch (runner `/pause`, `/health`).                   |
-| `LEASH_ONCHAIN_PAUSED` | `1` — mirror on-chain pause from an external watcher.                 |
-| `SOLANA_RPC`           | RPC URL (demos, kits).                                                |
-| `AGENT_ASSET`          | Core asset mint (demos).                                              |
-| `LEASH_RUNNER_URL`     | Web app proxy for `receipts.jsonl` (default `http://localhost:8787`). |
+- `https://docs.leash.market/llms.txt`
+- `https://docs.leash.market/llms-full.txt`
+- `https://api.leash.market/openapi.json`
 
 ## Docker
 
-**Split stack (default):** runner + seller-demo + web.
+Split stack:
 
 ```bash
 docker compose up --build
 ```
 
-**Merged profile** (single buy+sell process):
+Merged demo profile:
 
 ```bash
 docker compose --profile merged up --build merged-demo
 ```
 
-### Production deployments
+Railway-ready Dockerfiles live in [`docker/`](docker). Frontends can also run
+on Vercel with the existing Next.js standalone output.
 
-Each long-running service has a Railway-ready Dockerfile in [`docker/`](./docker)
-(build context = repo root). Frontends can run on Railway _or_ Vercel — both
-work with the same `next.config.ts` (`output: 'standalone'`).
-
-| Service              | Dockerfile                        | Suggested host             |
-| -------------------- | --------------------------------- | -------------------------- |
-| `apps/api`           | `docker/api.Dockerfile`           | Railway                    |
-| `apps/agent-runtime` | `docker/agent-runtime.Dockerfile` | Railway (no public domain) |
-| `apps/agents`        | `docker/agents.Dockerfile`        | Vercel (recommended)       |
-| `apps/marketplace`   | `docker/marketplace.Dockerfile`   | Vercel (recommended)       |
-| `apps/explorer`      | `docker/explorer.Dockerfile`      | Vercel / Railway           |
+| Service       | Dockerfile                                                           | Suggested host    |
+| ------------- | -------------------------------------------------------------------- | ----------------- |
+| API           | [`docker/api.Dockerfile`](docker/api.Dockerfile)                     | Railway           |
+| Agent runtime | [`docker/agent-runtime.Dockerfile`](docker/agent-runtime.Dockerfile) | Railway           |
+| Agent app     | [`docker/agents.Dockerfile`](docker/agents.Dockerfile)               | Vercel            |
+| Marketplace   | [`docker/marketplace.Dockerfile`](docker/marketplace.Dockerfile)     | Vercel            |
+| Explorer      | [`docker/explorer.Dockerfile`](docker/explorer.Dockerfile)           | Vercel or Railway |
+| Playground    | [`docker/playground.Dockerfile`](docker/playground.Dockerfile)       | Vercel or Railway |
+| Facilitator   | [`docker/facilitator.Dockerfile`](docker/facilitator.Dockerfile)     | Railway           |
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+See [`CONTRIBUTING.md`](CONTRIBUTING.md).
