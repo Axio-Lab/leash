@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { blogArticles } from '@/lib/blog';
+import { blogArticles, getBlogSearchText } from '@/lib/blog';
 
 const POSTS_PER_PAGE = 10;
 
@@ -42,17 +42,7 @@ function pageHref(page: number, query: string): string {
 function matchesArticleSearch(article: (typeof blogArticles)[number], query: string): boolean {
   if (query.length === 0) return true;
   const needle = query.toLowerCase();
-  const searchableText = [
-    article.title,
-    article.eyebrow,
-    article.description,
-    article.tags.join(' '),
-    article.takeaways.join(' '),
-    article.sections.map((section) => `${section.title} ${section.body.join(' ')}`).join(' '),
-  ]
-    .join(' ')
-    .toLowerCase();
-  return searchableText.includes(needle);
+  return getBlogSearchText(article).includes(needle);
 }
 
 export default async function BlogIndexPage({ searchParams }: BlogIndexPageProps) {
@@ -76,7 +66,7 @@ export default async function BlogIndexPage({ searchParams }: BlogIndexPageProps
           </Badge>
           <div className="space-y-3">
             <h1 className="text-balance text-4xl font-semibold leading-tight tracking-tight md:text-5xl">
-              Notes on agent identity and capabilities.
+              Articles on agent identity and capabilities.
             </h1>
             <p className="max-w-2xl text-pretty text-base text-fg-muted md:text-lg">
               Guides and essays for builders giving AI agents identity, policy, payments, proof
@@ -139,6 +129,9 @@ export default async function BlogIndexPage({ searchParams }: BlogIndexPageProps
                     <h2 className="text-xl font-semibold leading-tight tracking-tight">
                       {article.title}
                     </h2>
+                    <p className="text-xs font-medium uppercase tracking-widest text-fg-subtle">
+                      {article.category} · {article.audience}
+                    </p>
                     <p className="line-clamp-3 text-sm leading-6 text-fg-muted">
                       {article.description}
                     </p>
