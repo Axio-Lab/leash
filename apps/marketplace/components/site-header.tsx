@@ -22,7 +22,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-bg/70 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-[1240px] items-center gap-6 px-5">
-        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
+        <Link href="/" className="flex shrink-0 items-center gap-2 font-semibold tracking-tight">
           <Image
             src="/leash-logo.png"
             alt="Leash"
@@ -31,7 +31,7 @@ export function SiteHeader() {
             className="[filter:brightness(0)_invert(1)] shrink-0"
             priority
           />
-          <span className="hidden sm:inline">
+          <span className="whitespace-nowrap">
             leash<span className="text-fg-muted">.market</span>
           </span>
         </Link>
