@@ -27,11 +27,18 @@ import type {
   DailyTransactionsResponse,
   DailyTxBucket,
   DiscoverResponse,
+  IdentityCapabilityRequirement,
+  IdentityDisclosureRead,
+  IdentityVerificationDecision,
+  IdentityVerificationDecisionRequest,
+  IdentityVerificationThresholds,
+  IdentityVerifyResponse,
   PaymentLink,
   PaymentLinkCreateInput,
   PaymentLinkPatchInput,
   PaymentLinksListResponse,
   PaySkillsProvider,
+  PublicIdentityProfile,
   Receipt,
   RecordAgentInput,
   RecordAgentResponse,
@@ -150,6 +157,57 @@ export class LeashClient {
     return this.requestJson<ReputationSnapshot>(
       'GET',
       `/v1/agents/${encodeURIComponent(args.agentMint)}/reputation${params.toString() ? `?${params}` : ''}`,
+    );
+  }
+
+  async resolveIdentity(args: {
+    mint?: string;
+    handle?: string;
+    domain?: string;
+  }): Promise<PublicIdentityProfile> {
+    const params = new URLSearchParams();
+    if (args.mint) params.set('mint', args.mint);
+    if (args.handle) params.set('handle', args.handle);
+    if (args.domain) params.set('domain', args.domain);
+    return this.requestJson<PublicIdentityProfile>('GET', `/v1/identity/resolve?${params}`);
+  }
+
+  async verifyIdentity(args: {
+    mint?: string;
+    handle?: string;
+    domain?: string;
+  }): Promise<IdentityVerifyResponse> {
+    const params = new URLSearchParams();
+    if (args.mint) params.set('mint', args.mint);
+    if (args.handle) params.set('handle', args.handle);
+    if (args.domain) params.set('domain', args.domain);
+    return this.requestJson<IdentityVerifyResponse>('GET', `/v1/identity/verify?${params}`);
+  }
+
+  async verifyIdentityDecision(
+    args: IdentityVerificationDecisionRequest,
+  ): Promise<IdentityVerificationDecision> {
+    return this.requestJson<IdentityVerificationDecision>('POST', '/v1/identity/verify', args);
+  }
+
+  async verifyCapabilitySeller(args: {
+    selector: { mint?: string; handle?: string; domain?: string };
+    capability: IdentityCapabilityRequirement;
+    intent?: IdentityVerificationDecisionRequest['intent'];
+    thresholds?: IdentityVerificationThresholds;
+  }): Promise<IdentityVerificationDecision> {
+    return this.verifyIdentityDecision({
+      selector: args.selector,
+      intent: args.intent ?? 'call_capability',
+      capability: args.capability,
+      ...(args.thresholds ? { thresholds: args.thresholds } : {}),
+    });
+  }
+
+  async readIdentityDisclosure(token: string): Promise<IdentityDisclosureRead> {
+    return this.requestJson<IdentityDisclosureRead>(
+      'GET',
+      `/v1/identity/disclosures/${encodeURIComponent(token)}`,
     );
   }
 

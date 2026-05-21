@@ -58,7 +58,7 @@ export default function ManageListingPage({ params }: { params: Promise<{ slug: 
         href="/creator/tools"
         className="inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg"
       >
-        <ArrowLeft className="size-4" /> My tools
+        <ArrowLeft className="size-4" /> My capabilities
       </Link>
 
       <header className="flex flex-wrap items-start justify-between gap-4 rounded-xl border bg-aurora p-6">
@@ -103,7 +103,7 @@ export default function ManageListingPage({ params }: { params: Promise<{ slug: 
           <StarRating value={data.rating.avg} count={data.rating.count} />
         </Stat>
         <Stat label="Health">{data.listing.health_status ?? '—'}</Stat>
-        <Stat label="Tools">{data.listing.tools.length}</Stat>
+        <Stat label="Callable tools">{data.listing.tools.length}</Stat>
       </div>
 
       <Card>
@@ -119,7 +119,7 @@ export default function ManageListingPage({ params }: { params: Promise<{ slug: 
 
       <Card>
         <CardHeader>
-          <CardTitle>Tools</CardTitle>
+          <CardTitle>Callable tools</CardTitle>
         </CardHeader>
         <CardContent>
           <ul className="divide-y divide-border">

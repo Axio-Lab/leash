@@ -1,21 +1,45 @@
 ---
 title: Agent
-description: One MPL Core asset. One Asset Signer treasury. Two capabilities.
+description: One identity mint, with treasury, policy, capabilities, receipts, and reputation attached.
 ---
 
-A Leash agent is a **single MPL Core asset** that follows Metaplex's [MIP-104 / Agent Identity](https://www.metaplex.com/docs/agents/mint-agent) standard. Its identity (registration JSON), treasury (Asset Signer PDA), and policy (`leash` block + `RulesV1` doc) all hang off that one mint. Buyer and seller are _capabilities_ layered on top of the same asset; an agent can do either, both, or neither at any time.
+A Leash agent is a **single identity mint**: an MPL Core asset that follows
+Metaplex's [MIP-104 / Agent Identity](https://www.metaplex.com/docs/agents/mint-agent)
+standard. Everything else hangs from that one identifier: registration JSON,
+treasury, delegation, policy, capabilities, receipts, and reputation inputs.
+
+That is the core Leash primitive. The same identity can chat in the hosted app,
+run from an MCP server, pay an x402 endpoint, sell a capability, read connected
+data sources, or trigger an automation. Those are capabilities, not separate
+agents.
+
+## What an identity includes
+
+| Piece            | Source of truth                                                                                    | Purpose                                                                         |
+| ---------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Mint**         | MPL Core asset address                                                                             | The stable agent identifier peers reference.                                    |
+| **Registration** | Agent Identity URI                                                                                 | Name, image, description, services, trust registrations, and the `leash` block. |
+| **Treasury**     | Asset Signer PDA derived from the mint                                                             | Receives and holds SOL/SPL funds for the identity.                              |
+| **Delegation**   | Owner-signed executive grants and SPL approvals                                                    | Lets an online process act with bounded authority.                              |
+| **Policy**       | `RulesV1` referenced by the `leash` block                                                          | Defines budgets, hosts, triggers, and stop conditions.                          |
+| **Capabilities** | Registration services, marketplace listings, pay.sh endpoints, connections, automations, and tools | Tells peers what this identity can do.                                          |
+| **Receipts**     | Hash-chained receipt feed                                                                          | Proves the actions the identity took or earned from.                            |
+| **Reputation**   | Derived from receipts and events                                                                   | Lets peers decide whether to trust the identity.                                |
 
 Although the asset is one thing, three keypairs are wired to it at run-time — the **owner**, the **executive**, and the optional **operator**. Read [Identities](/concepts/identities) before working through the lifecycle below if you haven't seen that distinction yet; the rest of this page assumes it.
 
 ## Lifecycle
 
-1. **Create** — mint a Core asset and attach an `AgentIdentity` plugin in one tx. Use `createAgent` from `@leashmarket/registry-utils` (see [Create an agent](/guides/create-an-agent)) or the BYO equivalent (`createCollection` → `create` → `registerAgentIdentity`).
-2. **Read** — `getAgentIdentityStatus(umi, asset)` returns whether the identity is registered and the agent's treasury PDA. The on-chain registration URI lives on the `AgentIdentity` plugin and points to off-chain JSON.
-3. **Run** — to let an executive submit transactions for the agent, call `registerExecutive` once per wallet, then `delegateExecution` per asset. The executive then signs Core `Execute` instructions on the agent's behalf.
-4. **Fund** — call `setSpendDelegation` per stable mint (USDC / USDT / USDG) the agent should be able to spend. Optionally pre-create every supported stable ATA in one shot with `provisionTreasuryAtas` so wallets and faucets can target the treasury without an "ATA missing" round-trip. See [Fund an agent](/guides/fund-an-agent).
+1. **Create** — mint a Core asset and attach an `AgentIdentity` plugin in one tx. Use `createAgent` from `@leashmarket/registry-utils` (see [Create an agent](/guides/create-an-agent)) or the BYO equivalent (`createCollection` -> `create` -> `registerAgentIdentity`).
+2. **Declare** — publish registration JSON with services, trust registrations, image, description, and optional `leash` block pointers.
+3. **Read** — `getAgentIdentityStatus(umi, asset)` returns whether the identity is registered and the agent's treasury PDA. The registration URI lives on the `AgentIdentity` plugin and points to off-chain JSON.
+4. **Delegate** — call `registerExecutive` once per executive wallet, then `delegateExecution` per asset so the executive can submit Core `Execute` instructions on the agent's behalf.
+5. **Fund** — call `setSpendDelegation` per stable mint (USDC / USDT / USDG) the agent should be able to spend. Optionally pre-create every supported stable ATA in one shot with `provisionTreasuryAtas` so wallets and faucets can target the treasury without an "ATA missing" round-trip. See [Fund an agent](/guides/fund-an-agent).
+6. **Prove** — every gated spend, earn, deny, or settlement produces receipts and events keyed by the same identity.
 
 ## Runtime surface
 
-- `@leashmarket/core` — `Agent`, `treasuryPda`, `deriveAgentTreasuryAddress`, `deriveAgentTreasuryAta`, policy + receipt machinery.
-- `@leashmarket/registry-utils` — `createAgent`, `getAgentIdentityStatus`, `registerExecutive`, `delegateExecution`, `setSpendDelegation`, `provisionTreasuryAtas`, `withdrawTreasury`, plus registration URI resolution and ERC-8004 helpers.
-- `@leashmarket/seller-kit` / `@leashmarket/buyer-kit` — capability layers over the same asset.
+- `@leashmarket/core` — `Agent`, treasury derivation, policy evaluation, receipt hashing, x402/MPP helpers.
+- `@leashmarket/registry-utils` — identity creation, identity reads, executive registration, execution delegation, spend delegation, treasury provisioning, withdrawals, and ERC-8004 registration helpers.
+- `@leashmarket/seller-kit` / `@leashmarket/buyer-kit` — capability layers over the same identity.
+- `@leashmarket/mcp` / `@leashmarket/cli` / `@leashmarket/sdk` — host surfaces that let an AI agent or human operate the identity.

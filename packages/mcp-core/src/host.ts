@@ -17,6 +17,8 @@
  * implementer of this interface.
  */
 
+import type { IdentitySelector, IdentityVerificationDecisionRequest } from '@leashmarket/schemas';
+
 import type { LeashToolResult } from './tool.js';
 
 /** SVM cluster slugs as used by the Leash API + Metaplex SDK. */
@@ -149,6 +151,9 @@ export type ReputationArgs = {
   agent_mint: string;
   network?: SvmNetwork;
 };
+
+export type IdentitySelectorArgs = IdentitySelector;
+export type IdentityVerifyArgs = IdentityVerificationDecisionRequest;
 
 /**
  * Inputs for `leash_pay_skills_endpoints` — expand a chosen
@@ -326,6 +331,18 @@ export interface LeashHost {
    * — both hosts hit `GET /v1/agents/:mint/reputation` directly.
    */
   reputation(args: ReputationArgs): Promise<LeashToolResult>;
+
+  /**
+   * Resolve a Leash identity selector (mint, handle, or verified
+   * domain) to the public agent identity profile.
+   */
+  resolveIdentity(args: IdentitySelectorArgs): Promise<LeashToolResult>;
+
+  /**
+   * Verify that a mint, handle, or domain resolves to a live agent
+   * identity. Public — does not require the active agent to exist.
+   */
+  verifyIdentity(args: IdentityVerifyArgs): Promise<LeashToolResult>;
 
   /**
    * Expand a `pay-skills` discover item into its paid endpoints.

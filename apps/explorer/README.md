@@ -1,8 +1,8 @@
 # @leashmarket/explorer
 
-`explorer.leash.market` — the Leash protocol explorer. Solscan-style
-search across agents, transactions, receipts, and events on **devnet
-and mainnet**.
+`explorer.leash.market` — the Leash agent identity explorer. Solscan-style
+search across agent identities, transactions, proof receipts, and events on
+**devnet and mainnet**.
 
 ## Architecture
 
@@ -42,16 +42,16 @@ Next.js server.
 
 ## Routes
 
-| Path                    | Page                                     |
-| ----------------------- | ---------------------------------------- |
-| `/`                     | Recent events + recent receipts + status |
-| `/events?kind=&cursor=` | Filterable, cursor-paginated event feed  |
-| `/agent/<mint>`         | Identity, treasury, events, receipts     |
-| `/tx/<sig>`             | Decoded Leash event(s) for a tx          |
-| `/event/<id>`           | Single event lifecycle                   |
-| `/receipt/<hash>`       | Receipt detail + chain navigation        |
-| `/health`               | Indexer status for both networks         |
-| `/search?q=…`           | Free-form search fallback                |
+| Path                    | Page                                          |
+| ----------------------- | --------------------------------------------- |
+| `/`                     | Recent events + recent proof trail            |
+| `/events?kind=&cursor=` | Filterable, cursor-paginated event feed       |
+| `/agent/<mint>`         | Agent identity, treasury, events, proof trail |
+| `/tx/<sig>`             | Decoded Leash event(s) for a tx               |
+| `/event/<id>`           | Single event lifecycle                        |
+| `/receipt/<hash>`       | Proof receipt detail + chain navigation       |
+| `/health`               | Indexer status for both networks              |
+| `/search?q=…`           | Free-form search fallback                     |
 
 ## Environment
 

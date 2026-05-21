@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 15;
+const SCHEMA_VERSION = 19;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -339,6 +339,87 @@ const SCHEMA_SQL: readonly string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_agents_owner ON agents(owner_privy_id)`,
 
+  `CREATE TABLE IF NOT EXISTS agent_identity_profiles (
+    agent_mint       TEXT PRIMARY KEY,
+    network          TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    handle           TEXT UNIQUE,
+    visibility       TEXT NOT NULL DEFAULT '{}',
+    capability_cards TEXT NOT NULL DEFAULT '[]',
+    created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (agent_mint) REFERENCES agents(mint)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_identity_profiles_handle ON agent_identity_profiles(handle) WHERE handle IS NOT NULL`,
+
+  `CREATE TABLE IF NOT EXISTS agent_identity_domains (
+    domain       TEXT PRIMARY KEY,
+    agent_mint   TEXT NOT NULL,
+    network      TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    status       TEXT NOT NULL CHECK (status IN ('pending','verified','failed')),
+    verified_at  TEXT,
+    last_error   TEXT,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (agent_mint) REFERENCES agents(mint)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_identity_domains_agent ON agent_identity_domains(agent_mint)`,
+
+  `CREATE TABLE IF NOT EXISTS agent_identity_claims (
+    id           TEXT PRIMARY KEY,
+    agent_mint   TEXT NOT NULL,
+    network      TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    issuer       TEXT NOT NULL,
+    subject_mint TEXT NOT NULL,
+    type         TEXT NOT NULL,
+    value        TEXT NOT NULL,
+    evidence_url TEXT,
+    signature    TEXT NOT NULL,
+    visibility   TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public','private')),
+    expires_at   TEXT,
+    revoked_at   TEXT,
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (agent_mint) REFERENCES agents(mint)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_identity_claims_agent ON agent_identity_claims(agent_mint, visibility, revoked_at)`,
+
+  `CREATE TABLE IF NOT EXISTS agent_operator_history (
+    event_id             TEXT PRIMARY KEY,
+    agent_mint           TEXT NOT NULL,
+    network              TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    kind                 TEXT NOT NULL CHECK (kind IN ('executive_register','executive_delegate','delegation_set','delegation_revoke')),
+    phase                TEXT NOT NULL CHECK (phase IN ('prepared','submitted','confirmed','failed')),
+    actor                TEXT,
+    delegate             TEXT,
+    executive            TEXT,
+    token_mint           TEXT,
+    source_token_account TEXT,
+    delegated_amount     TEXT,
+    signature            TEXT,
+    event_source         TEXT NOT NULL DEFAULT 'api',
+    metadata_json        TEXT NOT NULL DEFAULT '{}',
+    created_at           TEXT NOT NULL,
+    confirmed_at         TEXT,
+    failed_at            TEXT,
+    updated_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (agent_mint) REFERENCES agents(mint)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_operator_history_agent ON agent_operator_history(agent_mint, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_operator_history_public ON agent_operator_history(agent_mint, phase, created_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS agent_identity_disclosures (
+    id             TEXT PRIMARY KEY,
+    agent_mint     TEXT NOT NULL,
+    network        TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    token_hash     TEXT NOT NULL UNIQUE,
+    resources_json TEXT NOT NULL DEFAULT '[]',
+    expires_at     TEXT NOT NULL,
+    revoked_at     TEXT,
+    created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (agent_mint) REFERENCES agents(mint)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_identity_disclosures_agent ON agent_identity_disclosures(agent_mint, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_identity_disclosures_token ON agent_identity_disclosures(token_hash)`,
+
   // ─────────────────────────────────────────────────────────────────────
   // Tasks (v8) — one row per "do this" the agent is given. The
   // agent-runtime worker claims pending tasks via UPDATE WHERE status
@@ -379,6 +460,72 @@ const SCHEMA_SQL: readonly string[] = [
   `CREATE INDEX IF NOT EXISTS idx_activities_task ON task_activities(task_id, created_at)`,
 
   // ─────────────────────────────────────────────────────────────────────
+  // Automations (v17) — persistent background jobs owned by a Privy user
+  // and executed by the user's on-chain agent. Triggers and connection
+  // permissions are JSON so schedules, webhooks, and app events can share
+  // one table without schema churn.
+  `CREATE TABLE IF NOT EXISTS automations (
+    id                   TEXT PRIMARY KEY,
+    owner_privy_id       TEXT NOT NULL,
+    agent_mint           TEXT NOT NULL,
+    name                 TEXT NOT NULL,
+    description          TEXT,
+    instructions         TEXT NOT NULL DEFAULT '',
+    status               TEXT NOT NULL DEFAULT 'paused'
+                           CHECK (status IN ('enabled','paused')),
+    trigger_type         TEXT NOT NULL
+                           CHECK (trigger_type IN ('schedule','webhook','event')),
+    trigger_config       TEXT NOT NULL DEFAULT '{}',
+    source_config        TEXT NOT NULL DEFAULT '{}',
+    delivery_policy      TEXT NOT NULL DEFAULT 'history_only'
+                           CHECK (delivery_policy IN ('history_only','every_run','on_failure','on_condition','silent')),
+    delivery_config      TEXT NOT NULL DEFAULT '{}',
+    budget_per_run       TEXT NOT NULL DEFAULT '0',
+    budget_per_day       TEXT NOT NULL DEFAULT '0',
+    timezone             TEXT NOT NULL DEFAULT 'UTC',
+    next_run_at          TEXT,
+    last_run_at          TEXT,
+    last_status          TEXT,
+    failure_count        INTEGER NOT NULL DEFAULT 0,
+    locked_by            TEXT,
+    locked_until         TEXT,
+    retention_days       INTEGER NOT NULL DEFAULT 30,
+    deleted_at           TEXT,
+    created_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (agent_mint) REFERENCES agents(mint)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_automations_owner_updated ON automations(owner_privy_id, updated_at DESC) WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_automations_due ON automations(next_run_at) WHERE deleted_at IS NULL AND status = 'enabled'`,
+  `CREATE INDEX IF NOT EXISTS idx_automations_lock ON automations(locked_until) WHERE deleted_at IS NULL AND status = 'enabled'`,
+
+  `CREATE TABLE IF NOT EXISTS automation_runs (
+    id                   TEXT PRIMARY KEY,
+    automation_id        TEXT NOT NULL,
+    owner_privy_id       TEXT NOT NULL,
+    agent_mint           TEXT NOT NULL,
+    trigger_type         TEXT NOT NULL,
+    trigger_payload      TEXT NOT NULL DEFAULT '{}',
+    status               TEXT NOT NULL DEFAULT 'queued'
+                           CHECK (status IN ('queued','running','succeeded','failed','skipped','cancelled')),
+    output_text          TEXT,
+    error                TEXT,
+    source_summary       TEXT NOT NULL DEFAULT '{}',
+    delivery_status      TEXT,
+    delivery_result      TEXT NOT NULL DEFAULT '{}',
+    spend_usd            TEXT NOT NULL DEFAULT '0',
+    receipts             TEXT NOT NULL DEFAULT '[]',
+    idempotency_key      TEXT,
+    claimed_by           TEXT,
+    started_at           TEXT,
+    finished_at          TEXT,
+    created_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (automation_id) REFERENCES automations(id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_automation_runs_auto_created ON automation_runs(automation_id, created_at DESC)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_automation_runs_idempotency ON automation_runs(automation_id, idempotency_key) WHERE idempotency_key IS NOT NULL`,
+
+  // ─────────────────────────────────────────────────────────────────────
   // Marketplace listings (v9) — third-party MCP servers published on
   // leash.market. `pricing` and `tools` are JSON blobs validated at
   // POST time. `health_status` is updated by the hourly health-check
@@ -394,6 +541,7 @@ const SCHEMA_SQL: readonly string[] = [
     category        TEXT NOT NULL,
     owner_privy_id  TEXT NOT NULL,
     owner_wallet    TEXT NOT NULL,
+    seller_agent_mint TEXT,
     endpoint        TEXT NOT NULL,
     pricing         TEXT NOT NULL DEFAULT '{}',
     tools           TEXT NOT NULL DEFAULT '[]',
@@ -674,12 +822,32 @@ export async function runMigrations(db: Client): Promise<void> {
     await migrateWebhooksAgentMint(db);
   }
 
+  // v17: automations become executable. Adds explicit run
+  // instructions plus a lightweight worker lease (`locked_by`,
+  // `locked_until`) used by the scheduler to claim due rows safely.
+  if (currentVersion < 17) {
+    await migrateExecutableAutomations(db);
+  }
+
+  // v19: native marketplace capabilities can be anchored to the
+  // seller's Leash agent identity. Existing rows remain null and are
+  // rendered as legacy/unverified until owners link an identity.
+  if (currentVersion < 19) {
+    await migrateListingsSellerAgentMint(db);
+  }
+
   // Always-on index assertions. These run after every boot — they're
   // cheap (`IF NOT EXISTS`) and idempotent, and they cover the case
   // where a brand-new DB takes the latest `SCHEMA_SQL` directly and
   // every versioned migration short-circuits.
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_webhooks_agent_mint ON webhooks(agent_mint) WHERE disabled_at IS NULL`,
+  );
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_automations_lock ON automations(locked_until) WHERE deleted_at IS NULL AND status = 'enabled'`,
+  );
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_listings_seller_agent ON listings(seller_agent_mint) WHERE seller_agent_mint IS NOT NULL`,
   );
 
   if (currentVersion < SCHEMA_VERSION) {
@@ -853,6 +1021,31 @@ async function migrateWebhooksAgentMint(db: Client): Promise<void> {
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_webhooks_agent_mint ON webhooks(agent_mint) WHERE disabled_at IS NULL`,
   );
+}
+
+async function migrateExecutableAutomations(db: Client): Promise<void> {
+  const info = await db.execute('PRAGMA table_info(automations)');
+  const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
+  if (!names.has('instructions')) {
+    await db.execute(`ALTER TABLE automations ADD COLUMN instructions TEXT NOT NULL DEFAULT ''`);
+  }
+  if (!names.has('locked_by')) {
+    await db.execute('ALTER TABLE automations ADD COLUMN locked_by TEXT');
+  }
+  if (!names.has('locked_until')) {
+    await db.execute('ALTER TABLE automations ADD COLUMN locked_until TEXT');
+  }
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_automations_lock ON automations(locked_until) WHERE deleted_at IS NULL AND status = 'enabled'`,
+  );
+}
+
+async function migrateListingsSellerAgentMint(db: Client): Promise<void> {
+  const info = await db.execute('PRAGMA table_info(listings)');
+  const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
+  if (!names.has('seller_agent_mint')) {
+    await db.execute(`ALTER TABLE listings ADD COLUMN seller_agent_mint TEXT`);
+  }
 }
 
 async function migrateWatchlistKindCheck(db: Client): Promise<void> {

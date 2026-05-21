@@ -8,11 +8,10 @@
  *
  * Why public (no API key required)
  * --------------------------------
- * Agent-to-agent commerce is a permissionless market — Leash is the
- * registry, not the gatekeeper. Discovery and reputation reads are
- * the agent equivalent of "google a service before paying it"; they
- * must work for any caller (MCP host, CLI, external indexer, the YC
- * reviewer hitting curl on the cmdline).
+ * Leash is the identity layer for AI agents, so discovery and
+ * reputation reads must be public. They are the agent equivalent of
+ * resolving a seller identity, checking its capabilities, and reading
+ * proof before trusting or paying it.
  *
  * Both endpoints are read-only and rate-limited at the platform
  * edge; no PII is leaked because listings are user-published metadata
@@ -31,6 +30,7 @@ import { execute } from '../storage/turso.js';
 import type { DbClient } from '../storage/turso.js';
 import { invalidRequest, notFound } from '../util/errors.js';
 import type { SvmNetwork } from '../util/network.js';
+import { publicIdentitySummary } from '../util/public-identity.js';
 
 export type DiscoverReputationDeps = {
   config: LeashApiConfig;
@@ -57,6 +57,26 @@ const DiscoverItemSchema = z
     }),
     pricing_type: z.enum(['free', 'per_call', 'variable']),
     seller_agent_mint: PubkeySchema.nullable(),
+    seller_identity: z
+      .object({
+        mint: PubkeySchema,
+        network: NetworkSchema,
+        handle: z.string().nullable(),
+        name: z.string(),
+        verified_domains: z.array(z.string()),
+        reputation: z.object({
+          settled_calls: z.number().int(),
+          denied_calls: z.number().int(),
+          rating: z.number(),
+        }),
+        capability_cards_count: z.number().int(),
+        claims_count: z.number().int(),
+      })
+      .nullable()
+      .openapi({
+        description:
+          'Public seller identity summary for Leash-native listings. Null for legacy unlinked listings and pay-skills entries.',
+      }),
     seller_wallet: PubkeySchema.nullable().openapi({
       description: 'Owner wallet for Leash listings; null for pay-skills entries.',
     }),
@@ -65,6 +85,10 @@ const DiscoverItemSchema = z
         'Aggregated rating in `[0, 1]`. Currently derived from the listing rating + seller dispute rate; null when neither signal exists. Always null for pay-skills entries.',
     }),
     health_status: z.enum(['ok', 'warn', 'down']).nullable(),
+    endpoint_count: z.number().int().min(0).optional().openapi({
+      description:
+        'Number of payable endpoints published by the provider when known. Most useful for pay-skills entries, where tools[] is intentionally empty until expanded.',
+    }),
     tags: z.array(z.string()),
     tools: z
       .array(
@@ -250,48 +274,52 @@ export function buildDiscoverReputationRoutes(deps: DiscoverReputationDeps): Ope
           : Promise.resolve([]),
       ]);
 
-      const leashItems = listings
-        .filter((l) => {
-          if (pricing_type && l.pricing.type !== pricing_type) return false;
-          if (l.pricing.type === 'per_call') {
-            const amt = Number(l.pricing.amount ?? '0');
-            if (Number.isFinite(amt) && amt > cap) return false;
-          }
-          return true;
-        })
-        .map((l) => {
-          const tags = l.category ? [l.category] : [];
-          // Listing rating is owned by the marketplace tables; we
-          // could surface it here, but pulling the per-listing rating
-          // summary for every row would N+1 the query. The agent-
-          // reputation endpoint covers per-agent quality; here we
-          // expose the listing health as a coarse signal until we
-          // denormalise listing.rating into the listings table.
-          const rating: number | null =
-            l.healthStatus === 'ok'
-              ? 1
-              : l.healthStatus === 'warn'
-                ? 0.6
-                : l.healthStatus === 'down'
-                  ? 0
-                  : null;
-          return {
-            source: 'leash' as const,
-            url: l.endpoint,
-            title: l.name,
-            description: l.description,
-            slug: l.slug,
-            category: l.category,
-            price_usdc: l.pricing.type === 'per_call' ? (l.pricing.amount ?? null) : null,
-            pricing_type: l.pricing.type,
-            seller_agent_mint: null,
-            seller_wallet: l.ownerWallet,
-            rating,
-            health_status: l.healthStatus,
-            tags,
-            tools: l.tools.map((t) => ({ name: t.name, description: t.description })),
-          };
-        });
+      const leashItems = await Promise.all(
+        listings
+          .filter((l) => {
+            if (pricing_type && l.pricing.type !== pricing_type) return false;
+            if (l.pricing.type === 'per_call') {
+              const amt = Number(l.pricing.amount ?? '0');
+              if (Number.isFinite(amt) && amt > cap) return false;
+            }
+            return true;
+          })
+          .map(async (l) => {
+            const tags = l.category ? [l.category] : [];
+            // Listing rating is owned by the marketplace tables; we
+            // could surface it here, but pulling the per-listing rating
+            // summary for every row would N+1 the query. The agent-
+            // reputation endpoint covers per-agent quality; here we
+            // expose the listing health as a coarse signal until we
+            // denormalise listing.rating into the listings table.
+            const rating: number | null =
+              l.healthStatus === 'ok'
+                ? 1
+                : l.healthStatus === 'warn'
+                  ? 0.6
+                  : l.healthStatus === 'down'
+                    ? 0
+                    : null;
+            const sellerIdentity = await publicIdentitySummary(deps.db, l.sellerAgentMint);
+            return {
+              source: 'leash' as const,
+              url: l.endpoint,
+              title: l.name,
+              description: l.description,
+              slug: l.slug,
+              category: l.category,
+              price_usdc: l.pricing.type === 'per_call' ? (l.pricing.amount ?? null) : null,
+              pricing_type: l.pricing.type,
+              seller_agent_mint: l.sellerAgentMint,
+              seller_identity: sellerIdentity,
+              seller_wallet: l.ownerWallet,
+              rating,
+              health_status: l.healthStatus,
+              tags,
+              tools: l.tools.map((t) => ({ name: t.name, description: t.description })),
+            };
+          }),
+      );
 
       // Merge with a stable preference: rated Leash listings first,
       // then unrated Leash, then pay-skills (sorted by min price

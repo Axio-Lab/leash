@@ -6,3 +6,4 @@ export * from './mpp-challenge.js';
 export * from './registration.js';
 export * from './capabilities.js';
 export * from './endpoint.js';
+export * from './identity.js';

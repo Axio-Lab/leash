@@ -36,7 +36,10 @@ import { buildWebhookRoutes } from './routes/webhooks.js';
 import { buildMetricsRoutes } from './routes/metrics.js';
 import { buildAdminRoutes } from './routes/admin.js';
 import { buildMarketplaceRoutes } from './routes/marketplace.js';
+import { buildAgentIdentityProfileRoutes } from './routes/agent-identity-profile.js';
 import { buildPlatformAgentRoutes } from './routes/platform-agents.js';
+import { buildPlatformAutomationRoutes } from './routes/platform-automations.js';
+import { setAutomationExternalChatDeliveryDeps } from './automations/reports.js';
 import { buildPlatformTaskRoutes } from './routes/platform-tasks.js';
 import { buildAgentSelfRegisterRoutes } from './routes/agent-self-register.js';
 import { buildDiscoverReputationRoutes } from './routes/discover-reputation.js';
@@ -95,7 +98,15 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   // Mounted BEFORE the user-key sub-app so its API key middleware
   // doesn't intercept admin requests.
   app.route('/', buildAdminRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
+  app.route(
+    '/',
+    buildAgentIdentityProfileRoutes({ config: deps.config, db: deps.db, cache: deps.cache }),
+  );
   app.route('/', buildPlatformAgentRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
+  app.route(
+    '/',
+    buildPlatformAutomationRoutes({ config: deps.config, db: deps.db, cache: deps.cache }),
+  );
   app.route('/', buildPlatformTaskRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   // External chat bridges (Telegram + WhatsApp). The admin-gated CRUD
   // sub-app is mounted alongside the other platform routes; the public
@@ -154,6 +165,14 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
       : {}),
     ...(whatsappManager ? { whatsapp: whatsappManager } : {}),
   };
+  setAutomationExternalChatDeliveryDeps({
+    config: deps.config,
+    db: deps.db,
+    ...(whatsappManager ? { whatsapp: whatsappManager } : {}),
+    ...(deps.externalDispatcherTelegramClientFactory
+      ? { telegramClientFactory: deps.externalDispatcherTelegramClientFactory }
+      : {}),
+  });
   app.route('/', buildExternalRoutes(externalDeps));
   app.route('/', buildExternalPublicRoutes(externalDeps));
   // Public agent-onboarding routes — `/v1/agents/self-register`,

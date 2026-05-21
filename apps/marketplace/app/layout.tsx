@@ -19,18 +19,18 @@ const robotoMono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'leash.market · The app store for AI agents',
+  title: 'leash.market · Capability registry for AI agents',
   description:
-    'An open registry of agent tools your agent can discover, rate, and pay per call. Stablecoin rails for autonomous agents.',
+    'An open registry of agent capabilities your agent identity can discover, pay for, and build reputation from.',
   icons: {
     icon: '/leash-logo.png',
     shortcut: '/leash-logo.png',
     apple: '/leash-logo.png',
   },
   openGraph: {
-    title: 'leash.market · The app store for AI agents',
+    title: 'leash.market · Capability registry for AI agents',
     description:
-      'An open registry of agent tools your agent can discover, rate, and pay per call. Stablecoin rails for autonomous agents.',
+      'An open registry of agent capabilities your agent identity can discover, pay for, and build reputation from.',
     siteName: 'leash.market',
   },
 };

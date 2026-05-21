@@ -1,0 +1,45 @@
+import type {
+  IdentitySelector,
+  IdentityVerificationDecision,
+  IdentityVerificationDecisionRequest,
+  IdentityVerifyResponse,
+} from '@leashmarket/schemas';
+
+export type {
+  IdentitySelector,
+  IdentityVerificationDecision,
+  IdentityVerificationDecisionRequest,
+  IdentityVerifyResponse,
+} from '@leashmarket/schemas';
+
+export async function verifyAgentIdentity(args: {
+  apiBaseUrl?: string;
+  selector: IdentitySelector;
+  fetchImpl?: typeof globalThis.fetch;
+}): Promise<IdentityVerifyResponse> {
+  const fetchImpl = args.fetchImpl ?? globalThis.fetch;
+  const params = new URLSearchParams();
+  if (args.selector.mint) params.set('mint', args.selector.mint);
+  if (args.selector.handle) params.set('handle', args.selector.handle);
+  if (args.selector.domain) params.set('domain', args.selector.domain);
+  const base = (args.apiBaseUrl ?? 'https://api.leash.market').replace(/\/+$/, '');
+  const res = await fetchImpl(`${base}/v1/identity/verify?${params}`);
+  if (!res.ok) throw new Error(`identity verify failed: HTTP ${res.status}`);
+  return res.json() as Promise<IdentityVerifyResponse>;
+}
+
+export async function verifyAgentIdentityDecision(args: {
+  apiBaseUrl?: string;
+  request: IdentityVerificationDecisionRequest;
+  fetchImpl?: typeof globalThis.fetch;
+}): Promise<IdentityVerificationDecision> {
+  const fetchImpl = args.fetchImpl ?? globalThis.fetch;
+  const base = (args.apiBaseUrl ?? 'https://api.leash.market').replace(/\/+$/, '');
+  const res = await fetchImpl(`${base}/v1/identity/verify`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(args.request),
+  });
+  if (!res.ok) throw new Error(`identity decision failed: HTTP ${res.status}`);
+  return res.json() as Promise<IdentityVerificationDecision>;
+}

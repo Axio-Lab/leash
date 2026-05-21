@@ -45,6 +45,12 @@ const echoHost: LeashHost = {
   async reputation(args) {
     return jsonResult({ kind: 'echo:reputation', args });
   },
+  async resolveIdentity(args) {
+    return jsonResult({ kind: 'echo:resolve_identity', args });
+  },
+  async verifyIdentity(args) {
+    return jsonResult({ kind: 'echo:verify_identity', args });
+  },
   async paySkillsProvider(args) {
     return jsonResult({ kind: 'echo:pay_skills_provider', args });
   },
@@ -80,8 +86,10 @@ describe('LEASH_TOOLS', () => {
       'leash_receipts',
       'leash_register_agent',
       'leash_reputation',
+      'leash_resolve_identity',
       'leash_set_spend_limit',
       'leash_transaction_history',
+      'leash_verify_identity',
       'leash_withdraw_treasury',
     ]);
   });

@@ -9,6 +9,7 @@ export type ToolRegistryContext = {
   privyId: string;
   agentMint?: string | null;
   ownerWallet?: string | null;
+  enabledToolkits?: string[];
 };
 
 /**
@@ -19,7 +20,7 @@ export async function resolveMcpServers(
 ): Promise<Record<string, McpServerConfig>> {
   const servers: Record<string, McpServerConfig> = {};
 
-  const composio = await resolveComposioMcpForPrivy(ctx.privyId);
+  const composio = await resolveComposioMcpForPrivy(ctx.privyId, ctx.enabledToolkits);
   if (composio) {
     servers.composio = composio;
   }

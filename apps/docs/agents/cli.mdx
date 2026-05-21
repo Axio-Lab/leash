@@ -95,6 +95,10 @@ leash discover -q ocr --max-price 0.10
 # 6. Vet a counterparty before paying.
 leash reputation AGENT_MINT_PUBKEY
 
+# 6b. Resolve or verify an identity selector before trusting it.
+leash identity resolve --handle payce-demo
+leash identity verify --domain agent.example
+
 # 7. Pay something (x402 or MPP — probed automatically).
 leash pay https://example.com/x/abc123
 # POST + JSON body when the paid route needs it:
@@ -173,6 +177,16 @@ marketplace + reputation:
     `pay skills endpoints <fqn>`). Take <fqn> from the (fqn: ...) hint
     emitted by `leash discover`.
   reputation AGENT_MINT [--network solana-devnet|solana-mainnet]
+
+identity:
+  identity resolve (--mint M | --handle H | --domain D)
+                                     resolve a public identity profile:
+                                     handle, domains, capability cards,
+                                     claims, and reputation summary.
+  identity verify (--mint M | --handle H | --domain D)
+                                     machine-readable preflight before
+                                     paying, trusting claims, or calling
+                                     a capability.
 
 activity:
   receipts [--limit N] [--direction outgoing|incoming|both]

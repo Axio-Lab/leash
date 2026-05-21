@@ -112,6 +112,7 @@ export async function runAgentForExternalChannel(
       body: JSON.stringify({
         owner_privy_id: conn.ownerPrivyId,
         channel: conn.channel,
+        external_connection_id: conn.id,
         message: args.message,
         ...(priorConversation.length > 0 ? { conversation: priorConversation } : {}),
       }),

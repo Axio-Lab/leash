@@ -26,6 +26,8 @@ curl 'https://api.leash.market/v1/discover?capability=ocr&limit=3'
 curl 'https://api.leash.market/v1/discover?capability=email&source=pay-skills'
 
 curl 'https://api.leash.market/v1/agents/AGENT_MINT/reputation'
+
+curl 'https://api.leash.market/v1/identity/verify?handle=payce-demo'
 ```
 
 If those return JSON, the SDK calls below will work too.
@@ -62,6 +64,21 @@ if (leashItem) {
   const rep = await leash.reputation({ agentMint: leashItem.seller_agent_mint! });
   if (rep.rating < 0.5) throw new Error('seller has too low a rating');
 }
+
+// 2a. Identity preflight before trusting a handle/domain/mint.
+const identity = await leash.resolveIdentity({ handle: 'payce-demo' });
+const verdict = await leash.verifyIdentity({ mint: identity.mint });
+if (!verdict.verified) throw new Error('identity did not verify');
+
+// Ask for an opinionated allow/warn/deny decision before paying or
+// calling a capability.
+const decision = await leash.verifyIdentityDecision({
+  selector: { mint: identity.mint },
+  intent: 'call_capability',
+  capability: { slug: 'seller/quote-api', protocol: 'x402' },
+  thresholds: { min_rating: 0.7, require_verified_domain: true },
+});
+if (decision.verdict === 'deny') throw new Error('identity decision denied');
 
 // 2b. Expand a pay-skills item into its individual paid endpoints —
 //     mirrors `pay skills endpoints <fqn>` from the pay.sh CLI. The

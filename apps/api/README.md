@@ -108,7 +108,7 @@ Receipts:
 - `POST /v1/agents/{mint}/pull-target` — register a `services.receipts`
   URL the API will poll on a cadence
 
-Payment links + public paywall (the "Stripe Payment Links" of x402):
+Payment links + public paywalls for identity-linked paid capabilities:
 
 - `POST /v1/payment-links` — create a hosted x402 paywall
 - `GET /v1/payment-links` and `GET /v1/payment-links/{id}` — read / list

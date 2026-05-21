@@ -1,11 +1,11 @@
 /**
  * `EndpointV1` — a Leash payment-link descriptor.
  *
- * An endpoint is the "Stripe Payment Link for x402" record: an agent owner
- * declares (`HTTP method` + `path` + `price`), and any x402-aware caller
- * can dial `https://<host>/x/<id>` to either probe the offer (returns 402
- * with a real `paymentRequirements[]`) or pay it (returns the configured
- * response template).
+ * An endpoint is an identity-linked paid capability: an agent owner declares
+ * (`HTTP method` + `path` + `price`), and any x402-aware caller can dial
+ * `https://<host>/x/<id>` to either probe the offer (returns 402 with a real
+ * `paymentRequirements[]`) or pay it (returns the configured response
+ * template).
  *
  * Endpoints are stored on the runner (server-side) so the shareable URL is
  * resolvable from anywhere — not just the device that created it.

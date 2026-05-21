@@ -38,6 +38,11 @@ import {
   type PolicyState,
   type TokenNetwork,
 } from '@leashmarket/core';
+import {
+  verifyAgentIdentityDecision,
+  type IdentitySelector,
+  type IdentityVerificationDecisionRequest,
+} from './identity.js';
 
 export type BuyerConfig = {
   agent: string;
@@ -114,6 +119,21 @@ export type BuyerConfig = {
    * when no preferred currency match is found.
    */
   preferredCurrency?: KnownStableSymbol;
+  /**
+   * Optional seller identity preflight. When configured, buyer-kit asks
+   * Leash for an agent-to-agent trust verdict before attempting payment.
+   * A `deny` verdict blocks the call and emits a denied spend receipt.
+   * `warn` is allowed by default unless `blockOnWarn` is true.
+   */
+  identity?: {
+    apiBaseUrl?: string;
+    selector: IdentitySelector;
+    intent?: IdentityVerificationDecisionRequest['intent'];
+    capability?: IdentityVerificationDecisionRequest['capability'];
+    thresholds?: IdentityVerificationDecisionRequest['thresholds'];
+    blockOnWarn?: boolean;
+    fetchImpl?: typeof globalThis.fetch;
+  };
 };
 
 export type BuyerCallResult = {
@@ -222,6 +242,66 @@ export function createBuyer(cfg: BuyerConfig): Buyer {
       const method = (init?.method ?? 'GET').toUpperCase();
       const body = init?.body != null ? String(init.body) : null;
       const h = requestHash({ method, url, body });
+      let identityDecision: Awaited<ReturnType<typeof verifyAgentIdentityDecision>> | null = null;
+      let identityError: string | null = null;
+      if (cfg.identity) {
+        try {
+          identityDecision = await verifyAgentIdentityDecision({
+            apiBaseUrl: cfg.identity.apiBaseUrl,
+            fetchImpl: cfg.identity.fetchImpl,
+            request: {
+              selector: cfg.identity.selector,
+              intent: cfg.identity.intent ?? 'pay',
+              ...(cfg.identity.capability ? { capability: cfg.identity.capability } : {}),
+              ...(cfg.identity.thresholds ? { thresholds: cfg.identity.thresholds } : {}),
+            },
+          });
+        } catch (err) {
+          identityError = err instanceof Error ? err.message : String(err);
+        }
+      }
+      if (
+        identityError ||
+        (identityDecision &&
+          (identityDecision.verdict === 'deny' ||
+            (identityDecision.verdict === 'warn' && cfg.identity?.blockOnWarn === true)))
+      ) {
+        const draft = {
+          v: '0.1' as const,
+          kind: 'spend' as const,
+          agent: cfg.agent,
+          nonce: state.recentRequestHashes.length,
+          ts: new Date().toISOString(),
+          policy_v: cfg.rules.v,
+          request: { method, url, body_hash: body ? requestHash({ method, url, body }) : null },
+          decision: 'deny' as const,
+          reason: identityError
+            ? `identity_verification_error: ${identityError}`
+            : `identity_verification_${identityDecision!.verdict}`,
+          price: null,
+          facilitator: null,
+          tx_sig: null,
+          response: null,
+          prev_receipt_hash: null,
+        };
+        const receipt = finalizeReceipt(draft);
+        await receiptSink(receipt);
+        return {
+          response: new Response(
+            JSON.stringify({
+              error: 'identity_verification_failed',
+              ...(identityDecision
+                ? { verdict: identityDecision.verdict, checks: identityDecision.checks }
+                : { detail: identityError }),
+            }),
+            { status: 403 },
+          ),
+          receipt,
+          failureReason: identityError
+            ? `identity_verification_error: ${identityError}`
+            : `identity_verification_${identityDecision!.verdict}`,
+        };
+      }
       const pol = evaluate(
         { method, url, requestHash: h, estimatedPrice: cfg.rules.budget.perCall },
         cfg.rules,

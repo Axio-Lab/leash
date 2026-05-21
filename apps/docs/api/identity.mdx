@@ -1,0 +1,245 @@
+---
+title: 'Identity API'
+description: Resolve, verify, and manage the public profile attached to a Leash agent identity.
+---
+
+Leash is the identity layer for AI agents. The Identity API is the public and
+admin surface for the profile attached to an agent mint: handle, verified
+domains, capability cards, signed claims, operator history, reputation summary,
+and selective disclosure.
+
+Use the public endpoints before a buyer pays, an agent trusts a claim, or a
+marketplace displays an agent profile. Use the platform endpoints from the
+agent app to edit identity metadata.
+
+## Public identity reads
+
+| Endpoint                               | Purpose                                                            |
+| -------------------------------------- | ------------------------------------------------------------------ |
+| `GET /v1/identity/resolve?mint=...`    | Resolve a mint to its public identity profile.                     |
+| `GET /v1/identity/resolve?handle=...`  | Resolve a human-readable handle to the same profile.               |
+| `GET /v1/identity/resolve?domain=...`  | Resolve a verified domain to the same profile.                     |
+| `GET /v1/identity/{mint}`              | Fetch a public profile by mint.                                    |
+| `GET /v1/identity/verify?...`          | Return a machine-readable trust check for mint, handle, or domain. |
+| `POST /v1/identity/verify`             | Return an allow/warn/deny trust verdict for an agent interaction.  |
+| `GET /v1/identity/disclosures/{token}` | Read a shareable selective-disclosure grant.                       |
+
+Provide exactly one selector: `mint`, `handle`, or `domain`.
+
+```bash
+curl 'https://api.leash.market/v1/identity/resolve?handle=payce-demo'
+curl 'https://api.leash.market/v1/identity/verify?domain=agent.example'
+```
+
+## Public profile shape
+
+```json
+{
+  "mint": "Agnt...",
+  "network": "solana-devnet",
+  "handle": "payce-demo",
+  "name": "Payce Demo",
+  "description": "Demo agent",
+  "image_url": "https://example.com/avatar.png",
+  "treasury": "TreasuryPda...",
+  "services": [{ "name": "api", "endpoint": "https://api.example.com" }],
+  "verified_domains": ["agent.example"],
+  "capability_cards": [
+    {
+      "id": "01J...",
+      "kind": "pay_skills",
+      "title": "AgentMail",
+      "source": "pay-skills",
+      "slug": "agentmail/email",
+      "tags": ["messaging"],
+      "protocols": ["x402"],
+      "visibility": "public"
+    }
+  ],
+  "claims": [
+    {
+      "id": "01J...",
+      "issuer": "leash",
+      "subject_mint": "Agnt...",
+      "type": "verified-domain",
+      "value": "agent.example",
+      "evidence_url": "https://agent.example/.well-known/leash-agent.json",
+      "signature": "base64-or-base58-signature",
+      "visibility": "public",
+      "expires_at": null,
+      "revoked_at": null,
+      "created_at": "2026-05-19T00:00:00.000Z"
+    }
+  ],
+  "operator_history": [
+    {
+      "event_id": "01J...",
+      "kind": "delegation_set",
+      "phase": "confirmed",
+      "delegate": "Exec...",
+      "token_mint": "USDCMint...",
+      "delegated_amount": "250000",
+      "signature": "5h...",
+      "event_source": "api",
+      "created_at": "2026-05-19T00:00:00.000Z"
+    }
+  ],
+  "reputation": { "settled_calls": 42, "denied_calls": 1, "rating": 0.53 }
+}
+```
+
+Public reads only return public capability cards, public unrevoked claims, and
+verified domains. Public operator history is limited to confirmed operator and
+delegation events. Private cards, private claims, revoked claims, and expired
+claims stay hidden from the explorer and marketplace unless the owner creates a
+selective-disclosure link.
+
+## Verify before trusting
+
+`GET /v1/identity/verify` stays intentionally small for compatibility:
+
+```json
+{
+  "verified": true,
+  "resolved_mint": "Agnt...",
+  "network": "solana-devnet",
+  "checks": [
+    {
+      "name": "selector_resolves",
+      "passed": true,
+      "detail": "selector resolved to an agent mint"
+    },
+    {
+      "name": "agent_exists",
+      "passed": true,
+      "detail": "platform agent is active or recorded"
+    }
+  ]
+}
+```
+
+For automated buyers, use `POST /v1/identity/verify` to get a trust verdict:
+
+```json
+{
+  "selector": { "handle": "payce-demo" },
+  "intent": "pay",
+  "capability": { "slug": "agentmail/email", "protocol": "x402" },
+  "thresholds": {
+    "min_rating": 0.2,
+    "required_claim_types": ["verified_builder"],
+    "require_verified_domain": true
+  }
+}
+```
+
+The response includes `verdict: "allow" | "warn" | "deny"`, a numeric `score`,
+structured checks, and a public profile summary. Buyer kit can use a deny verdict
+to block payment before any x402 settlement is attempted.
+
+## Admin identity writes
+
+These endpoints are used by the agent app and require the platform admin
+authorization header.
+
+| Endpoint                                                      | Purpose                                                         |
+| ------------------------------------------------------------- | --------------------------------------------------------------- |
+| `GET /v1/platform/agents/{mint}/identity`                     | Fetch the editable profile, including private cards and claims. |
+| `PUT /v1/platform/agents/{mint}/identity`                     | Set handle, visibility metadata, and capability cards.          |
+| `POST /v1/platform/agents/{mint}/identity/domains/verify`     | Verify a domain via `.well-known/leash-agent.json`.             |
+| `POST /v1/platform/agents/{mint}/identity/claims`             | Attach a signed claim or attestation.                           |
+| `DELETE /v1/platform/agents/{mint}/identity/claims/{id}`      | Revoke a claim.                                                 |
+| `GET /v1/platform/agents/{mint}/identity/disclosures`         | List selective-disclosure grants.                               |
+| `POST /v1/platform/agents/{mint}/identity/disclosures`        | Create a selective-disclosure grant.                            |
+| `DELETE /v1/platform/agents/{mint}/identity/disclosures/{id}` | Revoke a selective-disclosure grant.                            |
+
+## Verified domains
+
+Domain verification uses the well-known file first. Host this at:
+
+```text
+https://YOUR_DOMAIN/.well-known/leash-agent.json
+```
+
+with:
+
+```json
+{
+  "mint": "Agnt...",
+  "network": "solana-devnet"
+}
+```
+
+Then call:
+
+```bash
+curl -X POST 'https://api.leash.market/v1/platform/agents/Agnt.../identity/domains/verify' \
+  -H 'Authorization: Bearer $LEASH_API_ADMIN_SECRET' \
+  -H 'Content-Type: application/json' \
+  -d '{ "domain": "agent.example" }'
+```
+
+## Capability cards
+
+Capability cards describe what the identity can do. They are not limited to
+Leash-native listings. A single profile can include:
+
+| Kind              | What it represents                                   |
+| ----------------- | ---------------------------------------------------- |
+| `seller_api`      | A paid API or service the agent exposes.             |
+| `buyer_tool`      | A tool or API the agent can call.                    |
+| `data_source`     | A connected account or data source.                  |
+| `control_channel` | Telegram, WhatsApp, or another control surface.      |
+| `automation`      | A scheduled, webhook, or event-triggered automation. |
+| `marketplace`     | A native Leash marketplace listing.                  |
+| `pay_skills`      | A pay.sh/pay-skills provider or endpoint group.      |
+| `custom`          | A project-specific capability.                       |
+
+Each card has `visibility: "public" | "private"`. Public cards appear on the
+explorer and marketplace profile. Private cards remain available to the owner
+inside the agent app.
+
+## Claims and attestations
+
+Claims are signed records linked to the identity. The first version stores the
+claim envelope and revocation state; consumers decide which issuers they trust.
+
+```json
+{
+  "issuer": "leash",
+  "subject_mint": "Agnt...",
+  "type": "domain-control",
+  "value": "agent.example",
+  "evidence_url": "https://agent.example/.well-known/leash-agent.json",
+  "signature": "signature-over-claim-payload",
+  "visibility": "public",
+  "expires_at": null
+}
+```
+
+Revoking a claim sets `revoked_at`; the public profile filters it out while the
+admin profile can still retain the audit trail.
+
+## Operator history
+
+Operator history is the delegation/audit layer of the identity. Leash normalizes
+executive registration, executive delegation, SPL delegation set, and SPL
+delegation revoke events into `operator_history`.
+
+Owner views include prepared, submitted, confirmed, and failed rows. Public
+profiles and the explorer only show confirmed rows.
+
+## Selective disclosure
+
+Selective disclosure is Product V1 privacy: shareable, revocable bearer links,
+not ZK privacy. The raw token is only returned once. Leash stores a SHA-256 hash
+of the token and checks expiry/revocation on every read.
+
+Supported resources:
+
+- private or public capability cards by card id
+- private or public claims by claim id
+- selected receipt hashes with redacted field policy
+
+Default expiry is 7 days. Maximum expiry is 90 days. Revoked or expired grants
+return 404.

@@ -43,6 +43,40 @@ describe('createBuyer', () => {
     expect(seen).toHaveLength(1);
   });
 
+  it('blocks payment when identity preflight denies the seller', async () => {
+    const stubFetch: LeashFetch = vi.fn();
+    const identityFetch = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          verdict: 'deny',
+          resolved_mint: 'SellerMint',
+          network: 'solana-devnet',
+          score: 0,
+          checks: [{ name: 'capability_match', passed: false, severity: 'deny', detail: 'no' }],
+          profile: null,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    const buyer = createBuyer({
+      agent: 'A1',
+      rules,
+      signer: stubSigner,
+      fetch: stubFetch,
+      identity: {
+        apiBaseUrl: 'https://api.test',
+        selector: { handle: 'seller' },
+        capability: { slug: 'seller/api', protocol: 'x402' },
+        fetchImpl: identityFetch,
+      },
+    });
+    const result = await buyer.fetch('http://merchant.test/tag', { method: 'POST' });
+    expect(result.response.status).toBe(403);
+    expect(result.receipt.decision).toBe('deny');
+    expect(result.failureReason).toBe('identity_verification_deny');
+    expect(stubFetch).not.toHaveBeenCalled();
+  });
+
   it('records the seller-quoted price and failure reason on a 402 with no PAYMENT-RESPONSE', async () => {
     // Realistic shape of what `@x402/hono` returns on a failed settlement: a
     // 402 with the demanded `accepts[]` and a JSON body explaining why.

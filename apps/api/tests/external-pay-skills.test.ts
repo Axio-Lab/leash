@@ -100,6 +100,7 @@ describe('providerToItem', () => {
     expect(item.url).toBe('https://api.crushrewards.dev');
     expect(item.seller_wallet).toBeNull();
     expect(item.seller_agent_mint).toBeNull();
+    expect(item.seller_identity).toBeNull();
     expect(item.tools).toEqual([]);
     expect(item.tags).toEqual(['shopping']);
   });
@@ -116,6 +117,20 @@ describe('providerToItem', () => {
     const item = providerToItem(p);
     expect(item.pricing_type).toBe('variable');
     expect(item.price_usdc).toBeNull();
+  });
+
+  it('falls back to one capability when the pay-skills index omits endpoint_count', () => {
+    const item = providerToItem({
+      fqn: 'clustly/tips',
+      title: 'Clustly',
+      description: 'Tip any X handle in USDC',
+      use_case: 'Social payments',
+      category: 'social',
+      service_url: 'https://api.clustly.example',
+      min_price_usd: 0.01,
+      max_price_usd: 0.01,
+    });
+    expect(item.endpoint_count).toBe(1);
   });
 });
 

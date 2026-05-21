@@ -164,6 +164,7 @@ describe('telegram dispatcher — phase 3 happy paths', () => {
     );
     expect(inbound.status).toBe(200);
     expect(bff.calls).toHaveLength(1);
+    expect(bff.calls[0]!.external_connection_id).toBe(conn.id);
     expect(tg.sent).toHaveLength(1);
     expect(tg.sent[0]!.chatId).toBe(TELEGRAM_FROM_ID);
     expect(tg.sent[0]!.parseMode).toBe('MarkdownV2');

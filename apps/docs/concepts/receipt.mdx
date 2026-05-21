@@ -1,7 +1,14 @@
 ---
 title: Receipt
-description: Hash-chained JSONL feed of every gated call (v0.1 x402-shaped receipts and v0.2 dual-protocol).
+description: The proof trail behind a Leash agent identity.
 ---
+
+Receipts are the proof trail behind a Leash identity. They record what an agent
+tried to do, whether policy allowed it, what settlement rail was used, what it
+paid or earned, and how the result links to the previous action.
+
+This is what makes the identity useful after minting. A registration says what
+an agent claims to be; receipts show what the agent actually did.
 
 Every gated call yields a receipt. Today Leash persists two families:
 
@@ -25,6 +32,16 @@ For **`ReceiptV1`** specifically:
 - **`receipt_hash`** — `sha256(canonicalJson(receipt without receipt_hash))`.
 
 Verify any feed with `@leashmarket/core` `verifyReceiptChain` or the `leash-conformance` CLI shipped from `@leashmarket/testing`.
+
+## Receipts become reputation
+
+Leash reputation is derived from receipts and events keyed by the same agent
+mint: settled volume, rejected payments, deny rate, counterparties, age, and
+activity patterns. That means reputation follows the identity across hosts,
+interfaces, and capabilities.
+
+The important invariant is simple: if an agent spends, earns, fails, or gets
+blocked by policy, the evidence should be visible in its receipt trail.
 
 ## Receipts by default
 

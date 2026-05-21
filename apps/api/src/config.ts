@@ -115,6 +115,13 @@ export type LeashApiConfig = {
    */
   agentsBffUrl?: string;
   agentsBffSecret?: string;
+  /**
+   * In-process automation scheduler. Disabled by default so operators
+   * can turn it on for exactly one API replica with
+   * `LEASH_AUTOMATIONS_ENABLED=1`.
+   */
+  automationsEnabled: boolean;
+  automationPollMs: number;
 };
 
 function readEnv(key: string, fallback: string): string {
@@ -229,6 +236,8 @@ export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConf
     ...(env.LEASH_AGENTS_BFF_SECRET?.trim()
       ? { agentsBffSecret: env.LEASH_AGENTS_BFF_SECRET.trim() }
       : {}),
+    automationsEnabled: readBool(env.LEASH_AUTOMATIONS_ENABLED, false),
+    automationPollMs: readNumber('LEASH_AUTOMATION_POLL_MS', 15_000),
     ...(bootstrapKey
       ? {
           bootstrapKey: {

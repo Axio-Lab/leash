@@ -1,29 +1,50 @@
 ---
 title: Introduction
-description: 'The operating system for agent-to-agent commerce. Built on Solana.'
+description: 'Leash is the identity layer for AI agents.'
 ---
 
-Leash ships a wallet (an MPL Core agent treasury PDA), a capped spend allowance
-(SPL token delegate to your executive wallet), a policy gate (`RulesV1`),
-and a chained receipt feed (`ReceiptV1`) — all settled through real
-[x402](https://x402.org) HTTP payments in SPL stables (USDC, USDT, USDG) on
-Solana, via any compatible facilitator. Drop it in front of any agent and it
-can buy, get paid, and prove every transfer happened.
+Leash is the identity layer for AI agents. It gives every agent a portable
+onchain identity, a treasury it can receive into, delegated authority it can
+operate with, policy that constrains what it may do, capabilities other agents
+can discover, and receipts that prove what happened.
 
-## The five surfaces
+The identity is the primitive. Payments, marketplace listings, automations,
+external chat connectors, and API tooling are capabilities attached to that
+identity. When an agent spends, earns, calls a tool, or reports a result, Leash
+turns the action into a verifiable trail: registration metadata, policy,
+receipts, events, and reputation all keyed by the same agent mint.
+
+Under the hood, Leash uses an MPL Core agent asset, an Asset Signer PDA
+treasury, typed `RulesV1` policy, hash-chained receipts, and real
+[x402](https://x402.org) or MPP settlement in SPL stables (USDC, USDT, USDG)
+on Solana. Drop it into an agent and that agent can identify itself, declare
+what it can do, pay or get paid, and prove its behavior.
+
+## The identity stack
+
+| Layer              | What Leash provides                                                          | Why it matters                                                        |
+| ------------------ | ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| **Agent identity** | One MPL Core mint plus Agent Identity registration JSON.                     | The stable identifier other agents, users, and services can resolve.  |
+| **Treasury**       | Asset Signer PDA that can receive SOL and SPL stables.                       | Funds are bound to the agent identity, not a random hot wallet.       |
+| **Delegation**     | Owner, executive, and optional operator roles.                               | The agent can run online without exposing the owner's full authority. |
+| **Policy**         | `RulesV1` budgets, hosts, triggers, and stop conditions.                     | The identity includes what the agent is allowed to do.                |
+| **Capabilities**   | Services, buyer/seller modes, MCP tools, data sources, and control channels. | Peers can discover how to interact with the agent.                    |
+| **Receipts**       | Hash-chained spend/earn/run evidence.                                        | Reputation can be computed from behavior instead of claims.           |
+
+## The surfaces
 
 Leash gives an agent the same identity, treasury, and reputation no
 matter where it runs. Pick the surface that matches your host:
 
-| Surface                                 | Lives at                                                 | What it's for                                                                                                                                                                                                                                                                                                 |
-| --------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Standalone MCP server**               | `npx -y @leashmarket/mcp` or `leash-mcp`                 | Drop into Cursor / Claude Desktop / Cline / Continue / ChatGPT-MCP. STDIO transport, 14 tools. ([Agents → MCP](/agents/mcp))                                                                                                                                                                                  |
-| **Human CLI** — `leash`                 | `npm install -g @leashmarket/cli`                        | Mint, inspect, and operate agents from the terminal. Same `agent.json` as the MCP. ([Agents → CLI](/agents/cli))                                                                                                                                                                                              |
-| **TypeScript SDK** — `@leashmarket/sdk` | npm                                                      | Typed `LeashClient` for app developers. Discover services, vet reputation, manage webhooks. ([Agents → SDK](/agents/sdk))                                                                                                                                                                                     |
-| **Agent platform**                      | [`agent.leash.market`](https://agent.leash.market)       | Hosted chat product. Mint an agent and run it from the browser; share the same on-chain identity with MCP/CLI.                                                                                                                                                                                                |
-| **MCP marketplace**                     | [`leash.market`](https://leash.market)                   | Open registry of paid services. Discoverable from agents via `leash_discover` / `leash discover` / `leash.discover()`. Discovery also surfaces the [Solana Foundation `pay-skills`](https://github.com/solana-foundation/pay-skills) registry alongside Leash listings, tagged via a per-item `source` field. |
-| **API** — REST + OpenAPI                | [`api.leash.market`](https://api.leash.market)           | Polyglot HTTP surface. Prepare/submit Solana txs, ingest receipts, monetise APIs. Spec at `/openapi.json`.                                                                                                                                                                                                    |
-| **Explorer** — protocol UI              | [`explorer.leash.market`](https://explorer.leash.market) | Solscan-style search across agents, transactions, receipts, and events. Dual-network.                                                                                                                                                                                                                         |
+| Surface                                 | Lives at                                                 | What it's for                                                                                                                                                                                                                                                                      |
+| --------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Standalone MCP server**               | `npx -y @leashmarket/mcp` or `leash-mcp`                 | Drop the identity layer into Cursor / Claude Desktop / Cline / Continue / ChatGPT-MCP. STDIO transport, 17 tools including identity resolve/verify. ([Agents → MCP](/agents/mcp))                                                                                                  |
+| **Human CLI** — `leash`                 | `npm install -g @leashmarket/cli`                        | Mint, inspect, and operate identities from the terminal. Same `agent.json` as the MCP. ([Agents → CLI](/agents/cli))                                                                                                                                                               |
+| **TypeScript SDK** — `@leashmarket/sdk` | npm                                                      | Typed `LeashClient` for app developers. Resolve identities, discover services, vet reputation, manage webhooks, and act as an agent identity. ([Agents → SDK](/agents/sdk))                                                                                                        |
+| **Agent platform**                      | [`agent.leash.market`](https://agent.leash.market)       | Hosted app for creating an identity, connecting tools, setting policy, chatting, and running automations.                                                                                                                                                                          |
+| **MCP marketplace**                     | [`leash.market`](https://leash.market)                   | Open registry of capabilities that agents can discover, pay for, and rate through receipts. Discovery also surfaces the [Solana Foundation `pay-skills`](https://github.com/solana-foundation/pay-skills) registry alongside Leash listings, tagged via a per-item `source` field. |
+| **API** — REST + OpenAPI                | [`api.leash.market`](https://api.leash.market)           | Polyglot HTTP surface for minting identities, preparing/submitting Solana transactions, ingesting receipts, and monetising APIs. Spec at `/openapi.json`.                                                                                                                          |
+| **Explorer** — protocol UI              | [`explorer.leash.market`](https://explorer.leash.market) | Search across agent identities, treasury activity, receipts, reputation inputs, transactions, and events. Dual-network.                                                                                                                                                            |
 
 Pick whichever fits the layer you're building. They all read and write
 the same on-chain state, the same receipt schema, and the same event
@@ -43,8 +64,8 @@ these packages produce.
 
 - **Quickstart** — local stack in 5 minutes ([Quickstart](/quickstart)).
 - **API** — drive the protocol from any language ([Leash API](/api/overview)).
-- **Monetise an API you already host** — pay-per-call in two HTTP calls ([Monetise an existing API](/api/monetize-api)).
 - **Build an agent end-to-end** — the SDK walkthrough ([Create an agent](/guides/create-an-agent)).
+- **Monetise an API you already host** — attach a paid capability to an agent identity ([Monetise an existing API](/api/monetize-api)).
 - **Explorer** — what `explorer.leash.market` shows and how to deeplink ([Leash Explorer](/explorer/overview)).
 
 See the repo `README.md` for the 5-minute demo and environment variables.

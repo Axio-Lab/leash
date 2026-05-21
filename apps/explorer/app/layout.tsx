@@ -20,9 +20,9 @@ const robotoMono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'leash · explorer',
+  title: 'leash.explorer · Agent identity explorer',
   description:
-    'A semantic, dual-network protocol explorer for the Leash agent economy. Search agents, transactions, receipts, and events on Solana.',
+    'A dual-network explorer for Leash agent identities, treasuries, proof trails, transactions, and events on Solana.',
   metadataBase: new URL('https://explorer.leash.market'),
   icons: {
     icon: '/leash-logo.png',
@@ -30,8 +30,9 @@ export const metadata: Metadata = {
     apple: '/leash-logo.png',
   },
   openGraph: {
-    title: 'leash · explorer',
-    description: 'Every agent created, every executive bound, every receipt published.',
+    title: 'leash.explorer · Agent identity explorer',
+    description:
+      'Every agent identity created, every treasury funded, every proof receipt published.',
     siteName: 'leash.explorer',
   },
 };

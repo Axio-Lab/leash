@@ -7,7 +7,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
         <header className="space-y-1">
           <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">Settings</h1>
           <p className="text-xs sm:text-sm text-fg-muted">
-            Connections, favorites, and programmatic API keys.
+            Data sources, control channels, favorites, and programmatic API keys.
           </p>
         </header>
         <SettingsNav />

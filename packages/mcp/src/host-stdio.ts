@@ -31,6 +31,8 @@ import {
 } from '@leashmarket/core';
 import {
   fetchDiscover,
+  fetchIdentityProfile,
+  fetchIdentityVerify,
   fetchPaySkillsProvider,
   fetchReputation,
   isLikelyBase58Address,
@@ -43,6 +45,8 @@ import {
   type DailyTransactionsArgs,
   type DiscoverArgs,
   type GetIdentityArgs,
+  type IdentitySelectorArgs,
+  type IdentityVerifyArgs,
   type GetReceiptArgs,
   type GetSpendLimitArgs,
   type LeashHost,
@@ -550,6 +554,20 @@ class StdioHost implements LeashHost {
     return fetchReputation({
       apiBaseUrl: this.apiBaseUrl,
       network: this.network,
+      query: args,
+    });
+  }
+
+  async resolveIdentity(args: IdentitySelectorArgs): Promise<LeashToolResult> {
+    return fetchIdentityProfile({
+      apiBaseUrl: this.apiBaseUrl,
+      query: args,
+    });
+  }
+
+  async verifyIdentity(args: IdentityVerifyArgs): Promise<LeashToolResult> {
+    return fetchIdentityVerify({
+      apiBaseUrl: this.apiBaseUrl,
       query: args,
     });
   }

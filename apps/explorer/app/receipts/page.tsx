@@ -73,10 +73,10 @@ export default async function ReceiptsPage({ searchParams }: Props) {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Receipt feed</h1>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Proof trail</h1>
           <p className="whitespace-normal text-sm text-[--color-fg-muted]">
-            Every x402 settlement that any agent has emitted. Earn receipts come from paywall-served
-            calls; spend receipts come from buyer-side payments.
+            Every x402 settlement emitted by a Leash agent identity. Earn receipts come from
+            paywall-served calls; spend receipts come from buyer-side payments.
           </p>
         </div>
         {sp.cursor ? null : <LiveRefresh network={network} intervalSec={5} />}
@@ -85,7 +85,7 @@ export default async function ReceiptsPage({ searchParams }: Props) {
       {totals && totals.settled_count > 0 ? <SettlementTotalsStrip totals={totals} /> : null}
 
       <nav
-        aria-label="Filter receipts by kind"
+        aria-label="Filter proof receipts by kind"
         className="flex flex-wrap gap-1.5 rounded-xl border border-[--color-border] bg-[--color-bg-elev]/40 p-1.5 backdrop-blur-md"
       >
         {KIND_OPTIONS.map((opt) => {
@@ -168,7 +168,7 @@ function SettlementTotalsStrip({
       <KpiCard
         label="Settled calls"
         value={totals.settled_count.toLocaleString()}
-        sublabel="earn receipts"
+        sublabel="earn proof receipts"
         icon={<ReceiptIcon className="h-3.5 w-3.5" />}
       />
     </div>

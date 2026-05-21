@@ -88,6 +88,7 @@ describe('LeashClient (public reads)', () => {
             price_usdc: '0.1',
             pricing_type: 'per_call',
             seller_agent_mint: null,
+            seller_identity: null,
             seller_wallet: 'W',
             rating: 1,
             health_status: 'ok',
@@ -124,6 +125,116 @@ describe('LeashClient (public reads)', () => {
     const client = new LeashClient({ baseUrl: 'https://api.test', fetchImpl: fetch });
     await client.reputation({ agentMint: 'M', network: 'solana-mainnet' });
     expect(calls[0]!.url).toBe('https://api.test/v1/agents/M/reputation?network=solana-mainnet');
+  });
+
+  it('identity helpers resolve and verify selectors', async () => {
+    const { fetch, calls } = makeFetch((req) => ({
+      status: 200,
+      body: req.url.includes('/verify')
+        ? {
+            verified: true,
+            resolved_mint: 'M',
+            network: 'solana-devnet',
+            checks: [{ name: 'selector_resolves', passed: true, detail: 'ok' }],
+          }
+        : {
+            mint: 'M',
+            network: 'solana-devnet',
+            handle: 'demo',
+            name: 'Demo',
+            description: null,
+            image_url: null,
+            treasury: 'T',
+            services: [],
+            verified_domains: [],
+            capability_cards: [],
+            claims: [],
+            operator_history: [],
+            reputation: { settled_calls: 0, denied_calls: 0, rating: 0 },
+          },
+    }));
+    const client = new LeashClient({ baseUrl: 'https://api.test', fetchImpl: fetch });
+    await client.resolveIdentity({ handle: 'demo' });
+    await client.verifyIdentity({ domain: 'demo.example' });
+    expect(calls[0]!.url).toBe('https://api.test/v1/identity/resolve?handle=demo');
+    expect(calls[1]!.url).toBe('https://api.test/v1/identity/verify?domain=demo.example');
+  });
+
+  it('identity decision helper posts trust-verdict requests', async () => {
+    const { fetch, calls } = makeFetch(() => ({
+      status: 200,
+      body: {
+        verdict: 'allow',
+        resolved_mint: 'M',
+        network: 'solana-devnet',
+        score: 100,
+        checks: [{ name: 'selector_resolves', passed: true, severity: 'info', detail: 'ok' }],
+        profile: {
+          mint: 'M',
+          handle: 'demo',
+          name: 'Demo',
+          verified_domains: ['demo.example'],
+          reputation: { settled_calls: 1, denied_calls: 0, rating: 0.5 },
+          capability_cards_count: 1,
+          claims_count: 1,
+        },
+      },
+    }));
+    const client = new LeashClient({ baseUrl: 'https://api.test', fetchImpl: fetch });
+    await client.verifyIdentityDecision({
+      selector: { handle: 'demo' },
+      intent: 'pay',
+      capability: { slug: 'agentmail/email', protocol: 'x402' },
+    });
+    expect(calls[0]!.url).toBe('https://api.test/v1/identity/verify');
+    expect(calls[0]!.method).toBe('POST');
+    expect(JSON.parse(calls[0]!.body!)).toMatchObject({
+      selector: { handle: 'demo' },
+      intent: 'pay',
+      capability: { slug: 'agentmail/email', protocol: 'x402' },
+    });
+  });
+
+  it('verifyCapabilitySeller defaults to call_capability decision requests', async () => {
+    const { fetch, calls } = makeFetch(() => ({
+      status: 200,
+      body: {
+        verdict: 'allow',
+        resolved_mint: 'M',
+        network: 'solana-devnet',
+        score: 100,
+        checks: [{ name: 'capability_match', passed: true, severity: 'info', detail: 'ok' }],
+        profile: null,
+      },
+    }));
+    const client = new LeashClient({ baseUrl: 'https://api.test', fetchImpl: fetch });
+    await client.verifyCapabilitySeller({
+      selector: { mint: 'M' },
+      capability: { slug: 'seller/api', protocol: 'x402' },
+      thresholds: { min_rating: 0.2 },
+    });
+    expect(calls[0]!.url).toBe('https://api.test/v1/identity/verify');
+    expect(JSON.parse(calls[0]!.body!)).toMatchObject({
+      selector: { mint: 'M' },
+      intent: 'call_capability',
+      capability: { slug: 'seller/api', protocol: 'x402' },
+      thresholds: { min_rating: 0.2 },
+    });
+  });
+
+  it('reads selective disclosure grants by token', async () => {
+    const { fetch, calls } = makeFetch(() => ({
+      status: 200,
+      body: {
+        id: 'disc_1',
+        agent: { mint: 'M', network: 'solana-devnet', handle: 'demo', name: 'Demo' },
+        expires_at: '2026-05-20T00:00:00.000Z',
+        resources: { capability_cards: [], claims: [], receipts: [] },
+      },
+    }));
+    const client = new LeashClient({ baseUrl: 'https://api.test', fetchImpl: fetch });
+    await client.readIdentityDisclosure('tok_123');
+    expect(calls[0]!.url).toBe('https://api.test/v1/identity/disclosures/tok_123');
   });
 
   it('throws LeashError on non-2xx with the parsed body', async () => {

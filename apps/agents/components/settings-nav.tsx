@@ -12,8 +12,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 const links = [
-  { href: '/settings/connections', label: 'Connections' },
-  { href: '/settings/external', label: 'External' },
+  { href: '/settings/connections', label: 'Data sources' },
+  { href: '/settings/external', label: 'Control channels' },
   { href: '/settings/favorites', label: 'Favorites' },
   { href: '/settings/api-keys', label: 'API keys' },
 ] as const;

@@ -6,6 +6,24 @@ description: Scriptable buyer agents. createBuyer + dual-protocol paywall fetch 
 `@leashmarket/buyer-kit` wraps `@leashmarket/core` into the smallest possible "scriptable
 buyer". One call, one chained receipt, one real x402 SPL transfer.
 
+Before paying a seller you can ask Leash for an identity trust verdict with the
+same checks agents use for automated payments:
+
+```ts
+import { verifyAgentIdentityDecision } from '@leashmarket/buyer-kit';
+
+const decision = await verifyAgentIdentityDecision({
+  request: {
+    selector: { domain: 'seller.example' },
+    intent: 'pay',
+    capability: { slug: 'seller/quote-api', protocol: 'x402' },
+    thresholds: { min_rating: 0.7, require_verified_domain: true },
+  },
+});
+
+if (decision.verdict === 'deny') throw new Error('seller identity denied');
+```
+
 ```ts
 import { createBuyer } from '@leashmarket/buyer-kit';
 import { createKeyPairSignerFromBytes } from '@solana/kit';
@@ -35,6 +53,11 @@ const buyer = createBuyer({
    * stablecoin.
    */
   preferredCurrency: 'USDC',
+  identity: {
+    selector: { domain: 'seller.example' },
+    capability: { slug: 'seller/quote-api', protocol: 'x402' },
+    thresholds: { require_verified_domain: true },
+  },
   onReceipt: async (r) => {
     await fetch(`http://localhost:8787/a/${r.agent}/receipts`, {
       method: 'POST',
@@ -50,6 +73,11 @@ const { response, receipt } = await buyer.fetch('https://api.example.com/quote',
   headers: { 'content-type': 'application/json' },
 });
 ```
+
+When `identity` is set, `createBuyer` calls `POST /v1/identity/verify`
+before signing. `deny` blocks payment and emits a denied spend receipt.
+`warn` is allowed by default; set `blockOnWarn: true` when the caller wants
+warnings to stop settlement too.
 
 ## x402 and MPP (dual protocol)
 

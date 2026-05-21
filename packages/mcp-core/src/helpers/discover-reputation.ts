@@ -8,9 +8,32 @@
  * `LeashHost.discover` / `LeashHost.reputation` methods.
  */
 
+import type {
+  IdentityVerificationDecision,
+  IdentityVerifyResponse,
+  OperatorHistoryEntry,
+  PublicIdentityProfile,
+  PublicIdentitySummary,
+} from '@leashmarket/schemas';
+
+import type {
+  DiscoverArgs,
+  IdentitySelectorArgs,
+  IdentityVerifyArgs,
+  PaySkillsProviderArgs,
+  ReputationArgs,
+  SvmNetwork,
+} from '../host.js';
 import type { LeashToolResult } from '../tool.js';
 import { jsonResult } from '../tool.js';
-import type { DiscoverArgs, PaySkillsProviderArgs, ReputationArgs, SvmNetwork } from '../host.js';
+
+export type {
+  IdentityVerificationDecision,
+  IdentityVerifyResponse,
+  OperatorHistoryEntry,
+  PublicIdentityProfile,
+  PublicIdentitySummary,
+} from '@leashmarket/schemas';
 
 export type DiscoverSource = 'leash' | 'pay-skills';
 
@@ -30,10 +53,12 @@ export type DiscoverItem = {
   price_usdc: string | null;
   pricing_type: 'free' | 'per_call' | 'variable';
   seller_agent_mint: string | null;
+  seller_identity: PublicIdentitySummary | null;
   /** Owner wallet for Leash entries; null for pay-skills entries. */
   seller_wallet: string | null;
   rating: number | null;
   health_status: 'ok' | 'warn' | 'down' | null;
+  endpoint_count?: number;
   tags: string[];
   tools: Array<{ name: string; description: string }>;
 };
@@ -50,6 +75,29 @@ export type ReputationSnapshot = {
   newest_receipt_at: string | null;
   rating: number;
 };
+
+function identitySearchParams(
+  selector: IdentitySelectorArgs | IdentityVerifyArgs,
+): URLSearchParams {
+  const nested = 'selector' in selector ? selector.selector : undefined;
+  const params = new URLSearchParams();
+  const mint = selector.mint ?? nested?.mint;
+  const handle = selector.handle ?? nested?.handle;
+  const domain = selector.domain ?? nested?.domain;
+  if (mint) params.set('mint', mint);
+  if (handle) params.set('handle', handle);
+  if (domain) params.set('domain', domain);
+  return params;
+}
+
+function identitySelectorCount(selector: IdentitySelectorArgs | IdentityVerifyArgs): number {
+  const nested = 'selector' in selector ? selector.selector : undefined;
+  return [
+    selector.mint ?? nested?.mint,
+    selector.handle ?? nested?.handle,
+    selector.domain ?? nested?.domain,
+  ].filter(Boolean).length;
+}
 
 /**
  * GET /v1/discover. Returns the parsed payload as a `kind:
@@ -230,6 +278,88 @@ export async function fetchReputation(args: {
   } catch (err) {
     return jsonResult({
       kind: 'reputation',
+      status: 'error',
+      message: err instanceof Error ? err.message : 'unknown error',
+    });
+  }
+}
+
+export async function fetchIdentityProfile(args: {
+  apiBaseUrl: string;
+  query: IdentitySelectorArgs;
+  fetchImpl?: typeof globalThis.fetch;
+}): Promise<LeashToolResult> {
+  const fetchImpl = args.fetchImpl ?? globalThis.fetch;
+  const params = identitySearchParams(args.query);
+  if (identitySelectorCount(args.query) !== 1) {
+    return jsonResult({
+      kind: 'identity_profile',
+      status: 'error',
+      message: 'provide exactly one of: mint, handle, domain',
+    });
+  }
+  const url = `${args.apiBaseUrl.replace(/\/+$/, '')}/v1/identity/resolve?${params}`;
+  try {
+    const res = await fetchImpl(url);
+    const text = await res.text();
+    if (!res.ok) {
+      return jsonResult({
+        kind: 'identity_profile',
+        status: 'error',
+        message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+      });
+    }
+    const payload = JSON.parse(text) as PublicIdentityProfile;
+    return jsonResult({ kind: 'identity_profile', status: 'ok', ...payload });
+  } catch (err) {
+    return jsonResult({
+      kind: 'identity_profile',
+      status: 'error',
+      message: err instanceof Error ? err.message : 'unknown error',
+    });
+  }
+}
+
+export async function fetchIdentityVerify(args: {
+  apiBaseUrl: string;
+  query: IdentityVerifyArgs;
+  fetchImpl?: typeof globalThis.fetch;
+}): Promise<LeashToolResult> {
+  const fetchImpl = args.fetchImpl ?? globalThis.fetch;
+  const params = identitySearchParams(args.query);
+  if (identitySelectorCount(args.query) !== 1) {
+    return jsonResult({
+      kind: 'identity_verify',
+      status: 'error',
+      message: 'provide exactly one of: mint, handle, domain',
+    });
+  }
+  const wantsDecision = args.query.intent || args.query.capability || args.query.thresholds;
+  const url = `${args.apiBaseUrl.replace(/\/+$/, '')}/v1/identity/verify${wantsDecision ? '' : `?${params}`}`;
+  try {
+    const res = await fetchImpl(
+      url,
+      wantsDecision
+        ? {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(args.query),
+          }
+        : undefined,
+    );
+    const text = await res.text();
+    if (!res.ok) {
+      return jsonResult({
+        kind: 'identity_verify',
+        status: 'error',
+        message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+      });
+    }
+    const payload = JSON.parse(text) as IdentityVerifyResponse | IdentityVerificationDecision;
+    return jsonResult({ kind: 'identity_verify', status: 'ok', ...payload });
+  } catch (err) {
+    return jsonResult({
+      kind: 'identity_verify',
       status: 'error',
       message: err instanceof Error ? err.message : 'unknown error',
     });

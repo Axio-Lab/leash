@@ -135,6 +135,19 @@ export function buildDelegationRoutes(deps: {
         agentAsset: mint,
         mint: body.spl_mint,
         amountAtomic: amount,
+        metadata: {
+          actor: body.authority ?? body.payer,
+          payer: body.payer,
+          ...(body.authority ? { authority: body.authority } : {}),
+          executive: body.executive,
+          delegate: prepared.delegate,
+          source_token_account: prepared.sourceTokenAccount,
+          delegated_amount: prepared.delegatedAmount.toString(),
+          requested_amount: requested.toString(),
+          fee_padding_atoms: padding.toString(),
+          token_program: tokenProgramFromFlavor(body.token_program),
+          will_create_ata: prepared.willCreateAta,
+        },
         builder: prepared.builder,
         echo: {
           treasury: prepared.treasury,
@@ -209,6 +222,13 @@ export function buildDelegationRoutes(deps: {
         clientReference: body.client_reference ?? c.var.clientReference ?? null,
         agentAsset: mint,
         mint: body.spl_mint,
+        metadata: {
+          actor: body.authority ?? body.payer,
+          payer: body.payer,
+          ...(body.authority ? { authority: body.authority } : {}),
+          source_token_account: prepared.sourceTokenAccount,
+          token_program: tokenProgramFromFlavor(body.token_program),
+        },
         builder: prepared.builder,
         echo: {
           treasury: prepared.treasury,

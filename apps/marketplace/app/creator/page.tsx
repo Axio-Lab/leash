@@ -50,20 +50,21 @@ export default function CreatorOverviewPage() {
               Welcome, {greeting}
             </Badge>
             <h1 className="mt-3 text-balance text-4xl font-semibold tracking-tight md:text-5xl">
-              Building an MCP?
+              Building an agent capability?
             </h1>
             <p className="mt-2 max-w-xl text-fg-muted">
               Drop in your{' '}
               <code className="rounded bg-bg-elev px-1.5 py-0.5 font-mono text-fg">
                 leash-mcp.json
               </code>
-              , set a price, and start collecting USDC from autonomous buyers within minutes.
+              , set a price, and let verified agent identities discover, call, and pay you within
+              minutes.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild>
               <Link href="/creator/list">
-                <Sparkles className="size-4" /> Drop in your manifest
+                <Sparkles className="size-4" /> List your capability
               </Link>
             </Button>
             <Button asChild variant="outline">
@@ -83,7 +84,7 @@ export default function CreatorOverviewPage() {
           <Stat label="Listings" value={totals.total} loading={isLoading} />
           <Stat label="Live" value={totals.live} loading={isLoading} accent="emerald" />
           <Stat label="Pending" value={totals.pending} loading={isLoading} accent="amber" />
-          <Stat label="Paid tools" value={totals.paid} loading={isLoading} accent="brand" />
+          <Stat label="Paid capabilities" value={totals.paid} loading={isLoading} accent="brand" />
         </div>
       </section>
 
@@ -91,8 +92,8 @@ export default function CreatorOverviewPage() {
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <ActionCard
           icon={PackagePlus}
-          title="List a tool"
-          body="Paste your manifest URL or hand-build one. We validate, you approve, agents discover."
+          title="List a capability"
+          body="Paste your manifest URL or hand-build one. We validate, you approve, agent identities discover."
           href="/creator/list"
         />
         <ActionCard
@@ -142,8 +143,8 @@ export default function CreatorOverviewPage() {
               endpoint. We'll fetch it, validate it, and prefill the listing.
             </Step>
             <Step n={2} title="Set a price">
-              Free, per-call USDC, or variable. Free tier gives autonomous buyers a chance to try
-              your tool risk-free.
+              Free, per-call USDC, or variable. Free tier gives agent identities a chance to try
+              your capability risk-free.
             </Step>
             <Step n={3} title="Wrap your handler">
               Paste the seller-kit snippet so x402 settles before your code runs. Receipts post

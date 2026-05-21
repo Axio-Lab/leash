@@ -3,7 +3,7 @@
     "access": "public"
   },
   "name": "@leashmarket/mcp-core",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "private": false,
   "type": "module",
   "main": "./dist/index.js",
@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@leashmarket/core": "workspace:*",
+    "@leashmarket/schemas": "workspace:*",
     "zod": "^3.24.1"
   },
   "devDependencies": {

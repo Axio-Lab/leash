@@ -41,6 +41,15 @@ import { runAgentTurn } from '@/lib/agents/brain';
 import { resolveMcpServers } from '@/lib/agents/tool-registry';
 import { defaultSkillFragments } from '@/lib/agents/default-skills';
 import type { AgentEvent } from '@/lib/agents/types';
+import {
+  automationContextKey,
+  classifyAutomationIntent,
+  handleAutomationAssistantTurn,
+} from '@/lib/automations/assistant';
+import {
+  createAutomationAssistantDeps,
+  listConnectedToolkitsForOwner,
+} from '@/lib/automations/server';
 import { getServerEnv, resolveAgentModel } from '@/lib/env';
 
 export const runtime = 'nodejs';
@@ -49,6 +58,7 @@ const RunBodySchema = z.object({
   owner_privy_id: z.string().min(1),
   agent_mint: z.string().optional(),
   channel: z.enum(['telegram', 'whatsapp']),
+  external_connection_id: z.string().min(1).optional(),
   message: z.string().min(1).max(8000),
   conversation: z
     .array(
@@ -204,6 +214,55 @@ export async function POST(req: NextRequest) {
 
   const settings = await getAgentSettings(body.owner_privy_id).catch(() => DEFAULT_AGENT_SETTINGS);
   const effectiveModel = body.model?.trim() || resolveAgentModel(settings.tier);
+
+  const automationIntent = classifyAutomationIntent(body.message);
+  if (automationIntent) {
+    try {
+      const result = await handleAutomationAssistantTurn(createAutomationAssistantDeps(), {
+        ownerPrivyId: body.owner_privy_id,
+        message: body.message,
+        agentMint,
+        channel: body.channel,
+        contextKey: automationContextKey({
+          channel: body.channel,
+          ownerPrivyId: body.owner_privy_id,
+          externalConnectionId: body.external_connection_id ?? null,
+        }),
+        externalConnectionId: body.external_connection_id ?? null,
+        timezone: 'UTC',
+        toolkits: await listConnectedToolkitsForOwner(body.owner_privy_id),
+      });
+      if (result?.handled) {
+        console.log(
+          `[agents:run] trace=${trace} automation_reply intent=${automationIntent} agent_mint=${agentMint ?? 'null'}`,
+        );
+        return new Response(
+          JSON.stringify({
+            text: result.text,
+            artifacts: [],
+            errors: [],
+            warnings: [],
+            agent_mint: agentMint,
+            model: effectiveModel,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return new Response(
+        JSON.stringify({
+          text: `I could not complete that automation request: ${message}`,
+          artifacts: [],
+          errors: [],
+          warnings: [message],
+          agent_mint: agentMint,
+          model: effectiveModel,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
+  }
 
   const mcpServers = await resolveMcpServers({
     privyId: body.owner_privy_id,

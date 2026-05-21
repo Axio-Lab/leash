@@ -64,9 +64,9 @@ protocol-level walkthrough and how to swap facilitators.
 ## No-code path: Payment Links
 
 If you don't want to host a Hono app, the playground at `apps/playground/seller`
-is a **Payment-Link Builder** ("Stripe Payment Links for x402"): pick one
-of your agents, declare a method + path + price + response template, and
-the runner serves the result back as a real x402 paywall at
+is a **Payment-Link Builder** for identity-linked paid capabilities: pick
+one of your agents, declare a method + path + price + response template,
+and the runner serves the result back as a real x402 paywall at
 `https://<host>/x/<id>` — same `createSeller` middleware under the hood.
 
 See [Create a payment link](/guides/create-an-endpoint) for the full

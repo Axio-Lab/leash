@@ -157,8 +157,8 @@ export default function ConnectionsSettingsPage() {
   return (
     <div className="space-y-5">
       <p className="text-sm text-fg-muted">
-        Connect OAuth apps once — your agent receives every tool from that toolkit on the next
-        message.
+        Connect OAuth apps once. Your agent can use each toolkit as a data source and capability set
+        on the next message.
       </p>
 
       <div className="relative">
@@ -166,7 +166,7 @@ export default function ConnectionsSettingsPage() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search toolkits (gmail, github, slack…)"
+          placeholder="Search data sources (gmail, github, slack…)"
           className="w-full rounded-lg border border-border bg-bg pl-9 pr-3 py-2.5 text-sm placeholder:text-fg-subtle focus:outline-none focus:ring-1 focus:ring-brand/40"
         />
       </div>
@@ -176,14 +176,14 @@ export default function ConnectionsSettingsPage() {
           {tk.warning}
         </div>
       ) : null}
-      {tkErr ? <div className="text-sm text-danger">Could not load toolkits.</div> : null}
+      {tkErr ? <div className="text-sm text-danger">Could not load data sources.</div> : null}
 
       <div className="flex items-center justify-between text-xs text-fg-muted">
         <span>
           {connectedSlugs.size} connected ·{' '}
           {debouncedQ
             ? `${sorted.length} matching of ${allTotal} total`
-            : `${sorted.length} toolkits`}
+            : `${sorted.length} data sources`}
         </span>
         {totalPages > 1 ? (
           <span>
@@ -195,7 +195,7 @@ export default function ConnectionsSettingsPage() {
       {isLoading && visible.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-fg-muted">
           <Spinner size="lg" brand />
-          <span>Loading toolkits…</span>
+          <span>Loading data sources…</span>
         </div>
       ) : null}
 
@@ -249,7 +249,7 @@ export default function ConnectionsSettingsPage() {
                       </span>
                     ) : t.tools_count != null ? (
                       <span className="text-[10px] text-fg-subtle font-mono">
-                        {t.tools_count} tools
+                        {t.tools_count} capabilities
                       </span>
                     ) : (
                       <span />
@@ -287,7 +287,7 @@ export default function ConnectionsSettingsPage() {
 
       {!isLoading && items.length === 0 && !tkErr ? (
         <p className="text-sm text-fg-muted text-center py-8">
-          {debouncedQ ? `No toolkits match "${debouncedQ}".` : 'No toolkits available.'}
+          {debouncedQ ? `No data sources match "${debouncedQ}".` : 'No data sources available.'}
         </p>
       ) : null}
 
@@ -415,7 +415,7 @@ function ToolkitModal({
           <div>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-semibold tracking-widest uppercase text-fg-subtle">
-                Tools included
+                Capabilities included
               </h3>
               {tools.length > 0 ? (
                 <span className="text-xs text-fg-muted font-mono">{tools.length}</span>
@@ -423,14 +423,16 @@ function ToolkitModal({
             </div>
 
             {error ? (
-              <div className="text-sm text-danger">Could not load tools for this toolkit.</div>
+              <div className="text-sm text-danger">
+                Could not load capabilities for this toolkit.
+              </div>
             ) : isLoading ? (
               <div className="flex items-center gap-2 text-sm text-fg-muted py-4">
                 <Spinner size="sm" />
-                Loading tools
+                Loading capabilities
               </div>
             ) : tools.length === 0 ? (
-              <p className="text-sm text-fg-muted">No tools listed.</p>
+              <p className="text-sm text-fg-muted">No capabilities listed.</p>
             ) : (
               <ul className="space-y-2">
                 {tools.map((t) => (

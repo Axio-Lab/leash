@@ -60,12 +60,29 @@ async function go<T>(path: string, init?: RequestInit, withAdmin = false): Promi
 }
 
 export const leashMarketplace = {
+  discover: (q: URLSearchParams) =>
+    go<{ items: unknown[]; next_cursor: string | null }>(`/v1/discover?${q.toString()}`),
+  listPlatformAgents: (ownerPrivyId: string) =>
+    go<{ items: unknown[] }>(
+      `/v1/platform/agents?owner_privy_id=${encodeURIComponent(ownerPrivyId)}`,
+      undefined,
+      true,
+    ),
+  paySkillsProvider: (fqn: string) =>
+    go<unknown>(
+      `/v1/discover/pay-skills/${fqn
+        .split('/')
+        .map((seg) => encodeURIComponent(seg))
+        .join('/')}`,
+    ),
   listListings: (q: URLSearchParams) =>
     go<{ items: unknown[] }>(`/v1/marketplace/listings?${q.toString()}`),
   getListing: (slug: string) =>
-    go<{ listing: unknown; rating: { avg: number; count: number } }>(
-      `/v1/marketplace/listings/${encodeURIComponent(slug)}`,
-    ),
+    go<{
+      listing: unknown;
+      rating: { avg: number; count: number };
+      identity_verification: unknown;
+    }>(`/v1/marketplace/listings/${encodeURIComponent(slug)}`),
   createListing: (body: unknown) =>
     go<unknown>('/v1/marketplace/listings', { method: 'POST', body: JSON.stringify(body) }, true),
   fromUrl: (url: string) =>

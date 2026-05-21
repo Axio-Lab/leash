@@ -155,11 +155,17 @@ async function fanoutEvent(db: DbClient, id: string): Promise<void> {
   try {
     const row = await getEventById(db, id);
     if (!row) return;
-    const [{ enqueueDeliveriesForEvent }, { publishLiveEvent }] = await Promise.all([
+    const [
+      { enqueueDeliveriesForEvent },
+      { publishLiveEvent },
+      { upsertOperatorHistoryFromEvent },
+    ] = await Promise.all([
       import('./webhooks.js'),
       import('./events-pubsub.js'),
+      import('./operator-history.js'),
     ]);
     await Promise.all([
+      upsertOperatorHistoryFromEvent(db, row).catch(() => undefined),
       enqueueDeliveriesForEvent(db, row).catch(() => undefined),
       publishLiveEvent(row).catch(() => undefined),
     ]);

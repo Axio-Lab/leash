@@ -3,7 +3,7 @@
     "access": "public"
   },
   "name": "@leashmarket/sdk",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "description": "Typed Leash API client for app developers. Discover services, vet counterparties, manage agent webhooks, and ingest receipts in any TypeScript runtime.",
   "private": false,
   "type": "module",
@@ -26,6 +26,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@leashmarket/schemas": "workspace:*",
     "@metaplex-foundation/umi": "^1.5.1",
     "@metaplex-foundation/umi-bundle-defaults": "^1.5.1"
   },

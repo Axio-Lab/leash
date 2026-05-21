@@ -19,9 +19,10 @@ export default function ExternalSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">External chat</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Control channels</h1>
         <p className="mt-1 text-sm text-fg-muted">
-          Connect Telegram or WhatsApp so your agent reaches you where you already chat.
+          Connect Telegram or WhatsApp so you can command and track your agent where you already
+          chat.
         </p>
       </div>
 

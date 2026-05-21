@@ -9,15 +9,14 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
 
 /**
- * Animated story for "Building an MCP? Drop in your leash-mcp.json,
- * set a price, and start collecting USDC from autonomous buyers within
- * minutes."
+ * Animated story for listing an agent capability, setting a price, and
+ * collecting USDC when verified agent identities call it.
  *
  * The simulator advances through six steps on a 24s loop:
  *   1. drop the manifest    (json appears in the editor pane)
  *   2. price it             (per-call USDC amount lands)
  *   3. publish              (status flips approved)
- *   4. buyer agent arrives  (left rail lights up)
+ *   4. agent identity calls (left rail lights up)
  *   5. tool runs             (request → response in centre pane)
  *   6. settle in USDC        (right rail bumps balance and emits a receipt)
  *
@@ -28,7 +27,7 @@ const STEPS = [
   { id: 'manifest', label: 'Drop manifest' },
   { id: 'price', label: 'Set price' },
   { id: 'publish', label: 'Publish' },
-  { id: 'buyer', label: 'Agent buys' },
+  { id: 'buyer', label: 'Agent calls' },
   { id: 'execute', label: 'Tool runs' },
   { id: 'settle', label: 'USDC settles' },
 ] as const;
@@ -119,7 +118,7 @@ export function McpSimulation() {
               <Stage key="buyer">
                 <StageHeader
                   icon={<Sparkles className="size-4" />}
-                  label="Autonomous buyer found you"
+                  label="Agent identity found you"
                 />
                 <BuyerCard />
               </Stage>

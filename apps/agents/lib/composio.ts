@@ -55,16 +55,36 @@ const SESSION_TTL_MS = 60_000;
 const sessionCache = new Map<string, CacheEntry>();
 const inflight = new Map<string, Promise<McpServerConfig | null>>();
 
-export function invalidateComposioMcpCache(privyId: string): void {
-  sessionCache.delete(privyId);
-  inflight.delete(privyId);
+function normaliseAllowedToolkits(toolkits?: string[]): string[] | null {
+  if (!toolkits) return null;
+  return [...new Set(toolkits.map((s) => s.trim()).filter(Boolean))].sort();
 }
 
-async function buildComposioMcpForPrivy(privyId: string): Promise<McpServerConfig | null> {
+function cacheKey(privyId: string, allowedToolkits?: string[]): string {
+  const allowed = normaliseAllowedToolkits(allowedToolkits);
+  return `${privyId}:${allowed ? allowed.join(',') : '*'}`;
+}
+
+export function invalidateComposioMcpCache(privyId: string): void {
+  for (const key of [...sessionCache.keys()]) {
+    if (key === privyId || key.startsWith(`${privyId}:`)) sessionCache.delete(key);
+  }
+  for (const key of [...inflight.keys()]) {
+    if (key === privyId || key.startsWith(`${privyId}:`)) inflight.delete(key);
+  }
+}
+
+async function buildComposioMcpForPrivy(
+  privyId: string,
+  allowedToolkits?: string[],
+): Promise<McpServerConfig | null> {
   const composio = getComposio();
   if (!composio) return null;
 
   try {
+    const allowed = normaliseAllowedToolkits(allowedToolkits);
+    if (allowed && allowed.length === 0) return null;
+    const allowSet = allowed ? new Set(allowed) : null;
     const listed = await composio.connectedAccounts.list({
       userIds: [privyId],
       statuses: ['ACTIVE'],
@@ -76,7 +96,7 @@ async function buildComposioMcpForPrivy(privyId: string): Promise<McpServerConfi
         row && typeof row === 'object' && 'toolkit' in row
           ? (row as { toolkit?: { slug?: string } }).toolkit?.slug
           : undefined;
-      if (slug) slugs.add(slug);
+      if (slug && (!allowSet || allowSet.has(slug))) slugs.add(slug);
     }
     if (slugs.size === 0) return null;
 
@@ -96,23 +116,27 @@ async function buildComposioMcpForPrivy(privyId: string): Promise<McpServerConfi
  * from a 60s in-process cache. Concurrent callers for the same user
  * coalesce onto a single resolution.
  */
-export async function resolveComposioMcpForPrivy(privyId: string): Promise<McpServerConfig | null> {
+export async function resolveComposioMcpForPrivy(
+  privyId: string,
+  allowedToolkits?: string[],
+): Promise<McpServerConfig | null> {
   const now = Date.now();
-  const hit = sessionCache.get(privyId);
+  const key = cacheKey(privyId, allowedToolkits);
+  const hit = sessionCache.get(key);
   if (hit && hit.expiresAt > now) return hit.mcp;
 
-  const existingInflight = inflight.get(privyId);
+  const existingInflight = inflight.get(key);
   if (existingInflight) return existingInflight;
 
   const promise = (async () => {
     try {
-      const mcp = await buildComposioMcpForPrivy(privyId);
-      sessionCache.set(privyId, { mcp, expiresAt: Date.now() + SESSION_TTL_MS });
+      const mcp = await buildComposioMcpForPrivy(privyId, allowedToolkits);
+      sessionCache.set(key, { mcp, expiresAt: Date.now() + SESSION_TTL_MS });
       return mcp;
     } finally {
-      inflight.delete(privyId);
+      inflight.delete(key);
     }
   })();
-  inflight.set(privyId, promise);
+  inflight.set(key, promise);
   return promise;
 }

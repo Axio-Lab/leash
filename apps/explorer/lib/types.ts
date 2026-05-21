@@ -41,6 +41,8 @@ export type AgentSummary = {
   token: { has_token: boolean; mint: string | null; source: 'v1' | 'v2' | 'none' };
 };
 
+export type { IdentityDisclosureRead, PublicIdentityProfile } from '@leashmarket/schemas';
+
 export type TreasuryBalances = {
   agent_asset: string;
   network: 'solana-devnet' | 'solana-mainnet';

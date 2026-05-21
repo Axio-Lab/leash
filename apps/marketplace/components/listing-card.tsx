@@ -1,15 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { Cpu, Star } from 'lucide-react';
+import { Cpu, ShieldCheck, ShieldQuestion, Star } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import { NEXT_PUBLIC_AGENTS_URL } from '@/lib/env';
+import { useCapabilityCount } from '@/lib/use-pay-skills-capability-count';
 
 export type Listing = {
   id: string;
+  source?: 'leash' | 'pay-skills';
   slug: string;
   name: string;
   description: string;
@@ -17,21 +19,49 @@ export type Listing = {
   endpoint: string;
   pricing: { type: string; amount?: string; currency?: string };
   tools: Array<{ name: string }>;
+  endpoint_count?: number;
+  seller_agent_mint?: string | null;
+  seller_identity?: {
+    mint: string;
+    handle: string | null;
+    name: string;
+    reputation: { rating: number; settled_calls: number };
+  } | null;
   health_status: 'ok' | 'warn' | 'down' | null;
   status: string;
-  created_at: string;
+  created_at?: string;
   rating?: { avg: number; count: number };
 };
 
 export function ListingCard({ listing }: { listing: Listing }) {
+  const source = listing.source ?? 'leash';
+  const detailHref =
+    source === 'pay-skills' ? `/capability/pay-skills/${listing.slug}` : `/listing/${listing.slug}`;
+  const addHref = `${NEXT_PUBLIC_AGENTS_URL}/settings/favorites?${new URLSearchParams({
+    source,
+    q: listing.name || listing.slug,
+  }).toString()}`;
+  const { count } = useCapabilityCount(listing);
+
   return (
     <li className="group relative flex flex-col rounded-xl border border-border bg-card transition-all hover:-translate-y-0.5 hover:border-border-strong">
       <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-brand/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-      <Link href={`/listing/${listing.slug}`} className="flex flex-1 flex-col gap-3 p-4">
+      <Link href={detailHref} className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-2">
-          <Badge variant="outline" className="font-mono text-[10px] uppercase">
-            {listing.category}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant="outline" className="font-mono text-[10px] uppercase">
+              {listing.category}
+            </Badge>
+            <Badge
+              variant="secondary"
+              className={cn(
+                'font-mono text-[10px] uppercase',
+                source === 'pay-skills' ? 'text-fg-muted' : 'text-brand-strong',
+              )}
+            >
+              {source === 'pay-skills' ? 'pay.sh' : 'Leash'}
+            </Badge>
+          </div>
           <Pricing pricing={listing.pricing} />
         </div>
         <div>
@@ -43,7 +73,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
         <div className="mt-auto flex items-center gap-3 text-[11px] text-fg-subtle">
           <span className="inline-flex items-center gap-1">
             <Cpu className="size-3" />
-            {listing.tools.length} tool{listing.tools.length === 1 ? '' : 's'}
+            {count} capabilit{count === 1 ? 'y' : 'ies'}
           </span>
           {listing.rating && listing.rating.count > 0 ? (
             <span className="inline-flex items-center gap-1">
@@ -51,22 +81,50 @@ export function ListingCard({ listing }: { listing: Listing }) {
               {listing.rating.avg.toFixed(1)} ({listing.rating.count})
             </span>
           ) : null}
+          <IdentityStatus source={source} identity={listing.seller_identity ?? null} />
           <Health status={listing.health_status} />
         </div>
       </Link>
       <div className="flex items-center justify-between border-t border-border p-3">
-        <Link href={`/listing/${listing.slug}`} className="text-xs text-fg-muted hover:text-fg">
+        <Link href={detailHref} className="text-xs text-fg-muted hover:text-fg">
           Details
         </Link>
         <Button asChild size="sm">
-          <Link
-            href={`${NEXT_PUBLIC_AGENTS_URL}/agents/new?add=${encodeURIComponent(listing.slug)}`}
-          >
-            Add to agent
-          </Link>
+          <Link href={addHref}>Add capability</Link>
         </Button>
       </div>
     </li>
+  );
+}
+
+function IdentityStatus({
+  source,
+  identity,
+}: {
+  source: 'leash' | 'pay-skills';
+  identity: Listing['seller_identity'] | null;
+}) {
+  if (source === 'pay-skills') {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <ShieldQuestion className="size-3" />
+        external
+      </span>
+    );
+  }
+  if (!identity) {
+    return (
+      <span className="inline-flex items-center gap-1 text-amber-300">
+        <ShieldQuestion className="size-3" />
+        unverified
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-emerald-300">
+      <ShieldCheck className="size-3" />
+      {identity.handle ? `@${identity.handle}` : 'identity'}
+    </span>
   );
 }
 

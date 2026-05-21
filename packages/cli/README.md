@@ -1,8 +1,9 @@
 # @leashmarket/cli
 
-Human-driven CLI for the Leash agent economy. Mint agents, check
-balances, pay paywalls, discover services, and inspect reputation —
-straight from your terminal, no chat product or MCP host required.
+Human-driven CLI for the Leash identity layer for AI agents. Mint
+agent identities, verify sellers, check balances, discover
+capabilities, pay paywalls, and inspect reputation — straight from
+your terminal, no chat product or MCP host required.
 
 ## Install
 
@@ -64,23 +65,28 @@ leash agent create
 # 4. Confirm identity.
 leash agent show
 
-# 3. Look at the marketplace.
+# 5. Look at the capability marketplace.
 leash discover -q ocr --max-price 0.10
 
-# 4. Vet a counterparty.
+# 6. Vet a seller identity.
+leash identity verify --mint <agent_mint> \
+  --intent call_capability \
+  --capability-slug premium-search \
+  --protocol x402 \
+  --require-domain
 leash reputation <agent_mint>
 
-# 5. Pay something.
+# 7. Pay something.
 leash pay https://example.com/x/abc123
 
-# 6. Inspect activity.
+# 8. Inspect activity.
 leash receipts                                # latest receipts (newest first)
 leash history --days 7                        # last week + USD totals
 leash daily --days 14                         # per-day buckets
 leash receipt c3c50cb352a2624f783ca6a51bdb7fbcd3b67f04b4a42cd431444db05504181a
                                               # full ReceiptV1 by hash
 
-# 7. Cash out.
+# 9. Cash out.
 leash treasury balance
 leash treasury withdraw --to <wallet> --amount 0.50 --token USDC
 ```
@@ -107,7 +113,19 @@ treasury commands:
                                      change the executive's SPL spend authority
 
 marketplace + reputation:
-  discover [-q QUERY] [--max-price N] [--pricing-type T] [--limit N]
+  discover [-q QUERY] [--max-price N] [--pricing-type T]
+           [--source leash|pay-skills|all] [--limit N]
+                                     search Leash + pay.sh capabilities
+                                     and show seller identity labels
+  discover endpoints <fqn>           expand a pay.sh provider into endpoints
+  identity resolve (--mint M | --handle H | --domain D)
+                                     resolve a public identity profile
+  identity verify (--mint M | --handle H | --domain D)
+                  [--intent pay|call_capability|trust_claim|inspect]
+                  [--capability-kind K] [--capability-slug S]
+                  [--endpoint URL] [--protocol x402|mpp]
+                  [--min-rating N] [--require-claim T] [--require-domain]
+                                     verify identity or ask for trust verdict
   reputation <agent_mint> [--network solana-devnet|solana-mainnet]
 
 activity:

@@ -39,6 +39,15 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 });
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ error: 'invalid_request' }, { status: 400 });
+  if (typeof body.seller_agent_mint !== 'string' || body.seller_agent_mint.trim().length === 0) {
+    return NextResponse.json(
+      {
+        error: 'invalid_request',
+        message: 'seller_agent_mint is required for new marketplace listings',
+      },
+      { status: 422 },
+    );
+  }
   await getOrCreateUser(getDb(), {
     privyId: session.privyId,
     wallet: session.wallet,

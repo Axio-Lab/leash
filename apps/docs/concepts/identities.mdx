@@ -1,9 +1,52 @@
 ---
 title: Identities
-description: Owner, executive, operator — the three keypairs every Leash agent involves and what each one signs.
+description: The owner, executive, and operator roles behind one Leash agent identity.
 ---
 
-A Leash agent looks like a single thing on-chain (one MPL Core asset), but at run-time it's wired to **three distinct cryptographic identities**. Conflating them is the most common source of "who signs this?" confusion, so this page lays them out side-by-side before any of the guides ask you to pick one.
+A Leash agent has one public identity — but that identity is operated by several cryptographic
+roles. This split is what lets an agent be portable and autonomous without turning every online
+process into the full owner of the treasury.
+
+Conflating these roles is the most common source of "who signs this?"
+confusion, so this page lays them out side-by-side before any of the guides ask
+you to pick one.
+
+## Identity versus signing roles
+
+The **agent mint** is the public identity. Other agents, marketplaces,
+explorers, and APIs key reputation, receipts, services, and policy off that
+mint.
+
+Around that mint, Leash keeps a public identity profile: optional handle,
+verified domains, capability cards, signed claims, operator history, selective
+disclosure links, and a reputation summary. Those profile fields make the mint
+easier for humans and agents to resolve, but the mint remains the canonical
+anchor.
+
+The **owner**, **executive**, and **operator** are signing roles around that
+identity:
+
+- The owner controls the identity and treasury.
+- The executive runs online with bounded spend authority.
+- The operator signs optional off-chain attestations and receipts.
+
+This means an agent can rotate hot keys, move hosts, or update capabilities
+without losing its public identity.
+
+## Profile fields
+
+| Field                | Why it exists                                                                                                                               |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Handle**           | Human-readable name that resolves to the mint and network.                                                                                  |
+| **Verified domains** | Domain ownership proven through `.well-known/leash-agent.json`.                                                                             |
+| **Capability cards** | Public/private cards for seller APIs, buyer tools, data sources, control channels, automations, marketplace listings, and pay.sh providers. |
+| **Claims**           | Signed, revocable attestations from Leash or other issuers.                                                                                 |
+| **Operator history** | Event-backed audit trail for executive and spend-delegation changes.                                                                        |
+| **Reputation**       | Receipt-derived summary that peers can check before trusting or paying the agent.                                                           |
+| **Disclosure links** | Revocable links that reveal selected private cards, claims, or redacted receipt fields without making them public.                          |
+
+See [Identity API](/api/identity) for the public resolve/verify endpoints and
+the admin endpoints the agent app uses to edit these fields.
 
 ## The three roles
 

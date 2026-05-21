@@ -48,14 +48,14 @@ export default function MyToolsPage() {
           <Badge variant="outline" className="font-mono uppercase tracking-widest">
             Your registry
           </Badge>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight">My tools</h1>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight">My capabilities</h1>
           <p className="text-fg-muted text-sm mt-1">
-            Tools you've listed on leash.market. Approval is manual today; expect ~24h.
+            Capabilities you've listed on leash.market. Approval is manual today; expect ~24h.
           </p>
         </div>
         <Button asChild>
           <Link href="/creator/list">
-            <PackagePlus className="size-4" /> List a tool
+            <PackagePlus className="size-4" /> List capability
           </Link>
         </Button>
       </div>
@@ -71,13 +71,13 @@ export default function MyToolsPage() {
       ) : items.length === 0 ? (
         <Card className="bg-aurora text-center p-12">
           <Sparkles className="size-6 mx-auto text-brand-strong" />
-          <h3 className="mt-3 font-semibold">No tools yet</h3>
+          <h3 className="mt-3 font-semibold">No capabilities yet</h3>
           <p className="text-sm text-fg-muted mt-1 max-w-md mx-auto">
-            Drop a manifest URL or hand-build a listing. Approved tools surface on the public
+            Drop a manifest URL or hand-build a listing. Approved capabilities surface on the public
             registry instantly.
           </p>
           <Button asChild className="mt-4">
-            <Link href="/creator/list">List your first tool</Link>
+            <Link href="/creator/list">List your first capability</Link>
           </Button>
         </Card>
       ) : (
@@ -115,7 +115,7 @@ function ToolRow({ listing }: { listing: Listing }) {
               : `${listing.pricing.amount ?? '?'} ${listing.pricing.currency ?? 'USDC'}/call`}
           </Badge>
           <span>
-            · {listing.tools.length} tool{listing.tools.length === 1 ? '' : 's'}
+            · {listing.tools.length} callable tool{listing.tools.length === 1 ? '' : 's'}
           </span>
           {listing.health_status ? <span>· {listing.health_status}</span> : null}
         </div>

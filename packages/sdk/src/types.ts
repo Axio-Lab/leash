@@ -11,7 +11,33 @@
  * via `as unknown as` for forward-compat.
  */
 
-export type SvmNetwork = 'solana-devnet' | 'solana-mainnet';
+import type {
+  IdentityVerificationDecision,
+  PublicIdentitySummary,
+  SvmNetwork,
+} from '@leashmarket/schemas';
+
+export type {
+  IdentityCapabilityRequirement,
+  IdentityCapabilityCard,
+  IdentityClaim,
+  IdentityDisclosureCreateResponse,
+  IdentityDisclosureGrant,
+  IdentityDisclosureRead,
+  IdentityDisclosureResource,
+  IdentitySelector,
+  IdentityVerificationDecision,
+  IdentityVerificationDecisionProfile,
+  IdentityVerificationDecisionRequest,
+  IdentityVerificationThresholds,
+  IdentityVerifyResponse,
+  OperatorHistoryEntry,
+  PublicIdentityProfile,
+  PublicIdentitySummary,
+  SellerIdentityMetadata,
+  SellerIdentityMetadataEnvelope,
+  SvmNetwork,
+} from '@leashmarket/schemas';
 
 export type DiscoverSource = 'leash' | 'pay-skills';
 
@@ -35,9 +61,39 @@ export type DiscoverItem = {
   /** Owner wallet for Leash entries; null for pay-skills entries. */
   seller_wallet: string | null;
   rating: number | null;
+  /** Public seller identity summary for Leash-native listings. Null for legacy/pay-skills. */
+  seller_identity: PublicIdentitySummary | null;
   health_status: 'ok' | 'warn' | 'down' | null;
+  endpoint_count?: number;
   tags: string[];
   tools: Array<{ name: string; description: string }>;
+};
+
+export type MarketplaceListing = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  category: string;
+  owner_privy_id: string;
+  owner_wallet: string;
+  seller_agent_mint: string | null;
+  seller_identity: PublicIdentitySummary | null;
+  endpoint: string;
+  pricing: { type: 'free' | 'per_call' | 'variable'; amount?: string; currency?: string };
+  tools: Array<{ name: string; description: string; inputSchema?: unknown }>;
+  docs_url: string | null;
+  free_tier: number;
+  health_status: 'ok' | 'warn' | 'down' | null;
+  health_checked: string | null;
+  status: 'pending' | 'approved' | 'rejected' | 'disabled';
+  created_at: string;
+};
+
+export type MarketplaceListingDetail = {
+  listing: MarketplaceListing;
+  rating: { avg: number; count: number };
+  identity_verification: IdentityVerificationDecision | null;
 };
 
 export type DiscoverResponse = {
