@@ -555,7 +555,6 @@ const SCHEMA_SQL: readonly string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_listings_status_created ON listings(status, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_listings_category ON listings(category)`,
-  `CREATE INDEX IF NOT EXISTS idx_listings_seller_agent ON listings(seller_agent_mint) WHERE seller_agent_mint IS NOT NULL`,
 
   `CREATE TABLE IF NOT EXISTS listing_ratings (
     listing_id   TEXT NOT NULL,
