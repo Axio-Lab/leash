@@ -119,18 +119,6 @@ export default async function BlogIndexPage({ searchParams }: BlogIndexPageProps
         </form>
       </header>
 
-      <div className="flex items-center justify-between text-xs text-fg-muted">
-        <span>
-          {filteredArticles.length} article{filteredArticles.length === 1 ? '' : 's'}
-          {query.length > 0 ? ` for "${query}"` : null}
-        </span>
-        {totalPages > 1 ? (
-          <span>
-            Page {clampedPage} / {totalPages}
-          </span>
-        ) : null}
-      </div>
-
       {visibleArticles.length > 0 ? (
         <section aria-label="Articles" className="grid gap-4 md:grid-cols-2">
           {visibleArticles.map((article) => (
