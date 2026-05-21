@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import { SearchIcon, X } from 'lucide-react';
 
 import { Spinner } from '@/components/ui/spinner';
+import { getStoredActiveAgentMint } from '@/lib/active-agent';
 import { loadFavorites, saveFavorites, type FavoriteEntry } from '@/lib/favorites';
 
 import { usePrivy } from '@privy-io/react-auth';
@@ -54,6 +55,31 @@ type MarketplaceSearchResponse = {
   error?: string;
 };
 
+type IdentityCapabilityCard = {
+  id: string;
+  kind:
+    | 'seller_api'
+    | 'buyer_tool'
+    | 'data_source'
+    | 'control_channel'
+    | 'automation'
+    | 'marketplace'
+    | 'pay_skills'
+    | 'custom';
+  title: string;
+  description?: string;
+  source?: 'leash' | 'pay-skills' | 'manual' | 'connection' | 'automation';
+  slug?: string;
+  endpoint?: string;
+  tags: string[];
+  protocols: Array<'x402' | 'mpp'>;
+  visibility: 'public' | 'private';
+};
+
+type IdentityProfile = {
+  capability_cards?: IdentityCapabilityCard[];
+};
+
 const searchFetcher = async (url: string): Promise<MarketplaceSearchResponse> => {
   const res = await fetch(url, { credentials: 'include' });
   const json = (await res.json()) as MarketplaceSearchResponse;
@@ -96,6 +122,60 @@ function rowProtocols(r: Record<string, unknown>): Array<'x402' | 'mpp'> {
     if (out.length > 0) return out;
   }
   return ['x402'];
+}
+
+function favoriteCardId(entry: FavoriteEntry): string {
+  return `favorite:${entry.source ?? 'leash'}:${entry.slug}`;
+}
+
+function httpUrl(value?: string): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function cardFromFavorite(entry: FavoriteEntry): IdentityCapabilityCard {
+  const source = entry.source ?? 'leash';
+  const endpoint = httpUrl(entry.url);
+  return {
+    id: favoriteCardId(entry),
+    kind: source === 'pay-skills' ? 'pay_skills' : 'marketplace',
+    title: entry.title,
+    source,
+    slug: entry.slug,
+    ...(endpoint ? { endpoint } : {}),
+    tags: [],
+    protocols: entry.protocols ?? ['x402'],
+    visibility: 'public',
+  };
+}
+
+async function syncFavoriteCapabilityCard(entry: FavoriteEntry, active: boolean) {
+  const mint = getStoredActiveAgentMint();
+  if (!mint) return;
+  try {
+    const read = await fetch(`/api/agents/${encodeURIComponent(mint)}/identity`, {
+      credentials: 'include',
+    });
+    if (!read.ok) return;
+    const profile = (await read.json().catch(() => ({}))) as IdentityProfile;
+    const id = favoriteCardId(entry);
+    const current = profile.capability_cards ?? [];
+    const without = current.filter((card) => card.id !== id);
+    const next = active ? [...without, cardFromFavorite(entry)] : without;
+    await fetch(`/api/agents/${encodeURIComponent(mint)}/identity`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ capability_cards: next }),
+    });
+  } catch (err) {
+    console.warn('Could not sync favorite capability card', err);
+  }
 }
 
 export default function FavoritesSettingsPage() {
@@ -152,11 +232,13 @@ export default function FavoritesSettingsPage() {
 
   function toggleFavorite(entry: FavoriteEntry) {
     if (!pid) return;
-    const next = local.some((x) => x.slug === entry.slug && x.listingId === entry.listingId)
+    const wasActive = local.some((x) => x.slug === entry.slug && x.listingId === entry.listingId);
+    const next = wasActive
       ? local.filter((x) => !(x.slug === entry.slug && x.listingId === entry.listingId))
       : [...local, entry];
     setLocal(next);
     saveFavorites(pid, next);
+    void syncFavoriteCapabilityCard(entry, !wasActive);
   }
 
   const rawItems = data?.items ?? [];

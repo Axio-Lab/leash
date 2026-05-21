@@ -198,6 +198,7 @@ describe('Identity schemas', () => {
         checks: [{ name: 'selector_resolves', passed: true, severity: 'info', detail: 'ok' }],
         profile: {
           mint: profile.mint,
+          network: profile.network,
           handle: profile.handle,
           name: profile.name,
           verified_domains: profile.verified_domains,

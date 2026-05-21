@@ -88,6 +88,7 @@ describe('LeashClient (public reads)', () => {
             price_usdc: '0.1',
             pricing_type: 'per_call',
             seller_agent_mint: null,
+            seller_identity: null,
             seller_wallet: 'W',
             rating: 1,
             health_status: 'ok',
@@ -192,6 +193,48 @@ describe('LeashClient (public reads)', () => {
       intent: 'pay',
       capability: { slug: 'agentmail/email', protocol: 'x402' },
     });
+  });
+
+  it('verifyCapabilitySeller defaults to call_capability decision requests', async () => {
+    const { fetch, calls } = makeFetch(() => ({
+      status: 200,
+      body: {
+        verdict: 'allow',
+        resolved_mint: 'M',
+        network: 'solana-devnet',
+        score: 100,
+        checks: [{ name: 'capability_match', passed: true, severity: 'info', detail: 'ok' }],
+        profile: null,
+      },
+    }));
+    const client = new LeashClient({ baseUrl: 'https://api.test', fetchImpl: fetch });
+    await client.verifyCapabilitySeller({
+      selector: { mint: 'M' },
+      capability: { slug: 'seller/api', protocol: 'x402' },
+      thresholds: { min_rating: 0.2 },
+    });
+    expect(calls[0]!.url).toBe('https://api.test/v1/identity/verify');
+    expect(JSON.parse(calls[0]!.body!)).toMatchObject({
+      selector: { mint: 'M' },
+      intent: 'call_capability',
+      capability: { slug: 'seller/api', protocol: 'x402' },
+      thresholds: { min_rating: 0.2 },
+    });
+  });
+
+  it('reads selective disclosure grants by token', async () => {
+    const { fetch, calls } = makeFetch(() => ({
+      status: 200,
+      body: {
+        id: 'disc_1',
+        agent: { mint: 'M', network: 'solana-devnet', handle: 'demo', name: 'Demo' },
+        expires_at: '2026-05-20T00:00:00.000Z',
+        resources: { capability_cards: [], claims: [], receipts: [] },
+      },
+    }));
+    const client = new LeashClient({ baseUrl: 'https://api.test', fetchImpl: fetch });
+    await client.readIdentityDisclosure('tok_123');
+    expect(calls[0]!.url).toBe('https://api.test/v1/identity/disclosures/tok_123');
   });
 
   it('throws LeashError on non-2xx with the parsed body', async () => {

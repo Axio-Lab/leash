@@ -21,7 +21,7 @@ const robotoMono = Roboto_Mono({
 
 export const metadata: Metadata = {
   title: 'leash · playground',
-  description: 'The operating system for agent-to-agent commerce — interactive playground.',
+  description: 'The identity layer for AI agents — interactive playground.',
   metadataBase: new URL('https://playground.leash.market'),
   // Mirror apps/explorer + apps/agents: the white-inverted `leash-logo.png`
   // is the single source of truth for the brand mark across all surfaces.
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'leash · playground',
-    description: 'Mint agents, wire endpoints, fire payments. All from one place.',
+    description: 'Mint identities, wire capabilities, fire payments, and inspect proofs.',
     siteName: 'leash.playground',
   },
 };

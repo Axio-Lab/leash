@@ -113,7 +113,7 @@ export function mountOpenApi(
       {
         name: 'payment-links',
         description:
-          'Hosted x402 payment links served by `/x/{id}` (the "Stripe Payment Links" of x402). ' +
+          'Hosted x402 payment links served by `/x/{id}` for identity-linked paid capabilities. ' +
           'Network-scoped via the API key.',
       },
       {

@@ -13,6 +13,7 @@ import type {
   IdentityVerifyResponse,
   OperatorHistoryEntry,
   PublicIdentityProfile,
+  PublicIdentitySummary,
 } from '@leashmarket/schemas';
 
 import type {
@@ -31,6 +32,7 @@ export type {
   IdentityVerifyResponse,
   OperatorHistoryEntry,
   PublicIdentityProfile,
+  PublicIdentitySummary,
 } from '@leashmarket/schemas';
 
 export type DiscoverSource = 'leash' | 'pay-skills';
@@ -51,6 +53,7 @@ export type DiscoverItem = {
   price_usdc: string | null;
   pricing_type: 'free' | 'per_call' | 'variable';
   seller_agent_mint: string | null;
+  seller_identity: PublicIdentitySummary | null;
   /** Owner wallet for Leash entries; null for pay-skills entries. */
   seller_wallet: string | null;
   rating: number | null;
@@ -73,12 +76,27 @@ export type ReputationSnapshot = {
   rating: number;
 };
 
-function identitySearchParams(selector: IdentitySelectorArgs): URLSearchParams {
+function identitySearchParams(
+  selector: IdentitySelectorArgs | IdentityVerifyArgs,
+): URLSearchParams {
+  const nested = 'selector' in selector ? selector.selector : undefined;
   const params = new URLSearchParams();
-  if (selector.mint) params.set('mint', selector.mint);
-  if (selector.handle) params.set('handle', selector.handle);
-  if (selector.domain) params.set('domain', selector.domain);
+  const mint = selector.mint ?? nested?.mint;
+  const handle = selector.handle ?? nested?.handle;
+  const domain = selector.domain ?? nested?.domain;
+  if (mint) params.set('mint', mint);
+  if (handle) params.set('handle', handle);
+  if (domain) params.set('domain', domain);
   return params;
+}
+
+function identitySelectorCount(selector: IdentitySelectorArgs | IdentityVerifyArgs): number {
+  const nested = 'selector' in selector ? selector.selector : undefined;
+  return [
+    selector.mint ?? nested?.mint,
+    selector.handle ?? nested?.handle,
+    selector.domain ?? nested?.domain,
+  ].filter(Boolean).length;
 }
 
 /**
@@ -273,7 +291,7 @@ export async function fetchIdentityProfile(args: {
 }): Promise<LeashToolResult> {
   const fetchImpl = args.fetchImpl ?? globalThis.fetch;
   const params = identitySearchParams(args.query);
-  if ([args.query.mint, args.query.handle, args.query.domain].filter(Boolean).length !== 1) {
+  if (identitySelectorCount(args.query) !== 1) {
     return jsonResult({
       kind: 'identity_profile',
       status: 'error',
@@ -309,7 +327,7 @@ export async function fetchIdentityVerify(args: {
 }): Promise<LeashToolResult> {
   const fetchImpl = args.fetchImpl ?? globalThis.fetch;
   const params = identitySearchParams(args.query);
-  if ([args.query.mint, args.query.handle, args.query.domain].filter(Boolean).length !== 1) {
+  if (identitySelectorCount(args.query) !== 1) {
     return jsonResult({
       kind: 'identity_verify',
       status: 'error',

@@ -100,6 +100,7 @@ describe('providerToItem', () => {
     expect(item.url).toBe('https://api.crushrewards.dev');
     expect(item.seller_wallet).toBeNull();
     expect(item.seller_agent_mint).toBeNull();
+    expect(item.seller_identity).toBeNull();
     expect(item.tools).toEqual([]);
     expect(item.tags).toEqual(['shopping']);
   });

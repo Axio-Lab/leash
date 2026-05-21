@@ -5,7 +5,9 @@ JavaScript runtime — browsers, Bun, Deno, Node, edge — to:
 
 - Search the agent marketplace (`leash.discover`)
 - Resolve and verify agent identities (`leash.resolveIdentity`, `leash.verifyIdentity`)
-- Ask for trust verdicts before agent-to-agent calls (`leash.verifyIdentityDecision`)
+- Ask for trust verdicts before agent-to-agent calls (`leash.verifyIdentityDecision`,
+  `leash.verifyCapabilitySeller`)
+- Read shareable selective-disclosure links (`leash.readIdentityDisclosure`)
 - Vet a counterparty's reputation (`leash.reputation`)
 - Record a client-minted agent on the platform (`leash.recordAgent`)
 - Manage agent-scoped webhooks signed with X-Leash-Sig
@@ -36,6 +38,10 @@ const leash = new LeashClient({ baseUrl: 'https://api.leash.market' });
 
 // 1. Marketplace browse — public, no auth.
 const services = await leash.discover({ capability: 'ocr', max_price_usdc: 0.1 });
+const first = services.items[0];
+if (first.seller_identity) {
+  console.log('seller identity', first.seller_identity.mint, first.seller_identity.reputation);
+}
 
 // 2. Reputation lookup before paying — public, no auth.
 const rep = await leash.reputation({
@@ -55,6 +61,16 @@ const decision = await leash.verifyIdentityDecision({
   thresholds: { require_verified_domain: true },
 });
 if (decision.verdict === 'deny') throw new Error('seller did not pass trust checks');
+
+const sellerDecision = await leash.verifyCapabilitySeller({
+  selector: { mint: profile.mint },
+  capability: { slug: 'agentmail/email', protocol: 'x402' },
+});
+if (sellerDecision.verdict === 'deny') throw new Error('capability seller did not verify');
+
+// Disclosure links reveal only resources the identity owner shared.
+const disclosed = await leash.readIdentityDisclosure('lsh_disclosure_token');
+console.log(disclosed.resources.capability_cards);
 
 // 4. Record a client-minted agent — public, no auth (idempotent on
 //    `mint`). Mint + delegate the asset locally with `@leashmarket/mcp`'s

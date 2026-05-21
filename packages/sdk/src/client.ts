@@ -27,8 +27,11 @@ import type {
   DailyTransactionsResponse,
   DailyTxBucket,
   DiscoverResponse,
+  IdentityCapabilityRequirement,
+  IdentityDisclosureRead,
   IdentityVerificationDecision,
   IdentityVerificationDecisionRequest,
+  IdentityVerificationThresholds,
   IdentityVerifyResponse,
   PaymentLink,
   PaymentLinkCreateInput,
@@ -185,6 +188,27 @@ export class LeashClient {
     args: IdentityVerificationDecisionRequest,
   ): Promise<IdentityVerificationDecision> {
     return this.requestJson<IdentityVerificationDecision>('POST', '/v1/identity/verify', args);
+  }
+
+  async verifyCapabilitySeller(args: {
+    selector: { mint?: string; handle?: string; domain?: string };
+    capability: IdentityCapabilityRequirement;
+    intent?: IdentityVerificationDecisionRequest['intent'];
+    thresholds?: IdentityVerificationThresholds;
+  }): Promise<IdentityVerificationDecision> {
+    return this.verifyIdentityDecision({
+      selector: args.selector,
+      intent: args.intent ?? 'call_capability',
+      capability: args.capability,
+      ...(args.thresholds ? { thresholds: args.thresholds } : {}),
+    });
+  }
+
+  async readIdentityDisclosure(token: string): Promise<IdentityDisclosureRead> {
+    return this.requestJson<IdentityDisclosureRead>(
+      'GET',
+      `/v1/identity/disclosures/${encodeURIComponent(token)}`,
+    );
   }
 
   // ── agent recording (public) ──────────────────────────────────────

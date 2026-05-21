@@ -62,8 +62,8 @@ export default function DashboardPage() {
     <div className="flex flex-col gap-8">
       <PageHeader
         eyebrow="leash · playground"
-        title="The operating system for agent-to-agent commerce."
-        description="One control room for the runner, agents, sellers, buyers, and the schemas they share."
+        title="The identity layer for AI agents."
+        description="One control room for agent identities, proof receipts, sellers, buyers, and the schemas they share."
       />
 
       <section className="grid gap-4 md:grid-cols-3">

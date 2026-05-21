@@ -1,9 +1,10 @@
 # @leashmarket/mcp
 
-Standalone Leash MCP server. Lets any AI agent in any MCP host
-(Cursor, Claude Desktop, Cline, Continue, ChatGPT-MCP, …) sign
-on-chain Solana transactions, pay x402 paywalls, and check its
-treasury balance — without a browser in the loop.
+Standalone MCP server for the Leash identity layer for AI agents. It
+lets any AI agent in any MCP host (Cursor, Claude Desktop, Cline,
+Continue, ChatGPT-MCP, …) resolve and verify identities, inspect proof
+trails, sign on-chain Solana transactions, pay x402 paywalls, and
+check its treasury balance — without a browser in the loop.
 
 ## Install
 

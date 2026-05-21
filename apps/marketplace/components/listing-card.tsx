@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Cpu, Star } from 'lucide-react';
+import { Cpu, ShieldCheck, ShieldQuestion, Star } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,13 @@ export type Listing = {
   pricing: { type: string; amount?: string; currency?: string };
   tools: Array<{ name: string }>;
   endpoint_count?: number;
+  seller_agent_mint?: string | null;
+  seller_identity?: {
+    mint: string;
+    handle: string | null;
+    name: string;
+    reputation: { rating: number; settled_calls: number };
+  } | null;
   health_status: 'ok' | 'warn' | 'down' | null;
   status: string;
   created_at?: string;
@@ -74,6 +81,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
               {listing.rating.avg.toFixed(1)} ({listing.rating.count})
             </span>
           ) : null}
+          <IdentityStatus source={source} identity={listing.seller_identity ?? null} />
           <Health status={listing.health_status} />
         </div>
       </Link>
@@ -86,6 +94,37 @@ export function ListingCard({ listing }: { listing: Listing }) {
         </Button>
       </div>
     </li>
+  );
+}
+
+function IdentityStatus({
+  source,
+  identity,
+}: {
+  source: 'leash' | 'pay-skills';
+  identity: Listing['seller_identity'] | null;
+}) {
+  if (source === 'pay-skills') {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <ShieldQuestion className="size-3" />
+        external
+      </span>
+    );
+  }
+  if (!identity) {
+    return (
+      <span className="inline-flex items-center gap-1 text-amber-300">
+        <ShieldQuestion className="size-3" />
+        unverified
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-emerald-300">
+      <ShieldCheck className="size-3" />
+      {identity.handle ? `@${identity.handle}` : 'identity'}
+    </span>
   );
 }
 

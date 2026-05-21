@@ -5,8 +5,8 @@
  * Wraps the same `LeashHost` that `@leashmarket/mcp` exposes to AI agents,
  * but skips the MCP wire protocol and renders results as plain text
  * (or `--json` when machine-readable output is wanted). Designed to
- * be the "git/gh/aws" of the Leash agent economy: a small, fast tool
- * for humans who want to inspect or operate their agent without
+ * be the "git/gh/aws" of the Leash identity layer: a small, fast tool
+ * for humans who want to inspect, verify, or operate their agent without
  * spinning up a chat product or MCP host.
  *
  * Subcommands
@@ -28,7 +28,8 @@
  *   leash discover [-q QUERY] …     Search Leash + pay-skills (public).
  *   leash discover endpoints <fqn>  Expand a pay-skills provider into paid URLs.
  *   leash identity resolve …        Resolve a mint / handle / verified domain.
- *   leash identity verify …         Verify a mint / handle / verified domain.
+ *   leash identity verify …         Verify a mint / handle / verified domain
+ *                                   or request a full allow/warn/deny trust verdict.
  *   leash reputation <agent_mint>   Reputation snapshot (public).
  *   leash receipts [--limit N]      Recent receipts for the active agent.
  *   leash pay <link-url> [--method …]   Pay an x402 or MPP paywall (auto-detected).
@@ -47,7 +48,7 @@
 import { HostRef, buildServerFromEnv } from '@leashmarket/mcp';
 import type { LeashHost, LeashToolResult } from '@leashmarket/mcp-core';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.3';
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -440,6 +441,19 @@ async function runDiscover(args: string[]): Promise<void> {
       const tag = item.source === 'pay-skills' ? '[pay.sh]' : '[leash] ';
       const slug = item.source === 'pay-skills' ? `  (fqn: ${item.slug})` : '';
       lines.push(`  ${tag} ${item.title} — ${price} — ${item.url}${slug}`);
+      if (item.seller_identity) {
+        const identity = item.seller_identity as {
+          handle?: string | null;
+          mint?: string;
+          name?: string;
+        };
+        const label = identity.handle ? `@${identity.handle}` : (identity.name ?? identity.mint);
+        lines.push(`           seller identity: ${label} (${identity.mint})`);
+      } else if (item.source === 'leash') {
+        lines.push('           seller identity: unverified legacy listing');
+      } else {
+        lines.push('           seller identity: external pay.sh provider');
+      }
       lines.push(`           ${item.description}`);
     }
     if ((payload.items ?? []).some((i: { source?: string }) => i.source === 'pay-skills')) {
@@ -533,10 +547,40 @@ async function runIdentity(args: string[]): Promise<void> {
   const result =
     sub === 'resolve'
       ? await hostRef.resolveIdentity(selector)
-      : await hostRef.verifyIdentity(selector);
+      : await hostRef.verifyIdentity(identityVerifyArgs(args.slice(1), selector));
   printResult(result, json, (payload) => {
     if (payload.status !== 'ok') return formatStatusError(payload);
     if (sub === 'verify') {
+      if (typeof payload.verdict === 'string') {
+        const checks = (payload.checks ?? []) as Array<{
+          name: string;
+          passed: boolean;
+          severity: string;
+          detail: string;
+        }>;
+        const profile = payload.profile as
+          | {
+              handle?: string | null;
+              name?: string;
+              capability_cards_count?: number;
+              claims_count?: number;
+              reputation?: { rating?: number; settled_calls?: number };
+            }
+          | null
+          | undefined;
+        return [
+          `verdict: ${payload.verdict}`,
+          `score: ${payload.score}`,
+          `resolved_mint: ${payload.resolved_mint ?? '(none)'}`,
+          `network: ${payload.network ?? '(none)'}`,
+          profile
+            ? `profile: ${profile.handle ? `@${profile.handle}` : (profile.name ?? '(unnamed)')} · capabilities=${profile.capability_cards_count ?? 0} · claims=${profile.claims_count ?? 0} · rating=${Number(profile.reputation?.rating ?? 0).toFixed(4)}`
+            : 'profile: (none)',
+          ...checks.map(
+            (c) => `  ${c.passed ? 'ok' : 'fail'} ${c.name} [${c.severity}]: ${c.detail}`,
+          ),
+        ].join('\n');
+      }
       const checks = (payload.checks ?? []) as Array<{
         name: string;
         passed: boolean;
@@ -800,6 +844,14 @@ function optArg(args: string[], flag: string): string | undefined {
   return args[i + 1];
 }
 
+function allOptArgs(args: string[], flag: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === flag && args[i + 1]) out.push(args[i + 1]!);
+  }
+  return out;
+}
+
 function numArg(args: string[], flag: string): number | undefined {
   const v = optArg(args, flag);
   if (v === undefined) return undefined;
@@ -935,7 +987,11 @@ function printHelp(): void {
       '  identity resolve (--mint M | --handle H | --domain D)',
       '                                     resolve an agent identity profile',
       '  identity verify (--mint M | --handle H | --domain D)',
-      '                                     verify an agent identity selector before trusting it',
+      '                  [--intent pay|call_capability|trust_claim|inspect]',
+      '                  [--capability-kind K] [--capability-slug S]',
+      '                  [--endpoint URL] [--protocol x402|mpp]',
+      '                  [--min-rating N] [--require-claim T] [--require-domain]',
+      '                                     verify an identity or request a trust verdict',
       '  reputation <agent_mint> [--network solana-devnet|solana-mainnet]',
       '',
       'activity:',
@@ -987,5 +1043,65 @@ function identitySelector(args: string[]): { mint?: string; handle?: string; dom
     ...(mint ? { mint } : {}),
     ...(handle ? { handle } : {}),
     ...(domain ? { domain } : {}),
+  };
+}
+
+function identityVerifyArgs(
+  args: string[],
+  selector: { mint?: string; handle?: string; domain?: string },
+): Parameters<LeashHost['verifyIdentity']>[0] {
+  const intent = optArg(args, '--intent') as
+    | 'pay'
+    | 'call_capability'
+    | 'trust_claim'
+    | 'inspect'
+    | undefined;
+  const kind = optArg(args, '--capability-kind');
+  const slug = optArg(args, '--capability-slug') ?? optArg(args, '--capability');
+  const endpoint = optArg(args, '--endpoint');
+  const protocol = optArg(args, '--protocol') as 'x402' | 'mpp' | undefined;
+  const minRating = numArg(args, '--min-rating');
+  const requiredClaims = allOptArgs(args, '--require-claim');
+  const requireDomain = args.includes('--require-domain');
+  const wantsDecision =
+    intent ||
+    kind ||
+    slug ||
+    endpoint ||
+    protocol ||
+    minRating !== undefined ||
+    requiredClaims.length > 0 ||
+    requireDomain;
+  if (!wantsDecision) return selector;
+  if (intent && !['pay', 'call_capability', 'trust_claim', 'inspect'].includes(intent)) {
+    process.stderr.write('--intent must be pay, call_capability, trust_claim, or inspect\n');
+    process.exit(2);
+  }
+  if (protocol && protocol !== 'x402' && protocol !== 'mpp') {
+    process.stderr.write('--protocol must be x402 or mpp\n');
+    process.exit(2);
+  }
+  return {
+    selector,
+    intent: intent ?? 'inspect',
+    ...(kind || slug || endpoint || protocol
+      ? {
+          capability: {
+            ...(kind ? { kind } : {}),
+            ...(slug ? { slug } : {}),
+            ...(endpoint ? { endpoint } : {}),
+            ...(protocol ? { protocol } : {}),
+          },
+        }
+      : {}),
+    ...(minRating !== undefined || requiredClaims.length > 0 || requireDomain
+      ? {
+          thresholds: {
+            ...(minRating !== undefined ? { min_rating: minRating } : {}),
+            ...(requiredClaims.length > 0 ? { required_claim_types: requiredClaims } : {}),
+            ...(requireDomain ? { require_verified_domain: true } : {}),
+          },
+        }
+      : {}),
   };
 }

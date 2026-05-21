@@ -40,6 +40,8 @@ type DiscoverItem = {
   category: string;
   price_usdc: string | null;
   pricing_type: 'free' | 'per_call' | 'variable';
+  seller_agent_mint: string | null;
+  seller_identity: Listing['seller_identity'] | null;
   rating: number | null;
   health_status: 'ok' | 'warn' | 'down' | null;
   endpoint_count?: number;
@@ -61,6 +63,8 @@ function normalizeListing(item: DiscoverItem): Listing {
     },
     tools: item.tools ?? [],
     ...(typeof item.endpoint_count === 'number' ? { endpoint_count: item.endpoint_count } : {}),
+    seller_agent_mint: item.seller_agent_mint,
+    seller_identity: item.seller_identity,
     health_status: item.health_status,
     status: 'approved',
     ...(typeof item.rating === 'number' ? { rating: { avg: item.rating * 5, count: 1 } } : {}),

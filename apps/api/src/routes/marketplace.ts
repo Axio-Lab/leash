@@ -35,10 +35,16 @@ import {
   type ListingStatus,
   type ListingTool,
 } from '../storage/listings.js';
+import { getPlatformAgent } from '../storage/platform-agents.js';
 import type { CacheClient } from '../storage/redis.js';
 import type { DbClient } from '../storage/turso.js';
 import { invalidRequest, notFound } from '../util/errors.js';
 import { fetchAndValidateManifest, validateManifest } from '../util/mcp-manifest.js';
+import {
+  publicIdentitySummary,
+  syncMarketplaceCapabilityCard,
+  verifyMarketplaceSellerCapability,
+} from '../util/public-identity.js';
 
 export type MarketplaceDeps = { config: LeashApiConfig; db: DbClient; cache: CacheClient };
 
@@ -79,6 +85,45 @@ const statusQuerySchema = z
     return valid.length === 1 ? valid[0]! : valid;
   });
 
+const RatingSummarySchema = z
+  .object({ avg: z.number(), count: z.number().int() })
+  .openapi('ListingRatingSummary');
+
+const PublicIdentitySummarySchema = z
+  .object({
+    mint: PubkeySchema,
+    network: z.enum(['solana-devnet', 'solana-mainnet']),
+    handle: z.string().nullable(),
+    name: z.string(),
+    verified_domains: z.array(z.string()),
+    reputation: z.object({
+      settled_calls: z.number().int(),
+      denied_calls: z.number().int(),
+      rating: z.number(),
+    }),
+    capability_cards_count: z.number().int(),
+    claims_count: z.number().int(),
+  })
+  .openapi('PublicIdentitySummary');
+
+const IdentityVerificationDecisionSchema = z
+  .object({
+    verdict: z.enum(['allow', 'warn', 'deny']),
+    resolved_mint: PubkeySchema.nullable(),
+    network: z.enum(['solana-devnet', 'solana-mainnet']).nullable(),
+    score: z.number(),
+    checks: z.array(
+      z.object({
+        name: z.string(),
+        passed: z.boolean(),
+        severity: z.enum(['info', 'warn', 'deny']),
+        detail: z.string(),
+      }),
+    ),
+    profile: PublicIdentitySummarySchema.nullable(),
+  })
+  .openapi('ListingIdentityVerification');
+
 const ListingSchema = z
   .object({
     id: z.string(),
@@ -88,6 +133,8 @@ const ListingSchema = z
     category: z.string(),
     owner_privy_id: z.string(),
     owner_wallet: PubkeySchema,
+    seller_agent_mint: PubkeySchema.nullable(),
+    seller_identity: PublicIdentitySummarySchema.nullable(),
     endpoint: z.string().url(),
     pricing: PricingSchema,
     tools: z.array(ToolSchema),
@@ -100,10 +147,6 @@ const ListingSchema = z
   })
   .openapi('MarketplaceListing');
 
-const RatingSummarySchema = z
-  .object({ avg: z.number(), count: z.number().int() })
-  .openapi('ListingRatingSummary');
-
 const ReviewSchema = z
   .object({
     id: z.string(),
@@ -114,7 +157,23 @@ const ReviewSchema = z
   })
   .openapi('ListingReview');
 
-function listingToWire(l: NonNullable<Awaited<ReturnType<typeof getListingById>>>) {
+function listingCapabilityPayload(l: NonNullable<Awaited<ReturnType<typeof getListingById>>>) {
+  return {
+    sellerAgentMint: l.sellerAgentMint,
+    listingId: l.id,
+    slug: l.slug,
+    name: l.name,
+    description: l.description,
+    endpoint: l.endpoint,
+    category: l.category,
+    status: l.status,
+  };
+}
+
+function listingToWire(
+  l: NonNullable<Awaited<ReturnType<typeof getListingById>>>,
+  sellerIdentity: Awaited<ReturnType<typeof publicIdentitySummary>> = null,
+) {
   return {
     id: l.id,
     slug: l.slug,
@@ -123,6 +182,8 @@ function listingToWire(l: NonNullable<Awaited<ReturnType<typeof getListingById>>
     category: l.category,
     owner_privy_id: l.ownerPrivyId,
     owner_wallet: l.ownerWallet,
+    seller_agent_mint: l.sellerAgentMint,
+    seller_identity: sellerIdentity,
     endpoint: l.endpoint,
     pricing: l.pricing,
     tools: l.tools,
@@ -133,6 +194,13 @@ function listingToWire(l: NonNullable<Awaited<ReturnType<typeof getListingById>>
     status: l.status,
     created_at: l.createdAt,
   };
+}
+
+async function listingToWireWithIdentity(
+  db: DbClient,
+  l: NonNullable<Awaited<ReturnType<typeof getListingById>>>,
+) {
+  return listingToWire(l, await publicIdentitySummary(db, l.sellerAgentMint));
 }
 
 export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
@@ -187,7 +255,10 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
         ...(q.q ? { q: q.q } : {}),
         ...(q.limit ? { limit: q.limit } : {}),
       });
-      return c.json({ items: items.map(listingToWire) }, 200);
+      const withIdentity = await Promise.all(
+        items.map((item) => listingToWireWithIdentity(deps.db, item)),
+      );
+      return c.json({ items: withIdentity }, 200);
     },
   );
 
@@ -203,7 +274,11 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
           description: 'ok',
           content: {
             'application/json': {
-              schema: z.object({ listing: ListingSchema, rating: RatingSummarySchema }),
+              schema: z.object({
+                listing: ListingSchema,
+                rating: RatingSummarySchema,
+                identity_verification: IdentityVerificationDecisionSchema.nullable(),
+              }),
             },
           },
         },
@@ -215,7 +290,20 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
       const l = await getListingBySlug(deps.db, slug);
       if (!l) throw notFound('listing not found');
       const rating = await getListingRatingSummary(deps.db, l.id);
-      return c.json({ listing: listingToWire(l), rating }, 200);
+      const sellerIdentity = await publicIdentitySummary(deps.db, l.sellerAgentMint);
+      const identityVerification = await verifyMarketplaceSellerCapability(deps.db, {
+        sellerAgentMint: l.sellerAgentMint,
+        endpoint: l.endpoint,
+        slug: l.slug,
+      });
+      return c.json(
+        {
+          listing: listingToWire(l, sellerIdentity),
+          rating,
+          identity_verification: identityVerification,
+        },
+        200,
+      );
     },
   );
 
@@ -242,6 +330,7 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
                 category: z.string().min(1).max(40).default('misc'),
                 owner_privy_id: z.string().min(1),
                 owner_wallet: PubkeySchema,
+                seller_agent_mint: PubkeySchema,
                 endpoint: z.string().url(),
                 pricing: PricingSchema,
                 tools: z.array(ToolSchema).min(1),
@@ -264,6 +353,13 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
       const b = c.req.valid('json');
       const existing = await getListingBySlug(deps.db, b.slug);
       if (existing) throw invalidRequest('slug already in use');
+      const sellerAgent = await getPlatformAgent(deps.db, b.seller_agent_mint);
+      if (!sellerAgent || sellerAgent.ownerPrivyId !== b.owner_privy_id) {
+        throw invalidRequest('seller_agent_mint must belong to owner_privy_id');
+      }
+      if (sellerAgent.ownerWallet !== b.owner_wallet) {
+        throw invalidRequest('seller_agent_mint owner wallet does not match owner_wallet');
+      }
       const created = await createListing(deps.db, {
         slug: b.slug,
         name: b.name,
@@ -271,13 +367,15 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
         category: b.category,
         ownerPrivyId: b.owner_privy_id,
         ownerWallet: b.owner_wallet,
+        sellerAgentMint: b.seller_agent_mint,
         endpoint: b.endpoint,
         pricing: b.pricing as ListingPricing,
         tools: b.tools as ListingTool[],
         ...(b.docs_url ? { docsUrl: b.docs_url } : {}),
         ...(b.free_tier !== undefined ? { freeTier: b.free_tier } : {}),
       });
-      return c.json(listingToWire(created), 200);
+      await syncMarketplaceCapabilityCard(deps.db, listingCapabilityPayload(created));
+      return c.json(await listingToWireWithIdentity(deps.db, created), 200);
     },
   );
 
@@ -358,7 +456,8 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
       if (!existing) throw notFound('listing not found');
       await setListingStatus(deps.db, id, status);
       const after = await getListingById(deps.db, id);
-      return c.json(listingToWire(after!), 200);
+      await syncMarketplaceCapabilityCard(deps.db, listingCapabilityPayload(after!));
+      return c.json(await listingToWireWithIdentity(deps.db, after!), 200);
     },
   );
 

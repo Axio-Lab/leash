@@ -45,10 +45,10 @@ const fetcher = async (url: string) => {
 /**
  * Seller payment-link builder.
  *
- * The "Stripe Payment Links" surface for x402 on Solana. Pick one of your
- * agents, declare a method + path + price, define the response template,
- * save it. The runner persists the descriptor and `/x/<id>` becomes a
- * live x402 paywall served by `@leashmarket/seller-kit`.
+ * The no-code surface for identity-linked paid capabilities. Pick one of
+ * your agents, declare a method + path + price, define the response
+ * template, save it. The runner persists the descriptor and `/x/<id>`
+ * becomes a live x402 paywall served by `@leashmarket/seller-kit`.
  */
 export default function SellerPage() {
   const toast = useToast();

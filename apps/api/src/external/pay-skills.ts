@@ -74,6 +74,7 @@ export type PaySkillsItem = {
   price_usdc: string | null;
   pricing_type: 'free' | 'per_call' | 'variable';
   seller_agent_mint: null;
+  seller_identity: null;
   seller_wallet: null;
   rating: null;
   health_status: null;
@@ -199,6 +200,7 @@ export function providerToItem(p: PaySkillsProvider): PaySkillsItem {
     price_usdc,
     pricing_type,
     seller_agent_mint: null,
+    seller_identity: null,
     seller_wallet: null,
     rating: null,
     health_status: null,

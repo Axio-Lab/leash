@@ -107,6 +107,18 @@ export const IdentityReputationSummarySchema = z.object({
 });
 export type IdentityReputationSummary = z.infer<typeof IdentityReputationSummarySchema>;
 
+export const PublicIdentitySummarySchema = z.object({
+  mint: z.string(),
+  network: IdentityNetworkSchema,
+  handle: z.string().nullable(),
+  name: z.string(),
+  verified_domains: z.array(z.string()),
+  reputation: IdentityReputationSummarySchema,
+  capability_cards_count: z.number().int(),
+  claims_count: z.number().int(),
+});
+export type PublicIdentitySummary = z.infer<typeof PublicIdentitySummarySchema>;
+
 export const PublicIdentityProfileSchema = z.object({
   mint: z.string(),
   network: IdentityNetworkSchema,
@@ -176,17 +188,7 @@ export const IdentityVerificationCheckSchema = z.object({
 });
 export type IdentityVerificationCheck = z.infer<typeof IdentityVerificationCheckSchema>;
 
-export const IdentityVerificationDecisionProfileSchema = z
-  .object({
-    mint: z.string(),
-    handle: z.string().nullable(),
-    name: z.string(),
-    verified_domains: z.array(z.string()),
-    reputation: IdentityReputationSummarySchema,
-    capability_cards_count: z.number().int(),
-    claims_count: z.number().int(),
-  })
-  .nullable();
+export const IdentityVerificationDecisionProfileSchema = PublicIdentitySummarySchema.nullable();
 export type IdentityVerificationDecisionProfile = z.infer<
   typeof IdentityVerificationDecisionProfileSchema
 >;

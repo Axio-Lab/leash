@@ -2,8 +2,9 @@
  * Phase 3 smoke test for the 90-second demo path.
  *
  * Exercises the full Phase 1+2 backend in one go without touching the
- * UI or RPC: seed listings → create platform user → mint agent record →
- * enqueue a task → record activities → confirm everything queryable.
+ * UI or RPC: create platform user → mint agent record → seed an
+ * identity-backed listing → enqueue a task → record activities →
+ * confirm everything queryable.
  *
  * Keeps us honest that the public-facing demo flow stays green even as
  * we touch storage and routes.
@@ -31,34 +32,6 @@ function admin() {
 describe('demo flow smoke', () => {
   it('seeds a listing, mints an agent, enqueues a task, and surfaces public stats', async () => {
     const rig = await createTestRig({ adminSecret: ADMIN });
-
-    const listingRes = await rig.app.fetch(
-      new Request('http://test.local/v1/marketplace/listings', {
-        method: 'POST',
-        headers: admin(),
-        body: JSON.stringify({
-          slug: 'data-fetch',
-          name: 'Data Fetch',
-          description: 'Read-only adapters',
-          category: 'data',
-          owner_privy_id: PRIVY_ID,
-          owner_wallet: WALLET,
-          endpoint: 'https://data.example/mcp',
-          pricing: { type: 'free' },
-          tools: [{ name: 'fx_rate', description: 'fx' }],
-        }),
-      }),
-    );
-    expect(listingRes.status).toBe(200);
-    const listing = (await listingRes.json()) as { id: string };
-
-    await rig.app.fetch(
-      new Request(`http://test.local/v1/marketplace/listings/${listing.id}/status`, {
-        method: 'PATCH',
-        headers: admin(),
-        body: JSON.stringify({ status: 'approved' }),
-      }),
-    );
 
     await rig.db.execute({
       sql: 'INSERT INTO platform_users (privy_id, wallet, email) VALUES (?, ?, ?)',
@@ -88,6 +61,35 @@ describe('demo flow smoke', () => {
       }),
     );
     expect(agentRes.status).toBe(200);
+
+    const listingRes = await rig.app.fetch(
+      new Request('http://test.local/v1/marketplace/listings', {
+        method: 'POST',
+        headers: admin(),
+        body: JSON.stringify({
+          slug: 'data-fetch',
+          name: 'Data Fetch',
+          description: 'Read-only adapters',
+          category: 'data',
+          owner_privy_id: PRIVY_ID,
+          owner_wallet: WALLET,
+          seller_agent_mint: MINT,
+          endpoint: 'https://data.example/mcp',
+          pricing: { type: 'free' },
+          tools: [{ name: 'fx_rate', description: 'fx' }],
+        }),
+      }),
+    );
+    expect(listingRes.status).toBe(200);
+    const listing = (await listingRes.json()) as { id: string };
+
+    await rig.app.fetch(
+      new Request(`http://test.local/v1/marketplace/listings/${listing.id}/status`, {
+        method: 'PATCH',
+        headers: admin(),
+        body: JSON.stringify({ status: 'approved' }),
+      }),
+    );
 
     const taskRes = await rig.app.fetch(
       new Request('http://test.local/v1/platform/tasks', {

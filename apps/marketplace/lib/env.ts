@@ -3,6 +3,10 @@ export const NEXT_PUBLIC_PRIVY_APP_ID: string = process.env.NEXT_PUBLIC_PRIVY_AP
 export const NEXT_PUBLIC_AGENTS_URL: string =
   process.env.NEXT_PUBLIC_AGENTS_URL ?? 'http://localhost:4100';
 
+/** Public explorer for agent identities and proof trails. */
+export const NEXT_PUBLIC_EXPLORER_URL: string =
+  process.env.NEXT_PUBLIC_EXPLORER_URL ?? 'https://explorer.leash.market';
+
 /** Hosted agent product (footer “Agent platform”). */
 export const NEXT_PUBLIC_AGENT_PLATFORM_URL: string =
   process.env.NEXT_PUBLIC_AGENT_PLATFORM_URL ?? 'https://agent.leash.market';

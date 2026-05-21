@@ -1,11 +1,11 @@
 /**
  * Payment-link CRUD + paywall counters.
  *
- * A payment link is the Leash equivalent of "Stripe Payment Links" for
- * x402: an agent owner declares `(method + price + response template)`
- * and any x402-aware caller can dial `https://api.leash.market/x/<id>`
- * to either probe the offer (gets a real `paymentRequirements[]` in a
- * 402) or pay it (gets the configured response).
+ * A payment link is an identity-linked paid capability: an agent owner
+ * declares `(method + price + response template)` and any x402-aware caller
+ * can dial `https://api.leash.market/x/<id>` to either probe the offer
+ * (gets a real `paymentRequirements[]` in a 402) or pay it (gets the
+ * configured response).
  *
  * Records are scoped to (network, api_key_id):
  *   - `network` matches the prefix of the issuing API key, so devnet

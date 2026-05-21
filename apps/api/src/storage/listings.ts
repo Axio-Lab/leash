@@ -36,6 +36,7 @@ export type Listing = {
   category: string;
   ownerPrivyId: string;
   ownerWallet: string;
+  sellerAgentMint: string | null;
   endpoint: string;
   pricing: ListingPricing;
   tools: ListingTool[];
@@ -82,6 +83,7 @@ function rowToListing(row: Record<string, unknown>): Listing {
     category: String(row.category),
     ownerPrivyId: String(row.owner_privy_id),
     ownerWallet: String(row.owner_wallet),
+    sellerAgentMint: row.seller_agent_mint == null ? null : String(row.seller_agent_mint),
     endpoint: String(row.endpoint),
     pricing,
     tools,
@@ -103,6 +105,7 @@ export async function createListing(
     category: string;
     ownerPrivyId: string;
     ownerWallet: string;
+    sellerAgentMint?: string | null;
     endpoint: string;
     pricing: ListingPricing;
     tools: ListingTool[];
@@ -115,9 +118,9 @@ export async function createListing(
     db,
     `INSERT INTO listings (
       id, slug, name, description, category,
-      owner_privy_id, owner_wallet, endpoint,
+      owner_privy_id, owner_wallet, seller_agent_mint, endpoint,
       pricing, tools, docs_url, free_tier
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       args.slug,
@@ -126,6 +129,7 @@ export async function createListing(
       args.category,
       args.ownerPrivyId,
       args.ownerWallet,
+      args.sellerAgentMint ?? null,
       args.endpoint,
       JSON.stringify(args.pricing),
       JSON.stringify(args.tools),

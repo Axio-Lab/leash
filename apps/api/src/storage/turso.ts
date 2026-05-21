@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 18;
+const SCHEMA_VERSION = 19;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -541,6 +541,7 @@ const SCHEMA_SQL: readonly string[] = [
     category        TEXT NOT NULL,
     owner_privy_id  TEXT NOT NULL,
     owner_wallet    TEXT NOT NULL,
+    seller_agent_mint TEXT,
     endpoint        TEXT NOT NULL,
     pricing         TEXT NOT NULL DEFAULT '{}',
     tools           TEXT NOT NULL DEFAULT '[]',
@@ -554,6 +555,7 @@ const SCHEMA_SQL: readonly string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_listings_status_created ON listings(status, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_listings_category ON listings(category)`,
+  `CREATE INDEX IF NOT EXISTS idx_listings_seller_agent ON listings(seller_agent_mint) WHERE seller_agent_mint IS NOT NULL`,
 
   `CREATE TABLE IF NOT EXISTS listing_ratings (
     listing_id   TEXT NOT NULL,
@@ -828,6 +830,13 @@ export async function runMigrations(db: Client): Promise<void> {
     await migrateExecutableAutomations(db);
   }
 
+  // v19: native marketplace capabilities can be anchored to the
+  // seller's Leash agent identity. Existing rows remain null and are
+  // rendered as legacy/unverified until owners link an identity.
+  if (currentVersion < 19) {
+    await migrateListingsSellerAgentMint(db);
+  }
+
   // Always-on index assertions. These run after every boot — they're
   // cheap (`IF NOT EXISTS`) and idempotent, and they cover the case
   // where a brand-new DB takes the latest `SCHEMA_SQL` directly and
@@ -837,6 +846,9 @@ export async function runMigrations(db: Client): Promise<void> {
   );
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_automations_lock ON automations(locked_until) WHERE deleted_at IS NULL AND status = 'enabled'`,
+  );
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_listings_seller_agent ON listings(seller_agent_mint) WHERE seller_agent_mint IS NOT NULL`,
   );
 
   if (currentVersion < SCHEMA_VERSION) {
@@ -1027,6 +1039,14 @@ async function migrateExecutableAutomations(db: Client): Promise<void> {
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_automations_lock ON automations(locked_until) WHERE deleted_at IS NULL AND status = 'enabled'`,
   );
+}
+
+async function migrateListingsSellerAgentMint(db: Client): Promise<void> {
+  const info = await db.execute('PRAGMA table_info(listings)');
+  const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
+  if (!names.has('seller_agent_mint')) {
+    await db.execute(`ALTER TABLE listings ADD COLUMN seller_agent_mint TEXT`);
+  }
 }
 
 async function migrateWatchlistKindCheck(db: Client): Promise<void> {

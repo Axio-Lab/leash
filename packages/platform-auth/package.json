@@ -1,6 +1,6 @@
 {
   "name": "@leashmarket/platform-auth",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": false,
   "type": "module",
   "publishConfig": {
