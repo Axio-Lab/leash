@@ -36,7 +36,7 @@ export function LandingBackdrop() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 -z-10 min-h-full w-full overflow-hidden"
+      className="pointer-events-none absolute inset-x-0 -top-20 bottom-0 -z-10 w-full overflow-hidden"
       style={style}
     >
       <div className="absolute inset-0 bg-[linear-gradient(to_right,oklch(1_0_0/0.028)_1px,transparent_1px),linear-gradient(to_bottom,oklch(1_0_0/0.028)_1px,transparent_1px)] bg-size-[48px_48px] opacity-55" />

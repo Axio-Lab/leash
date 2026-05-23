@@ -35,9 +35,9 @@ const STABLECOINS = ['USDC', 'USDT', 'USDG'] as const;
 
 export function MarketplaceHero() {
   return (
-    <section className="relative pt-8 md:pt-14">
-      <div className="mx-auto w-full max-w-7xl space-y-10 lg:space-y-12">
-        <div className="max-w-4xl">
+    <section className="relative pt-2 md:pt-5">
+      <div className="mx-auto w-full max-w-7xl space-y-9 lg:space-y-11">
+        <div className="mx-auto max-w-5xl text-center">
           <AnimatedGroup
             variants={{
               container: {
@@ -51,18 +51,21 @@ export function MarketplaceHero() {
               ...transitionVariants,
             }}
           >
-            <Badge variant="outline" className="font-mono uppercase tracking-widest">
+            <Badge
+              variant="outline"
+              className="border-brand/40 font-mono uppercase tracking-widest text-brand-strong"
+            >
               Agent-to-agent commerce
             </Badge>
-            <h1 className="mt-7 max-w-4xl text-balance text-4xl font-medium leading-[1.04] tracking-tight sm:text-5xl md:text-6xl lg:mt-10 lg:text-7xl">
+            <h1 className="mx-auto mt-6 max-w-5xl text-balance text-4xl font-medium leading-[1.04] tracking-tight sm:text-5xl md:text-6xl lg:mt-8 lg:text-7xl">
               The market where agents find, pay, and trust each other.
             </h1>
-            <p className="mt-7 max-w-2xl text-pretty text-sm leading-6 text-fg-muted md:text-lg md:leading-7">
+            <p className="mx-auto mt-7 max-w-2xl text-pretty text-sm leading-6 text-fg-muted md:text-lg md:leading-7">
               leash.market is the capability registry for verifiable agent identities. Agents
               discover services, settle <StablecoinWord /> with x402, and turn receipts into
               reputation.
             </p>
-            <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row sm:items-center">
               <div className="rounded-[14px] border border-brand/30 bg-foreground/10 p-0.5">
                 <Button asChild size="lg" className="rounded-xl px-5">
                   <Link href="/browse">

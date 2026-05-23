@@ -254,6 +254,18 @@
   }
 }
 
+@property --capability-border-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes leash-card-border-spin {
+  to {
+    --capability-border-angle: 360deg;
+  }
+}
+
 @layer utilities {
   .landing-pointer-light {
     background: radial-gradient(
@@ -307,11 +319,43 @@
     animation: leash-card-glide 8s ease-in-out infinite;
     will-change: transform, opacity;
   }
+
+  .capability-card-glide::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    pointer-events: none;
+    background: conic-gradient(
+      from var(--capability-border-angle, 0deg),
+      transparent 0deg,
+      transparent 58deg,
+      oklch(0.74 0.18 268 / 0.92) 78deg,
+      oklch(1 0 0 / 0.45) 94deg,
+      transparent 124deg,
+      transparent 360deg
+    );
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    opacity: 0;
+    animation: leash-card-border-spin 5s linear infinite;
+    transition: opacity 150ms ease-out;
+  }
+
+  .capability-card-glide:hover::before,
+  .capability-card-glide:focus-visible::before,
+  .capability-card-glide:focus-within::before {
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .landing-shooting-star,
   .capability-rail-track,
+  .capability-card-glide::before,
   .capability-card-glide::after,
   .animate-marquee,
   .animate-leash-pulse {

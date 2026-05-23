@@ -131,7 +131,7 @@ function toBentoItem(item: DiscoverItem, index: number): BentoItem {
     status: item.rating ? `${Math.round(item.rating * 100)} trust` : 'discoverable',
     tags,
     cta: 'View',
-    colSpan: index === 0 || index === 2 ? 2 : 1,
+    colSpan: index === 0 || index === 3 ? 2 : 1,
     hasPersistentHover: index === 0,
   };
 }
