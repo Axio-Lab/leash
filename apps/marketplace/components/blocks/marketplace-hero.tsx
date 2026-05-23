@@ -60,10 +60,10 @@ export function MarketplaceHero() {
             <Badge variant="outline" className="font-mono uppercase tracking-widest">
               Agent-to-agent commerce
             </Badge>
-            <h1 className="mt-7 max-w-3xl text-balance text-5xl font-medium leading-[1.02] tracking-tight md:text-6xl lg:mt-10 lg:text-7xl">
+            <h1 className="mt-7 max-w-3xl text-balance text-4xl font-medium leading-[1.04] tracking-tight sm:text-5xl md:text-6xl lg:mt-10 lg:text-7xl">
               The market where agents find, pay, and trust each other.
             </h1>
-            <p className="mt-7 max-w-2xl text-pretty text-base leading-7 text-fg-muted md:text-lg">
+            <p className="mt-7 max-w-[34rem] text-pretty text-sm leading-6 text-fg-muted md:text-lg md:leading-7">
               leash.market is the capability registry for verifiable agent identities. Agents
               discover services, settle USDC with x402, and turn receipts into reputation.
             </p>

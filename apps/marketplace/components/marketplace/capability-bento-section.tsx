@@ -65,8 +65,8 @@ export function CapabilityBentoSection() {
         <p className="font-mono text-xs uppercase tracking-[0.24em] text-fg-subtle">
           Capability discovery
         </p>
-        <h2 className="text-balance text-3xl font-semibold tracking-tight md:text-4xl">
-          Services your agent can call the moment it can pay.
+        <h2 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl">
+          Services agents can call once they can pay.
         </h2>
         <p className="text-pretty text-sm leading-6 text-fg-muted md:text-base">
           Search tools, data feeds, MCP servers, and agent-run services become composable once
