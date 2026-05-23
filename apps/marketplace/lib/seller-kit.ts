@@ -6,38 +6,51 @@
  * an HTTP 402 if no `x-payment` header is present, otherwise lets the
  * upstream handler run as normal.
  *
- * The runtime list is intentionally short (Hono, Express, FastAPI, raw)
- * — the goal is "drop-in within minutes", not "every framework on
- * earth". The MCP example uses `@modelcontextprotocol/sdk` patterns.
+ * The runtime list is intentionally short and production-facing: a Hono
+ * seller, receipt forwarding, a manifest, and a buyer-side probe.
  */
 
 export type SnippetParams = {
   slug: string;
   toolName?: string;
   amount?: string;
-  currency?: string;
+  currency?: StableCurrency | string;
   network?: 'solana-devnet' | 'solana-mainnet';
   sellerAgent?: string;
+  upstreamUrl?: string;
+  rail?: PaymentRail;
+  feePayerAddress?: string;
 };
 
+export type StableCurrency = 'USDC' | 'USDT' | 'USDG';
+export type PaymentRail = 'x402' | 'mpp';
+
+export const STABLE_CURRENCIES: StableCurrency[] = ['USDC', 'USDT', 'USDG'];
+export const PAYMENT_RAILS: Array<{ id: PaymentRail; label: string; description: string }> = [
+  { id: 'x402', label: 'x402', description: 'HTTP 402 payment-required header' },
+  { id: 'mpp', label: 'MPP', description: 'problem+json challenge and PaymentScheme retry' },
+];
+
 const DEFAULTS: Required<SnippetParams> = {
-  slug: 'my-tool',
+  slug: 'premium-search',
   toolName: 'search',
   amount: '0.001',
   currency: 'USDC',
   network: 'solana-devnet',
-  sellerAgent: '<your-seller-agent-asset>',
+  sellerAgent: '<your-leash-agent-address>',
+  upstreamUrl: 'https://api.example-search.com/v1/search',
+  rail: 'x402',
+  feePayerAddress: '<facilitator-fee-payer-address>',
 };
 
 function merge(p: SnippetParams): Required<SnippetParams> {
   return { ...DEFAULTS, ...Object.fromEntries(Object.entries(p).filter(([, v]) => Boolean(v))) };
 }
 
-export type SnippetLanguage = 'hono' | 'node' | 'receipts' | 'manifest' | 'curl';
+export type SnippetLanguage = 'hono' | 'receipts' | 'manifest' | 'curl';
 
 export const LANGUAGES: Array<{ id: SnippetLanguage; label: string; sub: string }> = [
   { id: 'hono', label: 'Hono seller', sub: 'TS · @leashmarket/seller-kit' },
-  { id: 'node', label: 'Node smoke', sub: 'TS · local paid endpoint test' },
   { id: 'receipts', label: 'Receipts', sub: 'Explorer forwarding' },
   { id: 'manifest', label: 'leash-mcp.json', sub: 'Manifest file' },
   { id: 'curl', label: 'curl', sub: 'Buyer-side test' },
@@ -48,8 +61,6 @@ export function snippet(language: SnippetLanguage, params: SnippetParams): strin
   switch (language) {
     case 'hono':
       return honoSnippet(p);
-    case 'node':
-      return nodeSmokeSnippet(p);
     case 'receipts':
       return receiptsSnippet(p);
     case 'manifest':
@@ -60,7 +71,11 @@ export function snippet(language: SnippetLanguage, params: SnippetParams): strin
 }
 
 function honoSnippet(p: Required<SnippetParams>): string {
-  return `// Hono — gate a route with @leashmarket/seller-kit
+  return p.rail === 'mpp' ? mppHonoSnippet(p) : x402HonoSnippet(p);
+}
+
+function x402HonoSnippet(p: Required<SnippetParams>): string {
+  return `// Hono — gate a route with @leashmarket/seller-kit using x402
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
@@ -69,15 +84,18 @@ import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
 import { createSeller } from '@leashmarket/seller-kit';
 
 const app = new Hono();
-const umi = createUmi(process.env.SOLANA_RPC ?? 'https://api.devnet.solana.com')
+const umi = createUmi(process.env.SOLANA_RPC)
   .use(mplCore())
   .use(mplToolbox());
 
+process.env.LEASH_API_URL = 'https://api.leash.market';
+process.env.LEASH_API_KEY = '<your-leash-api-key>';
+
 createSeller(app, {
   umi,
-  // This is a Leash/Metaplex Core agent asset, not a wallet address.
+  // This is your Leash agent address, not an arbitrary receiving wallet.
   // seller-kit derives the on-chain payTo PDA from this identity.
-  sellerAgent: { asset: process.env.LEASH_SELLER_AGENT ?? '${p.sellerAgent}' },
+  sellerAgent: { asset: '${p.sellerAgent}' },
   network: '${p.network}',
   facilitator: '${facilitatorFor(p.network)}',
   routes: {
@@ -88,27 +106,98 @@ createSeller(app, {
       acceptsCurrencies: ['USDT', 'USDG'],
     },
   },
-  // Optional: set LEASH_API_URL + LEASH_API_KEY or LEASH_RUNNER_URL
-  // and seller-kit will forward earn receipts to explorer-compatible storage.
+  // With LEASH_API_URL + LEASH_API_KEY set, seller-kit forwards earn receipts
+  // so explorer.leash.market can show successful paid calls.
 });
 
 app.post('/${p.slug}/${p.toolName}', async (c) => {
-  const body = await c.req.json();
-  // payment is verified before this runs
-  return c.json({ ok: true, query: body.query });
+  const { query } = await c.req.json();
+
+  // Payment is verified before this runs. Put the API you want to monetize here.
+  const upstream = await fetch('${p.upstreamUrl}', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ query, limit: 5 }),
+  });
+
+  if (!upstream.ok) {
+    return c.json({ error: 'search_failed' }, 502);
+  }
+
+  const data = await upstream.json();
+  return c.json({
+    ok: true,
+    query,
+    results: data.results,
+  });
 });
 
 serve({ fetch: app.fetch, port: 8080 });`;
 }
 
-function nodeSmokeSnippet(p: Required<SnippetParams>): string {
-  return `# Run the same kind of smoke test we use locally.
-# It starts a seller-kit Hono endpoint, probes for 402, then pays with buyer-kit.
-LEASH_E2E_SELLER_AGENT=${p.sellerAgent} \\
-LEASH_SMOKE_PRICE='${p.amount} ${p.currency}' \\
-pnpm --filter @leashmarket/api exec tsx \\
-  --env-file-if-exists=.env.e2e \\
-  scripts/seller-kit-local-smoke.ts`;
+function mppHonoSnippet(p: Required<SnippetParams>): string {
+  return `// Hono — gate a route with @leashmarket/seller-kit using MPP
+import { Hono } from 'hono';
+import { serve } from '@hono/node-server';
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
+import { mplCore } from '@metaplex-foundation/mpl-core';
+import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
+import { createMppSeller } from '@leashmarket/seller-kit';
+
+const app = new Hono();
+const umi = createUmi(process.env.SOLANA_RPC)
+  .use(mplCore())
+  .use(mplToolbox());
+
+process.env.LEASH_API_URL = 'https://api.leash.market';
+process.env.LEASH_API_KEY = '<your-leash-api-key>';
+
+createMppSeller(app, {
+  umi,
+  // This is your Leash agent address, not an arbitrary receiving wallet.
+  // seller-kit derives the on-chain payTo PDA from this identity.
+  sellerAgent: { asset: '${p.sellerAgent}' },
+  network: '${p.network}',
+  facilitator: '${facilitatorFor(p.network)}',
+  // MPP challenges include the facilitator fee payer that co-signs settlement.
+  feePayerAddress: process.env.LEASH_MPP_FEE_PAYER ?? '${p.feePayerAddress}',
+  routes: {
+    'POST /${p.slug}/${p.toolName}': {
+      description: '${capitalize(p.slug.replace(/-/g, ' '))} ${p.toolName} endpoint',
+      price: '${p.amount} ${p.currency}',
+      currency: '${p.currency}',
+    },
+  },
+  // Use a shared challengeStore (Redis/KV) when running multiple instances.
+});
+
+app.post('/${p.slug}/${p.toolName}', async (c) => {
+  const { query } = await c.req.json();
+
+  // Payment is verified before this runs. Put the API you want to monetize here.
+  const upstream = await fetch('${p.upstreamUrl}', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ query, limit: 5 }),
+  });
+
+  if (!upstream.ok) {
+    return c.json({ error: 'search_failed' }, 502);
+  }
+
+  const data = await upstream.json();
+  return c.json({
+    ok: true,
+    query,
+    results: data.results,
+  });
+});
+
+serve({ fetch: app.fetch, port: 8080 });`;
 }
 
 function receiptsSnippet(p: Required<SnippetParams>): string {
@@ -122,8 +211,8 @@ const routes = {
 };
 
 // Option A: let seller-kit use its built-in env-based receipt sink.
-process.env.LEASH_API_URL = 'http://localhost:8801';
-process.env.LEASH_API_KEY = 'lsh_test_...';
+process.env.LEASH_API_URL = 'https://api.leash.market';
+process.env.LEASH_API_KEY = '<your-leash-api-key>';
 
 createSeller(app, {
   umi,
@@ -139,7 +228,7 @@ createSeller(app, {
   network: '${p.network}',
   routes,
   onReceipt: async (receipt) => {
-    await fetch(\`http://localhost:8801/v1/receipts/\${receipt.agent}\`, {
+    await fetch(\`https://api.leash.market/v1/receipts/\${receipt.agent}\`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -160,6 +249,7 @@ function manifestSnippet(p: Required<SnippetParams>): string {
       category: 'misc',
       endpoint: `https://your-domain.com/mcp`,
       seller_agent: p.sellerAgent,
+      protocol: p.rail,
       pricing: {
         type: p.amount === '0' ? 'free' : 'per_call',
         amount: p.amount,

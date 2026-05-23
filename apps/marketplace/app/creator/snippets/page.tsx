@@ -9,20 +9,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/cn';
+import {
+  PAYMENT_RAILS,
+  STABLE_CURRENCIES,
+  type PaymentRail,
+  type StableCurrency,
+} from '@/lib/seller-kit';
 
 /**
  * /creator/snippets — the seller kit. A standalone page where creators
- * can plug their slug, price, and seller agent, and copy ready-to-paste code
+ * can plug their slug, price, and Leash agent address, and copy ready-to-paste code
  * for any runtime. Independent of any specific listing so creators can
  * prototype before they list.
  */
 export default function SnippetsPage() {
-  const [slug, setSlug] = React.useState('my-tool');
+  const [slug, setSlug] = React.useState('premium-search');
   const [toolName, setToolName] = React.useState('search');
   const [amount, setAmount] = React.useState('0.001');
-  const [currency, setCurrency] = React.useState('USDC');
+  const [currency, setCurrency] = React.useState<StableCurrency>('USDC');
   const [network, setNetwork] = React.useState<'solana-devnet' | 'solana-mainnet'>('solana-devnet');
-  const [sellerAgent, setSellerAgent] = React.useState('<your-seller-agent-asset>');
+  const [sellerAgent, setSellerAgent] = React.useState('<your-leash-agent-address>');
+  const [upstreamUrl, setUpstreamUrl] = React.useState('https://api.example-search.com/v1/search');
+  const [rail, setRail] = React.useState<PaymentRail>('x402');
+  const [feePayerAddress, setFeePayerAddress] = React.useState('<facilitator-fee-payer-address>');
 
   return (
     <div className="min-w-0 space-y-6">
@@ -66,6 +75,20 @@ export default function SnippetsPage() {
                 spellCheck={false}
               />
             </Field>
+            <Field id="snippet-rail" label="Payment rail">
+              <select
+                id="snippet-rail"
+                value={rail}
+                onChange={(e) => setRail(e.target.value as PaymentRail)}
+                className="min-h-10 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand/40"
+              >
+                {PAYMENT_RAILS.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.label} — {r.description}
+                  </option>
+                ))}
+              </select>
+            </Field>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field id="snippet-amount" label="Amount">
                 <Input
@@ -78,13 +101,18 @@ export default function SnippetsPage() {
                 />
               </Field>
               <Field id="snippet-currency" label="Currency">
-                <Input
+                <select
                   id="snippet-currency"
                   value={currency}
-                  onChange={(e) => setCurrency(e.target.value.toUpperCase())}
-                  className="font-mono"
-                  spellCheck={false}
-                />
+                  onChange={(e) => setCurrency(e.target.value as StableCurrency)}
+                  className="min-h-10 w-full rounded-lg border border-border bg-bg px-3 py-2 font-mono text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand/40"
+                >
+                  {STABLE_CURRENCIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
               </Field>
             </div>
             <fieldset>
@@ -108,7 +136,7 @@ export default function SnippetsPage() {
                 ))}
               </div>
             </fieldset>
-            <Field id="snippet-seller-agent" label="Seller agent asset">
+            <Field id="snippet-seller-agent" label="Your Leash agent address">
               <Input
                 id="snippet-seller-agent"
                 value={sellerAgent}
@@ -117,10 +145,38 @@ export default function SnippetsPage() {
                 spellCheck={false}
               />
               <p className="text-xs leading-5 text-fg-muted">
-                This must be your Leash/Metaplex Core agent asset. seller-kit derives the on-chain
-                payTo PDA from it; it is not an arbitrary receiving wallet.
+                This must be your Leash agent address. seller-kit derives the on-chain payTo PDA
+                from it; it is not an arbitrary receiving wallet.
               </p>
             </Field>
+            <Field id="snippet-upstream-url" label="Endpoint to run after payment">
+              <Input
+                id="snippet-upstream-url"
+                type="url"
+                inputMode="url"
+                value={upstreamUrl}
+                onChange={(e) => setUpstreamUrl(e.target.value)}
+                className="font-mono text-xs"
+                spellCheck={false}
+              />
+              <p className="text-xs leading-5 text-fg-muted">
+                Paste the API endpoint that should execute only after x402 payment succeeds.
+              </p>
+            </Field>
+            {rail === 'mpp' ? (
+              <Field id="snippet-fee-payer" label="MPP fee payer address">
+                <Input
+                  id="snippet-fee-payer"
+                  value={feePayerAddress}
+                  onChange={(e) => setFeePayerAddress(e.target.value)}
+                  className="font-mono text-xs"
+                  spellCheck={false}
+                />
+                <p className="text-xs leading-5 text-fg-muted">
+                  MPP challenges include the facilitator fee payer that co-signs settlement.
+                </p>
+              </Field>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -128,12 +184,24 @@ export default function SnippetsPage() {
           <CardHeader>
             <CardTitle>Snippet</CardTitle>
             <CardDescription>
-              Copy and paste — the generated seller uses `createSeller`, an agent asset, and the
-              live devnet/mainnet facilitator for real x402 settlement.
+              Copy and paste — the generated seller uses `createSeller`, your Leash agent address,
+              and the live devnet/mainnet facilitator for real x402 settlement.
             </CardDescription>
           </CardHeader>
           <CardContent className="min-w-0">
-            <SnippetBlock params={{ slug, toolName, amount, currency, network, sellerAgent }} />
+            <SnippetBlock
+              params={{
+                slug,
+                toolName,
+                amount,
+                currency,
+                network,
+                sellerAgent,
+                upstreamUrl,
+                rail,
+                feePayerAddress,
+              }}
+            />
           </CardContent>
         </Card>
       </div>

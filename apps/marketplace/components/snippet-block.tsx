@@ -10,8 +10,8 @@ import { LANGUAGES, type SnippetLanguage, type SnippetParams, snippet } from '@/
 /**
  * Tabbed seller-kit snippet block. Used on /creator/snippets and at the
  * end of the list-a-tool flow. Switches between Hono seller setup,
- * local smoke testing, receipt forwarding, manifest, and curl examples.
- * Each pane renders the snippet tailored to the supplied params.
+ * receipt forwarding, manifest, and curl examples. Each pane renders
+ * the snippet tailored to the supplied params.
  */
 export function SnippetBlock({
   params,

@@ -167,8 +167,8 @@ export default function CreatorDocsPage() {
       <section className="space-y-4">
         <SectionHead n={3} icon={Code2} title="Wrap your endpoint with the seller kit">
           The seller-kit middleware short-circuits unauthenticated requests with HTTP 402 and only
-          forwards to your handler once an x402 payment has been verified. Use your seller agent
-          asset so payments, receipts, and reputation attach to the right identity.
+          forwards to your handler once an x402 payment has been verified. Use your Leash agent
+          address so payments, receipts, and reputation attach to the right identity.
         </SectionHead>
         <Card>
           <CardContent className="pt-5">
@@ -177,7 +177,8 @@ export default function CreatorDocsPage() {
                 slug: 'premium-search',
                 toolName: 'search',
                 amount: '0.001',
-                sellerAgent: '<your-seller-agent-asset>',
+                sellerAgent: '<your-leash-agent-address>',
+                upstreamUrl: 'https://api.example-search.com/v1/search',
               }}
             />
           </CardContent>
