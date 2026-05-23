@@ -889,9 +889,9 @@ const programmaticArticleSpecs: ProgrammaticArticleSpec[] = [
   {
     slug: 'monetize-api-endpoint-with-leash-seller-kit',
     title: 'How to monetize an API endpoint with Leash seller-kit',
-    seoTitle: 'Monetize an API endpoint with x402 and Leash seller-kit',
+    seoTitle: 'Monetize an API endpoint with x402, MPP, and Leash seller-kit',
     seoDescription:
-      'Turn a Hono API route into a paid x402 endpoint using @leashmarket/seller-kit, a seller agent identity, devnet facilitator settlement, and explorer-ready receipts.',
+      'Turn an API route into a paid x402 or MPP endpoint using @leashmarket/seller-kit, hosted payment links, marketplace discovery, and explorer-ready receipts.',
     eyebrow: 'Endpoint monetization',
     category: 'Packages',
     audience: 'API builders selling capabilities to AI agents',
@@ -901,21 +901,32 @@ const programmaticArticleSpecs: ProgrammaticArticleSpec[] = [
       'monetize API endpoint',
       '@leashmarket/seller-kit',
       'x402 API payments',
+      'MPP API payments',
       'AI agent API monetization',
     ],
-    tags: ['Seller kit', 'API monetization', 'x402', 'Explorer'],
+    tags: ['Seller kit', 'API monetization', 'x402', 'MPP', 'Explorer'],
     takeaways: [
-      'seller-kit needs a seller agent asset because payTo is derived from that agent identity.',
-      'The first unpaid request returns HTTP 402 with payment requirements.',
+      'seller-kit needs your Leash agent address because payTo is derived from that agent identity.',
+      'The creator flow can create hosted x402 or MPP payment links from an active marketplace API key.',
+      'Marketplace discovery is optional, but the description should explain the exact paid capability agents can buy.',
       'Explorer visibility requires receipt ingestion or an API-aware transaction path, not only a raw on-chain transfer.',
     ],
     useCase:
-      'A useful API endpoint can become an agent-readable product when it advertises a price, accepts x402 payment, and ties every successful call to a seller agent identity. The smoke test in `apps/api/scripts/seller-kit-local-smoke.ts` demonstrates the smallest version: start a local paid route, probe it as an unpaid caller, then pay it from a buyer agent treasury.',
+      'A useful API endpoint can become an agent-readable product when it advertises a price, accepts x402 or MPP payment, and ties every successful call to a Leash agent identity. The creator flow creates a hosted payment link first; then you can optionally submit the same endpoint to marketplace discovery with a short description of what agents can buy.',
     mechanics:
-      'seller-kit mounts x402 middleware onto your Hono app. It receives a seller agent asset, derives the seller Asset Signer PDA as the on-chain destination, advertises accepted stablecoins through the facilitator, and only calls your route handler after the buyer signs and settlement succeeds. The buyer side can be any compatible x402 client; Leash buyer-kit adds policy, agent treasury delegation, and spend receipts.',
+      'seller-kit mounts payment middleware onto your Hono app. `createSeller` speaks x402; `createMppSeller` speaks MPP. Both receive your Leash agent address, derive the seller Asset Signer PDA as the on-chain destination, advertise accepted stablecoins through the facilitator, and only call your route handler after the buyer signs and settlement succeeds.',
     checklist:
-      'Create or reuse a seller agent, fund and delegate a buyer agent for testing, configure the devnet or mainnet facilitator, wrap the API route with `createSeller`, run one unpaid 402 probe, run one paid buyer-kit call, and forward earn/spend receipts to the Leash API or runner when you want explorer pages to update immediately.',
+      'Create or reuse a Leash agent, select or create an active marketplace API key, choose x402 or MPP, pick USDC/USDT/USDG, create a hosted payment link, optionally submit to marketplace discovery, wrap dynamic endpoints with seller-kit, and forward receipts to the Leash API or runner when you want explorer pages to update immediately.',
     codeBlocks: [
+      codeBlock('Create a hosted payment link from the creator flow', 'txt', [
+        '1. Open /creator/list.',
+        '2. Pick your Leash agent address.',
+        '3. Choose x402 or MPP and USDC, USDT, or USDG.',
+        '4. Select an active marketplace API key, or create one when the selector says no key found.',
+        '5. Click Create payment link.',
+        '6. Optional: check “Also submit to marketplace discovery” with a description like:',
+        '   “Paid search endpoint for agents. Input: query. Output: ranked web results with citations.”',
+      ]),
       codeBlock('Seller-kit route', 'ts', [
         "import { Hono } from 'hono';",
         "import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';",
@@ -924,13 +935,16 @@ const programmaticArticleSpecs: ProgrammaticArticleSpec[] = [
         "import { createSeller } from '@leashmarket/seller-kit';",
         '',
         'const app = new Hono();',
-        "const umi = createUmi(process.env.SOLANA_RPC ?? 'https://api.devnet.solana.com')",
+        'const umi = createUmi(process.env.SOLANA_RPC)',
         '  .use(mplCore())',
         '  .use(mplToolbox());',
         '',
+        "process.env.LEASH_API_URL = 'https://api.leash.market';",
+        "process.env.LEASH_API_KEY = '<your-leash-api-key>';",
+        '',
         'createSeller(app, {',
         '  umi,',
-        '  sellerAgent: { asset: process.env.LEASH_SELLER_AGENT! },',
+        "  sellerAgent: { asset: '<your-leash-agent-address>' },",
         "  network: 'solana-devnet',",
         "  facilitator: 'https://facilitator-devnet.leash.market',",
         '  routes: {',
@@ -941,6 +955,18 @@ const programmaticArticleSpecs: ProgrammaticArticleSpec[] = [
         "      acceptsCurrencies: ['USDT', 'USDG'],",
         '    },',
         '  },',
+        '});',
+        '',
+        "app.post('/paid/quote', async (c) => {",
+        '  const { query } = await c.req.json();',
+        "  const upstream = await fetch('https://api.example-search.com/v1/search', {",
+        "    method: 'POST',",
+        "    headers: { 'content-type': 'application/json' },",
+        '    body: JSON.stringify({ query, limit: 5 }),',
+        '  });',
+        "  if (!upstream.ok) return c.json({ error: 'search_failed' }, 502);",
+        '  const data = await upstream.json();',
+        '  return c.json({ ok: true, results: data.results });',
         '});',
       ]),
       codeBlock('Smoke-test the paid endpoint', 'sh', [
@@ -972,7 +998,17 @@ const programmaticArticleSpecs: ProgrammaticArticleSpec[] = [
       {
         question: 'Why does seller-kit need a seller agent?',
         answer:
-          'seller-kit derives the seller payTo address from the seller agent asset. That keeps payment, receipts, and reputation attached to the agent identity instead of a loose wallet address.',
+          'seller-kit derives the seller payTo address from your Leash agent address. That keeps payment, receipts, and reputation attached to the agent identity instead of a loose wallet address.',
+      },
+      {
+        question: 'Should I choose x402 or MPP?',
+        answer:
+          'Use x402 when you want standard HTTP 402 payment-required semantics. Use MPP when your buyer clients prefer problem+json negotiation. Leash keeps both attached to the same agent identity and receipt model.',
+      },
+      {
+        question: 'Do I have to list the endpoint in marketplace discovery?',
+        answer:
+          'No. A hosted payment link can stay private. Discovery is only for endpoints you want agents to find through browse, search, and reputation surfaces.',
       },
       {
         question: 'Why did my smoke-test transaction not appear in the explorer?',

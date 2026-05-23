@@ -37,7 +37,8 @@ export default function CreatorDocsPage() {
         <p className="max-w-2xl text-fg-muted">
           leash.market is the open registry where agent identities discover, pay for, and use
           capabilities. If you operate an API, an MCP server, or even a single agent service, you
-          can list it here — free or paid — and start collecting USDC per call.
+          can create a payment link, optionally submit it to discovery, and start collecting stable
+          per-call payments.
         </p>
       </header>
 
@@ -48,7 +49,11 @@ export default function CreatorDocsPage() {
             title: 'Anyone can list',
             body: 'Devs, agent creators, indie operators.',
           },
-          { icon: Wallet, title: 'Per-call USDC', body: 'Settles in seconds via x402 + Solana.' },
+          {
+            icon: Wallet,
+            title: 'x402 or MPP',
+            body: 'Choose the rail and stablecoin for the buyer flow.',
+          },
           {
             icon: CheckCircle2,
             title: 'Onchain receipts',
@@ -66,23 +71,15 @@ export default function CreatorDocsPage() {
       </section>
 
       <section className="space-y-4">
-        <SectionHead n={1} icon={KeyRound} title="Get an API key">
-          Sign in with email or Solana wallet, then issue an{' '}
-          <code className="font-mono text-fg">lsh_*</code> key with{' '}
-          <code className="font-mono text-fg">marketplace</code> scope. Use it to manage listings
-          programmatically.
-        </SectionHead>
-        <Button asChild variant="outline">
-          <Link href="/creator/api-keys">
-            Issue a key <ArrowRight className="size-4" />
-          </Link>
-        </Button>
-      </section>
-
-      <section className="space-y-4">
-        <SectionHead n={2} icon={PackagePlus} title="Describe your capability">
-          A leash listing is a JSON document. You can paste a URL to a hosted manifest (recommended)
-          or fill the fields by hand. Here's the canonical shape:
+        <SectionHead n={1} icon={PackagePlus} title="Describe and monetize your capability">
+          Use{' '}
+          <Link href="/creator/list" className="text-brand hover:underline">
+            List capability
+          </Link>{' '}
+          as the single production flow. Paste a manifest or fill fields by hand, choose x402 or
+          MPP, select USDC, USDT, or USDG, pick an active marketplace API key, and create a hosted
+          payment link. Check “Also submit to marketplace discovery” when you want agents to find it
+          in the registry.
         </SectionHead>
         <Card>
           <CardHeader>
@@ -138,8 +135,9 @@ export default function CreatorDocsPage() {
                 Decimal string in the listed currency. Per-call only.
               </FieldDef>
               <FieldDef label="pricing.currency">
-                Currently <code className="font-mono text-fg">USDC</code>. More stablecoins land
-                with x402 ecosystem rollouts.
+                One of <code className="font-mono text-fg">USDC</code>,{' '}
+                <code className="font-mono text-fg">USDT</code>, or{' '}
+                <code className="font-mono text-fg">USDG</code>.
               </FieldDef>
               <FieldDef label="tools[]">
                 List of callable tools inside this capability. Each has{' '}
@@ -159,16 +157,24 @@ export default function CreatorDocsPage() {
         </Card>
         <Button asChild>
           <Link href="/creator/list">
-            Start a listing <ArrowRight className="size-4" />
+            Open creator flow <ArrowRight className="size-4" />
           </Link>
         </Button>
       </section>
 
       <section className="space-y-4">
-        <SectionHead n={3} icon={Code2} title="Wrap your endpoint with the seller kit">
-          The seller-kit middleware short-circuits unauthenticated requests with HTTP 402 and only
-          forwards to your handler once an x402 payment has been verified. Use your Leash agent
-          address so payments, receipts, and reputation attach to the right identity.
+        <SectionHead n={2} icon={KeyRound} title="Use an active marketplace API key">
+          The creator flow lists your active, non-revoked keys with marketplace scope. If none
+          exist, create one in place, reveal it if needed, then select it to create the hosted
+          payment link.
+        </SectionHead>
+      </section>
+
+      <section className="space-y-4">
+        <SectionHead n={3} icon={Code2} title="Wrap the paid endpoint when you need live data">
+          Hosted payment links are the fastest way to sell access. For dynamic APIs, copy the
+          generated seller-kit snippet from the same creator flow. It forwards to your handler only
+          after x402 or MPP payment succeeds.
         </SectionHead>
         <Card>
           <CardContent className="pt-5">
@@ -179,13 +185,14 @@ export default function CreatorDocsPage() {
                 amount: '0.001',
                 sellerAgent: '<your-leash-agent-address>',
                 upstreamUrl: 'https://api.example-search.com/v1/search',
+                rail: 'x402',
               }}
             />
           </CardContent>
         </Card>
         <Button asChild variant="outline">
-          <Link href="/creator/snippets">
-            Open seller kit <ArrowRight className="size-4" />
+          <Link href="/creator/list">
+            Create payment link <ArrowRight className="size-4" />
           </Link>
         </Button>
       </section>
@@ -202,8 +209,8 @@ export default function CreatorDocsPage() {
           >
             agent.leash.market
           </a>{' '}
-          can add it as a capability with a single click — and your wallet starts collecting USDC
-          per call.
+          can add it as a capability with a single click — and your wallet starts collecting
+          per-call stablecoin payments.
         </p>
         <div className="flex justify-center gap-2">
           <Button asChild>

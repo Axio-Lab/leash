@@ -5,8 +5,7 @@ import { CreatorShell } from '@/components/creator-shell';
  * Every authenticated route lives under `/creator/*`:
  *   /creator                    — overview + animated MCP simulator
  *   /creator/tools              — your listings
- *   /creator/list               — list a new tool
- *   /creator/snippets           — x402 seller kit / code snippets
+ *   /creator/list               — create payment links + list a new tool
  *   /creator/api-keys           — keys
  *   /creator/docs               — onboarding doc
  *   /creator/admin/queue        — moderation queue (admin allowlist)
