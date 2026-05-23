@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 
@@ -18,7 +19,14 @@ export function AuthButton(): React.ReactElement | null {
 }
 
 function Inner(): React.ReactElement {
+  const router = useRouter();
   const { ready, authenticated, user, login, logout } = usePrivy();
+
+  async function handleLogout() {
+    await logout();
+    router.replace('/');
+  }
+
   if (!ready) {
     return (
       <span
@@ -48,7 +56,7 @@ function Inner(): React.ReactElement {
           <span className="font-mono text-xs">{short}</span>
         </Link>
       </Button>
-      <Button onClick={logout} size="icon" variant="ghost" aria-label="Sign out">
+      <Button onClick={handleLogout} size="icon" variant="ghost" aria-label="Sign out">
         <LogOut className="size-4" />
       </Button>
     </div>

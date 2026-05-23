@@ -94,11 +94,16 @@ function Inner({ children }: { children: React.ReactNode }) {
   const wallet = user?.wallet?.address ?? solana?.address ?? '';
   const short = wallet ? `${wallet.slice(0, 4)}…${wallet.slice(-4)}` : 'connected';
 
+  async function handleLogout() {
+    await logout();
+    router.replace('/');
+  }
+
   return (
-    <div className="min-h-dvh grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
+    <div className="grid min-h-dvh grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
       {/* Sidebar — desktop */}
-      <aside className="hidden border-r border-border bg-bg-elev/40 lg:flex lg:flex-col">
-        <SidebarBody pathname={pathname} short={short} onLogout={logout} />
+      <aside className="sticky top-0 hidden h-dvh border-r border-border bg-bg-elev/40 lg:flex lg:flex-col">
+        <SidebarBody pathname={pathname} short={short} onLogout={handleLogout} />
       </aside>
 
       {/* Sidebar — mobile drawer */}
@@ -110,16 +115,13 @@ function Inner({ children }: { children: React.ReactNode }) {
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setDrawerOpen(false)}
           />
-          <aside className="absolute left-0 top-0 flex h-full w-[280px] flex-col border-r border-border bg-bg-elev">
-            <button
-              type="button"
-              aria-label="Close menu"
-              onClick={() => setDrawerOpen(false)}
-              className="absolute right-3 top-3 rounded-md border p-1 text-fg-muted hover:text-fg"
-            >
-              <X className="size-4" />
-            </button>
-            <SidebarBody pathname={pathname} short={short} onLogout={logout} />
+          <aside className="absolute left-0 top-0 flex h-dvh w-[min(320px,calc(100vw-2rem))] flex-col border-r border-border bg-bg-elev">
+            <SidebarBody
+              pathname={pathname}
+              short={short}
+              onLogout={handleLogout}
+              onClose={() => setDrawerOpen(false)}
+            />
           </aside>
         </div>
       ) : null}
@@ -135,6 +137,16 @@ function Inner({ children }: { children: React.ReactNode }) {
           >
             <Menu className="size-4" />
           </button>
+          <Link href="/" className="inline-flex items-center lg:hidden" aria-label="leash.market">
+            <Image
+              src="/leash-logo.png"
+              alt=""
+              width={20}
+              height={20}
+              className="shrink-0 filter-[brightness(0)_invert(1)]"
+              priority
+            />
+          </Link>
           <div className="flex items-center gap-2 text-sm text-fg-muted">
             <Compass className="size-4 text-brand-strong" />
             <span className="truncate">{titleForPath(pathname)}</span>
@@ -170,16 +182,18 @@ function SidebarBody({
   pathname,
   short,
   onLogout,
+  onClose,
 }: {
   pathname: string;
   short: string;
   onLogout: () => void;
+  onClose?: () => void;
 }) {
   const isActive = (href: string) =>
     href === '/creator' ? pathname === '/creator' : pathname.startsWith(href);
   return (
     <>
-      <div className="flex items-center gap-2 border-b border-border px-5 py-4">
+      <div className="flex min-h-14 items-center gap-2 border-b border-border px-5 py-4">
         <Image
           src="/leash-logo.png"
           alt="Leash"
@@ -194,14 +208,24 @@ function SidebarBody({
         <Badge variant="outline" className="ml-auto font-mono uppercase">
           Creator
         </Badge>
+        {onClose ? (
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={onClose}
+            className="-mr-1 grid size-8 place-items-center rounded-md border text-fg-muted hover:text-fg"
+          >
+            <X className="size-4" />
+          </button>
+        ) : null}
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto scrollbar-thin">
+      <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4 scrollbar-thin">
         <NavGroup label="Build" items={PRIMARY} isActive={isActive} />
         <NavGroup label="Settings" items={SECONDARY} isActive={isActive} />
       </nav>
 
-      <div className="border-t border-border p-3 space-y-2">
+      <div className="mt-auto shrink-0 space-y-2 border-t border-border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="rounded-lg border bg-bg p-3">
           <div className="text-[10px] uppercase tracking-widest text-fg-subtle">Wallet</div>
           <div className="mt-1 font-mono text-xs">{short}</div>
