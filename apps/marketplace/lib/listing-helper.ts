@@ -12,16 +12,19 @@
 export type ListingPricing = {
   type: 'free' | 'per_call' | 'variable';
   amount?: string;
-  currency?: string;
+  currency?: ListingStableCurrency;
 };
+
+export type ListingPaymentProtocol = 'x402' | 'mpp';
+export type ListingStableCurrency = 'USDC' | 'USDT' | 'USDG';
 
 export type ListingEndpoint = {
   method: 'GET' | 'POST';
   url: string;
   description: string;
   pricing?: ListingPricing;
-  protocol?: string[];
-  supported_usd?: string[];
+  protocol?: ListingPaymentProtocol[];
+  supported_usd?: ListingStableCurrency[];
 };
 
 export type ListingDraft = {

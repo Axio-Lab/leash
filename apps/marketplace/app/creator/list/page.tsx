@@ -124,7 +124,7 @@ export default function CreatorListPage() {
           url: endpointUrl,
           description: endpointDescription,
           pricing,
-          protocol: [searchParams.get('endpoint_protocol') ?? 'x402'],
+          protocol: [searchParams.get('endpoint_protocol') === 'mpp' ? 'mpp' : 'x402'],
           supported_usd: supportedFromParams(searchParams),
         },
       ],
@@ -596,7 +596,7 @@ function ReviewStage({
                       onChange={(e) =>
                         setDraft((d) => ({
                           ...d,
-                          pricing: { ...d.pricing, currency: e.target.value },
+                          pricing: { ...d.pricing, currency: e.target.value as StableCurrency },
                         }))
                       }
                       className={cn(SELECT_CLASS, 'font-mono')}
@@ -808,7 +808,9 @@ function PayableEndpointEditor({
                   <select
                     aria-label={`Endpoint ${index + 1} currency`}
                     value={(pricing.currency as StableCurrency | undefined) ?? 'USDC'}
-                    onChange={(e) => updateEndpointPricing(index, { currency: e.target.value })}
+                    onChange={(e) =>
+                      updateEndpointPricing(index, { currency: e.target.value as StableCurrency })
+                    }
                     className={cn(SELECT_CLASS, 'font-mono')}
                   >
                     {STABLE_CURRENCIES.map((c) => (
@@ -820,7 +822,9 @@ function PayableEndpointEditor({
                   <select
                     aria-label={`Endpoint ${index + 1} payment rail`}
                     value={protocol}
-                    onChange={(e) => updateEndpoint(index, { protocol: [e.target.value] })}
+                    onChange={(e) =>
+                      updateEndpoint(index, { protocol: [e.target.value as PaymentRail] })
+                    }
                     className={SELECT_CLASS}
                   >
                     {PAYMENT_RAILS.map((rail) => (
@@ -1013,20 +1017,26 @@ function pricingFromParams(params: SearchParamReader): ListingPricing {
   const rawType = params.get('endpoint_pricing_type');
   const type: ListingPricing['type'] =
     rawType === 'free' || rawType === 'variable' ? rawType : 'per_call';
+  const rawCurrency = params.get('endpoint_currency');
+  const currency: StableCurrency = STABLE_CURRENCIES.includes(rawCurrency as StableCurrency)
+    ? (rawCurrency as StableCurrency)
+    : 'USDC';
   return {
     type,
     ...(params.get('endpoint_amount') ? { amount: params.get('endpoint_amount')! } : {}),
-    currency: params.get('endpoint_currency') ?? 'USDC',
+    currency,
   };
 }
 
-function supportedFromParams(params: SearchParamReader): string[] {
+function supportedFromParams(params: SearchParamReader): StableCurrency[] {
   const raw = params.get('endpoint_supported_usd');
   if (!raw) return ['USDC'];
   return raw
     .split(',')
     .map((currency) => currency.trim())
-    .filter(Boolean);
+    .filter((currency): currency is StableCurrency =>
+      STABLE_CURRENCIES.includes(currency as StableCurrency),
+    );
 }
 
 function titleFromDescription(description: string): string {

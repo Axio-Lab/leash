@@ -81,14 +81,22 @@ export type MarketplaceListing = {
   seller_agent_mint: string | null;
   seller_identity: PublicIdentitySummary | null;
   endpoint: string;
-  pricing: { type: 'free' | 'per_call' | 'variable'; amount?: string; currency?: string };
+  pricing: {
+    type: 'free' | 'per_call' | 'variable';
+    amount?: string;
+    currency?: 'USDC' | 'USDT' | 'USDG';
+  };
   endpoints: Array<{
     method: 'GET' | 'POST';
     url: string;
     description: string;
-    pricing?: { type: 'free' | 'per_call' | 'variable'; amount?: string; currency?: string };
-    protocol?: string[];
-    supported_usd?: string[];
+    pricing?: {
+      type: 'free' | 'per_call' | 'variable';
+      amount?: string;
+      currency?: 'USDC' | 'USDT' | 'USDG';
+    };
+    protocol?: Array<'x402' | 'mpp'>;
+    supported_usd?: Array<'USDC' | 'USDT' | 'USDG'>;
   }>;
   docs_url: string | null;
   free_tier: number;

@@ -6,6 +6,9 @@
 
 import { invalidRequest } from './errors.js';
 
+type ManifestPaymentProtocol = 'x402' | 'mpp';
+type ManifestStableCurrency = 'USDC' | 'USDT' | 'USDG';
+
 export type McpManifest = {
   name: string;
   slug: string | null;
@@ -16,11 +19,19 @@ export type McpManifest = {
     method: 'GET' | 'POST';
     url: string;
     description: string;
-    pricing?: { type: 'free' | 'per_call' | 'variable'; amount?: string; currency?: string };
-    protocol?: string[];
-    supported_usd?: string[];
+    pricing?: {
+      type: 'free' | 'per_call' | 'variable';
+      amount?: string;
+      currency?: ManifestStableCurrency;
+    };
+    protocol?: ManifestPaymentProtocol[];
+    supported_usd?: ManifestStableCurrency[];
   }>;
-  pricing: { type: 'free' | 'per_call' | 'variable'; amount?: string; currency?: string };
+  pricing: {
+    type: 'free' | 'per_call' | 'variable';
+    amount?: string;
+    currency?: ManifestStableCurrency;
+  };
   docs_url?: string;
   free_tier?: number;
 };
@@ -41,16 +52,7 @@ export function validateManifest(input: unknown): McpManifest {
   const category = typeof m.category === 'string' && m.category.length > 0 ? m.category : 'misc';
   if (!m.pricing || typeof m.pricing !== 'object')
     throw invalidRequest('manifest.pricing required');
-  const pricing = m.pricing as Record<string, unknown>;
-  const type = String(pricing.type);
-  if (type !== 'free' && type !== 'per_call' && type !== 'variable') {
-    throw invalidRequest(`manifest.pricing.type must be free|per_call|variable, got ${type}`);
-  }
-  const manifestPricing: ManifestPricing = {
-    type,
-    ...(typeof pricing.amount === 'string' ? { amount: pricing.amount } : {}),
-    ...(typeof pricing.currency === 'string' ? { currency: pricing.currency } : {}),
-  };
+  const manifestPricing = parseManifestPricing(m.pricing, 'manifest.pricing');
   const rawEndpoints = Array.isArray(m.endpoints) ? m.endpoints : [];
   const legacyTools = Array.isArray(m.tools) ? m.tools : [];
   const endpoints: ManifestEndpoint[] =
@@ -70,18 +72,14 @@ export function validateManifest(input: unknown): McpManifest {
             method,
             url: endpoint.url,
             description: endpoint.description,
-            ...(endpoint.pricing && typeof endpoint.pricing === 'object'
-              ? { pricing: endpoint.pricing as typeof manifestPricing }
+            ...(endpoint.pricing
+              ? { pricing: parseManifestPricing(endpoint.pricing, `endpoints[${i}].pricing`) }
               : {}),
             ...(Array.isArray(endpoint.protocol)
-              ? { protocol: endpoint.protocol.filter((p): p is string => typeof p === 'string') }
+              ? { protocol: endpoint.protocol.filter(isManifestPaymentProtocol) }
               : {}),
             ...(Array.isArray(endpoint.supported_usd)
-              ? {
-                  supported_usd: endpoint.supported_usd.filter(
-                    (p): p is string => typeof p === 'string',
-                  ),
-                }
+              ? { supported_usd: endpoint.supported_usd.filter(isManifestStableCurrency) }
               : {}),
           };
         })
@@ -109,6 +107,32 @@ export function validateManifest(input: unknown): McpManifest {
     ...(typeof m.docs_url === 'string' ? { docs_url: m.docs_url } : {}),
     ...(typeof m.free_tier === 'number' ? { free_tier: m.free_tier } : {}),
   };
+}
+
+function parseManifestPricing(input: unknown, path: string): ManifestPricing {
+  if (!input || typeof input !== 'object') throw invalidRequest(`${path} required`);
+  const pricing = input as Record<string, unknown>;
+  const type = pricing.type;
+  if (type !== 'free' && type !== 'per_call' && type !== 'variable') {
+    throw invalidRequest(`${path}.type must be free|per_call|variable, got ${String(type)}`);
+  }
+  const currency = pricing.currency;
+  if (currency !== undefined && !isManifestStableCurrency(currency)) {
+    throw invalidRequest(`${path}.currency must be USDC|USDT|USDG`);
+  }
+  return {
+    type,
+    ...(typeof pricing.amount === 'string' ? { amount: pricing.amount } : {}),
+    ...(currency ? { currency } : {}),
+  };
+}
+
+function isManifestPaymentProtocol(value: unknown): value is ManifestPaymentProtocol {
+  return value === 'x402' || value === 'mpp';
+}
+
+function isManifestStableCurrency(value: unknown): value is ManifestStableCurrency {
+  return value === 'USDC' || value === 'USDT' || value === 'USDG';
 }
 
 const MAX_BYTES = 256 * 1024;

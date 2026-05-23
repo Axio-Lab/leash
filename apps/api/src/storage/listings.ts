@@ -15,16 +15,19 @@ import { execute } from './turso.js';
 export type ListingPricing = {
   type: 'free' | 'per_call' | 'variable';
   amount?: string;
-  currency?: string;
+  currency?: ListingStableCurrency;
 };
+
+export type ListingPaymentProtocol = 'x402' | 'mpp';
+export type ListingStableCurrency = 'USDC' | 'USDT' | 'USDG';
 
 export type ListingEndpoint = {
   method: 'GET' | 'POST';
   url: string;
   description: string;
   pricing?: ListingPricing;
-  protocol?: string[];
-  supported_usd?: string[];
+  protocol?: ListingPaymentProtocol[];
+  supported_usd?: ListingStableCurrency[];
 };
 
 export type ListingStatus = 'pending' | 'approved' | 'rejected' | 'disabled';
@@ -77,13 +80,11 @@ function rowToListing(row: Record<string, unknown>): Listing {
               ? { pricing: record.pricing as ListingPricing }
               : {}),
             ...(Array.isArray(record.protocol)
-              ? { protocol: record.protocol.filter((p): p is string => typeof p === 'string') }
+              ? { protocol: record.protocol.filter(isListingPaymentProtocol) }
               : {}),
             ...(Array.isArray(record.supported_usd)
               ? {
-                  supported_usd: record.supported_usd.filter(
-                    (p): p is string => typeof p === 'string',
-                  ),
+                  supported_usd: record.supported_usd.filter(isListingStableCurrency),
                 }
               : {}),
           };
@@ -135,6 +136,14 @@ function rowToListing(row: Record<string, unknown>): Listing {
     status,
     createdAt: String(row.created_at),
   };
+}
+
+function isListingPaymentProtocol(value: unknown): value is ListingPaymentProtocol {
+  return value === 'x402' || value === 'mpp';
+}
+
+function isListingStableCurrency(value: unknown): value is ListingStableCurrency {
+  return value === 'USDC' || value === 'USDT' || value === 'USDG';
 }
 
 export async function createListing(

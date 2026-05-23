@@ -52,9 +52,12 @@ const PricingSchema = z
   .object({
     type: z.enum(['free', 'per_call', 'variable']),
     amount: z.string().optional(),
-    currency: z.string().optional(),
+    currency: z.enum(['USDC', 'USDT', 'USDG']).optional(),
   })
   .openapi('ListingPricing');
+
+const ListingPaymentProtocolSchema = z.enum(['x402', 'mpp']);
+const ListingStableCurrencySchema = z.enum(['USDC', 'USDT', 'USDG']);
 
 const ListingEndpointSchema = z
   .object({
@@ -62,8 +65,8 @@ const ListingEndpointSchema = z
     url: z.string().url(),
     description: z.string(),
     pricing: PricingSchema.optional(),
-    protocol: z.array(z.string()).optional(),
-    supported_usd: z.array(z.string()).optional(),
+    protocol: z.array(ListingPaymentProtocolSchema).optional(),
+    supported_usd: z.array(ListingStableCurrencySchema).optional(),
   })
   .openapi('ListingEndpoint');
 
