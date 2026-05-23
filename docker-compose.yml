@@ -89,7 +89,7 @@ services:
       # Rate limit
       LEASH_API_RATELIMIT_RPM: ${LEASH_API_RATELIMIT_RPM:-120}
       # Facilitator URLs (x402 settlement)
-      LEASH_API_FACILITATOR_URL_DEVNET: ${LEASH_API_FACILITATOR_URL_DEVNET:-https://devnet-facilitator.leash.market}
+      LEASH_API_FACILITATOR_URL_DEVNET: ${LEASH_API_FACILITATOR_URL_DEVNET:-https://facilitator-devnet.leash.market}
       LEASH_API_FACILITATOR_URL_MAINNET: ${LEASH_API_FACILITATOR_URL_MAINNET:-https://facilitator.leash.market}
       # Public origin (canonical URL this API is reachable on)
       LEASH_API_PUBLIC_ORIGIN: ${LEASH_API_PUBLIC_ORIGIN:-https://api.leash.market}

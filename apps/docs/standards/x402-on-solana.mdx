@@ -24,7 +24,7 @@ buyer or stand up a seller, see the SDK pages for
 | **Executive** (Privy wallet, Node keypair, TEE)                                                                        | The SPL transfer (as **delegate** of the buyer agent treasury) | —                                | Pays the buyer-side fee on the transfer       |
 | **Buyer agent** (Core asset)                                                                                           | Nothing — passive owner                                        | Asset Signer PDA → SPL token ATA | —                                             |
 | **Seller** (`@leashmarket/seller-kit` middleware)                                                                      | Nothing                                                        | Asset Signer PDA (`payTo`)       | —                                             |
-| **Facilitator** (`devnet-facilitator.leash.market` devnet, `facilitator.leash.market` mainnet, or any compatible host) | Nothing                                                        | —                                | Pays the **network fee** to broadcast `payTo` |
+| **Facilitator** (`facilitator-devnet.leash.market` devnet, `facilitator.leash.market` mainnet, or any compatible host) | Nothing                                                        | —                                | Pays the **network fee** to broadcast `payTo` |
 
 Both parties address themselves via Core Asset Signer PDAs. Funds land in
 the seller agent's treasury directly, and they leave the buyer agent's
@@ -78,7 +78,7 @@ payment link or `createSeller` route config). Each row carries the same atomic
       "amount": "1000",
       "asset": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
       "payTo": "<seller agent's Asset Signer PDA>",
-      "feePayer": "devnet-facilitator.leash.market",
+      "feePayer": "facilitator-devnet.leash.market",
       "extra": { "feePayer": "<facilitator pubkey>" },
       "maxTimeoutSeconds": 30,
       "description": "Tag a payload"
@@ -89,7 +89,7 @@ payment link or `createSeller` route config). Each row carries the same atomic
       "amount": "1000",
       "asset": "4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7",
       "payTo": "<seller agent's Asset Signer PDA>",
-      "feePayer": "devnet-facilitator.leash.market",
+      "feePayer": "facilitator-devnet.leash.market",
       "extra": { "feePayer": "<facilitator pubkey>" },
       "maxTimeoutSeconds": 30,
       "description": "Tag a payload"
@@ -152,10 +152,10 @@ Any HTTPS x402 facilitator works. The Leash defaults:
 
 | Network          | Default facilitator                       | Notes                                                       |
 | ---------------- | ----------------------------------------- | ----------------------------------------------------------- |
-| `solana-devnet`  | `https://devnet-facilitator.leash.market` | Leash-operated devnet, gas-sponsored, Token-2022 supported. |
+| `solana-devnet`  | `https://facilitator-devnet.leash.market` | Leash-operated devnet, gas-sponsored, Token-2022 supported. |
 | `solana-mainnet` | `https://facilitator.leash.market`        | Leash-operated mainnet, gas-sponsored.                      |
 
-Third-party alternatives (all wire-compatible): `devnet-facilitator.leash.market` (devnet), `facilitator.leash.market` (mainnet), community hosts, self-hosted `@leashmarket/facilitator`.
+Third-party alternatives (all wire-compatible): `facilitator-devnet.leash.market` (devnet), `facilitator.leash.market` (mainnet), community hosts, self-hosted `@leashmarket/facilitator`.
 
 Override per-process by setting `LEASH_FACILITATOR_URL`, or per-seller via
 `facilitator: '…'`:

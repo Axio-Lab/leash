@@ -76,7 +76,7 @@ describe('seller utility endpoints', () => {
         source: 'config' | 'default';
       };
       expect(body.source).toBe('default');
-      expect(body.facilitator).toBe('https://devnet-facilitator.leash.market');
+      expect(body.facilitator).toBe('https://facilitator-devnet.leash.market');
     });
   });
 

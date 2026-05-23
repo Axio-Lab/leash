@@ -10,7 +10,7 @@
  *
  * Defaults (as of April 2026):
  *
- *   - **Solana devnet** → `https://devnet-facilitator.leash.market`
+ *   - **Solana devnet** → `https://facilitator-devnet.leash.market`
  *     Leash-operated `@leashmarket/facilitator` instance. Gas-sponsored, supports
  *     the `exact` SVM scheme (x402 v1 + v2), Token-2022, and the Leash
  *     1% protocol fee leg. The facilitator auto-provisions destination ATAs
@@ -27,15 +27,15 @@
 import type { LeashX402Network } from './client.js';
 
 export const DEFAULT_FACILITATORS: Partial<Record<LeashX402Network, string>> = {
-  'solana-devnet': 'https://devnet-facilitator.leash.market',
+  'solana-devnet': 'https://facilitator-devnet.leash.market',
   'solana-mainnet': 'https://facilitator.leash.market',
 };
 
 /** Canonical Leash devnet facilitator URL. */
-export const LEASH_FACILITATOR_URL = 'https://devnet-facilitator.leash.market';
+export const LEASH_FACILITATOR_URL = 'https://facilitator-devnet.leash.market';
 
 /** Universal fallback when nothing else resolves. */
-export const FALLBACK_FACILITATOR_URL = 'https://devnet-facilitator.leash.market';
+export const FALLBACK_FACILITATOR_URL = 'https://facilitator-devnet.leash.market';
 
 /**
  * Resolve the facilitator URL Leash should default to.
@@ -46,7 +46,7 @@ export const FALLBACK_FACILITATOR_URL = 'https://devnet-facilitator.leash.market
  *      exists; safely no-ops in browser bundles where `process` is shimmed
  *      out by Webpack/Next).
  *   2. The first network's hosted default in {@link DEFAULT_FACILITATORS}.
- *   3. {@link FALLBACK_FACILITATOR_URL} (svmacc devnet) — keeps the API total
+ *   3. {@link FALLBACK_FACILITATOR_URL} — keeps the API total
  *      so callers never have to handle "no default".
  */
 export function defaultFacilitatorFor(

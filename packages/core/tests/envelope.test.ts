@@ -25,7 +25,7 @@ const RECEIPT: ReceiptV1 = {
     network: 'solana-devnet',
     asset: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
   },
-  facilitator: 'https://devnet-facilitator.leash.market',
+  facilitator: 'https://facilitator-devnet.leash.market',
   tx_sig: '5sig',
   payment_requirements_hash: null,
   response: { status: 200, body_hash: null },
@@ -41,7 +41,7 @@ describe('buildLeashEnvelope', () => {
     expect(envelope.agent).toBe(RECEIPT.agent);
     expect(envelope.network).toBe('solana-devnet');
     expect(envelope.amount).toEqual({ amount: '1500000', currency: 'USDC' });
-    expect(envelope.facilitator).toBe('https://devnet-facilitator.leash.market');
+    expect(envelope.facilitator).toBe('https://facilitator-devnet.leash.market');
     expect(envelope.explorer.tx).toBe('https://solscan.io/tx/5sig?cluster=devnet');
     expect(envelope.explorer.agent).toBe(`https://example.com/agents/${RECEIPT.agent}`);
   });
