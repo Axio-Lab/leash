@@ -35,10 +35,9 @@ export default function CreatorDocsPage() {
           List an agent capability on leash.market in three steps
         </h1>
         <p className="max-w-2xl text-fg-muted">
-          leash.market is the open registry where agent identities discover, pay for, and use
-          capabilities. If you operate an API, an MCP server, or even a single agent service, you
-          can create a payment link, optionally submit it to discovery, and start collecting stable
-          per-call payments.
+          leash.market separates two jobs: monetize a raw HTTP endpoint into a hosted x402 or MPP
+          payable endpoint, then list your provider and payable endpoints in discovery so agents can
+          find them.
         </p>
       </header>
 
@@ -71,15 +70,36 @@ export default function CreatorDocsPage() {
       </section>
 
       <section className="space-y-4">
-        <SectionHead n={1} icon={PackagePlus} title="Describe and monetize your capability">
+        <SectionHead n={1} icon={Code2} title="Monetize an endpoint">
+          Use{' '}
+          <Link href="/creator/monetize" className="text-brand hover:underline">
+            Monetize endpoint
+          </Link>{' '}
+          when you have a raw GET or POST URL that should require payment. Choose x402 or MPP,
+          select USDC, USDT, or USDG, pick an active marketplace API key, and create a hosted
+          payable endpoint.
+        </SectionHead>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild>
+            <Link href="/creator/monetize">
+              Monetize endpoint <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/creator/list">List existing payable endpoints</Link>
+          </Button>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <SectionHead n={2} icon={PackagePlus} title="List provider and payable endpoints">
           Use{' '}
           <Link href="/creator/list" className="text-brand hover:underline">
             List capability
           </Link>{' '}
-          as the single production flow. Paste a manifest or fill fields by hand, choose x402 or
-          MPP, select USDC, USDT, or USDG, pick an active marketplace API key, and create a hosted
-          payment link. Check “Also submit to marketplace discovery” when you want agents to find it
-          in the registry.
+          when your payable endpoint already exists. The provider URL describes who runs the
+          service; each payable endpoint row describes the exact GET or POST URL agents can call,
+          its rail, price, and supported stablecoins.
         </SectionHead>
         <Card>
           <CardHeader>
@@ -123,8 +143,8 @@ export default function CreatorDocsPage() {
                 filters.
               </FieldDef>
               <FieldDef label="endpoint">
-                Public HTTPS URL the agent identity will call. For an MCP server, this is the MCP
-                endpoint. For a paid REST API, the resource URL.
+                Provider or service URL. This is the base URL for the seller, not necessarily the
+                paid URL agents call.
               </FieldDef>
               <FieldDef label="pricing.type">
                 One of <code className="font-mono text-fg">free</code>,{' '}
@@ -143,8 +163,8 @@ export default function CreatorDocsPage() {
                 List of payable HTTP endpoints inside this capability. Each has{' '}
                 <code className="font-mono text-fg">method</code>,{' '}
                 <code className="font-mono text-fg">url</code>,{' '}
-                <code className="font-mono text-fg">description</code>, and optional endpoint-level
-                pricing/protocol metadata.
+                <code className="font-mono text-fg">description</code>, endpoint-level pricing,
+                rail, and supported stablecoins.
               </FieldDef>
               <FieldDef label="docs_url (optional)">
                 Where humans can read about your capability.
@@ -158,24 +178,24 @@ export default function CreatorDocsPage() {
         </Card>
         <Button asChild>
           <Link href="/creator/list">
-            Open creator flow <ArrowRight className="size-4" />
+            List capability <ArrowRight className="size-4" />
           </Link>
         </Button>
       </section>
 
       <section className="space-y-4">
-        <SectionHead n={2} icon={KeyRound} title="Use an active marketplace API key">
-          The creator flow lists your active, non-revoked keys with marketplace scope. If none
+        <SectionHead n={3} icon={KeyRound} title="Use an active marketplace API key">
+          Monetize endpoint lists your active, non-revoked keys with marketplace scope. If none
           exist, create one in place, reveal it if needed, then select it to create the hosted
-          payment link.
+          payable endpoint.
         </SectionHead>
       </section>
 
       <section className="space-y-4">
-        <SectionHead n={3} icon={Code2} title="Wrap the paid endpoint when you need live data">
+        <SectionHead n={4} icon={Code2} title="Wrap the paid endpoint when you need live data">
           Hosted payment links are the fastest way to sell access. For dynamic APIs, copy the
-          generated seller-kit snippet from the same creator flow. It forwards to your handler only
-          after x402 or MPP payment succeeds.
+          seller-kit pattern below. It forwards to your handler only after x402 or MPP payment
+          succeeds.
         </SectionHead>
         <Card>
           <CardContent className="pt-5">
@@ -192,8 +212,8 @@ export default function CreatorDocsPage() {
           </CardContent>
         </Card>
         <Button asChild variant="outline">
-          <Link href="/creator/list">
-            Create payment link <ArrowRight className="size-4" />
+          <Link href="/creator/monetize">
+            Create payable endpoint <ArrowRight className="size-4" />
           </Link>
         </Button>
       </section>
@@ -201,7 +221,7 @@ export default function CreatorDocsPage() {
       <section className="rounded-xl border bg-aurora p-8 text-center space-y-3">
         <h3 className="text-2xl font-semibold tracking-tight">That's it.</h3>
         <p className="max-w-xl mx-auto text-fg-muted">
-          Once your listing is approved, every agent identity on{' '}
+          Once your listing is published, every agent identity on{' '}
           <a
             href={NEXT_PUBLIC_AGENTS_URL}
             target="_blank"

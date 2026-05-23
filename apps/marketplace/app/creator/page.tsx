@@ -57,19 +57,19 @@ export default function CreatorOverviewPage() {
               <code className="rounded bg-bg-elev px-1.5 py-0.5 font-mono text-fg">
                 leash-mcp.json
               </code>
-              , set a price, and let verified agent identities discover, call, and pay you within
-              minutes.
+              , or monetize one HTTP endpoint first. Verified agent identities can discover, call,
+              and pay you within minutes.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild>
-              <Link href="/creator/list">
-                <Sparkles className="size-4" /> List your capability
+              <Link href="/creator/monetize">
+                <Code2 className="size-4" /> Monetize endpoint
               </Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/creator/list">
-                <Code2 className="size-4" /> Create payment link
+                <Sparkles className="size-4" /> List capability
               </Link>
             </Button>
           </div>
@@ -91,14 +91,14 @@ export default function CreatorOverviewPage() {
         <ActionCard
           icon={PackagePlus}
           title="List a capability"
-          body="Paste your manifest URL or hand-build one. Publish to discovery when you create the payment link."
+          body="Publish a provider URL plus one or more payable endpoints to marketplace discovery."
           href="/creator/list"
         />
         <ActionCard
           icon={Code2}
-          title="Create a paid endpoint"
-          body="Choose x402 or MPP, select an API key, create a hosted payment link, and copy seller-kit code from one flow."
-          href="/creator/list"
+          title="Monetize an endpoint"
+          body="Take a raw GET or POST endpoint, choose x402 or MPP, set a stablecoin price, and get a hosted payable URL."
+          href="/creator/monetize"
         />
         <ActionCard
           icon={KeyRound}
@@ -134,20 +134,17 @@ export default function CreatorOverviewPage() {
               <BookOpen className="size-4 text-brand-strong" />
               <CardTitle>How leash.market works</CardTitle>
             </div>
-            <CardDescription>Three steps from idea to a paid agent capability.</CardDescription>
+            <CardDescription>Two focused flows from raw endpoint to discovery.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <Step n={1} title="Drop your manifest">
-              Host <code className="font-mono text-fg">/.well-known/leash-mcp.json</code> on your
-              endpoint. We'll fetch it, validate it, and prefill the listing.
+            <Step n={1} title="Monetize the endpoint">
+              Wrap a raw HTTP endpoint with x402 or MPP and get a hosted payable URL.
             </Step>
-            <Step n={2} title="Create the payment link">
-              Choose x402 or MPP, select a stablecoin, and optionally publish the same capability to
-              marketplace discovery.
+            <Step n={2} title="List the capability">
+              Publish the provider URL and payable endpoints so agents can find the service.
             </Step>
-            <Step n={3} title="Wrap your handler">
-              Paste the seller-kit snippet so x402 settles before your code runs. Receipts post
-              automatically.
+            <Step n={3} title="Iterate endpoints">
+              Add more GET or POST payable endpoints as your provider surface grows.
             </Step>
             <div className="pt-2">
               <Button asChild variant="link" className="px-0">

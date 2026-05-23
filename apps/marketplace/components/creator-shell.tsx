@@ -11,6 +11,7 @@ import {
   Compass,
   KeyRound,
   LayoutDashboard,
+  Link2,
   LogOut,
   Menu,
   PackagePlus,
@@ -48,7 +49,8 @@ type NavItem = {
 const PRIMARY: NavItem[] = [
   { href: '/creator', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/creator/tools', label: 'My capabilities', icon: PackagePlus },
-  { href: '/creator/list', label: 'List capability', icon: Sparkles, badge: 'New' },
+  { href: '/creator/monetize', label: 'Monetize endpoint', icon: Link2, badge: 'New' },
+  { href: '/creator/list', label: 'List capability', icon: Sparkles },
 ];
 
 const SECONDARY: NavItem[] = [
@@ -323,6 +325,7 @@ function SignInGate({ onLogin }: { onLogin: () => void }) {
 function titleForPath(p: string): string {
   if (p === '/creator') return 'Dashboard';
   if (p.startsWith('/creator/tools')) return 'My capabilities';
+  if (p.startsWith('/creator/monetize')) return 'Monetize endpoint';
   if (p.startsWith('/creator/list')) return 'List capability';
   if (p.startsWith('/creator/snippets')) return 'List capability';
   if (p.startsWith('/creator/api-keys')) return 'API keys';
