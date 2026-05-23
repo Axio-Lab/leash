@@ -129,15 +129,11 @@ function Inner({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-dvh flex-col">
         {/* Top bar */}
         <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-bg/80 px-4 backdrop-blur-xl lg:px-6">
-          <button
-            type="button"
-            aria-label="Open menu"
-            onClick={() => setDrawerOpen(true)}
-            className="rounded-md border p-1.5 text-fg-muted hover:text-fg lg:hidden"
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 font-semibold tracking-tight lg:hidden"
+            aria-label="leash.market"
           >
-            <Menu className="size-4" />
-          </button>
-          <Link href="/" className="inline-flex items-center lg:hidden" aria-label="leash.market">
             <Image
               src="/leash-logo.png"
               alt=""
@@ -146,7 +142,18 @@ function Inner({ children }: { children: React.ReactNode }) {
               className="shrink-0 filter-[brightness(0)_invert(1)]"
               priority
             />
+            <span className="whitespace-nowrap text-sm">
+              leash<span className="text-fg-muted">.market</span>
+            </span>
           </Link>
+          <button
+            type="button"
+            aria-label="Open menu"
+            onClick={() => setDrawerOpen(true)}
+            className="rounded-md border p-1.5 text-fg-muted hover:text-fg lg:hidden"
+          >
+            <Menu className="size-4" />
+          </button>
           <div className="flex items-center gap-2 text-sm text-fg-muted">
             <Compass className="size-4 text-brand-strong" />
             <span className="truncate">{titleForPath(pathname)}</span>
