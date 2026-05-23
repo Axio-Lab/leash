@@ -153,9 +153,12 @@ export default function CreatorListPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-[1100px]">
+    <div className="space-y-6">
       <header>
-        <Badge variant="outline" className="font-mono uppercase tracking-widest">
+        <Badge
+          variant="outline"
+          className="border-brand/40 font-mono uppercase tracking-widest text-brand-strong"
+        >
           <Sparkles className="size-3 mr-1.5" /> List capability
         </Badge>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Add an agent capability</h1>
@@ -747,7 +750,10 @@ function SubmittedStage({
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono uppercase">
+            <Badge
+              variant="outline"
+              className="border-brand/40 font-mono uppercase text-brand-strong"
+            >
               Step 3 · Seller kit
             </Badge>
           </div>

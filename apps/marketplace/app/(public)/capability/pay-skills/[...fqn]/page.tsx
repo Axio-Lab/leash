@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { use } from 'react';
+import { use, useEffect, useState } from 'react';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import useSWR from 'swr';
 
@@ -42,6 +42,8 @@ const json = async (url: string) => {
   return r.json();
 };
 
+const ENDPOINTS_PER_PAGE = 7;
+
 function endpointPrice(endpoint: PaySkillsEndpoint): string {
   const price = endpoint.pricing?.dimensions?.[0]?.tiers?.[0]?.price_usd;
   return typeof price === 'number' ? `$${price}` : 'variable';
@@ -54,10 +56,15 @@ export default function PaySkillsCapabilityPage({
 }) {
   const { fqn } = use(params);
   const providerFqn = fqn.join('/');
+  const [page, setPage] = useState(1);
   const { data, error, isLoading } = useSWR<PaySkillsProvider>(
     `/api/pay-skills/${providerFqn}`,
     json,
   );
+
+  useEffect(() => {
+    setPage(1);
+  }, [providerFqn]);
 
   if (isLoading) {
     return (
@@ -77,6 +84,12 @@ export default function PaySkillsCapabilityPage({
     q: data.fqn,
   }).toString()}`;
   const endpointCount = data.endpoints.length;
+  const totalPages = Math.max(1, Math.ceil(endpointCount / ENDPOINTS_PER_PAGE));
+  const clampedPage = Math.min(page, totalPages);
+  const visibleEndpoints = data.endpoints.slice(
+    (clampedPage - 1) * ENDPOINTS_PER_PAGE,
+    clampedPage * ENDPOINTS_PER_PAGE,
+  );
   const countLabel = capabilityCountLabel({
     source: 'pay-skills',
     endpoint_count: endpointCount,
@@ -128,57 +141,91 @@ export default function PaySkillsCapabilityPage({
         <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
           <Card>
             <CardHeader>
-              <CardTitle>Endpoints</CardTitle>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <CardTitle>Endpoints</CardTitle>
+                {totalPages > 1 ? (
+                  <span className="font-mono text-xs text-fg-muted">
+                    Page {clampedPage} / {totalPages}
+                  </span>
+                ) : null}
+              </div>
             </CardHeader>
             <CardContent>
               {data.endpoints.length === 0 ? (
                 <p className="text-sm text-fg-muted">No published endpoints.</p>
               ) : (
-                <ul className="space-y-3">
-                  {data.endpoints.map((endpoint, index) => (
-                    <li
-                      key={`${endpoint.method}-${endpoint.url}-${index}`}
-                      className="rounded-lg border border-border bg-bg/40 p-3"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 text-sm font-medium">
-                            <span className="font-mono text-xs uppercase text-fg-muted">
-                              {endpoint.method}
-                            </span>
-                            <span className="break-all">{endpoint.url}</span>
+                <>
+                  <ul className="space-y-3">
+                    {visibleEndpoints.map((endpoint, index) => (
+                      <li
+                        key={`${endpoint.method}-${endpoint.url}-${index}`}
+                        className="rounded-lg border border-border bg-bg/40 p-3"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 text-sm font-medium">
+                              <span className="font-mono text-xs uppercase text-fg-muted">
+                                {endpoint.method}
+                              </span>
+                              <span className="break-all">{endpoint.url}</span>
+                            </div>
+                            {endpoint.description ? (
+                              <p className="mt-1 line-clamp-3 text-xs leading-snug text-fg-muted">
+                                {endpoint.description}
+                              </p>
+                            ) : null}
                           </div>
-                          {endpoint.description ? (
-                            <p className="mt-1 line-clamp-3 text-xs leading-snug text-fg-muted">
-                              {endpoint.description}
-                            </p>
+                          <Badge variant="paid">{endpointPrice(endpoint)}</Badge>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1 text-[10px] text-fg-muted">
+                          {(endpoint.protocol ?? []).map((protocol) => (
+                            <span key={protocol} className="rounded bg-bg-elev px-1.5 py-0.5">
+                              {protocol}
+                            </span>
+                          ))}
+                          {(endpoint.supported_usd ?? []).map((symbol) => (
+                            <span
+                              key={symbol}
+                              className="rounded bg-brand/10 px-1.5 py-0.5 text-brand"
+                            >
+                              {symbol}
+                            </span>
+                          ))}
+                          {endpoint.probe_status ? (
+                            <span className="rounded bg-fg-muted/10 px-1.5 py-0.5">
+                              probe: {endpoint.probe_status}
+                            </span>
                           ) : null}
                         </div>
-                        <Badge variant="paid">{endpointPrice(endpoint)}</Badge>
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-1 text-[10px] text-fg-muted">
-                        {(endpoint.protocol ?? []).map((protocol) => (
-                          <span key={protocol} className="rounded bg-bg-elev px-1.5 py-0.5">
-                            {protocol}
-                          </span>
-                        ))}
-                        {(endpoint.supported_usd ?? []).map((symbol) => (
-                          <span
-                            key={symbol}
-                            className="rounded bg-brand/10 px-1.5 py-0.5 text-brand"
-                          >
-                            {symbol}
-                          </span>
-                        ))}
-                        {endpoint.probe_status ? (
-                          <span className="rounded bg-fg-muted/10 px-1.5 py-0.5">
-                            probe: {endpoint.probe_status}
-                          </span>
-                        ) : null}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                      </li>
+                    ))}
+                  </ul>
+                  {totalPages > 1 ? (
+                    <div className="mt-4 flex items-center justify-center gap-2 border-t border-border pt-4">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={clampedPage <= 1}
+                      >
+                        Previous
+                      </Button>
+                      <span className="px-2 text-xs text-fg-muted">
+                        {clampedPage} / {totalPages}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={clampedPage >= totalPages}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  ) : null}
+                </>
               )}
             </CardContent>
           </Card>

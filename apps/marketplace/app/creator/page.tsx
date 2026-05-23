@@ -41,12 +41,15 @@ export default function CreatorOverviewPage() {
       : 'creator');
 
   return (
-    <div className="space-y-10 max-w-[1100px]">
+    <div className="space-y-10">
       {/* Hero / animated simulator */}
       <section className="space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <Badge variant="outline" className="font-mono uppercase tracking-widest">
+            <Badge
+              variant="outline"
+              className="border-brand/40 font-mono uppercase tracking-widest text-brand-strong"
+            >
               Welcome, {greeting}
             </Badge>
             <h1 className="mt-3 text-balance text-4xl font-semibold tracking-tight md:text-5xl">
@@ -212,16 +215,18 @@ function ActionCard({
   href: string;
 }) {
   return (
-    <Card className="group flex flex-col p-5 transition-all hover:-translate-y-0.5 hover:border-border-strong">
-      <Icon className="size-5 text-brand-strong" />
-      <h3 className="mt-3 font-semibold">{title}</h3>
-      <p className="mt-1 flex-1 text-sm text-fg-muted">{body}</p>
-      <Link
-        href={href}
-        className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-brand-strong group-hover:underline"
-      >
-        Open <ArrowRight className="size-3.5" />
-      </Link>
+    <Card className="capability-card-glide group relative flex flex-col overflow-hidden p-5 transition-all hover:-translate-y-0.5 hover:border-brand/50">
+      <div className="relative z-10 flex flex-1 flex-col">
+        <Icon className="size-5 text-brand-strong" />
+        <h3 className="mt-3 font-semibold">{title}</h3>
+        <p className="mt-1 flex-1 text-sm text-fg-muted">{body}</p>
+        <Link
+          href={href}
+          className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-brand-strong group-hover:underline"
+        >
+          Open <ArrowRight className="size-3.5" />
+        </Link>
+      </div>
     </Card>
   );
 }

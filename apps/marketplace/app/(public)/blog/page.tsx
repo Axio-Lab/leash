@@ -59,9 +59,12 @@ export default async function BlogIndexPage({ searchParams }: BlogIndexPageProps
 
   return (
     <div className="space-y-10">
-      <header className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-        <div className="max-w-3xl space-y-4">
-          <Badge variant="outline" className="font-mono uppercase tracking-widest">
+      <header className="flex flex-col gap-6 rounded-2xl border border-border bg-card/45 p-6 lg:flex-row lg:items-start lg:justify-between lg:p-8">
+        <div className="max-w-4xl space-y-4">
+          <Badge
+            variant="outline"
+            className="border-brand/40 font-mono uppercase tracking-widest text-brand-strong"
+          >
             Leash blog
           </Badge>
           <div className="space-y-3">
@@ -117,8 +120,8 @@ export default async function BlogIndexPage({ searchParams }: BlogIndexPageProps
               href={`/blog/${article.slug}`}
               className="group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
             >
-              <Card className="h-full p-5 transition-colors hover:border-border-strong hover:bg-bg-elev-2/70">
-                <div className="flex h-full flex-col gap-5">
+              <Card className="capability-card-glide relative h-full overflow-hidden p-5 transition-colors hover:border-brand/50 hover:bg-bg-elev-2/70">
+                <div className="relative z-10 flex h-full flex-col gap-5">
                   <div className="flex items-center justify-between gap-3">
                     <Badge variant="secondary">{article.eyebrow}</Badge>
                     <span className="text-xs text-fg-subtle">

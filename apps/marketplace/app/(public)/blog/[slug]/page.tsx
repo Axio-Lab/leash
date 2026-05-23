@@ -128,7 +128,10 @@ export default async function BlogArticlePage({ params }: PageProps) {
             <div className="bg-grid p-6 md:p-8 lg:p-10">
               <div className="max-w-3xl space-y-5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="font-mono uppercase tracking-widest">
+                  <Badge
+                    variant="outline"
+                    className="border-brand/40 font-mono uppercase tracking-widest text-brand-strong"
+                  >
                     {article.eyebrow}
                   </Badge>
                   <span className="inline-flex items-center gap-1.5 text-xs text-fg-muted">

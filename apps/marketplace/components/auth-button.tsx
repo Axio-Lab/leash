@@ -31,7 +31,7 @@ function Inner(): React.ReactElement {
   }
   if (!authenticated) {
     return (
-      <Button onClick={login} size="sm">
+      <Button onClick={login} size="sm" className="min-w-28 px-5">
         Sign in
       </Button>
     );

@@ -23,9 +23,12 @@ import { NEXT_PUBLIC_AGENTS_URL } from '@/lib/env';
  */
 export default function CreatorDocsPage() {
   return (
-    <div className="space-y-12 max-w-[900px]">
+    <div className="space-y-12">
       <header className="space-y-3">
-        <Badge variant="outline" className="font-mono uppercase tracking-widest">
+        <Badge
+          variant="outline"
+          className="border-brand/40 font-mono uppercase tracking-widest text-brand-strong"
+        >
           <BookOpen className="size-3 mr-1.5" /> How it works
         </Badge>
         <h1 className="text-balance text-4xl font-semibold leading-tight tracking-tight">
@@ -52,10 +55,12 @@ export default function CreatorDocsPage() {
             body: 'Every call leaves a verifiable trail.',
           },
         ].map(({ icon: Icon, title, body }) => (
-          <Card key={title} className="p-4">
-            <Icon className="size-4 text-brand-strong" />
-            <div className="mt-2 font-semibold">{title}</div>
-            <p className="text-xs text-fg-muted">{body}</p>
+          <Card key={title} className="capability-card-glide relative overflow-hidden p-4">
+            <div className="relative z-10">
+              <Icon className="size-4 text-brand-strong" />
+              <div className="mt-2 font-semibold">{title}</div>
+              <p className="text-xs text-fg-muted">{body}</p>
+            </div>
           </Card>
         ))}
       </section>

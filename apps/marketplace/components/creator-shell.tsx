@@ -157,7 +157,9 @@ function Inner({ children }: { children: React.ReactNode }) {
         </header>
 
         <main className="flex-1 px-4 py-8 lg:px-10">
-          <WalletGate>{children}</WalletGate>
+          <WalletGate>
+            <div className="mx-auto w-full max-w-7xl">{children}</div>
+          </WalletGate>
         </main>
       </div>
     </div>
@@ -183,7 +185,7 @@ function SidebarBody({
           alt="Leash"
           width={20}
           height={20}
-          className="[filter:brightness(0)_invert(1)] shrink-0"
+          className="shrink-0 filter-[brightness(0)_invert(1)]"
           priority
         />
         <Link href="/" className="text-sm font-semibold tracking-tight">

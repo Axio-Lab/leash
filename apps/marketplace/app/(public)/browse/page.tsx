@@ -9,7 +9,7 @@ import { ListingCard, type Listing } from '@/components/listing-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/cn';
 
 const PER_PAGE = 9;
@@ -178,11 +178,12 @@ export default function BrowsePage() {
       </div>
 
       {isLoading ? (
-        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-44" />
-          ))}
-        </ul>
+        <div className="flex min-h-[360px] items-center justify-center rounded-xl border border-border bg-card/55">
+          <div className="flex flex-col items-center gap-3 text-sm text-fg-muted">
+            <Spinner size="lg" brand />
+            <span>Loading capabilities</span>
+          </div>
+        </div>
       ) : error ? (
         <div className="text-danger text-sm">{(error as Error).message}</div>
       ) : items.length === 0 ? (

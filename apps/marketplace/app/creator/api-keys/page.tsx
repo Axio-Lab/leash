@@ -14,9 +14,12 @@ export default function ApiKeysPage() {
   const [created, setCreated] = React.useState<CreatedKey | null>(null);
   const { mutate } = useSWRConfig();
   return (
-    <div className="space-y-6 max-w-[1100px]">
+    <div className="space-y-6">
       <div>
-        <Badge variant="outline" className="font-mono uppercase tracking-widest">
+        <Badge
+          variant="outline"
+          className="border-brand/40 font-mono uppercase tracking-widest text-brand-strong"
+        >
           <KeyRound className="size-3 mr-1.5" /> Auth
         </Badge>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">API keys</h1>

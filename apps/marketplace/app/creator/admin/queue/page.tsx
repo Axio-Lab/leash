@@ -74,10 +74,13 @@ export default function AdminQueuePage() {
   }
 
   return (
-    <div className="space-y-6 max-w-[1100px]">
+    <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <Badge variant="outline" className="font-mono uppercase tracking-widest">
+          <Badge
+            variant="outline"
+            className="border-brand/40 font-mono uppercase tracking-widest text-brand-strong"
+          >
             <Shield className="size-3 mr-1.5" /> Admin
           </Badge>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">Moderation queue</h1>

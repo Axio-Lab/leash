@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Cpu, ShieldCheck, ShieldQuestion, Star } from 'lucide-react';
+import { ArrowRight, Cpu, ShieldCheck, ShieldQuestion, Star } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -44,51 +44,56 @@ export function ListingCard({ listing }: { listing: Listing }) {
   const { count } = useCapabilityCount(listing);
 
   return (
-    <li className="group relative flex flex-col rounded-xl border border-border bg-card transition-all hover:-translate-y-0.5 hover:border-border-strong">
-      <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-brand/40 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-      <Link href={detailHref} className="flex flex-1 flex-col gap-3 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge variant="outline" className="font-mono text-[10px] uppercase">
-              {listing.category}
-            </Badge>
-            <Badge
-              variant="secondary"
-              className={cn(
-                'font-mono text-[10px] uppercase',
-                source === 'pay-skills' ? 'text-fg-muted' : 'text-brand-strong',
-              )}
-            >
-              {source === 'pay-skills' ? 'pay.sh' : 'Leash'}
-            </Badge>
-          </div>
-          <Pricing pricing={listing.pricing} />
-        </div>
-        <div>
-          <div className="font-semibold leading-tight group-hover:text-brand-strong">
-            {listing.name}
-          </div>
-          <p className="mt-1 line-clamp-2 text-sm text-fg-muted">{listing.description}</p>
-        </div>
-        <div className="mt-auto flex items-center gap-3 text-[11px] text-fg-subtle">
-          <span className="inline-flex items-center gap-1">
-            <Cpu className="size-3" />
-            {count} capabilit{count === 1 ? 'y' : 'ies'}
-          </span>
-          {listing.rating && listing.rating.count > 0 ? (
-            <span className="inline-flex items-center gap-1">
-              <Star className="size-3 fill-current text-amber-300" />
-              {listing.rating.avg.toFixed(1)} ({listing.rating.count})
+    <li className="capability-card-glide group relative flex min-h-[230px] flex-col overflow-hidden rounded-xl border border-border bg-card p-4 outline-none transition-[transform,box-shadow,border-color,background-color] duration-150 ease-out hover:-translate-y-1 hover:border-brand/50 hover:shadow-[0_18px_70px_-42px_oklch(0.66_0.19_268/0.75)]">
+      <Link
+        href={detailHref}
+        className="relative z-10 flex flex-1 flex-col justify-between gap-5 rounded-lg focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="grid size-9 place-items-center rounded-lg border border-border bg-bg/70 transition-transform duration-150 ease-out group-hover:-translate-y-0.5 group-hover:border-brand/50 group-hover:bg-brand/10">
+              <Cpu className="size-4 text-brand-strong" aria-hidden="true" />
+            </div>
+            <span className="rounded-md border border-border bg-bg/70 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-fg-muted backdrop-blur-sm">
+              {source === 'pay-skills' ? 'pay.sh' : 'leash'}
             </span>
-          ) : null}
-          <IdentityStatus source={source} identity={listing.seller_identity ?? null} />
-          <Health status={listing.health_status} />
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-[15px] font-medium tracking-tight text-fg group-hover:text-brand-strong">
+              {listing.name}
+            </h3>
+            <p className="line-clamp-3 text-sm leading-snug text-fg-muted">{listing.description}</p>
+          </div>
+
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-[11px] text-fg-subtle">
+            <span className="rounded-md border border-border bg-bg/70 px-2 py-1 font-mono">
+              #{listing.category}
+            </span>
+            <span className="rounded-md border border-border bg-bg/70 px-2 py-1 font-mono">
+              #{count} capabilit{count === 1 ? 'y' : 'ies'}
+            </span>
+            <Pricing pricing={listing.pricing} />
+          </div>
+        </div>
+
+        <div className="flex items-end justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-fg-subtle">
+            {listing.rating && listing.rating.count > 0 ? (
+              <span className="inline-flex items-center gap-1">
+                <Star className="size-3 fill-current text-amber-300" />
+                {listing.rating.avg.toFixed(1)} ({listing.rating.count})
+              </span>
+            ) : null}
+            <IdentityStatus source={source} identity={listing.seller_identity ?? null} />
+            <Health status={listing.health_status} />
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1 text-xs text-fg-muted transition-[color,transform] duration-150 group-hover:translate-x-0.5 group-hover:text-brand-strong">
+            View <ArrowRight className="size-3" aria-hidden="true" />
+          </span>
         </div>
       </Link>
-      <div className="flex items-center justify-between border-t border-border p-3">
-        <Link href={detailHref} className="text-xs text-fg-muted hover:text-fg">
-          Details
-        </Link>
+      <div className="relative z-10 mt-4 flex items-center justify-end border-t border-border pt-3">
         <Button asChild size="sm">
           <Link href={addHref}>Add capability</Link>
         </Button>
