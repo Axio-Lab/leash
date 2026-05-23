@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   ExternalLink,
   Link2,
-  Radar,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
@@ -19,9 +18,11 @@ import { ShowKeyOnceModal } from '@/components/show-key-once';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input, Textarea } from '@/components/ui/input';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SafeSelect } from '@/components/ui/safe-select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/cn';
 import { NEXT_PUBLIC_AGENTS_URL } from '@/lib/env';
 import { privyAuthedFetch } from '@/lib/privy-fetch';
@@ -58,25 +59,21 @@ type PaymentLinkResult = {
   currency?: StableCurrency;
 };
 
-type InspectResult = {
-  method: 'GET' | 'POST';
-  allowed_methods: string[];
-  detail: string;
-};
-
 type PricingType = 'free' | 'per_call' | 'variable';
 
-const SELECT_CLASS =
-  'min-h-10 w-full min-w-0 max-w-full truncate rounded-lg border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand/40 disabled:opacity-50';
+type CreatedEndpointDraft = {
+  upstreamUrl: string;
+  pricingType: PricingType;
+  amount: string;
+  currency: StableCurrency;
+  rail: PaymentRail;
+  acceptedCurrencies: StableCurrency[];
+};
 
 export default function CreatorMonetizePage() {
   const router = useRouter();
   const { getAccessToken } = usePrivy();
-  const [label, setLabel] = React.useState('');
-  const [description, setDescription] = React.useState('');
   const [upstreamUrl, setUpstreamUrl] = React.useState('');
-  const [providerUrl, setProviderUrl] = React.useState('');
-  const [method, setMethod] = React.useState<'GET' | 'POST'>('POST');
   const [pricingType, setPricingType] = React.useState<PricingType>('per_call');
   const [amount, setAmount] = React.useState('0.001');
   const [currency, setCurrency] = React.useState<StableCurrency>('USDC');
@@ -95,11 +92,11 @@ export default function CreatorMonetizePage() {
   const [apiKeysBusy, setApiKeysBusy] = React.useState(true);
   const [apiKeysError, setApiKeysError] = React.useState<string | null>(null);
   const [selectedApiKeyId, setSelectedApiKeyId] = React.useState('');
-  const [inspectBusy, setInspectBusy] = React.useState(false);
-  const [inspectResult, setInspectResult] = React.useState<InspectResult | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [paymentLink, setPaymentLink] = React.useState<PaymentLinkResult | null>(null);
+  const [createdEndpointDraft, setCreatedEndpointDraft] =
+    React.useState<CreatedEndpointDraft | null>(null);
   const [createKeyOpen, setCreateKeyOpen] = React.useState(false);
   const [createdKey, setCreatedKey] = React.useState<CreatedKey | null>(null);
 
@@ -157,15 +154,8 @@ export default function CreatorMonetizePage() {
     void loadApiKeys();
   }, [loadApiKeys]);
 
-  React.useEffect(() => {
-    if (providerUrl.trim().length > 0) return;
-    const origin = originFromUrl(upstreamUrl);
-    if (origin) setProviderUrl(origin);
-  }, [providerUrl, upstreamUrl]);
-
   const selectedAgent = agents.find((agent) => agent.mint === selectedAgentMint) ?? null;
   const canCreate =
-    label.trim().length > 0 &&
     upstreamUrl.trim().length > 0 &&
     selectedAgent != null &&
     selectedApiKeyId.length > 0 &&
@@ -173,41 +163,25 @@ export default function CreatorMonetizePage() {
     !apiKeysBusy &&
     (pricingType === 'free' || amount.trim().length > 0);
 
-  async function inspectEndpoint() {
-    setInspectBusy(true);
-    setInspectResult(null);
-    setError(null);
-    try {
-      const res = await privyAuthedFetch(getAccessToken, '/api/endpoint-inspect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: upstreamUrl }),
-      });
-      const body = (await res.json().catch(() => null)) as
-        | InspectResult
-        | { message?: string }
-        | null;
-      if (!res.ok || !body || !('method' in body)) {
-        throw new Error(body && 'message' in body ? body.message : `HTTP ${res.status}`);
-      }
-      setMethod(body.method);
-      setInspectResult(body);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setInspectBusy(false);
-    }
-  }
-
   async function createPaymentLink(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError(null);
     setPaymentLink(null);
+    setCreatedEndpointDraft(null);
     try {
       if (!selectedApiKeyId) throw new Error('Select or create a marketplace API key.');
       if (!selectedAgentMint) throw new Error('Select the seller identity for this endpoint.');
       const quotedAmount = pricingType === 'free' ? '0' : amount.trim();
+      const generatedLabel = labelFromUrl(upstreamUrl);
+      const createdDraft: CreatedEndpointDraft = {
+        upstreamUrl,
+        pricingType,
+        amount: amount.trim(),
+        currency,
+        rail,
+        acceptedCurrencies,
+      };
       const response = {
         status: 200,
         mimeType: 'application/json',
@@ -222,11 +196,10 @@ export default function CreatorMonetizePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           key_id: selectedApiKeyId,
-          id: slugFromLabel(label),
-          label: label.trim(),
-          description: description.trim() || undefined,
+          id: slugFromUrl(upstreamUrl),
+          label: generatedLabel,
+          description: undefined,
           owner_agent: selectedAgentMint,
-          method,
           protocol: rail,
           price: `${quotedAmount} ${currency}`,
           currency,
@@ -234,7 +207,7 @@ export default function CreatorMonetizePage() {
           response,
           metadata: {
             upstream_url: upstreamUrl,
-            provider_url: providerUrl || originFromUrl(upstreamUrl),
+            provider_url: originFromUrl(upstreamUrl),
             pricing_type: pricingType,
             free_tier: Number(freeTier || 0),
           },
@@ -249,6 +222,8 @@ export default function CreatorMonetizePage() {
         throw new Error(err?.message ?? err?.error ?? `HTTP ${res.status}`);
       }
       setPaymentLink(body);
+      setCreatedEndpointDraft(createdDraft);
+      setUpstreamUrl('');
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -257,18 +232,22 @@ export default function CreatorMonetizePage() {
   }
 
   function addToDiscovery() {
-    if (!paymentLink) return;
+    if (!paymentLink || !createdEndpointDraft) return;
+    const generatedLabel = labelFromUrl(createdEndpointDraft.upstreamUrl);
     const params = new URLSearchParams({
-      provider_url: providerUrl || originFromUrl(upstreamUrl) || upstreamUrl,
+      provider_url:
+        originFromUrl(createdEndpointDraft.upstreamUrl) || createdEndpointDraft.upstreamUrl,
       endpoint_url: paymentLink.share_url,
-      endpoint_method: method,
-      endpoint_description: description.trim() || label.trim(),
-      endpoint_pricing_type: pricingType,
-      endpoint_currency: currency,
-      endpoint_protocol: rail,
-      endpoint_supported_usd: acceptedCurrencies.join(','),
+      endpoint_method: paymentLink.method ?? 'GET',
+      endpoint_description: generatedLabel,
+      endpoint_pricing_type: createdEndpointDraft.pricingType,
+      endpoint_currency: createdEndpointDraft.currency,
+      endpoint_protocol: createdEndpointDraft.rail,
+      endpoint_supported_usd: createdEndpointDraft.acceptedCurrencies.join(','),
     });
-    if (pricingType !== 'free') params.set('endpoint_amount', amount.trim());
+    if (createdEndpointDraft.pricingType !== 'free') {
+      params.set('endpoint_amount', createdEndpointDraft.amount);
+    }
     router.push(`/creator/list?${params.toString()}`);
   }
 
@@ -282,96 +261,36 @@ export default function CreatorMonetizePage() {
           <Link2 className="mr-1.5 size-3" aria-hidden="true" /> Monetize endpoint
         </Badge>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">
-          Turn an endpoint into a payable endpoint
+          Make your existing endpoint payable
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-fg-muted">
-          Wrap one upstream HTTP endpoint with a hosted x402 or MPP paywall. After it is live, add
-          the payable URL to marketplace discovery from the listing flow.
+          Paste the URL you already run, choose payment settings, and Leash returns a hosted x402 or
+          MPP payable URL.
         </p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <form onSubmit={createPaymentLink} className="space-y-6" aria-busy={busy}>
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <form onSubmit={createPaymentLink} className="min-w-0 space-y-6" aria-busy={busy}>
           <Card>
             <CardHeader>
-              <CardTitle>Endpoint details</CardTitle>
+              <CardTitle>Existing endpoint</CardTitle>
               <CardDescription>
-                Start with the raw endpoint you already run. Leash returns a hosted payable URL.
+                Provide the current URL for the endpoint you want to monetize.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field id="endpoint-label" label="Label">
-                  <Input
-                    id="endpoint-label"
-                    value={label}
-                    onChange={(e) => setLabel(e.target.value)}
-                    placeholder="Premium search"
-                    autoComplete="off"
-                    required
-                  />
-                </Field>
-                <Field id="provider-url" label="Provider URL">
-                  <Input
-                    id="provider-url"
-                    type="url"
-                    inputMode="url"
-                    value={providerUrl}
-                    onChange={(e) => setProviderUrl(e.target.value)}
-                    placeholder="https://api.example.com"
-                    className="font-mono text-xs"
-                  />
-                </Field>
-              </div>
-              <Field id="endpoint-description" label="Description">
-                <Textarea
-                  id="endpoint-description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Search fresh web results with citations."
-                  rows={3}
+              <Field id="upstream-url" label="Existing endpoint URL">
+                <Input
+                  id="upstream-url"
+                  type="url"
+                  inputMode="url"
+                  value={upstreamUrl}
+                  onChange={(e) => setUpstreamUrl(e.target.value)}
+                  placeholder="https://api.example.com/v1/search"
+                  className="font-mono text-xs"
+                  required
                 />
               </Field>
-              <div className="grid gap-4 md:grid-cols-[1fr_160px]">
-                <Field id="upstream-url" label="Upstream endpoint URL">
-                  <Input
-                    id="upstream-url"
-                    type="url"
-                    inputMode="url"
-                    value={upstreamUrl}
-                    onChange={(e) => setUpstreamUrl(e.target.value)}
-                    placeholder="https://api.example.com/v1/search"
-                    className="font-mono text-xs"
-                    required
-                  />
-                </Field>
-                <Field id="endpoint-method" label="Method">
-                  <select
-                    id="endpoint-method"
-                    value={method}
-                    onChange={(e) => setMethod(e.target.value as 'GET' | 'POST')}
-                    className={cn(SELECT_CLASS, 'font-mono')}
-                  >
-                    <option value="POST">POST</option>
-                    <option value="GET">GET</option>
-                  </select>
-                </Field>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={inspectEndpoint}
-                  disabled={inspectBusy || upstreamUrl.trim().length === 0}
-                >
-                  <Radar className="size-4" aria-hidden="true" />
-                  {inspectBusy ? 'Inspecting...' : 'Detect method'}
-                </Button>
-                {inspectResult ? (
-                  <p className="text-xs text-fg-muted">{inspectResult.detail}</p>
-                ) : null}
-              </div>
             </CardContent>
           </Card>
 
@@ -385,38 +304,34 @@ export default function CreatorMonetizePage() {
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <Field id="payment-rail" label="Payment rail">
-                  <select
+                  <SafeSelect
                     id="payment-rail"
                     value={rail}
-                    onChange={(e) => setRail(e.target.value as PaymentRail)}
-                    className={SELECT_CLASS}
-                  >
-                    {PAYMENT_RAILS.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.label} - {r.description}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => setRail(value as PaymentRail)}
+                    options={PAYMENT_RAILS.map((r) => ({
+                      value: r.id,
+                      label: r.label,
+                      description: r.description,
+                    }))}
+                  />
+                  <p className="text-xs text-fg-muted">
+                    {PAYMENT_RAILS.find((r) => r.id === rail)?.description}
+                  </p>
                 </Field>
                 <Field id="payment-currency" label="Primary currency">
-                  <select
+                  <SafeSelect
                     id="payment-currency"
                     value={currency}
-                    onChange={(e) => {
-                      const next = e.target.value as StableCurrency;
+                    onChange={(value) => {
+                      const next = value as StableCurrency;
                       setCurrency(next);
                       setAcceptedCurrencies((prev) =>
                         prev.includes(next) ? prev : [next, ...prev],
                       );
                     }}
-                    className={cn(SELECT_CLASS, 'font-mono')}
-                  >
-                    {STABLE_CURRENCIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+                    options={STABLE_CURRENCIES.map((c) => ({ value: c, label: c }))}
+                    buttonClassName="font-mono"
+                  />
                 </Field>
               </div>
 
@@ -515,23 +430,21 @@ export default function CreatorMonetizePage() {
                 <InlineError message={agentsError} />
               ) : (
                 <Field id="seller-agent" label="Seller identity">
-                  <select
+                  <SafeSelect
                     id="seller-agent"
                     value={selectedAgentMint}
-                    onChange={(event) => setSelectedAgentMint(event.target.value)}
+                    onChange={setSelectedAgentMint}
                     disabled={agents.length === 0}
-                    className={SELECT_CLASS}
-                  >
-                    {agents.length === 0 ? (
-                      <option value="">No agent identities found</option>
-                    ) : null}
-                    {agents.map((agent) => (
-                      <option key={agent.mint} value={agent.mint}>
-                        {agent.name} - {agent.network.replace('solana-', '')} -{' '}
-                        {shortMint(agent.mint)}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="No agent identities found"
+                    options={agents.map((agent) => ({
+                      value: agent.mint,
+                      label: `${compactLabel(agent.name)} - ${agent.network.replace(
+                        'solana-',
+                        '',
+                      )} - ${shortMint(agent.mint)}`,
+                      description: agent.mint,
+                    }))}
+                  />
                   {agents.length === 0 ? (
                     <p className="text-xs text-fg-muted">
                       Create an agent identity first, then return here.{' '}
@@ -552,21 +465,19 @@ export default function CreatorMonetizePage() {
                 <InlineError message={apiKeysError} />
               ) : (
                 <Field id="api-key" label="Marketplace API key">
-                  <select
+                  <SafeSelect
                     id="api-key"
                     value={selectedApiKeyId}
-                    onChange={(event) => setSelectedApiKeyId(event.target.value)}
+                    onChange={setSelectedApiKeyId}
                     disabled={apiKeys.length === 0}
-                    className={SELECT_CLASS}
-                  >
-                    {apiKeys.length === 0 ? <option value="">No API key found</option> : null}
-                    {apiKeys.map((key) => (
-                      <option key={key.id} value={key.id}>
-                        {key.name} - {key.network.replace('solana-', '')} - {key.prefix}...
-                        {key.last4}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="No API key found"
+                    options={apiKeys.map((key) => ({
+                      value: key.id,
+                      label: `${compactLabel(key.name)} - ${key.network.replace('solana-', '')} - ${
+                        key.prefix
+                      }...${key.last4}`,
+                    }))}
+                  />
                   {apiKeys.length === 0 ? (
                     <Button
                       type="button"
@@ -583,13 +494,20 @@ export default function CreatorMonetizePage() {
               {error ? <InlineError message={error} /> : null}
 
               <Button type="submit" disabled={busy || !canCreate} className="w-full sm:w-auto">
-                {busy ? 'Creating payable endpoint...' : 'Create payable endpoint'}
+                {busy ? (
+                  <>
+                    <Spinner size="xs" className="text-white" />
+                    Creating payable endpoint...
+                  </>
+                ) : (
+                  'Create payable endpoint'
+                )}
               </Button>
             </CardContent>
           </Card>
         </form>
 
-        <aside className="space-y-4 lg:sticky lg:top-20 self-start">
+        <aside className="min-w-0 space-y-4 self-start lg:sticky lg:top-20">
           <Card>
             <CardHeader>
               <CardTitle>Preview</CardTitle>
@@ -602,16 +520,9 @@ export default function CreatorMonetizePage() {
                     {pricingType === 'free' ? 'Free' : `${amount || '?'} ${currency}`}
                   </Badge>
                   <Badge variant="outline" className="font-mono">
-                    {method}
-                  </Badge>
-                  <Badge variant="outline" className="font-mono">
                     {rail.toUpperCase()}
                   </Badge>
                 </div>
-                <div className="mt-3 font-semibold">{label || 'Untitled payable endpoint'}</div>
-                <p className="mt-1 text-xs text-fg-muted">
-                  {description || 'Add a short description for buyer agents.'}
-                </p>
                 <code className="mt-3 block break-all rounded-md border bg-bg-elev px-3 py-2 font-mono text-[11px] text-fg-muted">
                   {upstreamUrl || 'https://api.example.com/v1/endpoint'}
                 </code>
@@ -727,6 +638,10 @@ function shortMint(mint: string): string {
   return `${mint.slice(0, 4)}...${mint.slice(-4)}`;
 }
 
+function compactLabel(value: string): string {
+  return value.length > 28 ? `${value.slice(0, 25)}...` : value;
+}
+
 function originFromUrl(value: string): string {
   try {
     return new URL(value).origin;
@@ -735,10 +650,18 @@ function originFromUrl(value: string): string {
   }
 }
 
-function slugFromLabel(value: string): string {
-  const slug = value
+function labelFromUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    return `${url.hostname}${url.pathname === '/' ? '' : url.pathname}`;
+  } catch {
+    return 'Payable endpoint';
+  }
+}
+
+function slugFromUrl(value: string): string {
+  const slug = labelFromUrl(value)
     .toLowerCase()
-    .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 80);

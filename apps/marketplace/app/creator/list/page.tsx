@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SafeSelect } from '@/components/ui/safe-select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/cn';
 import { NEXT_PUBLIC_AGENTS_URL } from '@/lib/env';
@@ -50,9 +51,6 @@ type OwnedAgent = {
   network: 'solana-devnet' | 'solana-mainnet';
   owner_wallet: string;
 };
-
-const SELECT_CLASS =
-  'min-h-10 w-full min-w-0 max-w-full truncate rounded-lg border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand/40 disabled:opacity-50';
 
 /**
  * Discovery-only creator flow:
@@ -474,8 +472,8 @@ function ReviewStage({
   );
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-      <div className="space-y-6">
+    <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="min-w-0 space-y-6">
         <SellerIdentitySelector
           agents={agents}
           busy={agentsBusy}
@@ -590,23 +588,18 @@ function ReviewStage({
                     />
                   </Field>
                   <Field id="listing-currency" label="Currency">
-                    <select
+                    <SafeSelect
                       id="listing-currency"
                       value={(draft.pricing.currency as StableCurrency | undefined) ?? 'USDC'}
-                      onChange={(e) =>
+                      onChange={(value) =>
                         setDraft((d) => ({
                           ...d,
-                          pricing: { ...d.pricing, currency: e.target.value as StableCurrency },
+                          pricing: { ...d.pricing, currency: value as StableCurrency },
                         }))
                       }
-                      className={cn(SELECT_CLASS, 'font-mono')}
-                    >
-                      {STABLE_CURRENCIES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
+                      options={STABLE_CURRENCIES.map((c) => ({ value: c, label: c }))}
+                      buttonClassName="font-mono"
+                    />
                   </Field>
                 </div>
               ) : null}
@@ -637,7 +630,7 @@ function ReviewStage({
         </Card>
       </div>
 
-      <Card className="self-start lg:sticky lg:top-20">
+      <Card className="min-w-0 self-start lg:sticky lg:top-20">
         <CardHeader>
           <CardTitle>Preview</CardTitle>
           <CardDescription>How this listing will look to agent identities.</CardDescription>
@@ -739,25 +732,27 @@ function PayableEndpointEditor({
             const protocol = (endpoint.protocol?.[0] ?? 'x402') as PaymentRail;
             const supported = endpoint.supported_usd ?? ['USDC'];
             return (
-              <li key={`${endpoint.method}-${endpoint.url}-${index}`} className="space-y-3 p-3">
-                <div className="grid gap-2 md:grid-cols-[90px_minmax(0,1fr)_auto]">
-                  <select
+              <li
+                key={`${endpoint.method}-${endpoint.url}-${index}`}
+                className="min-w-0 space-y-3 p-3"
+              >
+                <div className="grid min-w-0 gap-2 md:grid-cols-[90px_minmax(0,1fr)_auto]">
+                  <SafeSelect
                     aria-label={`Endpoint ${index + 1} method`}
                     value={endpoint.method}
-                    onChange={(e) =>
-                      updateEndpoint(index, { method: e.target.value as 'GET' | 'POST' })
-                    }
-                    className={cn(SELECT_CLASS, 'font-mono text-xs')}
-                  >
-                    <option value="POST">POST</option>
-                    <option value="GET">GET</option>
-                  </select>
+                    onChange={(value) => updateEndpoint(index, { method: value as 'GET' | 'POST' })}
+                    options={[
+                      { value: 'POST', label: 'POST' },
+                      { value: 'GET', label: 'GET' },
+                    ]}
+                    buttonClassName="font-mono text-xs"
+                  />
                   <Input
                     value={endpoint.url}
                     onChange={(e) => updateEndpoint(index, { url: e.target.value })}
                     type="url"
                     inputMode="url"
-                    className="font-mono text-[11px]"
+                    className="min-w-0 font-mono text-[11px]"
                     placeholder="https://api.leash.market/x/your-endpoint"
                     aria-label={`Endpoint ${index + 1} URL`}
                   />
@@ -781,21 +776,21 @@ function PayableEndpointEditor({
                   placeholder="What this payable endpoint does"
                   aria-label={`Endpoint ${index + 1} description`}
                 />
-                <div className="grid gap-2 md:grid-cols-4">
-                  <select
+                <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  <SafeSelect
                     aria-label={`Endpoint ${index + 1} pricing type`}
                     value={pricing.type}
-                    onChange={(e) =>
+                    onChange={(value) =>
                       updateEndpointPricing(index, {
-                        type: e.target.value as ListingPricing['type'],
+                        type: value as ListingPricing['type'],
                       })
                     }
-                    className={SELECT_CLASS}
-                  >
-                    <option value="free">Free</option>
-                    <option value="per_call">Per call</option>
-                    <option value="variable">Variable</option>
-                  </select>
+                    options={[
+                      { value: 'free', label: 'Free' },
+                      { value: 'per_call', label: 'Per call' },
+                      { value: 'variable', label: 'Variable' },
+                    ]}
+                  />
                   <Input
                     value={pricing.amount ?? ''}
                     onChange={(e) => updateEndpointPricing(index, { amount: e.target.value })}
@@ -805,34 +800,27 @@ function PayableEndpointEditor({
                     disabled={pricing.type === 'free'}
                     aria-label={`Endpoint ${index + 1} amount`}
                   />
-                  <select
+                  <SafeSelect
                     aria-label={`Endpoint ${index + 1} currency`}
                     value={(pricing.currency as StableCurrency | undefined) ?? 'USDC'}
-                    onChange={(e) =>
-                      updateEndpointPricing(index, { currency: e.target.value as StableCurrency })
+                    onChange={(value) =>
+                      updateEndpointPricing(index, { currency: value as StableCurrency })
                     }
-                    className={cn(SELECT_CLASS, 'font-mono')}
-                  >
-                    {STABLE_CURRENCIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                  <select
+                    options={STABLE_CURRENCIES.map((c) => ({ value: c, label: c }))}
+                    buttonClassName="font-mono"
+                  />
+                  <SafeSelect
                     aria-label={`Endpoint ${index + 1} payment rail`}
                     value={protocol}
-                    onChange={(e) =>
-                      updateEndpoint(index, { protocol: [e.target.value as PaymentRail] })
+                    onChange={(value) =>
+                      updateEndpoint(index, { protocol: [value as PaymentRail] })
                     }
-                    className={SELECT_CLASS}
-                  >
-                    {PAYMENT_RAILS.map((rail) => (
-                      <option key={rail.id} value={rail.id}>
-                        {rail.label}
-                      </option>
-                    ))}
-                  </select>
+                    options={PAYMENT_RAILS.map((rail) => ({
+                      value: rail.id,
+                      label: rail.label,
+                      description: rail.description,
+                    }))}
+                  />
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-fg-subtle">Accepted:</span>
@@ -914,23 +902,20 @@ function SellerIdentitySelector({
       </CardHeader>
       <CardContent className="space-y-3">
         <Field id="seller-agent" label="Agent identity">
-          <select
+          <SafeSelect
             id="seller-agent"
             value={selectedAgentMint}
-            onChange={(event) => setSelectedAgentMint(event.target.value)}
+            onChange={setSelectedAgentMint}
             disabled={busy || agents.length === 0}
-            className={SELECT_CLASS}
-          >
-            {busy ? <option value="">Loading identities...</option> : null}
-            {!busy && agents.length === 0 ? (
-              <option value="">No agent identities found</option>
-            ) : null}
-            {agents.map((agent) => (
-              <option key={agent.mint} value={agent.mint}>
-                {agent.name} - {agent.network.replace('solana-', '')} - {shortMint(agent.mint)}
-              </option>
-            ))}
-          </select>
+            placeholder={busy ? 'Loading identities...' : 'No agent identities found'}
+            options={agents.map((agent) => ({
+              value: agent.mint,
+              label: `${compactLabel(agent.name)} - ${agent.network.replace('solana-', '')} - ${shortMint(
+                agent.mint,
+              )}`,
+              description: agent.mint,
+            }))}
+          />
         </Field>
         {error ? (
           <InlineError message={error} />
@@ -1003,6 +988,10 @@ function InlineError({ message }: { message: string }) {
 
 function shortMint(mint: string): string {
   return `${mint.slice(0, 4)}...${mint.slice(-4)}`;
+}
+
+function compactLabel(value: string): string {
+  return value.length > 28 ? `${value.slice(0, 25)}...` : value;
 }
 
 function formatPricing(pricing: ListingPricing): string {
