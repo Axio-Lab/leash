@@ -72,7 +72,7 @@ const SELECT_CLASS =
  * Three-stage flow:
  *   1. Choose how to start — paste a manifest URL, build by hand, or
  *      copy the example. The chosen path produces a `ListingDraft`.
- *   2. Review every field (name, slug, pricing, tools…), create a hosted
+ *   2. Review every field (name, slug, pricing, endpoints…), create a hosted
  *      payment link, and optionally publish to marketplace discovery.
  *   3. Done — show the seller-kit snippet so they can wrap their own endpoint.
  */
@@ -195,7 +195,7 @@ export default function CreatorListPage() {
         seller_agent_mint: selectedAgentMint,
         endpoint: draft.endpoint,
         pricing: draft.pricing,
-        tools: draft.tools,
+        endpoints: draft.endpoints,
         ...(draft.docsUrl ? { docs_url: draft.docsUrl } : {}),
         ...(draft.freeTier > 0 ? { free_tier: draft.freeTier } : {}),
       }),
@@ -219,7 +219,9 @@ export default function CreatorListPage() {
       );
       return;
     }
-    const amount = draft.pricing.amount?.trim() || '0.001';
+    const primaryEndpoint = draft.endpoints[0];
+    const endpointPricing = primaryEndpoint?.pricing ?? draft.pricing;
+    const amount = endpointPricing.amount?.trim() || draft.pricing.amount?.trim() || '0.001';
     setBusy(true);
     try {
       const response = {
@@ -229,7 +231,7 @@ export default function CreatorListPage() {
           ok: true,
           capability: draft.slug,
           message: 'Payment accepted. Call the protected endpoint to receive live data.',
-          upstream_url: draft.endpoint,
+          upstream_url: primaryEndpoint?.url ?? draft.endpoint,
         },
       };
       const res = await privyAuthedFetch(getAccessToken, '/api/payment-links', {
@@ -241,7 +243,7 @@ export default function CreatorListPage() {
           label: draft.name,
           description: draft.description,
           owner_agent: selectedAgentMint,
-          method: 'POST',
+          method: primaryEndpoint?.method ?? 'POST',
           protocol: rail,
           price: `${amount} ${currency}`,
           currency,
@@ -249,7 +251,7 @@ export default function CreatorListPage() {
           response,
           metadata: {
             category: draft.category,
-            upstream_url: draft.endpoint,
+            upstream_url: primaryEndpoint?.url ?? draft.endpoint,
             marketplace_discovery_description: discoveryDescription(draft),
           },
         }),
@@ -285,8 +287,8 @@ export default function CreatorListPage() {
         </Badge>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Add an agent capability</h1>
         <p className="mt-1 max-w-2xl text-sm text-fg-muted">
-          Anything an agent identity can call by HTTP — an MCP server, a paid REST API, or a
-          callable tool — can be listed here. Create a payment link, then optionally publish it to
+          Anything an agent identity can call by HTTP — an MCP server, a paid REST API, or a paid
+          endpoint — can be listed here. Create a payment link, then optionally publish it to
           marketplace discovery so agents can find it immediately.
         </p>
       </header>
@@ -514,7 +516,7 @@ function ChooseStage({
   "slug": "premium-search",
   "endpoint": "https://search.demo.leash.market/mcp",
   "pricing": { "type": "per_call", "amount": "0.001", "currency": "USDC" },
-  "tools": [{ "name": "search", "description": "..." }]
+  "endpoints": [{ "method": "POST", "url": "https://search.demo.leash.market/mcp/tools/search", "description": "Search with citations" }]
 }`}
             </pre>
             <Button onClick={onExample}>
@@ -723,50 +725,68 @@ function ReviewStage({
             </div>
 
             <div>
-              <Label>Tools</Label>
+              <Label>Payable endpoints</Label>
               <ul className="mt-2 divide-y divide-border rounded-md border bg-bg/40 text-xs">
-                {draft.tools.length === 0 ? (
+                {draft.endpoints.length === 0 ? (
                   <li className="px-3 py-3 text-fg-subtle">
-                    No callable tools detected. Add at least one operation by hand below or
+                    No payable endpoints detected. Add at least one endpoint by hand below or
                     re-import the manifest.
                   </li>
                 ) : (
-                  draft.tools.map((t, i) => (
+                  draft.endpoints.map((endpoint, i) => (
                     <li
-                      key={`${t.name}-${i}`}
-                      className="grid grid-cols-[120px_1fr_auto] items-start gap-3 px-3 py-2"
+                      key={`${endpoint.method}-${endpoint.url}-${i}`}
+                      className="grid gap-2 px-3 py-3 md:grid-cols-[90px_minmax(0,1fr)_auto]"
                     >
-                      <Input
-                        value={t.name}
+                      <select
+                        value={endpoint.method}
                         onChange={(e) =>
                           setDraft((d) => ({
                             ...d,
-                            tools: d.tools.map((tt, j) =>
-                              j === i ? { ...tt, name: e.target.value } : tt,
+                            endpoints: d.endpoints.map((ep, j) =>
+                              j === i ? { ...ep, method: e.target.value as 'GET' | 'POST' } : ep,
                             ),
                           }))
                         }
-                        className="font-mono text-[11px] h-7 px-2"
-                      />
-                      <Input
-                        value={t.description}
-                        onChange={(e) =>
-                          setDraft((d) => ({
-                            ...d,
-                            tools: d.tools.map((tt, j) =>
-                              j === i ? { ...tt, description: e.target.value } : tt,
-                            ),
-                          }))
-                        }
-                        className="h-7 px-2"
-                      />
+                        className={cn(SELECT_CLASS, 'font-mono text-xs')}
+                      >
+                        <option value="POST">POST</option>
+                        <option value="GET">GET</option>
+                      </select>
+                      <div className="min-w-0 space-y-2">
+                        <Input
+                          value={endpoint.url}
+                          onChange={(e) =>
+                            setDraft((d) => ({
+                              ...d,
+                              endpoints: d.endpoints.map((ep, j) =>
+                                j === i ? { ...ep, url: e.target.value } : ep,
+                              ),
+                            }))
+                          }
+                          className="font-mono text-[11px]"
+                          placeholder="https://api.example.com/v1/search"
+                        />
+                        <Input
+                          value={endpoint.description}
+                          onChange={(e) =>
+                            setDraft((d) => ({
+                              ...d,
+                              endpoints: d.endpoints.map((ep, j) =>
+                                j === i ? { ...ep, description: e.target.value } : ep,
+                              ),
+                            }))
+                          }
+                          placeholder="What this payable endpoint does"
+                        />
+                      </div>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() =>
                           setDraft((d) => ({
                             ...d,
-                            tools: d.tools.filter((_, j) => j !== i),
+                            endpoints: d.endpoints.filter((_, j) => j !== i),
                           }))
                         }
                       >
@@ -783,11 +803,21 @@ function ReviewStage({
                 onClick={() =>
                   setDraft((d) => ({
                     ...d,
-                    tools: [...d.tools, { name: '', description: '' }],
+                    endpoints: [
+                      ...d.endpoints,
+                      {
+                        method: 'POST',
+                        url: d.endpoint,
+                        description: '',
+                        pricing: d.pricing,
+                        protocol: [rail],
+                        supported_usd: [currency],
+                      },
+                    ],
                   }))
                 }
               >
-                + Add callable tool
+                + Add payable endpoint
               </Button>
             </div>
 
@@ -818,7 +848,7 @@ function ReviewStage({
               {draft.description || 'Add a one-line description.'}
             </p>
             <div className="text-[11px] text-fg-subtle">
-              {draft.tools.length} callable tool{draft.tools.length === 1 ? '' : 's'}
+              {draft.endpoints.length} payable endpoint{draft.endpoints.length === 1 ? '' : 's'}
             </div>
             <div className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
               {selectedAgent ? (
@@ -914,8 +944,8 @@ function ReviewStage({
             </Button>
             {!isDraftComplete(draft) ? (
               <p className="text-[11px] text-fg-subtle">
-                Add a name, slug (≥2 chars), description, endpoint, and at least one callable tool
-                to enable payment-link creation.
+                Add a name, slug (≥2 chars), description, service URL, and at least one payable
+                endpoint to enable payment-link creation.
               </p>
             ) : null}
             {isDraftComplete(draft) && !selectedAgent ? (
@@ -998,12 +1028,15 @@ function shortMint(mint: string): string {
 }
 
 function discoveryDescription(draft: ListingDraft): string {
-  const toolNames = draft.tools
-    .map((tool) => tool.name.trim())
+  const endpointNames = draft.endpoints
+    .map((endpoint) => endpoint.description.trim())
     .filter(Boolean)
     .slice(0, 3)
     .join(', ');
-  return `${draft.description.trim()}${toolNames ? ` Tools: ${toolNames}.` : ''}`.slice(0, 500);
+  return `${draft.description.trim()}${endpointNames ? ` Endpoints: ${endpointNames}.` : ''}`.slice(
+    0,
+    500,
+  );
 }
 
 function SubmittedStage({
@@ -1086,11 +1119,11 @@ function SubmittedStage({
           <SnippetBlock
             params={{
               slug: draft.slug,
-              toolName: draft.tools[0]?.name ?? 'search',
+              toolName: slugify(draft.endpoints[0]?.description ?? 'endpoint') || 'endpoint',
               amount: draft.pricing.amount ?? '0.001',
               currency,
               sellerAgent: selectedAgentMint,
-              upstreamUrl: draft.endpoint,
+              upstreamUrl: draft.endpoints[0]?.url ?? draft.endpoint,
               rail,
             }}
           />

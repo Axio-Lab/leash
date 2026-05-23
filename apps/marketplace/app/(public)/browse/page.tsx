@@ -45,7 +45,8 @@ type DiscoverItem = {
   rating: number | null;
   health_status: 'ok' | 'warn' | 'down' | null;
   endpoint_count?: number;
-  tools: Array<{ name: string }>;
+  tools?: Array<{ name: string }>;
+  endpoints?: Array<{ method: string; url: string; description: string }>;
 };
 
 function normalizeListing(item: DiscoverItem): Listing {
@@ -62,6 +63,7 @@ function normalizeListing(item: DiscoverItem): Listing {
       ...(item.price_usdc ? { amount: item.price_usdc, currency: 'USDC' } : {}),
     },
     tools: item.tools ?? [],
+    endpoints: item.endpoints ?? [],
     ...(typeof item.endpoint_count === 'number' ? { endpoint_count: item.endpoint_count } : {}),
     seller_agent_mint: item.seller_agent_mint,
     seller_identity: item.seller_identity,

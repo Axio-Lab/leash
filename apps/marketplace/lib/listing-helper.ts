@@ -15,10 +15,13 @@ export type ListingPricing = {
   currency?: string;
 };
 
-export type ListingTool = {
-  name: string;
+export type ListingEndpoint = {
+  method: 'GET' | 'POST';
+  url: string;
   description: string;
-  inputSchema?: unknown;
+  pricing?: ListingPricing;
+  protocol?: string[];
+  supported_usd?: string[];
 };
 
 export type ListingDraft = {
@@ -28,7 +31,7 @@ export type ListingDraft = {
   category: string;
   endpoint: string;
   pricing: ListingPricing;
-  tools: ListingTool[];
+  endpoints: ListingEndpoint[];
   docsUrl?: string;
   freeTier: number;
 };
@@ -40,7 +43,7 @@ export const EMPTY_DRAFT: ListingDraft = {
   category: 'misc',
   endpoint: '',
   pricing: { type: 'free' },
-  tools: [],
+  endpoints: [],
   freeTier: 0,
 };
 
@@ -50,7 +53,8 @@ export type ManifestImport = {
   description: string;
   category: string;
   endpoint: string;
-  tools: ListingTool[];
+  endpoints?: ListingEndpoint[];
+  tools?: Array<{ name: string; description: string }>;
   pricing: ListingPricing;
   docs_url?: string;
   free_tier?: number;
@@ -64,7 +68,15 @@ export function manifestToDraft(m: ManifestImport): ListingDraft {
     category: m.category || 'misc',
     endpoint: m.endpoint,
     pricing: m.pricing,
-    tools: m.tools,
+    endpoints:
+      m.endpoints && m.endpoints.length > 0
+        ? m.endpoints
+        : (m.tools ?? []).map((tool) => ({
+            method: 'POST' as const,
+            url: m.endpoint,
+            description: tool.description || tool.name,
+            pricing: m.pricing,
+          })),
     ...(m.docs_url ? { docsUrl: m.docs_url } : {}),
     freeTier: m.free_tier ?? 0,
   };
@@ -86,6 +98,6 @@ export function isDraftComplete(d: ListingDraft): boolean {
     d.name.trim().length > 0 &&
     d.description.trim().length > 0 &&
     d.endpoint.trim().length > 0 &&
-    d.tools.length > 0
+    d.endpoints.length > 0
   );
 }

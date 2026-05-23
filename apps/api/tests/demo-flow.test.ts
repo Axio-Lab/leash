@@ -76,7 +76,9 @@ describe('demo flow smoke', () => {
           seller_agent_mint: MINT,
           endpoint: 'https://data.example/mcp',
           pricing: { type: 'free' },
-          tools: [{ name: 'fx_rate', description: 'fx' }],
+          endpoints: [
+            { method: 'GET', url: 'https://data.example/mcp/fx_rate', description: 'fx' },
+          ],
         }),
       }),
     );

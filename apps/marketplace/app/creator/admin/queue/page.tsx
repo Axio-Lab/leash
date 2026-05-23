@@ -33,7 +33,7 @@ export default function AdminQueuePage() {
           category: string;
           endpoint: string;
           pricing: { type: string; amount?: string; currency?: string };
-          tools: Array<{ name: string }>;
+          endpoints: Array<{ method: string; url: string; description: string }>;
           status: string;
           owner_wallet: string;
           created_at: string;
@@ -160,7 +160,7 @@ export default function AdminQueuePage() {
                   <div className="flex flex-wrap items-center gap-2 text-xs text-fg-subtle">
                     <Badge variant="outline">{l.category}</Badge>
                     <span>
-                      {l.tools.length} tool{l.tools.length === 1 ? '' : 's'}
+                      {l.endpoints.length} endpoint{l.endpoints.length === 1 ? '' : 's'}
                     </span>
                     <span>·</span>
                     <span>

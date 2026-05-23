@@ -139,11 +139,12 @@ export default function CreatorDocsPage() {
                 <code className="font-mono text-fg">USDT</code>, or{' '}
                 <code className="font-mono text-fg">USDG</code>.
               </FieldDef>
-              <FieldDef label="tools[]">
-                List of callable tools inside this capability. Each has{' '}
-                <code className="font-mono text-fg">name</code>,{' '}
-                <code className="font-mono text-fg">description</code>, and an optional{' '}
-                <code className="font-mono text-fg">inputSchema</code> (JSON Schema).
+              <FieldDef label="endpoints[]">
+                List of payable HTTP endpoints inside this capability. Each has{' '}
+                <code className="font-mono text-fg">method</code>,{' '}
+                <code className="font-mono text-fg">url</code>,{' '}
+                <code className="font-mono text-fg">description</code>, and optional endpoint-level
+                pricing/protocol metadata.
               </FieldDef>
               <FieldDef label="docs_url (optional)">
                 Where humans can read about your capability.

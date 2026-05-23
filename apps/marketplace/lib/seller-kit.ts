@@ -255,15 +255,18 @@ function manifestSnippet(p: Required<SnippetParams>): string {
         amount: p.amount,
         currency: p.currency,
       },
-      tools: [
+      endpoints: [
         {
-          name: p.toolName,
-          description: 'What this callable tool does, in one sentence.',
-          inputSchema: {
-            type: 'object',
-            properties: { query: { type: 'string' } },
-            required: ['query'],
+          method: 'POST',
+          url: `https://your-domain.com/${p.slug}/${p.toolName}`,
+          description: 'What this payable endpoint does, in one sentence.',
+          pricing: {
+            type: p.amount === '0' ? 'free' : 'per_call',
+            amount: p.amount,
+            currency: p.currency,
           },
+          protocol: [p.rail],
+          supported_usd: [p.currency],
         },
       ],
       docs_url: 'https://your-domain.com/docs',

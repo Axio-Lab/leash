@@ -42,7 +42,7 @@ const DiscoverItemSchema = z
   .object({
     source: z.enum(['leash', 'pay-skills']).openapi({
       description:
-        'Catalogue this entry came from. `leash` items are agents listed on the Leash marketplace (carry seller_wallet + tools); `pay-skills` items are pulled from the Solana Foundation pay-skills registry (https://github.com/solana-foundation/pay-skills) and have no on-chain seller identity.',
+        'Catalogue this entry came from. `leash` items are agents listed on the Leash marketplace (carry seller_wallet + endpoints); `pay-skills` items are pulled from the Solana Foundation pay-skills registry (https://github.com/solana-foundation/pay-skills) and have no on-chain seller identity.',
     }),
     url: z.string().url(),
     title: z.string(),
@@ -101,6 +101,15 @@ const DiscoverItemSchema = z
         description:
           'Tools the listing exposes. The MCP host advertises this so an LLM can pick the right call once a service is selected. Always empty for pay-skills entries (use `endpoint_count` and the provider OpenAPI doc).',
       }),
+    endpoints: z
+      .array(
+        z.object({
+          method: z.string(),
+          url: z.string().url(),
+          description: z.string(),
+        }),
+      )
+      .optional(),
   })
   .openapi('DiscoverItem');
 
@@ -316,7 +325,13 @@ export function buildDiscoverReputationRoutes(deps: DiscoverReputationDeps): Ope
               rating,
               health_status: l.healthStatus,
               tags,
-              tools: l.tools.map((t) => ({ name: t.name, description: t.description })),
+              endpoint_count: l.endpoints.length,
+              tools: [],
+              endpoints: l.endpoints.map((ep) => ({
+                method: ep.method,
+                url: ep.url,
+                description: ep.description,
+              })),
             };
           }),
       );

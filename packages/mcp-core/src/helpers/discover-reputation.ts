@@ -61,6 +61,7 @@ export type DiscoverItem = {
   endpoint_count?: number;
   tags: string[];
   tools: Array<{ name: string; description: string }>;
+  endpoints?: Array<{ method: string; url: string; description: string }>;
 };
 
 export type ReputationSnapshot = {

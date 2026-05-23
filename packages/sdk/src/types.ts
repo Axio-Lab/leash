@@ -67,6 +67,7 @@ export type DiscoverItem = {
   endpoint_count?: number;
   tags: string[];
   tools: Array<{ name: string; description: string }>;
+  endpoints?: Array<{ method: string; url: string; description: string }>;
 };
 
 export type MarketplaceListing = {
@@ -81,7 +82,14 @@ export type MarketplaceListing = {
   seller_identity: PublicIdentitySummary | null;
   endpoint: string;
   pricing: { type: 'free' | 'per_call' | 'variable'; amount?: string; currency?: string };
-  tools: Array<{ name: string; description: string; inputSchema?: unknown }>;
+  endpoints: Array<{
+    method: 'GET' | 'POST';
+    url: string;
+    description: string;
+    pricing?: { type: 'free' | 'per_call' | 'variable'; amount?: string; currency?: string };
+    protocol?: string[];
+    supported_usd?: string[];
+  }>;
   docs_url: string | null;
   free_tier: number;
   health_status: 'ok' | 'warn' | 'down' | null;

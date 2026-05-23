@@ -27,7 +27,16 @@ const baseListing = {
   seller_agent_mint: SELLER_MINT,
   endpoint: 'https://airtime.example/mcp',
   pricing: { type: 'per_call', amount: '0.10', currency: 'USDC' },
-  tools: [{ name: 'buy_airtime', description: 'Buy airtime' }],
+  endpoints: [
+    {
+      method: 'POST',
+      url: 'https://airtime.example/mcp/buy_airtime',
+      description: 'Buy airtime',
+      pricing: { type: 'per_call', amount: '0.10', currency: 'USDC' },
+      protocol: ['x402'],
+      supported_usd: ['USDC'],
+    },
+  ],
   free_tier: 5,
 };
 
@@ -257,7 +266,9 @@ describe('marketplace listings', () => {
       ownerWallet: WALLET,
       endpoint: 'https://legacy.example/mcp',
       pricing: { type: 'free' },
-      tools: [{ name: 'legacy', description: 'Legacy tool' }],
+      endpoints: [
+        { method: 'POST', url: 'https://legacy.example/mcp', description: 'Legacy tool' },
+      ],
     });
     await setListingStatus(rig.db, legacy.id, 'approved');
 
@@ -317,7 +328,7 @@ describe('manifest validation', () => {
       slug: 'x',
       description: 'd',
       endpoint: 'https://x.example/mcp',
-      tools: [{ name: 't', description: 'd' }],
+      endpoints: [{ method: 'POST', url: 'https://x.example/mcp/t', description: 'd' }],
       pricing: { type: 'free' },
     });
     expect(m.name).toBe('X');
@@ -330,19 +341,19 @@ describe('manifest validation', () => {
         name: 'X',
         description: 'd',
         endpoint: 'https://x.example/mcp',
-        tools: [{ name: 't', description: 'd' }],
+        endpoints: [{ method: 'POST', url: 'https://x.example/mcp/t', description: 'd' }],
         pricing: { type: 'gift' },
       }),
     ).toThrow();
   });
 
-  it('rejects malformed tool entries', () => {
+  it('rejects malformed endpoint entries', () => {
     expect(() =>
       validateManifest({
         name: 'X',
         description: 'd',
         endpoint: 'https://x.example/mcp',
-        tools: [{ description: 'no name' }],
+        endpoints: [{ method: 'POST', description: 'missing url' }],
         pricing: { type: 'free' },
       }),
     ).toThrow();

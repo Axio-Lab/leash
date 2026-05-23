@@ -31,9 +31,9 @@ import {
   recordListingHealth,
   setListingRating,
   setListingStatus,
+  type ListingEndpoint,
   type ListingPricing,
   type ListingStatus,
-  type ListingTool,
 } from '../storage/listings.js';
 import { getPlatformAgent } from '../storage/platform-agents.js';
 import type { CacheClient } from '../storage/redis.js';
@@ -56,13 +56,16 @@ const PricingSchema = z
   })
   .openapi('ListingPricing');
 
-const ToolSchema = z
+const ListingEndpointSchema = z
   .object({
-    name: z.string(),
+    method: z.enum(['GET', 'POST']).default('POST'),
+    url: z.string().url(),
     description: z.string(),
-    inputSchema: z.unknown().optional(),
+    pricing: PricingSchema.optional(),
+    protocol: z.array(z.string()).optional(),
+    supported_usd: z.array(z.string()).optional(),
   })
-  .openapi('ListingTool');
+  .openapi('ListingEndpoint');
 
 const ListingStatusSchema = z.enum(['pending', 'approved', 'rejected', 'disabled']);
 
@@ -137,7 +140,7 @@ const ListingSchema = z
     seller_identity: PublicIdentitySummarySchema.nullable(),
     endpoint: z.string().url(),
     pricing: PricingSchema,
-    tools: z.array(ToolSchema),
+    endpoints: z.array(ListingEndpointSchema),
     docs_url: z.string().nullable(),
     free_tier: z.number().int(),
     health_status: z.enum(['ok', 'warn', 'down']).nullable(),
@@ -186,7 +189,7 @@ function listingToWire(
     seller_identity: sellerIdentity,
     endpoint: l.endpoint,
     pricing: l.pricing,
-    tools: l.tools,
+    endpoints: l.endpoints,
     docs_url: l.docsUrl,
     free_tier: l.freeTier,
     health_status: l.healthStatus,
@@ -333,7 +336,7 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
                 seller_agent_mint: PubkeySchema,
                 endpoint: z.string().url(),
                 pricing: PricingSchema,
-                tools: z.array(ToolSchema).min(1),
+                endpoints: z.array(ListingEndpointSchema).min(1),
                 docs_url: z.string().url().optional(),
                 free_tier: z.number().int().nonnegative().optional(),
               }),
@@ -370,7 +373,7 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
         sellerAgentMint: b.seller_agent_mint,
         endpoint: b.endpoint,
         pricing: b.pricing as ListingPricing,
-        tools: b.tools as ListingTool[],
+        endpoints: b.endpoints as ListingEndpoint[],
         ...(b.docs_url ? { docsUrl: b.docs_url } : {}),
         ...(b.free_tier !== undefined ? { freeTier: b.free_tier } : {}),
         status: 'approved',
@@ -407,7 +410,7 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
                   description: z.string(),
                   category: z.string(),
                   endpoint: z.string(),
-                  tools: z.array(ToolSchema),
+                  endpoints: z.array(ListingEndpointSchema),
                   pricing: PricingSchema,
                   docs_url: z.string().optional(),
                   free_tier: z.number().int().optional(),

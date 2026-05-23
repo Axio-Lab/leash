@@ -3,7 +3,7 @@
  * its companion `listing_ratings` + `listing_reviews` tables.
  *
  * The marketplace (`leash.market`) is an open registry of MCP servers
- * that agents can discover and pay per call. Pricing + tools are JSON
+ * that agents can discover and pay per call. Pricing + endpoints are JSON
  * blobs; admin approval gates are encoded via the `status` column.
  */
 
@@ -18,10 +18,13 @@ export type ListingPricing = {
   currency?: string;
 };
 
-export type ListingTool = {
-  name: string;
+export type ListingEndpoint = {
+  method: 'GET' | 'POST';
+  url: string;
   description: string;
-  inputSchema?: unknown;
+  pricing?: ListingPricing;
+  protocol?: string[];
+  supported_usd?: string[];
 };
 
 export type ListingStatus = 'pending' | 'approved' | 'rejected' | 'disabled';
@@ -39,7 +42,7 @@ export type Listing = {
   sellerAgentMint: string | null;
   endpoint: string;
   pricing: ListingPricing;
-  tools: ListingTool[];
+  endpoints: ListingEndpoint[];
   docsUrl: string | null;
   freeTier: number;
   healthStatus: ListingHealthStatus;
@@ -56,12 +59,50 @@ function rowToListing(row: Record<string, unknown>): Listing {
   } catch {
     pricing = { type: 'free' };
   }
-  let tools: ListingTool[] = [];
+  let endpoints: ListingEndpoint[] = [];
   try {
     const parsed = JSON.parse(String(row.tools ?? '[]'));
-    if (Array.isArray(parsed)) tools = parsed as ListingTool[];
+    if (Array.isArray(parsed)) {
+      endpoints = parsed.map((item): ListingEndpoint => {
+        const record = item as Record<string, unknown>;
+        if (typeof record.url === 'string') {
+          return {
+            method: record.method === 'GET' ? 'GET' : 'POST',
+            url: record.url,
+            description:
+              typeof record.description === 'string'
+                ? record.description
+                : `${record.method === 'GET' ? 'GET' : 'POST'} ${record.url}`,
+            ...(record.pricing && typeof record.pricing === 'object'
+              ? { pricing: record.pricing as ListingPricing }
+              : {}),
+            ...(Array.isArray(record.protocol)
+              ? { protocol: record.protocol.filter((p): p is string => typeof p === 'string') }
+              : {}),
+            ...(Array.isArray(record.supported_usd)
+              ? {
+                  supported_usd: record.supported_usd.filter(
+                    (p): p is string => typeof p === 'string',
+                  ),
+                }
+              : {}),
+          };
+        }
+        return {
+          method: 'POST',
+          url: String(row.endpoint),
+          description:
+            typeof record.description === 'string'
+              ? record.description
+              : typeof record.name === 'string'
+                ? record.name
+                : 'Callable endpoint',
+          pricing,
+        };
+      });
+    }
   } catch {
-    tools = [];
+    endpoints = [];
   }
   const status = String(row.status);
   if (
@@ -86,7 +127,7 @@ function rowToListing(row: Record<string, unknown>): Listing {
     sellerAgentMint: row.seller_agent_mint == null ? null : String(row.seller_agent_mint),
     endpoint: String(row.endpoint),
     pricing,
-    tools,
+    endpoints,
     docsUrl: row.docs_url != null ? String(row.docs_url) : null,
     freeTier: Number(row.free_tier ?? 0),
     healthStatus,
@@ -108,7 +149,7 @@ export async function createListing(
     sellerAgentMint?: string | null;
     endpoint: string;
     pricing: ListingPricing;
-    tools: ListingTool[];
+    endpoints: ListingEndpoint[];
     docsUrl?: string;
     freeTier?: number;
     status?: ListingStatus;
@@ -133,7 +174,7 @@ export async function createListing(
       args.sellerAgentMint ?? null,
       args.endpoint,
       JSON.stringify(args.pricing),
-      JSON.stringify(args.tools),
+      JSON.stringify(args.endpoints),
       args.docsUrl ?? null,
       args.freeTier ?? 0,
       args.status ?? 'approved',

@@ -12,11 +12,21 @@ export type McpManifest = {
   description: string;
   endpoint: string;
   category: string;
-  tools: Array<{ name: string; description: string; inputSchema?: unknown }>;
+  endpoints: Array<{
+    method: 'GET' | 'POST';
+    url: string;
+    description: string;
+    pricing?: { type: 'free' | 'per_call' | 'variable'; amount?: string; currency?: string };
+    protocol?: string[];
+    supported_usd?: string[];
+  }>;
   pricing: { type: 'free' | 'per_call' | 'variable'; amount?: string; currency?: string };
   docs_url?: string;
   free_tier?: number;
 };
+
+type ManifestPricing = McpManifest['pricing'];
+type ManifestEndpoint = McpManifest['endpoints'][number];
 
 export function validateManifest(input: unknown): McpManifest {
   if (!input || typeof input !== 'object') throw invalidRequest('manifest must be an object');
@@ -29,19 +39,6 @@ export function validateManifest(input: unknown): McpManifest {
     throw invalidRequest('manifest.endpoint required (http/https URL)');
   const slug = typeof m.slug === 'string' && m.slug.length > 0 ? m.slug : null;
   const category = typeof m.category === 'string' && m.category.length > 0 ? m.category : 'misc';
-  if (!Array.isArray(m.tools)) throw invalidRequest('manifest.tools must be an array');
-  const tools = m.tools.map((t, i) => {
-    if (!t || typeof t !== 'object') throw invalidRequest(`tools[${i}] must be an object`);
-    const tool = t as Record<string, unknown>;
-    if (typeof tool.name !== 'string') throw invalidRequest(`tools[${i}].name required`);
-    if (typeof tool.description !== 'string')
-      throw invalidRequest(`tools[${i}].description required`);
-    return {
-      name: tool.name,
-      description: tool.description,
-      ...(tool.inputSchema !== undefined ? { inputSchema: tool.inputSchema } : {}),
-    };
-  });
   if (!m.pricing || typeof m.pricing !== 'object')
     throw invalidRequest('manifest.pricing required');
   const pricing = m.pricing as Record<string, unknown>;
@@ -49,18 +46,66 @@ export function validateManifest(input: unknown): McpManifest {
   if (type !== 'free' && type !== 'per_call' && type !== 'variable') {
     throw invalidRequest(`manifest.pricing.type must be free|per_call|variable, got ${type}`);
   }
+  const manifestPricing: ManifestPricing = {
+    type,
+    ...(typeof pricing.amount === 'string' ? { amount: pricing.amount } : {}),
+    ...(typeof pricing.currency === 'string' ? { currency: pricing.currency } : {}),
+  };
+  const rawEndpoints = Array.isArray(m.endpoints) ? m.endpoints : [];
+  const legacyTools = Array.isArray(m.tools) ? m.tools : [];
+  const endpoints: ManifestEndpoint[] =
+    rawEndpoints.length > 0
+      ? rawEndpoints.map((e, i) => {
+          if (!e || typeof e !== 'object')
+            throw invalidRequest(`endpoints[${i}] must be an object`);
+          const endpoint = e as Record<string, unknown>;
+          const method = endpoint.method;
+          if (method !== 'GET' && method !== 'POST')
+            throw invalidRequest(`endpoints[${i}].method must be GET|POST`);
+          if (typeof endpoint.url !== 'string' || !/^https?:\/\//.test(endpoint.url))
+            throw invalidRequest(`endpoints[${i}].url required (http/https URL)`);
+          if (typeof endpoint.description !== 'string')
+            throw invalidRequest(`endpoints[${i}].description required`);
+          return {
+            method,
+            url: endpoint.url,
+            description: endpoint.description,
+            ...(endpoint.pricing && typeof endpoint.pricing === 'object'
+              ? { pricing: endpoint.pricing as typeof manifestPricing }
+              : {}),
+            ...(Array.isArray(endpoint.protocol)
+              ? { protocol: endpoint.protocol.filter((p): p is string => typeof p === 'string') }
+              : {}),
+            ...(Array.isArray(endpoint.supported_usd)
+              ? {
+                  supported_usd: endpoint.supported_usd.filter(
+                    (p): p is string => typeof p === 'string',
+                  ),
+                }
+              : {}),
+          };
+        })
+      : legacyTools.map((t, i) => {
+          if (!t || typeof t !== 'object') throw invalidRequest(`tools[${i}] must be an object`);
+          const tool = t as Record<string, unknown>;
+          if (typeof tool.description !== 'string')
+            throw invalidRequest(`tools[${i}].description required`);
+          return {
+            method: 'POST' as const,
+            url: m.endpoint as string,
+            description: tool.description,
+            pricing: manifestPricing,
+          };
+        });
+  if (endpoints.length === 0) throw invalidRequest('manifest.endpoints must be an array');
   return {
     name: m.name,
     slug,
     description: m.description,
     endpoint: m.endpoint,
     category,
-    tools,
-    pricing: {
-      type,
-      ...(typeof pricing.amount === 'string' ? { amount: pricing.amount } : {}),
-      ...(typeof pricing.currency === 'string' ? { currency: pricing.currency } : {}),
-    },
+    endpoints,
+    pricing: manifestPricing,
     ...(typeof m.docs_url === 'string' ? { docs_url: m.docs_url } : {}),
     ...(typeof m.free_tier === 'number' ? { free_tier: m.free_tier } : {}),
   };

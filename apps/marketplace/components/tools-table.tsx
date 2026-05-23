@@ -1,25 +1,32 @@
 'use client';
 
-export type Tool = {
-  name: string;
+export type PayableEndpoint = {
+  method: 'GET' | 'POST';
+  url: string;
   description: string;
-  inputSchema?: Record<string, unknown> | null;
 };
 
-export function ToolsTable({ tools }: { tools: Tool[] }) {
-  if (tools.length === 0) {
+export function ToolsTable({ endpoints }: { endpoints: PayableEndpoint[] }) {
+  if (endpoints.length === 0) {
     return (
       <p className="text-fg-muted text-sm">
-        This listing is available as a service endpoint. No extra callable tools were published.
+        This listing has not published individual payable endpoints yet.
       </p>
     );
   }
   return (
     <ul className="divide-y">
-      {tools.map((t) => (
-        <li key={t.name} className="py-3 flex items-start gap-3 text-sm">
-          <code className="font-mono text-brand min-w-[10ch]">{t.name}</code>
-          <span className="text-fg-muted">{t.description}</span>
+      {endpoints.map((endpoint, index) => (
+        <li key={`${endpoint.method}-${endpoint.url}-${index}`} className="py-3 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <code className="rounded border bg-bg px-2 py-1 font-mono text-[11px] text-brand">
+              {endpoint.method}
+            </code>
+            <code className="min-w-0 break-all font-mono text-xs text-fg-muted">
+              {endpoint.url}
+            </code>
+          </div>
+          <p className="mt-2 text-fg-muted">{endpoint.description}</p>
         </li>
       ))}
     </ul>
