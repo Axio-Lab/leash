@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { usePrivy } from '@privy-io/react-auth';
 
 import { AuthButton } from '@/components/auth-button';
 import { cn } from '@/lib/cn';
@@ -15,9 +16,16 @@ import { NEXT_PUBLIC_DOCS_URL } from '@/lib/env';
  */
 export function SiteHeader() {
   const pathname = usePathname();
+  const { authenticated } = usePrivy();
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : (pathname?.startsWith(href) ?? false);
   const isBlog = pathname?.startsWith('/blog') ?? false;
+  const navItems = [
+    { href: '/browse', label: 'Browse', external: false },
+    { href: '/blog', label: 'Blog', external: false },
+    ...(authenticated ? [{ href: '/creator', label: 'Creators', external: false }] : []),
+    { href: NEXT_PUBLIC_DOCS_URL, label: 'Docs', external: true },
+  ];
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-bg/70 backdrop-blur-xl">
@@ -28,7 +36,7 @@ export function SiteHeader() {
             alt="Leash"
             width={22}
             height={22}
-            className="[filter:brightness(0)_invert(1)] shrink-0"
+            className="shrink-0 filter-[brightness(0)_invert(1)]"
             priority
           />
           <span className="whitespace-nowrap">
@@ -37,12 +45,7 @@ export function SiteHeader() {
         </Link>
         {isBlog ? null : (
           <nav className="hidden items-center gap-1 text-sm md:flex">
-            {[
-              { href: '/browse', label: 'Browse', external: false },
-              { href: '/blog', label: 'Blog', external: false },
-              { href: '/creator', label: 'Creators', external: false },
-              { href: NEXT_PUBLIC_DOCS_URL, label: 'Docs', external: true },
-            ].map((item) =>
+            {navItems.map((item) =>
               item.external ? (
                 <a
                   key={item.href}

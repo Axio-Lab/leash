@@ -223,8 +223,7 @@
   }
   100% {
     opacity: 0;
-    transform: translate3d(var(--star-travel-x), var(--star-travel-y), 0) rotate(18deg)
-      scaleX(1);
+    transform: translate3d(var(--star-travel-x), var(--star-travel-y), 0) rotate(18deg) scaleX(1);
   }
 }
 
