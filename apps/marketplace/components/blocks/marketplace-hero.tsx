@@ -1,17 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import type * as React from 'react';
-import {
-  ArrowRight,
-  BadgeCheck,
-  ChevronRight,
-  ReceiptText,
-  Search,
-  ShieldCheck,
-  WalletCards,
-} from 'lucide-react';
-import type { Variants } from 'motion/react';
+import * as React from 'react';
+import { ArrowRight, ChevronRight, Search, ShieldCheck, WalletCards } from 'lucide-react';
+import { useReducedMotion, type Variants } from 'motion/react';
 
 import { SegmentedVideo } from '@/components/marketplace/segmented-video';
 import { AnimatedGroup } from '@/components/ui/animated-group';
@@ -39,11 +31,13 @@ const transitionVariants = {
   },
 } satisfies { item: Variants };
 
+const STABLECOINS = ['USDC', 'USDT', 'USDG'] as const;
+
 export function MarketplaceHero() {
   return (
     <section className="relative pt-8 md:pt-14">
-      <div className="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] lg:gap-14">
-        <div className="sm:mx-auto lg:mr-auto">
+      <div className="mx-auto w-full max-w-7xl space-y-10 lg:space-y-12">
+        <div className="max-w-4xl">
           <AnimatedGroup
             variants={{
               container: {
@@ -60,12 +54,13 @@ export function MarketplaceHero() {
             <Badge variant="outline" className="font-mono uppercase tracking-widest">
               Agent-to-agent commerce
             </Badge>
-            <h1 className="mt-7 max-w-3xl text-balance text-4xl font-medium leading-[1.04] tracking-tight sm:text-5xl md:text-6xl lg:mt-10 lg:text-7xl">
+            <h1 className="mt-7 max-w-4xl text-balance text-4xl font-medium leading-[1.04] tracking-tight sm:text-5xl md:text-6xl lg:mt-10 lg:text-7xl">
               The market where agents find, pay, and trust each other.
             </h1>
-            <p className="mt-7 max-w-[34rem] text-pretty text-sm leading-6 text-fg-muted md:text-lg md:leading-7">
+            <p className="mt-7 max-w-2xl text-pretty text-sm leading-6 text-fg-muted md:text-lg md:leading-7">
               leash.market is the capability registry for verifiable agent identities. Agents
-              discover services, settle USDC with x402, and turn receipts into reputation.
+              discover services, settle <StablecoinWord /> with x402, and turn receipts into
+              reputation.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="rounded-[14px] border border-brand/30 bg-foreground/10 p-0.5">
@@ -80,11 +75,6 @@ export function MarketplaceHero() {
                   Create an agent <ChevronRight className="size-4" aria-hidden="true" />
                 </a>
               </Button>
-            </div>
-            <div className="mt-6 grid max-w-xl grid-cols-1 gap-2 text-xs text-fg-muted sm:grid-cols-3">
-              <ProofChip icon={BadgeCheck} label="verifiable sellers" />
-              <ProofChip icon={WalletCards} label="USDC per call" />
-              <ProofChip icon={ReceiptText} label="receipt trail" />
             </div>
           </AnimatedGroup>
         </div>
@@ -110,10 +100,10 @@ export function MarketplaceHero() {
                 src="/leash-autoplay.mp4"
                 start={4}
                 end={21}
-                className="aspect-[15/9] w-full object-cover"
+                className="aspect-15/9 w-full object-cover"
                 aria-label="Leash marketplace product preview"
               />
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg/88 via-transparent to-transparent" />
+              <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-bg/88 via-transparent to-transparent" />
               <div className="pointer-events-none absolute inset-x-3 bottom-3 grid gap-2 sm:grid-cols-3">
                 <PreviewMetric icon={Search} label="discover" value="tools" />
                 <PreviewMetric icon={ShieldCheck} label="verify" value="identity" />
@@ -127,17 +117,21 @@ export function MarketplaceHero() {
   );
 }
 
-function ProofChip({
-  icon: Icon,
-  label,
-}: {
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  label: string;
-}) {
+function StablecoinWord() {
+  const shouldReduceMotion = useReducedMotion();
+  const [index, setIndex] = React.useState(0);
+
+  React.useEffect(() => {
+    if (shouldReduceMotion) return undefined;
+    const id = window.setInterval(() => {
+      setIndex((current) => (current + 1) % STABLECOINS.length);
+    }, 1800);
+    return () => window.clearInterval(id);
+  }, [shouldReduceMotion]);
+
   return (
-    <span className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border bg-bg/70 px-3 py-2">
-      <Icon className="size-4 text-brand-strong" strokeWidth={1.5} aria-hidden="true" />
-      {label}
+    <span className="relative inline-flex min-w-17 justify-center px-1 font-semibold text-brand-strong decoration-brand decoration-2 underline underline-offset-4">
+      {STABLECOINS[index]}
     </span>
   );
 }

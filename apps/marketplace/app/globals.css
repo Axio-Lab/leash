@@ -237,6 +237,23 @@
   }
 }
 
+@keyframes leash-card-glide {
+  0% {
+    transform: translate3d(-130%, 0, 0) skewX(-14deg);
+    opacity: 0;
+  }
+  14% {
+    opacity: 0.72;
+  }
+  34% {
+    opacity: 0;
+  }
+  100% {
+    transform: translate3d(260%, 0, 0) skewX(-14deg);
+    opacity: 0;
+  }
+}
+
 @layer utilities {
   .landing-pointer-light {
     background: radial-gradient(
@@ -272,11 +289,30 @@
   .capability-rail:hover .capability-rail-track {
     animation-play-state: paused;
   }
+
+  .capability-card-glide::after {
+    content: '';
+    position: absolute;
+    inset: -20% auto -20% 0;
+    width: 38%;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      oklch(0.74 0.18 268 / 0.1),
+      oklch(1 0 0 / 0.12),
+      transparent
+    );
+    transform: translate3d(-130%, 0, 0) skewX(-14deg);
+    animation: leash-card-glide 8s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .landing-shooting-star,
   .capability-rail-track,
+  .capability-card-glide::after,
   .animate-marquee,
   .animate-leash-pulse {
     animation: none;

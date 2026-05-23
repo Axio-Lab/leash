@@ -17,7 +17,7 @@ import {
 import { BentoGrid, type BentoItem } from '@/components/ui/bento-grid';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 
 type DiscoverItem = {
   source: 'leash' | 'pay-skills';
@@ -54,15 +54,17 @@ const railItems = [
 
 export function CapabilityBentoSection() {
   const { data, error, isLoading } = useSWR<{ items: DiscoverItem[] }>(
-    '/api/discover?source=all&limit=6',
+    '/api/discover?source=all&limit=7',
     fetcher,
   );
-  const items = (data?.items ?? []).slice(0, 6).map(toBentoItem);
+  const liveItems = (data?.items ?? []).slice(0, 7).map(toBentoItem);
+  const items =
+    liveItems.length > 0 && liveItems.length < 7 ? [...liveItems, listCapabilityItem] : liveItems;
 
   return (
     <section id="capabilities" className="space-y-7">
       <div className="mx-auto max-w-3xl space-y-3 text-center">
-        <p className="font-mono text-xs uppercase tracking-[0.24em] text-fg-subtle">
+        <p className="font-mono text-xs uppercase tracking-[0.24em] text-brand-strong">
           Capability discovery
         </p>
         <h2 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl">
@@ -77,13 +79,11 @@ export function CapabilityBentoSection() {
       <SlidingRail />
 
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton
-              key={index}
-              className={index === 0 || index === 3 ? 'h-48 md:col-span-2' : 'h-48'}
-            />
-          ))}
+        <div className="flex min-h-[408px] items-center justify-center rounded-xl border border-border bg-card/55">
+          <div className="flex flex-col items-center gap-3 text-sm text-fg-muted">
+            <Spinner size="lg" brand />
+            <span>Loading live capabilities</span>
+          </div>
         </div>
       ) : error ? (
         <Card className="p-8 text-center">
@@ -131,10 +131,22 @@ function toBentoItem(item: DiscoverItem, index: number): BentoItem {
     status: item.rating ? `${Math.round(item.rating * 100)} trust` : 'discoverable',
     tags,
     cta: 'View',
-    colSpan: index === 0 || index === 3 ? 2 : 1,
+    colSpan: index === 0 || index === 2 ? 2 : 1,
     hasPersistentHover: index === 0,
   };
 }
+
+const listCapabilityItem: BentoItem = {
+  title: 'List your capability',
+  meta: 'creator',
+  description:
+    'Publish an MCP tool, API endpoint, or agent service so autonomous buyers can find it.',
+  icon: <Sparkles className="size-4 text-brand-strong" />,
+  href: '/creator/list',
+  status: 'new listing',
+  tags: ['identity', 'x402', 'receipts'],
+  cta: 'Create',
+};
 
 function pickIcon(item: DiscoverItem, index: number) {
   const category = `${item.category} ${item.title}`.toLowerCase();
@@ -160,8 +172,8 @@ function SlidingRail() {
   const repeated = [...railItems, ...railItems];
   return (
     <div className="capability-rail relative overflow-hidden rounded-xl border border-border bg-bg/60 py-2">
-      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-20 bg-gradient-to-r from-bg to-transparent" />
-      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-20 bg-gradient-to-l from-bg to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-20 bg-linear-to-r from-bg to-transparent" />
+      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-20 bg-linear-to-l from-bg to-transparent" />
       <div className="capability-rail-track flex w-max items-center gap-2 px-2">
         {repeated.map((item, index) => (
           <span

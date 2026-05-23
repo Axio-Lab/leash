@@ -7,9 +7,9 @@ import { NEXT_PUBLIC_AGENTS_URL } from '@/lib/env';
 
 export default function MarketplaceLandingPage() {
   return (
-    <div className="relative -mx-5 overflow-hidden px-5 pb-2">
+    <div className="relative left-1/2 w-screen -translate-x-1/2 overflow-hidden px-5 pb-2">
       <LandingBackdrop />
-      <div className="relative space-y-24 md:space-y-28">
+      <div className="relative mx-auto w-full max-w-[1240px] space-y-24 md:space-y-28">
         <MarketplaceHero />
         <CapabilityBentoSection />
         <IdentityFeaturesSection />

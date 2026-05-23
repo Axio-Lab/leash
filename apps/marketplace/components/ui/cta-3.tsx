@@ -31,7 +31,7 @@ export function CallToAction({
   return (
     <div
       className={cn(
-        'relative mx-auto flex w-full max-w-3xl flex-col justify-between gap-y-6 border-y border-border bg-[radial-gradient(35%_80%_at_25%_0%,oklch(1_0_0/0.08),transparent)] px-4 py-8 md:px-8',
+        'relative mx-auto flex w-full max-w-7xl flex-col justify-between gap-y-6 rounded-xl border border-border bg-[radial-gradient(35%_80%_at_25%_0%,oklch(1_0_0/0.08),transparent)] px-4 py-8 md:px-8',
         className,
       )}
     >
@@ -62,7 +62,7 @@ export function CallToAction({
 
       <div className="space-y-2 text-center">
         {eyebrow ? (
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-fg-subtle">
+          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-brand-strong">
             {eyebrow}
           </p>
         ) : null}

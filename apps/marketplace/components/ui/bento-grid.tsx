@@ -171,7 +171,7 @@ function BentoGridItem({
   );
 
   const className = cn(
-    'group relative block h-full overflow-hidden rounded-xl border border-border bg-card p-4 outline-none',
+    'capability-card-glide group relative block h-full overflow-hidden rounded-xl border border-border bg-card p-4 outline-none',
     'transition-[transform,box-shadow,border-color,background-color] duration-150 ease-out',
     'hover:-translate-y-1 hover:border-brand/50 hover:shadow-[0_18px_70px_-42px_oklch(0.66_0.19_268/0.75)]',
     'focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg',

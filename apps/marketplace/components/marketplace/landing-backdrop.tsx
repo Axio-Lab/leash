@@ -36,13 +36,12 @@ export function LandingBackdrop() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-x-1/2 top-0 -z-10 h-full w-screen -translate-x-1/2 overflow-hidden"
+      className="pointer-events-none absolute inset-0 -z-10 min-h-full w-full overflow-hidden"
       style={style}
     >
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,oklch(1_0_0/0.035)_1px,transparent_1px),linear-gradient(to_bottom,oklch(1_0_0/0.035)_1px,transparent_1px)] bg-[size:48px_48px] opacity-60" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,oklch(1_0_0/0.028)_1px,transparent_1px),linear-gradient(to_bottom,oklch(1_0_0/0.028)_1px,transparent_1px)] bg-size-[48px_48px] opacity-55" />
       <div className="landing-pointer-light absolute inset-0" />
-      <div className="absolute inset-0 bg-[radial-gradient(100%_60%_at_50%_0%,oklch(0.66_0.19_268/0.18),transparent_55%)]" />
-      <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-brand/50 to-transparent" />
+      <div className="absolute inset-0 bg-[radial-gradient(95%_42%_at_50%_0%,oklch(0.66_0.19_268/0.16),transparent_58%),radial-gradient(80%_48%_at_50%_48%,oklch(0.32_0.12_268/0.2),transparent_70%)]" />
       {STARS.map((star, index) => (
         <span
           key={index}

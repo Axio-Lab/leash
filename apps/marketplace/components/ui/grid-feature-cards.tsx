@@ -23,8 +23,8 @@ export function FeatureCard({ feature, className, ...props }: FeatureCardProps) 
       )}
       {...props}
     >
-      <div className="pointer-events-none absolute left-1/2 top-0 -ml-20 -mt-2 h-full w-full [mask-image:linear-gradient(white,transparent)]">
-        <div className="absolute inset-0 bg-gradient-to-r from-foreground/5 to-foreground/1 opacity-100 [mask-image:radial-gradient(farthest-side_at_top,white,transparent)]">
+      <div className="pointer-events-none absolute left-1/2 top-0 -ml-20 -mt-2 h-full w-full mask-[linear-gradient(white,transparent)]">
+        <div className="absolute inset-0 bg-linear-to-r from-foreground/5 to-foreground/1 opacity-100 mask-[radial-gradient(farthest-side_at_top,white,transparent)]">
           <GridPattern
             width={20}
             height={20}
@@ -36,7 +36,7 @@ export function FeatureCard({ feature, className, ...props }: FeatureCardProps) 
         </div>
       </div>
       <feature.icon
-        className="relative z-10 size-6 text-fg-muted transition-[color,transform] duration-150 group-hover:-translate-y-0.5 group-hover:text-brand-strong"
+        className="relative z-10 size-6 text-brand-strong transition-transform duration-150 group-hover:-translate-y-0.5"
         strokeWidth={1.5}
         aria-hidden="true"
       />

@@ -56,12 +56,12 @@ export function IdentityFeaturesSection() {
 
   return (
     <section className="py-4 md:py-10">
-      <div className="mx-auto w-full max-w-5xl space-y-8">
+      <div className="mx-auto w-full max-w-7xl space-y-8">
         <AnimatedContainer
           className="mx-auto max-w-3xl text-center"
           reduceMotion={!!shouldReduceMotion}
         >
-          <p className="font-mono text-xs uppercase tracking-[0.24em] text-fg-subtle">
+          <p className="font-mono text-xs uppercase tracking-[0.24em] text-brand-strong">
             Built for identity
           </p>
           <h2 className="mt-3 text-balance text-3xl font-semibold tracking-tight md:text-4xl">
