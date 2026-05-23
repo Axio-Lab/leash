@@ -209,3 +209,76 @@
 .animate-leash-pulse {
   animation: leash-pulse 2.4s ease-in-out infinite;
 }
+
+@keyframes leash-shooting-star {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(18deg) scaleX(0.6);
+  }
+  7% {
+    opacity: 1;
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--star-travel-x), var(--star-travel-y), 0) rotate(18deg)
+      scaleX(1);
+  }
+}
+
+@keyframes leash-rail-slide {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@layer utilities {
+  .landing-pointer-light {
+    background: radial-gradient(
+      520px circle at var(--pointer-x) var(--pointer-y),
+      oklch(0.66 0.19 268 / 0.2),
+      transparent 58%
+    );
+  }
+
+  .landing-shooting-star {
+    position: absolute;
+    width: 10rem;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      oklch(1 0 0 / 0.86),
+      oklch(0.74 0.18 268 / 0.8),
+      transparent
+    );
+    border-radius: 999px;
+    filter: drop-shadow(0 0 8px oklch(0.74 0.18 268 / 0.55));
+    opacity: 0;
+    animation: leash-shooting-star var(--star-duration) ease-out var(--star-delay) infinite;
+    will-change: transform, opacity;
+  }
+
+  .capability-rail-track {
+    animation: leash-rail-slide 32s linear infinite;
+    will-change: transform;
+  }
+
+  .capability-rail:hover .capability-rail-track {
+    animation-play-state: paused;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-shooting-star,
+  .capability-rail-track,
+  .animate-marquee,
+  .animate-leash-pulse {
+    animation: none;
+  }
+}
