@@ -42,10 +42,13 @@ export default function MyToolsPage() {
   const items = data?.items ?? [];
 
   return (
-    <div className="space-y-6 max-w-[1100px]">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <Badge variant="outline" className="font-mono uppercase tracking-widest">
+          <Badge
+            variant="outline"
+            className="border-brand/40 font-mono uppercase tracking-widest text-brand-strong"
+          >
             Your registry
           </Badge>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">My capabilities</h1>
@@ -96,44 +99,46 @@ export default function MyToolsPage() {
 function ToolRow({ listing }: { listing: Listing }) {
   const isFree = listing.pricing.type === 'free';
   return (
-    <Card className="p-0">
-      <CardHeader className="flex-row items-start justify-between gap-2 space-y-0">
-        <div className="flex-1">
-          <Badge variant="outline" className="font-mono text-[10px] uppercase">
-            {listing.category}
-          </Badge>
-          <CardTitle className="mt-2">{listing.name}</CardTitle>
-          <CardDescription className="font-mono text-[11px] mt-1">{listing.slug}</CardDescription>
-        </div>
-        <StatusPill status={listing.status} />
-      </CardHeader>
-      <CardContent className="flex items-center justify-between gap-3 border-t border-border pt-3">
-        <div className="flex items-center gap-2 text-xs text-fg-muted">
-          <Badge variant={isFree ? 'free' : 'paid'}>
-            {isFree
-              ? 'Free'
-              : `${listing.pricing.amount ?? '?'} ${listing.pricing.currency ?? 'USDC'}/call`}
-          </Badge>
-          <span>
-            · {listing.tools.length} callable tool{listing.tools.length === 1 ? '' : 's'}
-          </span>
-          {listing.health_status ? <span>· {listing.health_status}</span> : null}
-        </div>
-        <div className="flex items-center gap-3 text-xs">
-          <Link
-            href={`/listing/${listing.slug}`}
-            className="inline-flex items-center gap-1 text-fg-muted hover:text-fg"
-          >
-            Public <ExternalLink className="size-3" />
-          </Link>
-          <Link
-            href={`/creator/tools/${listing.slug}`}
-            className="text-brand-strong hover:underline"
-          >
-            Manage →
-          </Link>
-        </div>
-      </CardContent>
+    <Card className="capability-card-glide relative overflow-hidden p-0">
+      <div className="relative z-10">
+        <CardHeader className="flex-row items-start justify-between gap-2 space-y-0">
+          <div className="flex-1">
+            <Badge variant="outline" className="font-mono text-[10px] uppercase">
+              {listing.category}
+            </Badge>
+            <CardTitle className="mt-2">{listing.name}</CardTitle>
+            <CardDescription className="font-mono text-[11px] mt-1">{listing.slug}</CardDescription>
+          </div>
+          <StatusPill status={listing.status} />
+        </CardHeader>
+        <CardContent className="flex items-center justify-between gap-3 border-t border-border pt-3">
+          <div className="flex items-center gap-2 text-xs text-fg-muted">
+            <Badge variant={isFree ? 'free' : 'paid'}>
+              {isFree
+                ? 'Free'
+                : `${listing.pricing.amount ?? '?'} ${listing.pricing.currency ?? 'USDC'}/call`}
+            </Badge>
+            <span>
+              · {listing.tools.length} callable tool{listing.tools.length === 1 ? '' : 's'}
+            </span>
+            {listing.health_status ? <span>· {listing.health_status}</span> : null}
+          </div>
+          <div className="flex items-center gap-3 text-xs">
+            <Link
+              href={`/listing/${listing.slug}`}
+              className="inline-flex items-center gap-1 text-fg-muted hover:text-fg"
+            >
+              Public <ExternalLink className="size-3" />
+            </Link>
+            <Link
+              href={`/creator/tools/${listing.slug}`}
+              className="text-brand-strong hover:underline"
+            >
+              Manage →
+            </Link>
+          </div>
+        </CardContent>
+      </div>
     </Card>
   );
 }

@@ -25,9 +25,12 @@ export default function SnippetsPage() {
   const [payTo, setPayTo] = React.useState('<your-wallet-address>');
 
   return (
-    <div className="space-y-6 max-w-[1100px]">
+    <div className="space-y-6">
       <header>
-        <Badge variant="outline" className="font-mono uppercase tracking-widest">
+        <Badge
+          variant="outline"
+          className="border-brand/40 font-mono uppercase tracking-widest text-brand-strong"
+        >
           <Code2 className="size-3 mr-1.5" /> Seller kit
         </Badge>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Make any API x402-compliant</h1>

@@ -53,7 +53,7 @@ export default function ManageListingPage({ params }: { params: Promise<{ slug: 
   const isFree = data.listing.pricing.type === 'free';
 
   return (
-    <div className="space-y-6 max-w-[1100px]">
+    <div className="space-y-6">
       <Link
         href="/creator/tools"
         className="inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg"
@@ -64,7 +64,10 @@ export default function ManageListingPage({ params }: { params: Promise<{ slug: 
       <header className="flex flex-wrap items-start justify-between gap-4 rounded-xl border bg-aurora p-6">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="font-mono uppercase">
+            <Badge
+              variant="outline"
+              className="border-brand/40 font-mono uppercase text-brand-strong"
+            >
               {data.listing.category}
             </Badge>
             <Badge
