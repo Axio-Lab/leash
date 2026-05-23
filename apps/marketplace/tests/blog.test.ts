@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { blogArticles, getBlogSearchText, getRelatedArticles } from '@/lib/blog';
 
 describe('programmatic blog articles', () => {
-  it('ships the existing article plus thirty SEO guides', () => {
-    expect(blogArticles).toHaveLength(31);
+  it('ships the existing article plus thirty-one SEO guides', () => {
+    expect(blogArticles).toHaveLength(32);
     expect(blogArticles[0]?.slug).toBe('identity-layer-for-ai-agents');
   });
 

@@ -167,13 +167,18 @@ export default function CreatorDocsPage() {
       <section className="space-y-4">
         <SectionHead n={3} icon={Code2} title="Wrap your endpoint with the seller kit">
           The seller-kit middleware short-circuits unauthenticated requests with HTTP 402 and only
-          forwards to your handler once an x402 payment has been verified. Pick the runtime that
-          matches your stack — full snippets live on the seller-kit page.
+          forwards to your handler once an x402 payment has been verified. Use your seller agent
+          asset so payments, receipts, and reputation attach to the right identity.
         </SectionHead>
         <Card>
           <CardContent className="pt-5">
             <SnippetBlock
-              params={{ slug: 'premium-search', toolName: 'search', amount: '0.001' }}
+              params={{
+                slug: 'premium-search',
+                toolName: 'search',
+                amount: '0.001',
+                sellerAgent: '<your-seller-agent-asset>',
+              }}
             />
           </CardContent>
         </Card>

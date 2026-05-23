@@ -17,7 +17,7 @@ export type SnippetParams = {
   amount?: string;
   currency?: string;
   network?: 'solana-devnet' | 'solana-mainnet';
-  payTo?: string;
+  sellerAgent?: string;
 };
 
 const DEFAULTS: Required<SnippetParams> = {
@@ -26,20 +26,19 @@ const DEFAULTS: Required<SnippetParams> = {
   amount: '0.001',
   currency: 'USDC',
   network: 'solana-devnet',
-  payTo: '<your-wallet-address>',
+  sellerAgent: '<your-seller-agent-asset>',
 };
 
 function merge(p: SnippetParams): Required<SnippetParams> {
   return { ...DEFAULTS, ...Object.fromEntries(Object.entries(p).filter(([, v]) => Boolean(v))) };
 }
 
-export type SnippetLanguage = 'hono' | 'express' | 'fastapi' | 'mcp' | 'manifest' | 'curl';
+export type SnippetLanguage = 'hono' | 'node' | 'receipts' | 'manifest' | 'curl';
 
 export const LANGUAGES: Array<{ id: SnippetLanguage; label: string; sub: string }> = [
-  { id: 'hono', label: 'Hono', sub: 'TS · Cloudflare / Bun / Node' },
-  { id: 'express', label: 'Express', sub: 'TS · Node' },
-  { id: 'fastapi', label: 'FastAPI', sub: 'Python · Uvicorn' },
-  { id: 'mcp', label: 'MCP server', sub: 'TS · @modelcontextprotocol/sdk' },
+  { id: 'hono', label: 'Hono seller', sub: 'TS · @leashmarket/seller-kit' },
+  { id: 'node', label: 'Node smoke', sub: 'TS · local paid endpoint test' },
+  { id: 'receipts', label: 'Receipts', sub: 'Explorer forwarding' },
   { id: 'manifest', label: 'leash-mcp.json', sub: 'Manifest file' },
   { id: 'curl', label: 'curl', sub: 'Buyer-side test' },
 ];
@@ -49,12 +48,10 @@ export function snippet(language: SnippetLanguage, params: SnippetParams): strin
   switch (language) {
     case 'hono':
       return honoSnippet(p);
-    case 'express':
-      return expressSnippet(p);
-    case 'fastapi':
-      return fastapiSnippet(p);
-    case 'mcp':
-      return mcpSnippet(p);
+    case 'node':
+      return nodeSmokeSnippet(p);
+    case 'receipts':
+      return receiptsSnippet(p);
     case 'manifest':
       return manifestSnippet(p);
     case 'curl':
@@ -63,21 +60,37 @@ export function snippet(language: SnippetLanguage, params: SnippetParams): strin
 }
 
 function honoSnippet(p: Required<SnippetParams>): string {
-  return `// Hono — drop in front of any tool route
+  return `// Hono — gate a route with @leashmarket/seller-kit
 import { Hono } from 'hono';
-import { x402Middleware } from '@leashmarket/seller-kit/hono';
+import { serve } from '@hono/node-server';
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
+import { mplCore } from '@metaplex-foundation/mpl-core';
+import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
+import { createSeller } from '@leashmarket/seller-kit';
 
 const app = new Hono();
+const umi = createUmi(process.env.SOLANA_RPC ?? 'https://api.devnet.solana.com')
+  .use(mplCore())
+  .use(mplToolbox());
 
-app.use(
-  '/${p.slug}/*',
-  x402Middleware({
-    price: { amount: '${p.amount}', currency: '${p.currency}' },
-    network: '${p.network}',
-    payTo: '${p.payTo}',
-    facilitator: 'https://facilitator-devnet.leash.market',
-  }),
-);
+createSeller(app, {
+  umi,
+  // This is a Leash/Metaplex Core agent asset, not a wallet address.
+  // seller-kit derives the on-chain payTo PDA from this identity.
+  sellerAgent: { asset: process.env.LEASH_SELLER_AGENT ?? '${p.sellerAgent}' },
+  network: '${p.network}',
+  facilitator: '${facilitatorFor(p.network)}',
+  routes: {
+    'POST /${p.slug}/${p.toolName}': {
+      description: '${capitalize(p.slug.replace(/-/g, ' '))} ${p.toolName} endpoint',
+      price: '${p.amount} ${p.currency}',
+      currency: '${p.currency}',
+      acceptsCurrencies: ['USDT', 'USDG'],
+    },
+  },
+  // Optional: set LEASH_API_URL + LEASH_API_KEY or LEASH_RUNNER_URL
+  // and seller-kit will forward earn receipts to explorer-compatible storage.
+});
 
 app.post('/${p.slug}/${p.toolName}', async (c) => {
   const body = await c.req.json();
@@ -85,83 +98,57 @@ app.post('/${p.slug}/${p.toolName}', async (c) => {
   return c.json({ ok: true, query: body.query });
 });
 
-export default app;`;
+serve({ fetch: app.fetch, port: 8080 });`;
 }
 
-function expressSnippet(p: Required<SnippetParams>): string {
-  return `// Express — drop in front of any tool route
-import express from 'express';
-import { x402Express } from '@leashmarket/seller-kit/express';
+function nodeSmokeSnippet(p: Required<SnippetParams>): string {
+  return `# Run the same kind of smoke test we use locally.
+# It starts a seller-kit Hono endpoint, probes for 402, then pays with buyer-kit.
+LEASH_E2E_SELLER_AGENT=${p.sellerAgent} \\
+LEASH_SMOKE_PRICE='${p.amount} ${p.currency}' \\
+pnpm --filter @leashmarket/api exec tsx \\
+  --env-file-if-exists=.env.e2e \\
+  scripts/seller-kit-local-smoke.ts`;
+}
 
-const app = express();
+function receiptsSnippet(p: Required<SnippetParams>): string {
+  return `// Explorer visibility needs receipt ingestion, not just an on-chain transfer.
+const routes = {
+  'POST /${p.slug}/${p.toolName}': {
+    description: '${capitalize(p.slug.replace(/-/g, ' '))} ${p.toolName} endpoint',
+    price: '${p.amount} ${p.currency}',
+    currency: '${p.currency}',
+  },
+};
 
-app.use(express.json());
-app.use(
-  '/${p.slug}',
-  x402Express({
-    price: { amount: '${p.amount}', currency: '${p.currency}' },
-    network: '${p.network}',
-    payTo: '${p.payTo}',
-    facilitator: 'https://facilitator-devnet.leash.market',
-  }),
-);
+// Option A: let seller-kit use its built-in env-based receipt sink.
+process.env.LEASH_API_URL = 'http://localhost:8801';
+process.env.LEASH_API_KEY = 'lsh_test_...';
 
-app.post('/${p.slug}/${p.toolName}', (req, res) => {
-  // payment is verified before this runs
-  res.json({ ok: true, query: req.body.query });
+createSeller(app, {
+  umi,
+  sellerAgent: { asset: '${p.sellerAgent}' },
+  network: '${p.network}',
+  routes,
 });
 
-app.listen(8080);`;
-}
-
-function fastapiSnippet(p: Required<SnippetParams>): string {
-  return `# FastAPI — drop in front of any tool route
-from fastapi import FastAPI, Request
-from leash_seller_kit.fastapi import x402_required
-
-app = FastAPI()
-
-@app.post("/${p.slug}/${p.toolName}")
-@x402_required(
-    amount="${p.amount}",
-    currency="${p.currency}",
-    network="${p.network}",
-    pay_to="${p.payTo}",
-    facilitator="https://facilitator-devnet.leash.market",
-)
-async def ${p.toolName}(request: Request):
-    body = await request.json()
-    # payment is verified before this runs
-    return {"ok": True, "query": body.get("query")}`;
-}
-
-function mcpSnippet(p: Required<SnippetParams>): string {
-  return `// MCP server — every tool call gated by x402
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { z } from 'zod';
-import { withX402 } from '@leashmarket/seller-kit/mcp';
-
-const server = new McpServer({ name: '${p.slug}', version: '0.1.0' });
-
-server.tool(
-  '${p.toolName}',
-  'Description shown to the agent',
-  { query: z.string() },
-  withX402(
-    {
-      price: { amount: '${p.amount}', currency: '${p.currency}' },
-      network: '${p.network}',
-      payTo: '${p.payTo}',
-    },
-    async ({ query }) => {
-      // payment is verified before this runs
-      const results = await mySearchAPI(query);
-      return { content: [{ type: 'text', text: JSON.stringify(results) }] };
-    },
-  ),
-);
-
-server.start();`;
+// Option B: forward explicitly.
+createSeller(app, {
+  umi,
+  sellerAgent: { asset: '${p.sellerAgent}' },
+  network: '${p.network}',
+  routes,
+  onReceipt: async (receipt) => {
+    await fetch(\`http://localhost:8801/v1/receipts/\${receipt.agent}\`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: \`Bearer \${process.env.LEASH_API_KEY}\`,
+      },
+      body: JSON.stringify(receipt),
+    });
+  },
+});`;
 }
 
 function manifestSnippet(p: Required<SnippetParams>): string {
@@ -172,6 +159,7 @@ function manifestSnippet(p: Required<SnippetParams>): string {
       description: 'One-line description of what your capability does for agents.',
       category: 'misc',
       endpoint: `https://your-domain.com/mcp`,
+      seller_agent: p.sellerAgent,
       pricing: {
         type: p.amount === '0' ? 'free' : 'per_call',
         amount: p.amount,
@@ -197,18 +185,21 @@ function manifestSnippet(p: Required<SnippetParams>): string {
 }
 
 function curlSnippet(p: Required<SnippetParams>): string {
-  return `# Test it from the buyer side. The first call returns 402 with payment instructions.
+  return `# Test the public endpoint. The first call returns 402 with payment instructions.
 curl -X POST https://your-domain.com/${p.slug}/${p.toolName} \\
   -H 'content-type: application/json' \\
   -d '{"query":"hello"}'
 
-# Then sign + retry with the leash buyer-kit:
-npx @leashmarket/buyer-kit pay \\
-  --url https://your-domain.com/${p.slug}/${p.toolName} \\
-  --key lsh_live_… \\
-  --body '{"query":"hello"}'`;
+# Then pay from an agent treasury with @leashmarket/buyer-kit.
+# The buyer agent needs balance + delegation before this can settle.`;
 }
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function facilitatorFor(network: Required<SnippetParams>['network']): string {
+  return network === 'solana-mainnet'
+    ? 'https://facilitator.leash.market'
+    : 'https://facilitator-devnet.leash.market';
 }

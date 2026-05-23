@@ -12,7 +12,7 @@ import { cn } from '@/lib/cn';
 
 /**
  * /creator/snippets — the seller kit. A standalone page where creators
- * can plug their slug, price, and wallet, and copy ready-to-paste code
+ * can plug their slug, price, and seller agent, and copy ready-to-paste code
  * for any runtime. Independent of any specific listing so creators can
  * prototype before they list.
  */
@@ -22,7 +22,7 @@ export default function SnippetsPage() {
   const [amount, setAmount] = React.useState('0.001');
   const [currency, setCurrency] = React.useState('USDC');
   const [network, setNetwork] = React.useState<'solana-devnet' | 'solana-mainnet'>('solana-devnet');
-  const [payTo, setPayTo] = React.useState('<your-wallet-address>');
+  const [sellerAgent, setSellerAgent] = React.useState('<your-seller-agent-asset>');
 
   return (
     <div className="min-w-0 space-y-6">
@@ -38,7 +38,8 @@ export default function SnippetsPage() {
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-fg-muted">
           The seller kit gates your route with a verified Solana stablecoin payment before your
-          handler runs. Drop in the snippet that matches your stack, set a price, and you're done.
+          handler runs. Payments are attached to a seller agent identity, so receipts and reputation
+          can follow the endpoint.
         </p>
       </header>
 
@@ -49,31 +50,51 @@ export default function SnippetsPage() {
             <CardDescription>The values are interpolated into every snippet.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Field label="Slug">
-              <Input value={slug} onChange={(e) => setSlug(e.target.value)} />
+            <Field id="snippet-slug" label="Slug">
+              <Input
+                id="snippet-slug"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                spellCheck={false}
+              />
             </Field>
-            <Field label="Tool name">
-              <Input value={toolName} onChange={(e) => setToolName(e.target.value)} />
+            <Field id="snippet-tool-name" label="Tool name">
+              <Input
+                id="snippet-tool-name"
+                value={toolName}
+                onChange={(e) => setToolName(e.target.value)}
+                spellCheck={false}
+              />
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Amount">
+              <Field id="snippet-amount" label="Amount">
                 <Input
+                  id="snippet-amount"
+                  type="text"
+                  inputMode="decimal"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   className="font-mono"
                 />
               </Field>
-              <Field label="Currency">
-                <Input value={currency} onChange={(e) => setCurrency(e.target.value)} />
+              <Field id="snippet-currency" label="Currency">
+                <Input
+                  id="snippet-currency"
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+                  className="font-mono"
+                  spellCheck={false}
+                />
               </Field>
             </div>
-            <div>
-              <Label>Network</Label>
+            <fieldset>
+              <legend className="text-sm font-medium text-fg">Network</legend>
               <div className="mt-1 grid grid-cols-2 gap-2">
                 {(['solana-devnet', 'solana-mainnet'] as const).map((n) => (
                   <button
                     key={n}
                     type="button"
+                    aria-pressed={network === n}
                     onClick={() => setNetwork(n)}
                     className={cn(
                       'min-h-10 rounded-md border px-3 py-1.5 text-xs uppercase tracking-wide transition-colors',
@@ -86,13 +107,19 @@ export default function SnippetsPage() {
                   </button>
                 ))}
               </div>
-            </div>
-            <Field label="Pay to (creator wallet)">
+            </fieldset>
+            <Field id="snippet-seller-agent" label="Seller agent asset">
               <Input
-                value={payTo}
-                onChange={(e) => setPayTo(e.target.value)}
+                id="snippet-seller-agent"
+                value={sellerAgent}
+                onChange={(e) => setSellerAgent(e.target.value)}
                 className="font-mono text-xs"
+                spellCheck={false}
               />
+              <p className="text-xs leading-5 text-fg-muted">
+                This must be your Leash/Metaplex Core agent asset. seller-kit derives the on-chain
+                payTo PDA from it; it is not an arbitrary receiving wallet.
+              </p>
             </Field>
           </CardContent>
         </Card>
@@ -101,12 +128,12 @@ export default function SnippetsPage() {
           <CardHeader>
             <CardTitle>Snippet</CardTitle>
             <CardDescription>
-              Copy and paste — the middleware speaks the wire format already supported by every x402
-              buyer (incl. our agent runtime).
+              Copy and paste — the generated seller uses `createSeller`, an agent asset, and the
+              live devnet/mainnet facilitator for real x402 settlement.
             </CardDescription>
           </CardHeader>
           <CardContent className="min-w-0">
-            <SnippetBlock params={{ slug, toolName, amount, currency, network, payTo }} />
+            <SnippetBlock params={{ slug, toolName, amount, currency, network, sellerAgent }} />
           </CardContent>
         </Card>
       </div>
@@ -125,8 +152,8 @@ export default function SnippetsPage() {
             transaction landed before letting the request through.
           </Step>
           <Step n={3} title="Forwards to your handler">
-            Your code runs only on verified payment. We append the receipt to your listing's stream
-            so explorer.leash.market lights up.
+            Your code runs only on verified payment. Forward the earn receipt to the Leash API or
+            runner if you want explorer.leash.market to show the trade immediately.
           </Step>
         </CardContent>
       </Card>
@@ -134,10 +161,10 @@ export default function SnippetsPage() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <Label>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       {children}
     </div>
   );
