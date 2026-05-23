@@ -1,22 +1,20 @@
 'use client';
 
 import * as React from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
   FileJson,
+  Link2,
   ShieldCheck,
   Sparkles,
   Wand2,
 } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 
-import { CreateKeyDialog, type CreatedKey } from '@/components/create-key-dialog';
-import { SnippetBlock } from '@/components/snippet-block';
-import { ShowKeyOnceModal } from '@/components/show-key-once';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,6 +30,8 @@ import {
   manifestToDraft,
   slugify,
   type ListingDraft,
+  type ListingEndpoint,
+  type ListingPricing,
   type ManifestImport,
 } from '@/lib/listing-helper';
 import { privyAuthedFetch } from '@/lib/privy-fetch';
@@ -50,34 +50,19 @@ type OwnedAgent = {
   network: 'solana-devnet' | 'solana-mainnet';
   owner_wallet: string;
 };
-type CreatorApiKey = {
-  id: string;
-  name: string;
-  network: 'solana-devnet' | 'solana-mainnet';
-  prefix: string;
-  last4: string;
-  scopes: string[];
-  disabled_at: string | null;
-};
-type PaymentLinkResult = {
-  id: string;
-  share_url: string;
-  protocol: PaymentRail;
-};
 
 const SELECT_CLASS =
   'min-h-10 w-full min-w-0 max-w-full truncate rounded-lg border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand/40 disabled:opacity-50';
 
 /**
- * Three-stage flow:
- *   1. Choose how to start — paste a manifest URL, build by hand, or
- *      copy the example. The chosen path produces a `ListingDraft`.
- *   2. Review every field (name, slug, pricing, endpoints…), create a hosted
- *      payment link, and optionally publish to marketplace discovery.
- *   3. Done — show the seller-kit snippet so they can wrap their own endpoint.
+ * Discovery-only creator flow:
+ *   1. Choose a manifest, blank draft, example, or prefilled monetized endpoint.
+ *   2. Review provider metadata and one or more payable endpoints.
+ *   3. Publish the listing directly to marketplace discovery.
  */
 export default function CreatorListPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { getAccessToken } = usePrivy();
 
   const [stage, setStage] = React.useState<Stage>('choose');
@@ -88,16 +73,7 @@ export default function CreatorListPage() {
   const [agentsBusy, setAgentsBusy] = React.useState(true);
   const [agentsError, setAgentsError] = React.useState<string | null>(null);
   const [selectedAgentMint, setSelectedAgentMint] = React.useState('');
-  const [apiKeys, setApiKeys] = React.useState<CreatorApiKey[]>([]);
-  const [apiKeysBusy, setApiKeysBusy] = React.useState(true);
-  const [apiKeysError, setApiKeysError] = React.useState<string | null>(null);
-  const [selectedApiKeyId, setSelectedApiKeyId] = React.useState('');
-  const [rail, setRail] = React.useState<PaymentRail>('x402');
-  const [currency, setCurrency] = React.useState<StableCurrency>('USDC');
-  const [includeMarketplace, setIncludeMarketplace] = React.useState(false);
-  const [paymentLink, setPaymentLink] = React.useState<PaymentLinkResult | null>(null);
-  const [createKeyOpen, setCreateKeyOpen] = React.useState(false);
-  const [createdKey, setCreatedKey] = React.useState<CreatedKey | null>(null);
+  const appliedPrefill = React.useRef(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -127,31 +103,35 @@ export default function CreatorListPage() {
     };
   }, [getAccessToken]);
 
-  const loadApiKeys = React.useCallback(async () => {
-    setApiKeysBusy(true);
-    setApiKeysError(null);
-    try {
-      const res = await privyAuthedFetch(getAccessToken, '/api/keys');
-      const body = (await res.json().catch(() => null)) as {
-        items?: CreatorApiKey[];
-        message?: string;
-      } | null;
-      if (!res.ok) throw new Error(body?.message ?? `HTTP ${res.status}`);
-      const active = (body?.items ?? []).filter(
-        (key) => !key.disabled_at && key.scopes.includes('marketplace'),
-      );
-      setApiKeys(active);
-      setSelectedApiKeyId((current) => current || active[0]?.id || '');
-    } catch (err) {
-      setApiKeysError((err as Error).message);
-    } finally {
-      setApiKeysBusy(false);
-    }
-  }, [getAccessToken]);
-
   React.useEffect(() => {
-    void loadApiKeys();
-  }, [loadApiKeys]);
+    if (appliedPrefill.current) return;
+    const endpointUrl = searchParams.get('endpoint_url');
+    if (!endpointUrl) return;
+    appliedPrefill.current = true;
+    const endpointDescription = searchParams.get('endpoint_description') ?? 'Payable endpoint';
+    const providerUrl = searchParams.get('provider_url') ?? originFromUrl(endpointUrl);
+    const pricing = pricingFromParams(searchParams);
+    setDraft({
+      slug: slugify(endpointDescription) || 'payable-endpoint',
+      name: titleFromDescription(endpointDescription),
+      description: endpointDescription,
+      category: 'misc',
+      endpoint: providerUrl || endpointUrl,
+      pricing,
+      endpoints: [
+        {
+          method: searchParams.get('endpoint_method') === 'GET' ? 'GET' : 'POST',
+          url: endpointUrl,
+          description: endpointDescription,
+          pricing,
+          protocol: [searchParams.get('endpoint_protocol') ?? 'x402'],
+          supported_usd: supportedFromParams(searchParams),
+        },
+      ],
+      freeTier: 0,
+    });
+    setStage('review');
+  }, [searchParams]);
 
   async function importFromUrl(url: string) {
     setError(null);
@@ -166,11 +146,7 @@ export default function CreatorListPage() {
       if (!res.ok || !('manifest' in body)) {
         throw new Error('message' in body && body.message ? body.message : 'import failed');
       }
-      const nextDraft = manifestToDraft(body.manifest);
-      if (STABLE_CURRENCIES.includes(nextDraft.pricing.currency as StableCurrency)) {
-        setCurrency(nextDraft.pricing.currency as StableCurrency);
-      }
-      setDraft(nextDraft);
+      setDraft(manifestToDraft(body.manifest));
       setStage('review');
     } catch (err) {
       setError((err as Error).message);
@@ -179,94 +155,33 @@ export default function CreatorListPage() {
     }
   }
 
-  async function submitListing() {
-    if (!selectedAgentMint) {
-      setError('Select the agent identity that owns this capability before submitting.');
-      throw new Error('missing_agent');
-    }
-    const res = await privyAuthedFetch(getAccessToken, '/api/listings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        slug: draft.slug,
-        name: draft.name,
-        description: draft.description,
-        category: draft.category,
-        seller_agent_mint: selectedAgentMint,
-        endpoint: draft.endpoint,
-        pricing: draft.pricing,
-        endpoints: draft.endpoints,
-        ...(draft.docsUrl ? { docs_url: draft.docsUrl } : {}),
-        ...(draft.freeTier > 0 ? { free_tier: draft.freeTier } : {}),
-      }),
-    });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { message?: string };
-      throw new Error(body.message ?? `HTTP ${res.status}`);
-    }
-  }
-
-  async function createPaymentLink() {
+  async function publishListing() {
     setError(null);
-    setPaymentLink(null);
-    if (!selectedApiKeyId) {
-      setError('Select or create an active marketplace API key before creating a payment link.');
-      return;
-    }
     if (!selectedAgentMint) {
-      setError(
-        'Select the agent identity that owns this capability before creating a payment link.',
-      );
+      setError('Select the agent identity that owns this capability before publishing.');
       return;
     }
-    const primaryEndpoint = draft.endpoints[0];
-    const endpointPricing = primaryEndpoint?.pricing ?? draft.pricing;
-    const amount = endpointPricing.amount?.trim() || draft.pricing.amount?.trim() || '0.001';
     setBusy(true);
     try {
-      const response = {
-        status: 200,
-        mimeType: 'application/json',
-        body: {
-          ok: true,
-          capability: draft.slug,
-          message: 'Payment accepted. Call the protected endpoint to receive live data.',
-          upstream_url: primaryEndpoint?.url ?? draft.endpoint,
-        },
-      };
-      const res = await privyAuthedFetch(getAccessToken, '/api/payment-links', {
+      const res = await privyAuthedFetch(getAccessToken, '/api/listings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          key_id: selectedApiKeyId,
-          id: draft.slug,
-          label: draft.name,
+          slug: draft.slug,
+          name: draft.name,
           description: draft.description,
-          owner_agent: selectedAgentMint,
-          method: primaryEndpoint?.method ?? 'POST',
-          protocol: rail,
-          price: `${amount} ${currency}`,
-          currency,
-          accepts_currencies: STABLE_CURRENCIES.filter((c) => c !== currency),
-          response,
-          metadata: {
-            category: draft.category,
-            upstream_url: primaryEndpoint?.url ?? draft.endpoint,
-            marketplace_discovery_description: discoveryDescription(draft),
-          },
+          category: draft.category,
+          seller_agent_mint: selectedAgentMint,
+          endpoint: draft.endpoint,
+          pricing: draft.pricing,
+          endpoints: draft.endpoints,
+          ...(draft.docsUrl ? { docs_url: draft.docsUrl } : {}),
+          ...(draft.freeTier > 0 ? { free_tier: draft.freeTier } : {}),
         }),
       });
-      const body = (await res.json().catch(() => null)) as
-        | PaymentLinkResult
-        | { message?: string; error?: string }
-        | null;
-      if (!res.ok || !body || !('share_url' in body)) {
-        const err = body && !('share_url' in body) ? body : null;
-        throw new Error(err?.message ?? err?.error ?? `HTTP ${res.status}`);
-      }
-      setPaymentLink(body);
-      if (includeMarketplace) {
-        await submitListing();
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(body.message ?? `HTTP ${res.status}`);
       }
       setStage('submitted');
     } catch (err) {
@@ -283,13 +198,14 @@ export default function CreatorListPage() {
           variant="outline"
           className="border-brand/40 font-mono uppercase tracking-widest text-brand-strong"
         >
-          <Sparkles className="size-3 mr-1.5" /> List capability
+          <Sparkles className="mr-1.5 size-3" aria-hidden="true" /> List capability
         </Badge>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">Add an agent capability</h1>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">
+          Add a capability to discovery
+        </h1>
         <p className="mt-1 max-w-2xl text-sm text-fg-muted">
-          Anything an agent identity can call by HTTP — an MCP server, a paid REST API, or a paid
-          endpoint — can be listed here. Create a payment link, then optionally publish it to
-          marketplace discovery so agents can find it immediately.
+          Publish a provider URL and the payable endpoints agents can call. To make a raw endpoint
+          payable first, use the monetize endpoint flow.
         </p>
       </header>
 
@@ -307,9 +223,6 @@ export default function CreatorListPage() {
           }}
           onExample={() => {
             setError(null);
-            if (STABLE_CURRENCIES.includes(EXAMPLE_DRAFT.pricing.currency as StableCurrency)) {
-              setCurrency(EXAMPLE_DRAFT.pricing.currency as StableCurrency);
-            }
             setDraft(EXAMPLE_DRAFT);
             setStage('review');
           }}
@@ -325,52 +238,14 @@ export default function CreatorListPage() {
           agentsError={agentsError}
           selectedAgentMint={selectedAgentMint}
           setSelectedAgentMint={setSelectedAgentMint}
-          apiKeys={apiKeys}
-          apiKeysBusy={apiKeysBusy}
-          apiKeysError={apiKeysError}
-          selectedApiKeyId={selectedApiKeyId}
-          setSelectedApiKeyId={setSelectedApiKeyId}
-          onCreateKey={() => setCreateKeyOpen(true)}
-          rail={rail}
-          setRail={setRail}
-          currency={currency}
-          setCurrency={setCurrency}
-          includeMarketplace={includeMarketplace}
-          setIncludeMarketplace={setIncludeMarketplace}
-          paymentLink={paymentLink}
-          onCreatePaymentLink={createPaymentLink}
           error={error}
           onBack={() => setStage('choose')}
+          onPublish={publishListing}
           busy={busy}
         />
       ) : null}
 
-      {stage === 'submitted' ? (
-        <SubmittedStage
-          draft={draft}
-          router={router}
-          selectedAgentMint={selectedAgentMint}
-          rail={rail}
-          currency={currency}
-          paymentLink={paymentLink}
-          marketplacePublished={includeMarketplace}
-        />
-      ) : null}
-      <CreateKeyDialog
-        open={createKeyOpen}
-        onClose={() => setCreateKeyOpen(false)}
-        defaultScopes={['marketplace']}
-        onCreated={(key) => {
-          setCreatedKey(key);
-          setSelectedApiKeyId(key.id);
-          setCreateKeyOpen(false);
-          void loadApiKeys();
-        }}
-      />
-      <ShowKeyOnceModal
-        plaintext={createdKey?.plaintext ?? null}
-        onClose={() => setCreatedKey(null)}
-      />
+      {stage === 'submitted' ? <SubmittedStage draft={draft} router={router} /> : null}
     </div>
   );
 }
@@ -378,35 +253,31 @@ export default function CreatorListPage() {
 function StageBar({ stage }: { stage: Stage }) {
   const steps: Array<{ id: Stage; label: string }> = [
     { id: 'choose', label: 'Source' },
-    { id: 'review', label: 'Review' },
-    { id: 'submitted', label: 'Wrap your endpoint' },
+    { id: 'review', label: 'Discovery details' },
+    { id: 'submitted', label: 'Published' },
   ];
   const currentIdx = steps.findIndex((s) => s.id === stage);
   return (
-    <ol className="flex items-center gap-2 text-xs">
+    <ol className="flex flex-wrap items-center gap-2 text-xs">
       {steps.map((s, i) => (
         <React.Fragment key={s.id}>
           <li
             className={cn(
-              'flex items-center gap-2 rounded-full border px-3 py-1',
+              'flex min-h-8 items-center gap-2 rounded-full border px-3 py-1',
               i <= currentIdx ? 'border-brand bg-brand/15 text-fg' : 'border-border text-fg-subtle',
             )}
           >
             <span
               className={cn(
                 'grid size-4 place-items-center rounded-full text-[10px] font-medium',
-                i < currentIdx
-                  ? 'bg-brand text-white'
-                  : i === currentIdx
-                    ? 'bg-brand text-white'
-                    : 'bg-bg-elev-2 text-fg-subtle',
+                i <= currentIdx ? 'bg-brand text-white' : 'bg-bg-elev-2 text-fg-subtle',
               )}
             >
-              {i < currentIdx ? <CheckCircle2 className="size-2.5" /> : i + 1}
+              {i < currentIdx ? <CheckCircle2 className="size-2.5" aria-hidden="true" /> : i + 1}
             </span>
             {s.label}
           </li>
-          {i < steps.length - 1 ? <span className="h-px w-4 bg-border" /> : null}
+          {i < steps.length - 1 ? <span className="hidden h-px w-4 bg-border sm:block" /> : null}
         </React.Fragment>
       ))}
     </ol>
@@ -439,12 +310,12 @@ function ChooseStage({
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <FileJson className="size-4 text-brand-strong" />
+              <FileJson className="size-4 text-brand-strong" aria-hidden="true" />
               <CardTitle>Paste your manifest URL</CardTitle>
             </div>
             <CardDescription>
-              Host <code className="font-mono text-fg">/.well-known/leash-mcp.json</code> on the
-              same origin as your endpoint. We'll fetch + validate it.
+              Import provider metadata and payable endpoints from{' '}
+              <code className="font-mono text-fg">/.well-known/leash-mcp.json</code>.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -455,21 +326,23 @@ function ChooseStage({
                 onUrl(url);
               }}
             >
-              <Label htmlFor="manifest-url">Manifest URL</Label>
-              <Input
-                id="manifest-url"
-                type="url"
-                required
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://search.example.com/.well-known/leash-mcp.json"
-                className="font-mono"
-              />
-              {error ? <div className="text-danger text-xs">{error}</div> : null}
+              <Field id="manifest-url" label="Manifest URL">
+                <Input
+                  id="manifest-url"
+                  type="url"
+                  inputMode="url"
+                  required
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://search.example.com/.well-known/leash-mcp.json"
+                  className="font-mono"
+                />
+              </Field>
+              {error ? <InlineError message={error} /> : null}
               <div className="flex justify-end pt-1">
                 <Button type="submit" disabled={busy || url.length === 0}>
-                  {busy ? 'Importing…' : 'Import manifest'}
-                  {!busy ? <ArrowRight className="size-4" /> : null}
+                  {busy ? 'Importing...' : 'Import manifest'}
+                  {!busy ? <ArrowRight className="size-4" aria-hidden="true" /> : null}
                 </Button>
               </div>
             </form>
@@ -481,17 +354,16 @@ function ChooseStage({
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <Wand2 className="size-4 text-brand-strong" />
+              <Wand2 className="size-4 text-brand-strong" aria-hidden="true" />
               <CardTitle>Build a listing by hand</CardTitle>
             </div>
             <CardDescription>
-              Don't have a manifest yet? Fill in the fields directly. You can host the manifest
-              later — agent identities only need the listing.
+              Use this when your payable endpoint already exists and you want it in discovery.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button onClick={onManual} variant="default">
-              Start blank <ArrowRight className="size-4" />
+              Start blank <ArrowRight className="size-4" aria-hidden="true" />
             </Button>
           </CardContent>
         </Card>
@@ -501,26 +373,25 @@ function ChooseStage({
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <Sparkles className="size-4 text-brand-strong" />
-              <CardTitle>Pre-fill with the &quot;Premium Web Search&quot; demo</CardTitle>
+              <Sparkles className="size-4 text-brand-strong" aria-hidden="true" />
+              <CardTitle>Pre-fill with the Premium Web Search demo</CardTitle>
             </div>
             <CardDescription>
-              Useful as a template. Tweak the slug/name/endpoint to make it yours, then submit. Or
-              hit submit as-is to feel out the flow.
+              Shows the provider URL plus two payable endpoints with different methods and prices.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <pre className="overflow-x-auto rounded-md border bg-bg p-4 text-[11px] leading-relaxed font-mono text-fg-muted scrollbar-thin">
+            <pre className="overflow-x-auto rounded-md border bg-bg p-4 font-mono text-[11px] leading-relaxed text-fg-muted scrollbar-thin">
               {`{
   "name": "Premium Web Search",
-  "slug": "premium-search",
-  "endpoint": "https://search.demo.leash.market/mcp",
-  "pricing": { "type": "per_call", "amount": "0.001", "currency": "USDC" },
-  "endpoints": [{ "method": "POST", "url": "https://search.demo.leash.market/mcp/tools/search", "description": "Search with citations" }]
+  "endpoint": "https://search.demo.leash.market",
+  "endpoints": [
+    { "method": "POST", "url": "https://api.leash.market/x/premium-search" }
+  ]
 }`}
             </pre>
             <Button onClick={onExample}>
-              Use the example <ArrowRight className="size-4" />
+              Use the example <ArrowRight className="size-4" aria-hidden="true" />
             </Button>
           </CardContent>
         </Card>
@@ -537,22 +408,9 @@ function ReviewStage({
   agentsError,
   selectedAgentMint,
   setSelectedAgentMint,
-  apiKeys,
-  apiKeysBusy,
-  apiKeysError,
-  selectedApiKeyId,
-  setSelectedApiKeyId,
-  onCreateKey,
-  rail,
-  setRail,
-  currency,
-  setCurrency,
-  includeMarketplace,
-  setIncludeMarketplace,
-  paymentLink,
-  onCreatePaymentLink,
   error,
   onBack,
+  onPublish,
   busy,
 }: {
   draft: ListingDraft;
@@ -562,28 +420,58 @@ function ReviewStage({
   agentsError: string | null;
   selectedAgentMint: string;
   setSelectedAgentMint: React.Dispatch<React.SetStateAction<string>>;
-  apiKeys: CreatorApiKey[];
-  apiKeysBusy: boolean;
-  apiKeysError: string | null;
-  selectedApiKeyId: string;
-  setSelectedApiKeyId: React.Dispatch<React.SetStateAction<string>>;
-  onCreateKey: () => void;
-  rail: PaymentRail;
-  setRail: React.Dispatch<React.SetStateAction<PaymentRail>>;
-  currency: StableCurrency;
-  setCurrency: React.Dispatch<React.SetStateAction<StableCurrency>>;
-  includeMarketplace: boolean;
-  setIncludeMarketplace: React.Dispatch<React.SetStateAction<boolean>>;
-  paymentLink: PaymentLinkResult | null;
-  onCreatePaymentLink: () => void;
   error: string | null;
   onBack: () => void;
+  onPublish: () => void;
   busy: boolean;
 }) {
   const selectedAgent = agents.find((agent) => agent.mint === selectedAgentMint) ?? null;
-  const canSubmit = isDraftComplete(draft) && selectedAgent != null && !agentsBusy;
-  const canCreatePaymentLink =
-    canSubmit && draft.pricing.type !== 'free' && selectedApiKeyId.length > 0 && !apiKeysBusy;
+  const canPublish = isDraftComplete(draft) && selectedAgent != null && !agentsBusy;
+
+  const updateEndpoint = React.useCallback(
+    (index: number, patch: Partial<ListingEndpoint>) => {
+      setDraft((d) => ({
+        ...d,
+        endpoints: d.endpoints.map((endpoint, j) =>
+          j === index ? { ...endpoint, ...patch } : endpoint,
+        ),
+      }));
+    },
+    [setDraft],
+  );
+
+  const updateEndpointPricing = React.useCallback(
+    (index: number, patch: Partial<ListingPricing>) => {
+      setDraft((d) => ({
+        ...d,
+        endpoints: d.endpoints.map((endpoint, j) =>
+          j === index
+            ? { ...endpoint, pricing: { ...(endpoint.pricing ?? d.pricing), ...patch } }
+            : endpoint,
+        ),
+      }));
+    },
+    [setDraft],
+  );
+
+  const toggleEndpointCurrency = React.useCallback(
+    (index: number, currency: StableCurrency) => {
+      setDraft((d) => ({
+        ...d,
+        endpoints: d.endpoints.map((endpoint, j) => {
+          if (j !== index) return endpoint;
+          const current = endpoint.supported_usd ?? [];
+          return {
+            ...endpoint,
+            supported_usd: current.includes(currency)
+              ? current.filter((c) => c !== currency)
+              : [...current, currency],
+          };
+        }),
+      }));
+    },
+    [setDraft],
+  );
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -598,16 +486,17 @@ function ReviewStage({
 
         <Card>
           <CardHeader>
-            <CardTitle>Listing fields</CardTitle>
+            <CardTitle>Provider details</CardTitle>
             <CardDescription>
-              Review every field before creating the payment link. If you publish to discovery, this
-              metadata appears in the marketplace immediately.
+              These fields describe the service provider. Paywall creation happens on the Monetize
+              endpoint page.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Field label="Name">
+              <Field id="listing-name" label="Name">
                 <Input
+                  id="listing-name"
                   value={draft.name}
                   onChange={(e) =>
                     setDraft((d) => ({
@@ -619,8 +508,9 @@ function ReviewStage({
                   placeholder="Premium Web Search"
                 />
               </Field>
-              <Field label="Slug">
+              <Field id="listing-slug" label="Slug">
                 <Input
+                  id="listing-slug"
                   value={draft.slug}
                   onChange={(e) => setDraft((d) => ({ ...d, slug: slugify(e.target.value) }))}
                   className="font-mono"
@@ -628,56 +518,65 @@ function ReviewStage({
                 />
               </Field>
             </div>
-            <Field label="One-line description">
+            <Field id="listing-description" label="One-line description">
               <Textarea
+                id="listing-description"
                 value={draft.description}
                 onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
                 rows={2}
-                placeholder="Short, clear, written for an agent — not a human."
+                placeholder="Short, clear, written for an agent - not a human."
               />
             </Field>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Field label="Category">
+              <Field id="listing-category" label="Category">
                 <Input
+                  id="listing-category"
                   value={draft.category}
                   onChange={(e) => setDraft((d) => ({ ...d, category: e.target.value }))}
-                  placeholder="search · data · payments · compute"
+                  placeholder="search, data, payments, compute"
                 />
               </Field>
-              <Field label="Endpoint">
+              <Field id="provider-url" label="Provider URL">
                 <Input
+                  id="provider-url"
                   value={draft.endpoint}
                   type="url"
+                  inputMode="url"
                   onChange={(e) => setDraft((d) => ({ ...d, endpoint: e.target.value }))}
                   className="font-mono text-xs"
-                  placeholder="https://your-tool.example/mcp"
+                  placeholder="https://provider.example.com"
                 />
               </Field>
             </div>
 
             <div className="rounded-lg border bg-bg/40 p-4 space-y-3">
-              <Label>Pricing</Label>
+              <Label>Discovery price summary</Label>
+              <p className="text-xs text-fg-muted">
+                Used for browse filters and cards. Individual endpoint rows below carry the exact
+                payable price and rail.
+              </p>
               <div className="flex flex-wrap gap-2">
-                {(['free', 'per_call', 'variable'] as const).map((t) => (
+                {(['free', 'per_call', 'variable'] as const).map((type) => (
                   <button
-                    key={t}
+                    key={type}
                     type="button"
-                    onClick={() => setDraft((d) => ({ ...d, pricing: { ...d.pricing, type: t } }))}
+                    onClick={() => setDraft((d) => ({ ...d, pricing: { ...d.pricing, type } }))}
                     className={cn(
-                      'rounded-md border px-3 py-1.5 text-xs uppercase tracking-wide transition-colors',
-                      draft.pricing.type === t
+                      'min-h-10 rounded-md border px-3 py-2 text-xs uppercase tracking-wide transition-colors focus-visible:ring-2 focus-visible:ring-brand/60',
+                      draft.pricing.type === type
                         ? 'border-brand bg-brand/15 text-brand-strong'
                         : 'border-border text-fg-muted hover:border-border-strong',
                     )}
                   >
-                    {t.replace('_', ' ')}
+                    {type.replace('_', ' ')}
                   </button>
                 ))}
               </div>
               {draft.pricing.type !== 'free' ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Amount">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field id="listing-amount" label="Amount">
                     <Input
+                      id="listing-amount"
                       value={draft.pricing.amount ?? ''}
                       onChange={(e) =>
                         setDraft((d) => ({
@@ -685,21 +584,21 @@ function ReviewStage({
                           pricing: { ...d.pricing, amount: e.target.value },
                         }))
                       }
+                      inputMode="decimal"
                       placeholder="0.001"
                       className="font-mono"
                     />
                   </Field>
-                  <Field label="Currency">
+                  <Field id="listing-currency" label="Currency">
                     <select
-                      value={currency}
-                      onChange={(e) => {
-                        const next = e.target.value as StableCurrency;
-                        setCurrency(next);
+                      id="listing-currency"
+                      value={(draft.pricing.currency as StableCurrency | undefined) ?? 'USDC'}
+                      onChange={(e) =>
                         setDraft((d) => ({
                           ...d,
-                          pricing: { ...d.pricing, currency: next },
-                        }));
-                      }}
+                          pricing: { ...d.pricing, currency: e.target.value },
+                        }))
+                      }
                       className={cn(SELECT_CLASS, 'font-mono')}
                     >
                       {STABLE_CURRENCIES.map((c) => (
@@ -711,10 +610,11 @@ function ReviewStage({
                   </Field>
                 </div>
               ) : null}
-              <Field label="Free tier (calls / day, optional)">
+              <Field id="free-tier" label="Free tier calls / day">
                 <Input
-                  type="number"
-                  min={0}
+                  id="free-tier"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={draft.freeTier}
                   onChange={(e) =>
                     setDraft((d) => ({ ...d, freeTier: Number(e.target.value || 0) }))
@@ -724,109 +624,20 @@ function ReviewStage({
               </Field>
             </div>
 
-            <div>
-              <Label>Payable endpoints</Label>
-              <ul className="mt-2 divide-y divide-border rounded-md border bg-bg/40 text-xs">
-                {draft.endpoints.length === 0 ? (
-                  <li className="px-3 py-3 text-fg-subtle">
-                    No payable endpoints detected. Add at least one endpoint by hand below or
-                    re-import the manifest.
-                  </li>
-                ) : (
-                  draft.endpoints.map((endpoint, i) => (
-                    <li
-                      key={`${endpoint.method}-${endpoint.url}-${i}`}
-                      className="grid gap-2 px-3 py-3 md:grid-cols-[90px_minmax(0,1fr)_auto]"
-                    >
-                      <select
-                        value={endpoint.method}
-                        onChange={(e) =>
-                          setDraft((d) => ({
-                            ...d,
-                            endpoints: d.endpoints.map((ep, j) =>
-                              j === i ? { ...ep, method: e.target.value as 'GET' | 'POST' } : ep,
-                            ),
-                          }))
-                        }
-                        className={cn(SELECT_CLASS, 'font-mono text-xs')}
-                      >
-                        <option value="POST">POST</option>
-                        <option value="GET">GET</option>
-                      </select>
-                      <div className="min-w-0 space-y-2">
-                        <Input
-                          value={endpoint.url}
-                          onChange={(e) =>
-                            setDraft((d) => ({
-                              ...d,
-                              endpoints: d.endpoints.map((ep, j) =>
-                                j === i ? { ...ep, url: e.target.value } : ep,
-                              ),
-                            }))
-                          }
-                          className="font-mono text-[11px]"
-                          placeholder="https://api.example.com/v1/search"
-                        />
-                        <Input
-                          value={endpoint.description}
-                          onChange={(e) =>
-                            setDraft((d) => ({
-                              ...d,
-                              endpoints: d.endpoints.map((ep, j) =>
-                                j === i ? { ...ep, description: e.target.value } : ep,
-                              ),
-                            }))
-                          }
-                          placeholder="What this payable endpoint does"
-                        />
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          setDraft((d) => ({
-                            ...d,
-                            endpoints: d.endpoints.filter((_, j) => j !== i),
-                          }))
-                        }
-                      >
-                        Remove
-                      </Button>
-                    </li>
-                  ))
-                )}
-              </ul>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-2"
-                onClick={() =>
-                  setDraft((d) => ({
-                    ...d,
-                    endpoints: [
-                      ...d.endpoints,
-                      {
-                        method: 'POST',
-                        url: d.endpoint,
-                        description: '',
-                        pricing: d.pricing,
-                        protocol: [rail],
-                        supported_usd: [currency],
-                      },
-                    ],
-                  }))
-                }
-              >
-                + Add payable endpoint
-              </Button>
-            </div>
+            <PayableEndpointEditor
+              draft={draft}
+              setDraft={setDraft}
+              updateEndpoint={updateEndpoint}
+              updateEndpointPricing={updateEndpointPricing}
+              toggleEndpointCurrency={toggleEndpointCurrency}
+            />
 
-            {error ? <div className="text-danger text-xs">{error}</div> : null}
+            {error ? <InlineError message={error} /> : null}
           </CardContent>
         </Card>
       </div>
 
-      <Card className="lg:sticky lg:top-20 self-start">
+      <Card className="self-start lg:sticky lg:top-20">
         <CardHeader>
           <CardTitle>Preview</CardTitle>
           <CardDescription>How this listing will look to agent identities.</CardDescription>
@@ -838,13 +649,11 @@ function ReviewStage({
                 {draft.category || 'misc'}
               </Badge>
               <Badge variant={draft.pricing.type === 'free' ? 'free' : 'paid'}>
-                {draft.pricing.type === 'free'
-                  ? 'Free'
-                  : `${draft.pricing.amount ?? '?'} ${currency}/call`}
+                {formatPricing(draft.pricing)}
               </Badge>
             </div>
             <div className="font-semibold">{draft.name || 'Untitled capability'}</div>
-            <p className="text-xs text-fg-muted line-clamp-3">
+            <p className="line-clamp-3 text-xs text-fg-muted">
               {draft.description || 'Add a one-line description.'}
             </p>
             <div className="text-[11px] text-fg-subtle">
@@ -853,99 +662,41 @@ function ReviewStage({
             <div className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
               {selectedAgent ? (
                 <>
-                  <ShieldCheck className="size-3 text-emerald-300" />
-                  {selectedAgent.name} · {selectedAgent.network.replace('solana-', '')}
+                  <ShieldCheck className="size-3 text-emerald-300" aria-hidden="true" />
+                  {selectedAgent.name} - {selectedAgent.network.replace('solana-', '')}
                 </>
               ) : (
                 <>
-                  <AlertTriangle className="size-3 text-amber-300" />
+                  <AlertTriangle className="size-3 text-amber-300" aria-hidden="true" />
                   Select seller identity
                 </>
               )}
             </div>
           </div>
-          <div className="mt-4 rounded-xl border border-brand/25 bg-brand/5 p-4 space-y-3">
-            <div>
-              <div className="text-sm font-semibold text-brand-strong">Monetize endpoint</div>
-              <p className="mt-1 text-xs leading-5 text-fg-muted">
-                Create a hosted payment link for this capability, then optionally submit the same
-                details to marketplace discovery.
+
+          <div className="mt-4 rounded-xl border border-brand/25 bg-brand/5 p-4 text-xs leading-5 text-fg-muted">
+            <div className="flex items-start gap-2">
+              <Link2 className="mt-0.5 size-4 shrink-0 text-brand-strong" aria-hidden="true" />
+              <p>
+                Need a payable endpoint first? Create it on{' '}
+                <a href="/creator/monetize" className="text-brand hover:underline">
+                  Monetize endpoint
+                </a>
+                , then come back to publish it here.
               </p>
             </div>
-            <Field label="Payment rail">
-              <select
-                value={rail}
-                onChange={(e) => setRail(e.target.value as PaymentRail)}
-                className={SELECT_CLASS}
-              >
-                {PAYMENT_RAILS.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.label} — {r.description}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="API key">
-              <select
-                value={selectedApiKeyId}
-                onChange={(e) => setSelectedApiKeyId(e.target.value)}
-                disabled={apiKeysBusy || apiKeys.length === 0}
-                className={SELECT_CLASS}
-              >
-                {apiKeysBusy ? <option value="">Loading API keys…</option> : null}
-                {!apiKeysBusy && apiKeys.length === 0 ? (
-                  <option value="">No API key found</option>
-                ) : null}
-                {apiKeys.map((key) => (
-                  <option key={key.id} value={key.id}>
-                    {key.name} · {key.network.replace('solana-', '')} · {key.prefix}…{key.last4}
-                  </option>
-                ))}
-              </select>
-              {apiKeysError ? <p className="text-xs text-danger">{apiKeysError}</p> : null}
-              {!apiKeysBusy && apiKeys.length === 0 ? (
-                <Button type="button" variant="outline" size="sm" onClick={onCreateKey}>
-                  Create marketplace API key
-                </Button>
-              ) : null}
-            </Field>
-            <label className="flex items-start gap-2 rounded-lg border border-border bg-bg/50 p-3 text-xs text-fg-muted">
-              <input
-                type="checkbox"
-                checked={includeMarketplace}
-                onChange={(e) => setIncludeMarketplace(e.target.checked)}
-                className="mt-0.5"
-              />
-              <span>
-                Also submit to marketplace discovery so agents can find this capability in browse,
-                search, and reputation flows.
-              </span>
-            </label>
-            {paymentLink ? (
-              <div className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-3 text-xs">
-                <div className="font-semibold text-emerald-200">Payment link created</div>
-                <a
-                  href={paymentLink.share_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-1 block break-all font-mono text-brand hover:underline"
-                >
-                  {paymentLink.share_url}
-                </a>
-              </div>
-            ) : null}
           </div>
+
           <div className="mt-4 flex flex-col gap-2">
-            <Button onClick={onCreatePaymentLink} disabled={busy || !canCreatePaymentLink}>
-              {busy ? 'Creating…' : 'Create payment link'}
+            <Button onClick={onPublish} disabled={busy || !canPublish}>
+              {busy ? 'Publishing...' : 'Publish to discovery'}
             </Button>
             <Button variant="ghost" onClick={onBack}>
-              <ArrowLeft className="size-4" /> Back to source
+              <ArrowLeft className="size-4" aria-hidden="true" /> Back to source
             </Button>
             {!isDraftComplete(draft) ? (
               <p className="text-[11px] text-fg-subtle">
-                Add a name, slug (≥2 chars), description, service URL, and at least one payable
-                endpoint to enable payment-link creation.
+                Add name, slug, description, provider URL, and at least one payable endpoint.
               </p>
             ) : null}
             {isDraftComplete(draft) && !selectedAgent ? (
@@ -956,6 +707,179 @@ function ReviewStage({
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function PayableEndpointEditor({
+  draft,
+  setDraft,
+  updateEndpoint,
+  updateEndpointPricing,
+  toggleEndpointCurrency,
+}: {
+  draft: ListingDraft;
+  setDraft: React.Dispatch<React.SetStateAction<ListingDraft>>;
+  updateEndpoint: (index: number, patch: Partial<ListingEndpoint>) => void;
+  updateEndpointPricing: (index: number, patch: Partial<ListingPricing>) => void;
+  toggleEndpointCurrency: (index: number, currency: StableCurrency) => void;
+}) {
+  return (
+    <div>
+      <Label>Payable endpoints</Label>
+      <ul className="mt-2 divide-y divide-border rounded-md border bg-bg/40 text-xs">
+        {draft.endpoints.length === 0 ? (
+          <li className="px-3 py-3 text-fg-subtle">
+            No payable endpoints yet. Add a hosted x402/MPP endpoint from Monetize endpoint, or add
+            one by hand.
+          </li>
+        ) : (
+          draft.endpoints.map((endpoint, index) => {
+            const pricing = endpoint.pricing ?? draft.pricing;
+            const protocol = (endpoint.protocol?.[0] ?? 'x402') as PaymentRail;
+            const supported = endpoint.supported_usd ?? ['USDC'];
+            return (
+              <li key={`${endpoint.method}-${endpoint.url}-${index}`} className="space-y-3 p-3">
+                <div className="grid gap-2 md:grid-cols-[90px_minmax(0,1fr)_auto]">
+                  <select
+                    aria-label={`Endpoint ${index + 1} method`}
+                    value={endpoint.method}
+                    onChange={(e) =>
+                      updateEndpoint(index, { method: e.target.value as 'GET' | 'POST' })
+                    }
+                    className={cn(SELECT_CLASS, 'font-mono text-xs')}
+                  >
+                    <option value="POST">POST</option>
+                    <option value="GET">GET</option>
+                  </select>
+                  <Input
+                    value={endpoint.url}
+                    onChange={(e) => updateEndpoint(index, { url: e.target.value })}
+                    type="url"
+                    inputMode="url"
+                    className="font-mono text-[11px]"
+                    placeholder="https://api.leash.market/x/your-endpoint"
+                    aria-label={`Endpoint ${index + 1} URL`}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      setDraft((d) => ({
+                        ...d,
+                        endpoints: d.endpoints.filter((_, j) => j !== index),
+                      }))
+                    }
+                  >
+                    Remove
+                  </Button>
+                </div>
+                <Input
+                  value={endpoint.description}
+                  onChange={(e) => updateEndpoint(index, { description: e.target.value })}
+                  placeholder="What this payable endpoint does"
+                  aria-label={`Endpoint ${index + 1} description`}
+                />
+                <div className="grid gap-2 md:grid-cols-4">
+                  <select
+                    aria-label={`Endpoint ${index + 1} pricing type`}
+                    value={pricing.type}
+                    onChange={(e) =>
+                      updateEndpointPricing(index, {
+                        type: e.target.value as ListingPricing['type'],
+                      })
+                    }
+                    className={SELECT_CLASS}
+                  >
+                    <option value="free">Free</option>
+                    <option value="per_call">Per call</option>
+                    <option value="variable">Variable</option>
+                  </select>
+                  <Input
+                    value={pricing.amount ?? ''}
+                    onChange={(e) => updateEndpointPricing(index, { amount: e.target.value })}
+                    inputMode="decimal"
+                    placeholder="0.001"
+                    className="font-mono"
+                    disabled={pricing.type === 'free'}
+                    aria-label={`Endpoint ${index + 1} amount`}
+                  />
+                  <select
+                    aria-label={`Endpoint ${index + 1} currency`}
+                    value={(pricing.currency as StableCurrency | undefined) ?? 'USDC'}
+                    onChange={(e) => updateEndpointPricing(index, { currency: e.target.value })}
+                    className={cn(SELECT_CLASS, 'font-mono')}
+                  >
+                    {STABLE_CURRENCIES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label={`Endpoint ${index + 1} payment rail`}
+                    value={protocol}
+                    onChange={(e) => updateEndpoint(index, { protocol: [e.target.value] })}
+                    className={SELECT_CLASS}
+                  >
+                    {PAYMENT_RAILS.map((rail) => (
+                      <option key={rail.id} value={rail.id}>
+                        {rail.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-fg-subtle">Accepted:</span>
+                  {STABLE_CURRENCIES.map((c) => {
+                    const checked = supported.includes(c);
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => toggleEndpointCurrency(index, c)}
+                        className={cn(
+                          'min-h-9 rounded-md border px-3 py-1.5 font-mono text-[11px] transition-colors focus-visible:ring-2 focus-visible:ring-brand/60',
+                          checked
+                            ? 'border-brand bg-brand/15 text-brand-strong'
+                            : 'border-border text-fg-muted hover:border-border-strong',
+                        )}
+                      >
+                        {c}
+                      </button>
+                    );
+                  })}
+                </div>
+              </li>
+            );
+          })
+        )}
+      </ul>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="mt-2"
+        onClick={() =>
+          setDraft((d) => ({
+            ...d,
+            endpoints: [
+              ...d.endpoints,
+              {
+                method: 'POST',
+                url: '',
+                description: '',
+                pricing: d.pricing,
+                protocol: ['x402'],
+                supported_usd: ['USDC'],
+              },
+            ],
+          }))
+        }
+      >
+        + Add payable endpoint
+      </Button>
     </div>
   );
 }
@@ -977,35 +901,35 @@ function SellerIdentitySelector({
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
-          <ShieldCheck className="size-4 text-brand-strong" />
+          <ShieldCheck className="size-4 text-brand-strong" aria-hidden="true" />
           <CardTitle>Seller identity</CardTitle>
         </div>
         <CardDescription>
-          New native listings are anchored to an agent identity. Buyers and agents use this link for
-          trust checks, reputation, and proof trails.
+          New native listings are anchored to an agent identity for trust checks and reputation.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <Label htmlFor="seller-agent">Agent identity</Label>
-        <select
-          id="seller-agent"
-          value={selectedAgentMint}
-          onChange={(event) => setSelectedAgentMint(event.target.value)}
-          disabled={busy || agents.length === 0}
-          className={SELECT_CLASS}
-        >
-          {busy ? <option value="">Loading identities…</option> : null}
-          {!busy && agents.length === 0 ? (
-            <option value="">No agent identities found</option>
-          ) : null}
-          {agents.map((agent) => (
-            <option key={agent.mint} value={agent.mint}>
-              {agent.name} · {agent.network.replace('solana-', '')} · {shortMint(agent.mint)}
-            </option>
-          ))}
-        </select>
+        <Field id="seller-agent" label="Agent identity">
+          <select
+            id="seller-agent"
+            value={selectedAgentMint}
+            onChange={(event) => setSelectedAgentMint(event.target.value)}
+            disabled={busy || agents.length === 0}
+            className={SELECT_CLASS}
+          >
+            {busy ? <option value="">Loading identities...</option> : null}
+            {!busy && agents.length === 0 ? (
+              <option value="">No agent identities found</option>
+            ) : null}
+            {agents.map((agent) => (
+              <option key={agent.mint} value={agent.mint}>
+                {agent.name} - {agent.network.replace('solana-', '')} - {shortMint(agent.mint)}
+              </option>
+            ))}
+          </select>
+        </Field>
         {error ? (
-          <p className="text-xs text-danger">{error}</p>
+          <InlineError message={error} />
         ) : agents.length === 0 && !busy ? (
           <p className="text-xs text-fg-muted">
             Create an agent identity first, then return here to list the capability.{' '}
@@ -1015,7 +939,7 @@ function SellerIdentitySelector({
           </p>
         ) : (
           <p className="text-xs text-fg-muted">
-            This identity will be shown on marketplace cards and used for verification decisions.
+            This identity is shown on marketplace cards and verification decisions.
           </p>
         )}
       </CardContent>
@@ -1023,130 +947,96 @@ function SellerIdentitySelector({
   );
 }
 
-function shortMint(mint: string): string {
-  return `${mint.slice(0, 4)}…${mint.slice(-4)}`;
-}
-
-function discoveryDescription(draft: ListingDraft): string {
-  const endpointNames = draft.endpoints
-    .map((endpoint) => endpoint.description.trim())
-    .filter(Boolean)
-    .slice(0, 3)
-    .join(', ');
-  return `${draft.description.trim()}${endpointNames ? ` Endpoints: ${endpointNames}.` : ''}`.slice(
-    0,
-    500,
-  );
-}
-
 function SubmittedStage({
   draft,
   router,
-  selectedAgentMint,
-  rail,
-  currency,
-  paymentLink,
-  marketplacePublished,
 }: {
   draft: ListingDraft;
   router: ReturnType<typeof useRouter>;
-  selectedAgentMint: string;
-  rail: PaymentRail;
-  currency: StableCurrency;
-  paymentLink: PaymentLinkResult | null;
-  marketplacePublished: boolean;
 }) {
   return (
     <div className="space-y-6">
       <Card className="bg-aurora">
         <CardHeader className="space-y-2 text-center">
-          <CheckCircle2 className="mx-auto size-7 text-emerald-300" />
-          <CardTitle className="text-2xl">
-            {paymentLink ? 'Payment link created' : 'Capability created'}
-          </CardTitle>
-          <CardDescription className="max-w-xl mx-auto">
-            <strong>{draft.name}</strong>{' '}
-            {marketplacePublished
-              ? 'is live in marketplace discovery and ready for paid agent calls.'
-              : paymentLink
-                ? 'is ready for paid agent calls.'
-                : 'has been published to marketplace discovery.'}{' '}
-            Drop the seller-kit snippet into your endpoint when you need live data behind the
-            paywall.
+          <CheckCircle2 className="mx-auto size-7 text-emerald-300" aria-hidden="true" />
+          <CardTitle className="text-2xl">Capability listed</CardTitle>
+          <CardDescription className="mx-auto max-w-xl">
+            <strong>{draft.name}</strong> is live in marketplace discovery with{' '}
+            {draft.endpoints.length} payable endpoint{draft.endpoints.length === 1 ? '' : 's'}.
           </CardDescription>
         </CardHeader>
-      </Card>
-      {paymentLink ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Payment link is ready</CardTitle>
-            <CardDescription>
-              Share this hosted paywall with buyer agents. The explorer will show receipts once
-              paid.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <a
-              href={paymentLink.share_url}
-              target="_blank"
-              rel="noreferrer"
-              className="block break-all rounded-lg border bg-bg px-3 py-2 font-mono text-sm text-brand hover:underline"
-            >
-              {paymentLink.share_url}
-            </a>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className="border-brand/40 font-mono uppercase text-brand-strong"
-            >
-              Step 3 · Seller kit
-            </Badge>
-          </div>
-          <CardTitle className="mt-2">Drop in this snippet to accept paid calls</CardTitle>
-          <CardDescription>
-            Pick the runtime that matches your stack. The middleware short-circuits unauthenticated
-            calls with a 402 + payment instructions and only forwards to your handler once payment
-            is verified.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SnippetBlock
-            params={{
-              slug: draft.slug,
-              toolName: slugify(draft.endpoints[0]?.description ?? 'endpoint') || 'endpoint',
-              amount: draft.pricing.amount ?? '0.001',
-              currency,
-              sellerAgent: selectedAgentMint,
-              upstreamUrl: draft.endpoints[0]?.url ?? draft.endpoint,
-              rail,
-            }}
-          />
-        </CardContent>
       </Card>
 
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => router.push('/creator/tools')}>
-          Go to my capabilities <ArrowRight className="size-4" />
+          Go to my capabilities <ArrowRight className="size-4" aria-hidden="true" />
         </Button>
-        <Button variant="outline" onClick={() => router.push('/creator/docs')}>
-          Read the full guide
+        <Button variant="outline" onClick={() => router.push('/creator/monetize')}>
+          Monetize another endpoint
         </Button>
       </div>
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <Label>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       {children}
     </div>
   );
+}
+
+function InlineError({ message }: { message: string }) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 p-3 text-xs text-danger">
+      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+      <span>{message}</span>
+    </div>
+  );
+}
+
+function shortMint(mint: string): string {
+  return `${mint.slice(0, 4)}...${mint.slice(-4)}`;
+}
+
+function formatPricing(pricing: ListingPricing): string {
+  if (pricing.type === 'free') return 'Free';
+  if (pricing.type === 'variable') return 'Variable';
+  return `${pricing.amount ?? '?'} ${pricing.currency ?? 'USDC'}`;
+}
+
+type SearchParamReader = { get(name: string): string | null };
+
+function pricingFromParams(params: SearchParamReader): ListingPricing {
+  const rawType = params.get('endpoint_pricing_type');
+  const type: ListingPricing['type'] =
+    rawType === 'free' || rawType === 'variable' ? rawType : 'per_call';
+  return {
+    type,
+    ...(params.get('endpoint_amount') ? { amount: params.get('endpoint_amount')! } : {}),
+    currency: params.get('endpoint_currency') ?? 'USDC',
+  };
+}
+
+function supportedFromParams(params: SearchParamReader): string[] {
+  const raw = params.get('endpoint_supported_usd');
+  if (!raw) return ['USDC'];
+  return raw
+    .split(',')
+    .map((currency) => currency.trim())
+    .filter(Boolean);
+}
+
+function titleFromDescription(description: string): string {
+  return description.split(/\s+/).filter(Boolean).slice(0, 6).join(' ');
+}
+
+function originFromUrl(value: string): string {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return '';
+  }
 }
