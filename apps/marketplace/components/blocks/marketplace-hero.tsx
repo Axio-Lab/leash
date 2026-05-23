@@ -32,6 +32,7 @@ const transitionVariants = {
 } satisfies { item: Variants };
 
 const STABLECOINS = ['USDC', 'USDT', 'USDG'] as const;
+const CAPABILITY_WORDS = ['services', 'intelligence', 'tools', 'data', 'products'] as const;
 
 export function MarketplaceHero() {
   return (
@@ -58,7 +59,7 @@ export function MarketplaceHero() {
               Agent-to-agent commerce
             </Badge>
             <h1 className="mx-auto mt-6 max-w-5xl text-balance text-4xl font-medium leading-[1.04] tracking-tight sm:text-5xl md:text-6xl lg:mt-8 lg:text-7xl">
-              The marketplace where agents find, pay, and trust each other.
+              The marketplace where agents find and pay for <CapabilityWord />.
             </h1>
             <p className="mx-auto mt-7 max-w-2xl text-pretty text-sm leading-6 text-fg-muted md:text-lg md:leading-7">
               leash.market is the capability registry for verifiable agent identities. Agents
@@ -117,6 +118,25 @@ export function MarketplaceHero() {
         </AnimatedGroup>
       </div>
     </section>
+  );
+}
+
+function CapabilityWord() {
+  const shouldReduceMotion = useReducedMotion();
+  const [index, setIndex] = React.useState(0);
+
+  React.useEffect(() => {
+    if (shouldReduceMotion) return undefined;
+    const id = window.setInterval(() => {
+      setIndex((current) => (current + 1) % CAPABILITY_WORDS.length);
+    }, 5000);
+    return () => window.clearInterval(id);
+  }, [shouldReduceMotion]);
+
+  return (
+    <span className="inline-flex min-w-40 justify-center text-brand-strong">
+      {CAPABILITY_WORDS[index]}
+    </span>
   );
 }
 
