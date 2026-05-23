@@ -14,7 +14,9 @@ import {
 } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 
+import { CreateKeyDialog, type CreatedKey } from '@/components/create-key-dialog';
 import { SnippetBlock } from '@/components/snippet-block';
+import { ShowKeyOnceModal } from '@/components/show-key-once';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,6 +35,12 @@ import {
   type ManifestImport,
 } from '@/lib/listing-helper';
 import { privyAuthedFetch } from '@/lib/privy-fetch';
+import {
+  PAYMENT_RAILS,
+  STABLE_CURRENCIES,
+  type PaymentRail,
+  type StableCurrency,
+} from '@/lib/seller-kit';
 
 type Stage = 'choose' | 'review' | 'submitted';
 type ImportResp = { manifest: ManifestImport } | { error: string; message?: string };
@@ -41,6 +49,20 @@ type OwnedAgent = {
   name: string;
   network: 'solana-devnet' | 'solana-mainnet';
   owner_wallet: string;
+};
+type CreatorApiKey = {
+  id: string;
+  name: string;
+  network: 'solana-devnet' | 'solana-mainnet';
+  prefix: string;
+  last4: string;
+  scopes: string[];
+  disabled_at: string | null;
+};
+type PaymentLinkResult = {
+  id: string;
+  share_url: string;
+  protocol: PaymentRail;
 };
 
 /**
@@ -65,6 +87,16 @@ export default function CreatorListPage() {
   const [agentsBusy, setAgentsBusy] = React.useState(true);
   const [agentsError, setAgentsError] = React.useState<string | null>(null);
   const [selectedAgentMint, setSelectedAgentMint] = React.useState('');
+  const [apiKeys, setApiKeys] = React.useState<CreatorApiKey[]>([]);
+  const [apiKeysBusy, setApiKeysBusy] = React.useState(true);
+  const [apiKeysError, setApiKeysError] = React.useState<string | null>(null);
+  const [selectedApiKeyId, setSelectedApiKeyId] = React.useState('');
+  const [rail, setRail] = React.useState<PaymentRail>('x402');
+  const [currency, setCurrency] = React.useState<StableCurrency>('USDC');
+  const [includeMarketplace, setIncludeMarketplace] = React.useState(false);
+  const [paymentLink, setPaymentLink] = React.useState<PaymentLinkResult | null>(null);
+  const [createKeyOpen, setCreateKeyOpen] = React.useState(false);
+  const [createdKey, setCreatedKey] = React.useState<CreatedKey | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -94,6 +126,32 @@ export default function CreatorListPage() {
     };
   }, [getAccessToken]);
 
+  const loadApiKeys = React.useCallback(async () => {
+    setApiKeysBusy(true);
+    setApiKeysError(null);
+    try {
+      const res = await privyAuthedFetch(getAccessToken, '/api/keys');
+      const body = (await res.json().catch(() => null)) as {
+        items?: CreatorApiKey[];
+        message?: string;
+      } | null;
+      if (!res.ok) throw new Error(body?.message ?? `HTTP ${res.status}`);
+      const active = (body?.items ?? []).filter(
+        (key) => !key.disabled_at && key.scopes.includes('marketplace'),
+      );
+      setApiKeys(active);
+      setSelectedApiKeyId((current) => current || active[0]?.id || '');
+    } catch (err) {
+      setApiKeysError((err as Error).message);
+    } finally {
+      setApiKeysBusy(false);
+    }
+  }, [getAccessToken]);
+
+  React.useEffect(() => {
+    void loadApiKeys();
+  }, [loadApiKeys]);
+
   async function importFromUrl(url: string) {
     setError(null);
     setBusy(true);
@@ -107,7 +165,11 @@ export default function CreatorListPage() {
       if (!res.ok || !('manifest' in body)) {
         throw new Error('message' in body && body.message ? body.message : 'import failed');
       }
-      setDraft(manifestToDraft(body.manifest));
+      const nextDraft = manifestToDraft(body.manifest);
+      if (STABLE_CURRENCIES.includes(nextDraft.pricing.currency as StableCurrency)) {
+        setCurrency(nextDraft.pricing.currency as StableCurrency);
+      }
+      setDraft(nextDraft);
       setStage('review');
     } catch (err) {
       setError((err as Error).message);
@@ -116,35 +178,107 @@ export default function CreatorListPage() {
     }
   }
 
-  async function submit() {
-    setError(null);
+  async function submitListing() {
     if (!selectedAgentMint) {
       setError('Select the agent identity that owns this capability before submitting.');
-      return;
+      throw new Error('missing_agent');
     }
+    const res = await privyAuthedFetch(getAccessToken, '/api/listings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slug: draft.slug,
+        name: draft.name,
+        description: draft.description,
+        category: draft.category,
+        seller_agent_mint: selectedAgentMint,
+        endpoint: draft.endpoint,
+        pricing: draft.pricing,
+        tools: draft.tools,
+        ...(draft.docsUrl ? { docs_url: draft.docsUrl } : {}),
+        ...(draft.freeTier > 0 ? { free_tier: draft.freeTier } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { message?: string };
+      throw new Error(body.message ?? `HTTP ${res.status}`);
+    }
+  }
+
+  async function submit() {
+    setError(null);
     setBusy(true);
     try {
-      const res = await privyAuthedFetch(getAccessToken, '/api/listings', {
+      await submitListing();
+      setStage('submitted');
+    } catch (err) {
+      if ((err as Error).message !== 'missing_agent') setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createPaymentLink() {
+    setError(null);
+    setPaymentLink(null);
+    if (!selectedApiKeyId) {
+      setError('Select or create an active marketplace API key before creating a payment link.');
+      return;
+    }
+    if (!selectedAgentMint) {
+      setError(
+        'Select the agent identity that owns this capability before creating a payment link.',
+      );
+      return;
+    }
+    const amount = draft.pricing.amount?.trim() || '0.001';
+    setBusy(true);
+    try {
+      const response = {
+        status: 200,
+        mimeType: 'application/json',
+        body: {
+          ok: true,
+          capability: draft.slug,
+          message: 'Payment accepted. Call the protected endpoint to receive live data.',
+          upstream_url: draft.endpoint,
+        },
+      };
+      const res = await privyAuthedFetch(getAccessToken, '/api/payment-links', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          slug: draft.slug,
-          name: draft.name,
+          key_id: selectedApiKeyId,
+          id: draft.slug,
+          label: draft.name,
           description: draft.description,
-          category: draft.category,
-          seller_agent_mint: selectedAgentMint,
-          endpoint: draft.endpoint,
-          pricing: draft.pricing,
-          tools: draft.tools,
-          ...(draft.docsUrl ? { docs_url: draft.docsUrl } : {}),
-          ...(draft.freeTier > 0 ? { free_tier: draft.freeTier } : {}),
+          owner_agent: selectedAgentMint,
+          method: 'POST',
+          protocol: rail,
+          price: `${amount} ${currency}`,
+          currency,
+          accepts_currencies: STABLE_CURRENCIES.filter((c) => c !== currency),
+          response,
+          metadata: {
+            category: draft.category,
+            upstream_url: draft.endpoint,
+            marketplace_discovery_description: discoveryDescription(draft),
+          },
         }),
       });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new Error(body.message ?? `HTTP ${res.status}`);
+      const body = (await res.json().catch(() => null)) as
+        | PaymentLinkResult
+        | { message?: string; error?: string }
+        | null;
+      if (!res.ok || !body || !('share_url' in body)) {
+        const err = body && !('share_url' in body) ? body : null;
+        throw new Error(err?.message ?? err?.error ?? `HTTP ${res.status}`);
       }
-      setStage('submitted');
+      setPaymentLink(body);
+      if (includeMarketplace) {
+        await submitListing();
+        setStage('submitted');
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -182,6 +316,9 @@ export default function CreatorListPage() {
           }}
           onExample={() => {
             setError(null);
+            if (STABLE_CURRENCIES.includes(EXAMPLE_DRAFT.pricing.currency as StableCurrency)) {
+              setCurrency(EXAMPLE_DRAFT.pricing.currency as StableCurrency);
+            }
             setDraft(EXAMPLE_DRAFT);
             setStage('review');
           }}
@@ -197,6 +334,20 @@ export default function CreatorListPage() {
           agentsError={agentsError}
           selectedAgentMint={selectedAgentMint}
           setSelectedAgentMint={setSelectedAgentMint}
+          apiKeys={apiKeys}
+          apiKeysBusy={apiKeysBusy}
+          apiKeysError={apiKeysError}
+          selectedApiKeyId={selectedApiKeyId}
+          setSelectedApiKeyId={setSelectedApiKeyId}
+          onCreateKey={() => setCreateKeyOpen(true)}
+          rail={rail}
+          setRail={setRail}
+          currency={currency}
+          setCurrency={setCurrency}
+          includeMarketplace={includeMarketplace}
+          setIncludeMarketplace={setIncludeMarketplace}
+          paymentLink={paymentLink}
+          onCreatePaymentLink={createPaymentLink}
           error={error}
           onBack={() => setStage('choose')}
           onSubmit={submit}
@@ -204,7 +355,31 @@ export default function CreatorListPage() {
         />
       ) : null}
 
-      {stage === 'submitted' ? <SubmittedStage draft={draft} router={router} /> : null}
+      {stage === 'submitted' ? (
+        <SubmittedStage
+          draft={draft}
+          router={router}
+          selectedAgentMint={selectedAgentMint}
+          rail={rail}
+          currency={currency}
+          paymentLink={paymentLink}
+        />
+      ) : null}
+      <CreateKeyDialog
+        open={createKeyOpen}
+        onClose={() => setCreateKeyOpen(false)}
+        defaultScopes={['marketplace']}
+        onCreated={(key) => {
+          setCreatedKey(key);
+          setSelectedApiKeyId(key.id);
+          setCreateKeyOpen(false);
+          void loadApiKeys();
+        }}
+      />
+      <ShowKeyOnceModal
+        plaintext={createdKey?.plaintext ?? null}
+        onClose={() => setCreatedKey(null)}
+      />
     </div>
   );
 }
@@ -371,6 +546,20 @@ function ReviewStage({
   agentsError,
   selectedAgentMint,
   setSelectedAgentMint,
+  apiKeys,
+  apiKeysBusy,
+  apiKeysError,
+  selectedApiKeyId,
+  setSelectedApiKeyId,
+  onCreateKey,
+  rail,
+  setRail,
+  currency,
+  setCurrency,
+  includeMarketplace,
+  setIncludeMarketplace,
+  paymentLink,
+  onCreatePaymentLink,
   error,
   onBack,
   onSubmit,
@@ -383,6 +572,20 @@ function ReviewStage({
   agentsError: string | null;
   selectedAgentMint: string;
   setSelectedAgentMint: React.Dispatch<React.SetStateAction<string>>;
+  apiKeys: CreatorApiKey[];
+  apiKeysBusy: boolean;
+  apiKeysError: string | null;
+  selectedApiKeyId: string;
+  setSelectedApiKeyId: React.Dispatch<React.SetStateAction<string>>;
+  onCreateKey: () => void;
+  rail: PaymentRail;
+  setRail: React.Dispatch<React.SetStateAction<PaymentRail>>;
+  currency: StableCurrency;
+  setCurrency: React.Dispatch<React.SetStateAction<StableCurrency>>;
+  includeMarketplace: boolean;
+  setIncludeMarketplace: React.Dispatch<React.SetStateAction<boolean>>;
+  paymentLink: PaymentLinkResult | null;
+  onCreatePaymentLink: () => void;
   error: string | null;
   onBack: () => void;
   onSubmit: () => void;
@@ -390,6 +593,8 @@ function ReviewStage({
 }) {
   const selectedAgent = agents.find((agent) => agent.mint === selectedAgentMint) ?? null;
   const canSubmit = isDraftComplete(draft) && selectedAgent != null && !agentsBusy;
+  const canCreatePaymentLink =
+    canSubmit && draft.pricing.type !== 'free' && selectedApiKeyId.length > 0 && !apiKeysBusy;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -496,16 +701,24 @@ function ReviewStage({
                     />
                   </Field>
                   <Field label="Currency">
-                    <Input
-                      value={draft.pricing.currency ?? 'USDC'}
-                      onChange={(e) =>
+                    <select
+                      value={currency}
+                      onChange={(e) => {
+                        const next = e.target.value as StableCurrency;
+                        setCurrency(next);
                         setDraft((d) => ({
                           ...d,
-                          pricing: { ...d.pricing, currency: e.target.value },
-                        }))
-                      }
-                      placeholder="USDC"
-                    />
+                          pricing: { ...d.pricing, currency: next },
+                        }));
+                      }}
+                      className="min-h-10 w-full rounded-lg border border-border bg-bg px-3 py-2 font-mono text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand/40"
+                    >
+                      {STABLE_CURRENCIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
                   </Field>
                 </div>
               ) : null}
@@ -610,7 +823,7 @@ function ReviewStage({
               <Badge variant={draft.pricing.type === 'free' ? 'free' : 'paid'}>
                 {draft.pricing.type === 'free'
                   ? 'Free'
-                  : `${draft.pricing.amount ?? '?'} ${draft.pricing.currency ?? 'USDC'}/call`}
+                  : `${draft.pricing.amount ?? '?'} ${currency}/call`}
               </Badge>
             </div>
             <div className="font-semibold">{draft.name || 'Untitled capability'}</div>
@@ -634,7 +847,81 @@ function ReviewStage({
               )}
             </div>
           </div>
+          <div className="mt-4 rounded-xl border border-brand/25 bg-brand/5 p-4 space-y-3">
+            <div>
+              <div className="text-sm font-semibold text-brand-strong">Monetize endpoint</div>
+              <p className="mt-1 text-xs leading-5 text-fg-muted">
+                Create a hosted payment link for this capability, then optionally submit the same
+                details to marketplace discovery.
+              </p>
+            </div>
+            <Field label="Payment rail">
+              <select
+                value={rail}
+                onChange={(e) => setRail(e.target.value as PaymentRail)}
+                className="min-h-10 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand/40"
+              >
+                {PAYMENT_RAILS.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.label} — {r.description}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="API key">
+              <select
+                value={selectedApiKeyId}
+                onChange={(e) => setSelectedApiKeyId(e.target.value)}
+                disabled={apiKeysBusy || apiKeys.length === 0}
+                className="min-h-10 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand/40 disabled:opacity-50"
+              >
+                {apiKeysBusy ? <option value="">Loading API keys…</option> : null}
+                {!apiKeysBusy && apiKeys.length === 0 ? (
+                  <option value="">No API key found</option>
+                ) : null}
+                {apiKeys.map((key) => (
+                  <option key={key.id} value={key.id}>
+                    {key.name} · {key.network.replace('solana-', '')} · {key.prefix}…{key.last4}
+                  </option>
+                ))}
+              </select>
+              {apiKeysError ? <p className="text-xs text-danger">{apiKeysError}</p> : null}
+              {!apiKeysBusy && apiKeys.length === 0 ? (
+                <Button type="button" variant="outline" size="sm" onClick={onCreateKey}>
+                  Create marketplace API key
+                </Button>
+              ) : null}
+            </Field>
+            <label className="flex items-start gap-2 rounded-lg border border-border bg-bg/50 p-3 text-xs text-fg-muted">
+              <input
+                type="checkbox"
+                checked={includeMarketplace}
+                onChange={(e) => setIncludeMarketplace(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                Also submit to marketplace discovery so agents can find this capability in browse,
+                search, and reputation flows.
+              </span>
+            </label>
+            {paymentLink ? (
+              <div className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-3 text-xs">
+                <div className="font-semibold text-emerald-200">Payment link created</div>
+                <a
+                  href={paymentLink.share_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 block break-all font-mono text-brand hover:underline"
+                >
+                  {paymentLink.share_url}
+                </a>
+              </div>
+            ) : null}
+          </div>
           <div className="mt-4 flex flex-col gap-2">
+            <Button onClick={onCreatePaymentLink} disabled={busy || !canCreatePaymentLink}>
+              {busy ? 'Creating…' : 'Create payment link'}
+            </Button>
             <Button onClick={onSubmit} disabled={busy || !canSubmit}>
               {busy ? 'Submitting…' : 'Submit for approval'}
             </Button>
@@ -726,12 +1013,29 @@ function shortMint(mint: string): string {
   return `${mint.slice(0, 4)}…${mint.slice(-4)}`;
 }
 
+function discoveryDescription(draft: ListingDraft): string {
+  const toolNames = draft.tools
+    .map((tool) => tool.name.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(', ');
+  return `${draft.description.trim()}${toolNames ? ` Tools: ${toolNames}.` : ''}`.slice(0, 500);
+}
+
 function SubmittedStage({
   draft,
   router,
+  selectedAgentMint,
+  rail,
+  currency,
+  paymentLink,
 }: {
   draft: ListingDraft;
   router: ReturnType<typeof useRouter>;
+  selectedAgentMint: string;
+  rail: PaymentRail;
+  currency: StableCurrency;
+  paymentLink: PaymentLinkResult | null;
 }) {
   return (
     <div className="space-y-6">
@@ -741,11 +1045,32 @@ function SubmittedStage({
           <CardTitle className="text-2xl">Submitted for approval</CardTitle>
           <CardDescription className="max-w-xl mx-auto">
             <strong>{draft.name}</strong> is in our moderation queue. Approval typically takes under
-            24h. While you wait, drop the seller-kit snippet into your endpoint so it's x402-ready
-            by go-live.
+            24h. While you wait, drop the seller-kit snippet into your endpoint so it is payment
+            ready by go-live.
           </CardDescription>
         </CardHeader>
       </Card>
+      {paymentLink ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Payment link is ready</CardTitle>
+            <CardDescription>
+              Share this hosted paywall with buyer agents. The explorer will show receipts once
+              paid.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <a
+              href={paymentLink.share_url}
+              target="_blank"
+              rel="noreferrer"
+              className="block break-all rounded-lg border bg-bg px-3 py-2 font-mono text-sm text-brand hover:underline"
+            >
+              {paymentLink.share_url}
+            </a>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -757,7 +1082,7 @@ function SubmittedStage({
               Step 3 · Seller kit
             </Badge>
           </div>
-          <CardTitle className="mt-2">Drop in this snippet to accept x402 payments</CardTitle>
+          <CardTitle className="mt-2">Drop in this snippet to accept paid calls</CardTitle>
           <CardDescription>
             Pick the runtime that matches your stack. The middleware short-circuits unauthenticated
             calls with a 402 + payment instructions and only forwards to your handler once payment
@@ -770,7 +1095,10 @@ function SubmittedStage({
               slug: draft.slug,
               toolName: draft.tools[0]?.name ?? 'search',
               amount: draft.pricing.amount ?? '0.001',
-              currency: draft.pricing.currency ?? 'USDC',
+              currency,
+              sellerAgent: selectedAgentMint,
+              upstreamUrl: draft.endpoint,
+              rail,
             }}
           />
         </CardContent>

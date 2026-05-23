@@ -8,7 +8,6 @@ import Image from 'next/image';
 import {
   ArrowUpRight,
   BookOpen,
-  Code2,
   Compass,
   KeyRound,
   LayoutDashboard,
@@ -50,7 +49,6 @@ const PRIMARY: NavItem[] = [
   { href: '/creator', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/creator/tools', label: 'My capabilities', icon: PackagePlus },
   { href: '/creator/list', label: 'List capability', icon: Sparkles, badge: 'New' },
-  { href: '/creator/snippets', label: 'Seller kit', icon: Code2 },
 ];
 
 const SECONDARY: NavItem[] = [
@@ -326,7 +324,7 @@ function titleForPath(p: string): string {
   if (p === '/creator') return 'Dashboard';
   if (p.startsWith('/creator/tools')) return 'My capabilities';
   if (p.startsWith('/creator/list')) return 'List capability';
-  if (p.startsWith('/creator/snippets')) return 'Seller kit';
+  if (p.startsWith('/creator/snippets')) return 'List capability';
   if (p.startsWith('/creator/api-keys')) return 'API keys';
   if (p.startsWith('/creator/docs')) return 'How it works';
   if (p.startsWith('/creator/admin')) return 'Admin';

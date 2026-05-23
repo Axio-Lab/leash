@@ -71,8 +71,8 @@ export default function CreatorOverviewPage() {
               </Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/creator/snippets">
-                <Code2 className="size-4" /> Get the seller kit
+              <Link href="/creator/list">
+                <Code2 className="size-4" /> Create payment link
               </Link>
             </Button>
           </div>
@@ -101,9 +101,9 @@ export default function CreatorOverviewPage() {
         />
         <ActionCard
           icon={Code2}
-          title="Make any API x402-compliant"
-          body="Drop the seller-kit middleware into Hono / Express / FastAPI. Payment in front of your handler in minutes."
-          href="/creator/snippets"
+          title="Create a paid endpoint"
+          body="Choose x402 or MPP, select an API key, create a hosted payment link, and copy seller-kit code from one flow."
+          href="/creator/list"
         />
         <ActionCard
           icon={KeyRound}
