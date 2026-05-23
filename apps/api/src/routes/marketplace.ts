@@ -6,7 +6,7 @@
  *   GET /v1/marketplace/listings/{slug}    — listing detail + rating summary
  *
  * Admin-gated (Privy-bound via BFFs):
- *   POST   /v1/marketplace/listings              — create (status=pending)
+ *   POST   /v1/marketplace/listings              — create (status=approved)
  *   POST   /v1/marketplace/listings/from-url     — fetch+validate manifest
  *   PATCH  /v1/marketplace/listings/{id}/status  — approve/reject/disable
  *   POST   /v1/marketplace/listings/{id}/rating  — set rating
@@ -312,7 +312,7 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
       method: 'post',
       path: '/v1/marketplace/listings',
       tags: ['marketplace'],
-      summary: 'Create a listing (status=pending)',
+      summary: 'Create a listing (status=approved)',
       security: [{ AdminSecret: [] }],
       request: {
         body: {
@@ -373,6 +373,7 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
         tools: b.tools as ListingTool[],
         ...(b.docs_url ? { docsUrl: b.docs_url } : {}),
         ...(b.free_tier !== undefined ? { freeTier: b.free_tier } : {}),
+        status: 'approved',
       });
       await syncMarketplaceCapabilityCard(deps.db, listingCapabilityPayload(created));
       return c.json(await listingToWireWithIdentity(deps.db, created), 200);

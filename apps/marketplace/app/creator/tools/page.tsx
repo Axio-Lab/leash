@@ -53,7 +53,7 @@ export default function MyToolsPage() {
           </Badge>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">My capabilities</h1>
           <p className="text-fg-muted text-sm mt-1">
-            Capabilities you've listed on leash.market. Approval is manual today; expect ~24h.
+            Capabilities you've listed on leash.market. New discovery listings go live immediately.
           </p>
         </div>
         <Button asChild>

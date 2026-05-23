@@ -111,6 +111,7 @@ export async function createListing(
     tools: ListingTool[];
     docsUrl?: string;
     freeTier?: number;
+    status?: ListingStatus;
   },
 ): Promise<Listing> {
   const id = ulid();
@@ -119,8 +120,8 @@ export async function createListing(
     `INSERT INTO listings (
       id, slug, name, description, category,
       owner_privy_id, owner_wallet, seller_agent_mint, endpoint,
-      pricing, tools, docs_url, free_tier
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      pricing, tools, docs_url, free_tier, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       args.slug,
@@ -135,6 +136,7 @@ export async function createListing(
       JSON.stringify(args.tools),
       args.docsUrl ?? null,
       args.freeTier ?? 0,
+      args.status ?? 'approved',
     ],
   );
   const created = await getListingById(db, id);

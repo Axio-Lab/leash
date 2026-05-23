@@ -81,15 +81,7 @@ describe('demo flow smoke', () => {
       }),
     );
     expect(listingRes.status).toBe(200);
-    const listing = (await listingRes.json()) as { id: string };
-
-    await rig.app.fetch(
-      new Request(`http://test.local/v1/marketplace/listings/${listing.id}/status`, {
-        method: 'PATCH',
-        headers: admin(),
-        body: JSON.stringify({ status: 'approved' }),
-      }),
-    );
+    await listingRes.json();
 
     const taskRes = await rig.app.fetch(
       new Request('http://test.local/v1/platform/tasks', {

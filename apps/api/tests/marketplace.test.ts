@@ -79,23 +79,7 @@ describe('marketplace listings', () => {
     );
     expect(create.status).toBe(200);
     const created = (await create.json()) as { id: string; status: string };
-    expect(created.status).toBe('pending');
-
-    const browseEmpty = await rig.app.fetch(
-      new Request('http://test.local/v1/marketplace/listings'),
-    );
-    expect(browseEmpty.status).toBe(200);
-    const empty = (await browseEmpty.json()) as { items: unknown[] };
-    expect(empty.items).toHaveLength(0);
-
-    const approve = await rig.app.fetch(
-      new Request(`http://test.local/v1/marketplace/listings/${created.id}/status`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ status: 'approved' }),
-      }),
-    );
-    expect(approve.status).toBe(200);
+    expect(created.status).toBe('approved');
 
     const browse = await rig.app.fetch(new Request('http://test.local/v1/marketplace/listings'));
     expect(browse.status).toBe(200);
@@ -311,16 +295,9 @@ describe('marketplace listings', () => {
       capability_cards: Array<{ id: string; visibility: string }>;
     };
     expect(ownerBody.capability_cards).toMatchObject([
-      { id: `marketplace:${created.id}`, visibility: 'private' },
+      { id: `marketplace:${created.id}`, visibility: 'public' },
     ]);
 
-    await rig.app.fetch(
-      new Request(`http://test.local/v1/marketplace/listings/${created.id}/status`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ status: 'approved' }),
-      }),
-    );
     const publicProfile = await rig.app.fetch(
       new Request(`http://test.local/v1/identity/${SELLER_MINT}`),
     );

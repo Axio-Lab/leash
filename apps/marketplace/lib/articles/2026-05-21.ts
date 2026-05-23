@@ -1372,7 +1372,7 @@ const programmaticArticleSpecs: ProgrammaticArticleSpec[] = [
     mechanics:
       'Leash marketplace submissions include seller_agent_mint, enrich detail pages with seller identity summaries, and sync approved listings into capability cards.',
     checklist:
-      'Create or select your seller identity, submit the listing metadata, include endpoint and pricing, wait for approval, and verify the seller identity panel.',
+      'Create or select your seller identity, submit the listing metadata, include endpoint and pricing, then verify the seller identity panel after it appears in marketplace discovery.',
     codeBlocks: [
       codeBlock('Listing identity metadata', 'json', [
         '{',

@@ -5,7 +5,6 @@ import { ArrowRight, BookOpen, Code2, KeyRound, PackagePlus, Sparkles, Wallet } 
 import useSWR from 'swr';
 import { usePrivy } from '@privy-io/react-auth';
 
-import { McpSimulation } from '@/components/marketplace/mcp-simulation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,7 +28,6 @@ export default function CreatorOverviewPage() {
   const items = data?.items ?? [];
   const totals = {
     total: items.length,
-    pending: items.filter((l) => l.status === 'pending').length,
     live: items.filter((l) => l.status === 'approved').length,
     paid: items.filter((l) => l.pricing.type !== 'free').length,
   };
@@ -42,7 +40,6 @@ export default function CreatorOverviewPage() {
 
   return (
     <div className="space-y-10">
-      {/* Hero / animated simulator */}
       <section className="space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -77,8 +74,6 @@ export default function CreatorOverviewPage() {
             </Button>
           </div>
         </div>
-
-        <McpSimulation />
       </section>
 
       {/* Numbers */}
@@ -86,7 +81,7 @@ export default function CreatorOverviewPage() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Stat label="Listings" value={totals.total} loading={isLoading} />
           <Stat label="Live" value={totals.live} loading={isLoading} accent="emerald" />
-          <Stat label="Pending" value={totals.pending} loading={isLoading} accent="amber" />
+          <Stat label="Instant discovery" value={totals.live} loading={isLoading} accent="brand" />
           <Stat label="Paid capabilities" value={totals.paid} loading={isLoading} accent="brand" />
         </div>
       </section>
@@ -96,7 +91,7 @@ export default function CreatorOverviewPage() {
         <ActionCard
           icon={PackagePlus}
           title="List a capability"
-          body="Paste your manifest URL or hand-build one. We validate, you approve, agent identities discover."
+          body="Paste your manifest URL or hand-build one. Publish to discovery when you create the payment link."
           href="/creator/list"
         />
         <ActionCard
@@ -122,7 +117,8 @@ export default function CreatorOverviewPage() {
               <CardTitle>Earnings (preview)</CardTitle>
             </div>
             <CardDescription>
-              Per-call USDC settlement lands directly in your wallet. Charts arrive next batch.
+              Per-call stablecoin settlement lands directly in your wallet. Charts arrive next
+              batch.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -145,9 +141,9 @@ export default function CreatorOverviewPage() {
               Host <code className="font-mono text-fg">/.well-known/leash-mcp.json</code> on your
               endpoint. We'll fetch it, validate it, and prefill the listing.
             </Step>
-            <Step n={2} title="Set a price">
-              Free, per-call USDC, or variable. Free tier gives agent identities a chance to try
-              your capability risk-free.
+            <Step n={2} title="Create the payment link">
+              Choose x402 or MPP, select a stablecoin, and optionally publish the same capability to
+              marketplace discovery.
             </Step>
             <Step n={3} title="Wrap your handler">
               Paste the seller-kit snippet so x402 settles before your code runs. Receipts post

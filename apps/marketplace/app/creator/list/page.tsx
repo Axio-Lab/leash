@@ -65,15 +65,16 @@ type PaymentLinkResult = {
   protocol: PaymentRail;
 };
 
+const SELECT_CLASS =
+  'min-h-10 w-full min-w-0 max-w-full truncate rounded-lg border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand/40 disabled:opacity-50';
+
 /**
  * Three-stage flow:
  *   1. Choose how to start — paste a manifest URL, build by hand, or
  *      copy the example. The chosen path produces a `ListingDraft`.
- *   2. Review every field (name, slug, pricing, tools…). Submit posts
- *      to `/api/listings` (BFF) which forwards to apps/api with the
- *      creator's Privy id + wallet attached.
- *   3. Done — show the seller-kit snippet so they can wrap their own
- *      endpoint with x402 in minutes.
+ *   2. Review every field (name, slug, pricing, tools…), create a hosted
+ *      payment link, and optionally publish to marketplace discovery.
+ *   3. Done — show the seller-kit snippet so they can wrap their own endpoint.
  */
 export default function CreatorListPage() {
   const router = useRouter();
@@ -205,19 +206,6 @@ export default function CreatorListPage() {
     }
   }
 
-  async function submit() {
-    setError(null);
-    setBusy(true);
-    try {
-      await submitListing();
-      setStage('submitted');
-    } catch (err) {
-      if ((err as Error).message !== 'missing_agent') setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function createPaymentLink() {
     setError(null);
     setPaymentLink(null);
@@ -277,8 +265,8 @@ export default function CreatorListPage() {
       setPaymentLink(body);
       if (includeMarketplace) {
         await submitListing();
-        setStage('submitted');
       }
+      setStage('submitted');
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -298,7 +286,8 @@ export default function CreatorListPage() {
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Add an agent capability</h1>
         <p className="mt-1 max-w-2xl text-sm text-fg-muted">
           Anything an agent identity can call by HTTP — an MCP server, a paid REST API, or a
-          callable tool — can be listed here. Free or paid. Approval is manual today; expect ~24h.
+          callable tool — can be listed here. Create a payment link, then optionally publish it to
+          marketplace discovery so agents can find it immediately.
         </p>
       </header>
 
@@ -350,7 +339,6 @@ export default function CreatorListPage() {
           onCreatePaymentLink={createPaymentLink}
           error={error}
           onBack={() => setStage('choose')}
-          onSubmit={submit}
           busy={busy}
         />
       ) : null}
@@ -363,6 +351,7 @@ export default function CreatorListPage() {
           rail={rail}
           currency={currency}
           paymentLink={paymentLink}
+          marketplacePublished={includeMarketplace}
         />
       ) : null}
       <CreateKeyDialog
@@ -562,7 +551,6 @@ function ReviewStage({
   onCreatePaymentLink,
   error,
   onBack,
-  onSubmit,
   busy,
 }: {
   draft: ListingDraft;
@@ -588,7 +576,6 @@ function ReviewStage({
   onCreatePaymentLink: () => void;
   error: string | null;
   onBack: () => void;
-  onSubmit: () => void;
   busy: boolean;
 }) {
   const selectedAgent = agents.find((agent) => agent.mint === selectedAgentMint) ?? null;
@@ -611,8 +598,8 @@ function ReviewStage({
           <CardHeader>
             <CardTitle>Listing fields</CardTitle>
             <CardDescription>
-              Review every field before submitting. Approval is manual today, but creators can fix
-              anything later from <strong>My capabilities</strong>.
+              Review every field before creating the payment link. If you publish to discovery, this
+              metadata appears in the marketplace immediately.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -711,7 +698,7 @@ function ReviewStage({
                           pricing: { ...d.pricing, currency: next },
                         }));
                       }}
-                      className="min-h-10 w-full rounded-lg border border-border bg-bg px-3 py-2 font-mono text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand/40"
+                      className={cn(SELECT_CLASS, 'font-mono')}
                     >
                       {STABLE_CURRENCIES.map((c) => (
                         <option key={c} value={c}>
@@ -859,7 +846,7 @@ function ReviewStage({
               <select
                 value={rail}
                 onChange={(e) => setRail(e.target.value as PaymentRail)}
-                className="min-h-10 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand/40"
+                className={SELECT_CLASS}
               >
                 {PAYMENT_RAILS.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -873,7 +860,7 @@ function ReviewStage({
                 value={selectedApiKeyId}
                 onChange={(e) => setSelectedApiKeyId(e.target.value)}
                 disabled={apiKeysBusy || apiKeys.length === 0}
-                className="min-h-10 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand/40 disabled:opacity-50"
+                className={SELECT_CLASS}
               >
                 {apiKeysBusy ? <option value="">Loading API keys…</option> : null}
                 {!apiKeysBusy && apiKeys.length === 0 ? (
@@ -922,16 +909,13 @@ function ReviewStage({
             <Button onClick={onCreatePaymentLink} disabled={busy || !canCreatePaymentLink}>
               {busy ? 'Creating…' : 'Create payment link'}
             </Button>
-            <Button onClick={onSubmit} disabled={busy || !canSubmit}>
-              {busy ? 'Submitting…' : 'Submit for approval'}
-            </Button>
             <Button variant="ghost" onClick={onBack}>
               <ArrowLeft className="size-4" /> Back to source
             </Button>
             {!isDraftComplete(draft) ? (
               <p className="text-[11px] text-fg-subtle">
                 Add a name, slug (≥2 chars), description, endpoint, and at least one callable tool
-                to enable submit.
+                to enable payment-link creation.
               </p>
             ) : null}
             {isDraftComplete(draft) && !selectedAgent ? (
@@ -978,7 +962,7 @@ function SellerIdentitySelector({
           value={selectedAgentMint}
           onChange={(event) => setSelectedAgentMint(event.target.value)}
           disabled={busy || agents.length === 0}
-          className="min-h-10 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand/40 disabled:opacity-50"
+          className={SELECT_CLASS}
         >
           {busy ? <option value="">Loading identities…</option> : null}
           {!busy && agents.length === 0 ? (
@@ -1029,6 +1013,7 @@ function SubmittedStage({
   rail,
   currency,
   paymentLink,
+  marketplacePublished,
 }: {
   draft: ListingDraft;
   router: ReturnType<typeof useRouter>;
@@ -1036,17 +1021,25 @@ function SubmittedStage({
   rail: PaymentRail;
   currency: StableCurrency;
   paymentLink: PaymentLinkResult | null;
+  marketplacePublished: boolean;
 }) {
   return (
     <div className="space-y-6">
       <Card className="bg-aurora">
         <CardHeader className="space-y-2 text-center">
           <CheckCircle2 className="mx-auto size-7 text-emerald-300" />
-          <CardTitle className="text-2xl">Submitted for approval</CardTitle>
+          <CardTitle className="text-2xl">
+            {paymentLink ? 'Payment link created' : 'Capability created'}
+          </CardTitle>
           <CardDescription className="max-w-xl mx-auto">
-            <strong>{draft.name}</strong> is in our moderation queue. Approval typically takes under
-            24h. While you wait, drop the seller-kit snippet into your endpoint so it is payment
-            ready by go-live.
+            <strong>{draft.name}</strong>{' '}
+            {marketplacePublished
+              ? 'is live in marketplace discovery and ready for paid agent calls.'
+              : paymentLink
+                ? 'is ready for paid agent calls.'
+                : 'has been published to marketplace discovery.'}{' '}
+            Drop the seller-kit snippet into your endpoint when you need live data behind the
+            paywall.
           </CardDescription>
         </CardHeader>
       </Card>
