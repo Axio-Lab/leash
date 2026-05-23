@@ -25,23 +25,25 @@ export default function SnippetsPage() {
   const [payTo, setPayTo] = React.useState('<your-wallet-address>');
 
   return (
-    <div className="space-y-6">
-      <header>
+    <div className="min-w-0 space-y-6">
+      <header className="min-w-0">
         <Badge
           variant="outline"
           className="border-brand/40 font-mono uppercase tracking-widest text-brand-strong"
         >
           <Code2 className="size-3 mr-1.5" /> Seller kit
         </Badge>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">Make any API x402-compliant</h1>
+        <h1 className="mt-2 text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
+          Make any API x402-compliant
+        </h1>
         <p className="mt-1 max-w-2xl text-sm text-fg-muted">
           The seller kit gates your route with a verified Solana stablecoin payment before your
           handler runs. Drop in the snippet that matches your stack, set a price, and you're done.
         </p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-        <Card className="lg:sticky lg:top-20 self-start">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <Card className="self-start lg:sticky lg:top-20">
           <CardHeader>
             <CardTitle>Configure</CardTitle>
             <CardDescription>The values are interpolated into every snippet.</CardDescription>
@@ -53,7 +55,7 @@ export default function SnippetsPage() {
             <Field label="Tool name">
               <Input value={toolName} onChange={(e) => setToolName(e.target.value)} />
             </Field>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Amount">
                 <Input
                   value={amount}
@@ -67,14 +69,14 @@ export default function SnippetsPage() {
             </div>
             <div>
               <Label>Network</Label>
-              <div className="mt-1 flex gap-2">
+              <div className="mt-1 grid grid-cols-2 gap-2">
                 {(['solana-devnet', 'solana-mainnet'] as const).map((n) => (
                   <button
                     key={n}
                     type="button"
                     onClick={() => setNetwork(n)}
                     className={cn(
-                      'rounded-md border px-3 py-1.5 text-xs uppercase tracking-wide transition-colors',
+                      'min-h-10 rounded-md border px-3 py-1.5 text-xs uppercase tracking-wide transition-colors',
                       network === n
                         ? 'border-brand bg-brand/15 text-brand-strong'
                         : 'border-border text-fg-muted hover:border-border-strong',
@@ -95,7 +97,7 @@ export default function SnippetsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0 overflow-hidden">
           <CardHeader>
             <CardTitle>Snippet</CardTitle>
             <CardDescription>
@@ -103,7 +105,7 @@ export default function SnippetsPage() {
               buyer (incl. our agent runtime).
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="min-w-0">
             <SnippetBlock params={{ slug, toolName, amount, currency, network, payTo }} />
           </CardContent>
         </Card>
