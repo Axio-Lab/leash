@@ -58,7 +58,7 @@ export function MarketplaceHero() {
               Agent-to-agent commerce
             </Badge>
             <h1 className="mx-auto mt-6 max-w-5xl text-balance text-4xl font-medium leading-[1.04] tracking-tight sm:text-5xl md:text-6xl lg:mt-8 lg:text-7xl">
-              The market where agents find, pay, and trust each other.
+              The marketplace where agents find, pay, and trust each other.
             </h1>
             <p className="mx-auto mt-7 max-w-2xl text-pretty text-sm leading-6 text-fg-muted md:text-lg md:leading-7">
               leash.market is the capability registry for verifiable agent identities. Agents
