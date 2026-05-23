@@ -2,17 +2,7 @@
 
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  AlertTriangle,
-  ArrowLeft,
-  ArrowRight,
-  CheckCircle2,
-  FileJson,
-  Link2,
-  ShieldCheck,
-  Sparkles,
-  Wand2,
-} from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Link2, Sparkles } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 
 import { Badge } from '@/components/ui/badge';
@@ -21,19 +11,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SafeSelect } from '@/components/ui/safe-select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/cn';
-import { NEXT_PUBLIC_AGENTS_URL } from '@/lib/env';
-import { EXAMPLE_DRAFT } from '@/lib/example-tool';
 import {
   EMPTY_DRAFT,
   isDraftComplete,
-  manifestToDraft,
   slugify,
   type ListingDraft,
   type ListingEndpoint,
   type ListingPricing,
-  type ManifestImport,
 } from '@/lib/listing-helper';
 import { privyAuthedFetch } from '@/lib/privy-fetch';
 import {
@@ -43,19 +28,24 @@ import {
   type StableCurrency,
 } from '@/lib/seller-kit';
 
-type Stage = 'choose' | 'review' | 'submitted';
-type ImportResp = { manifest: ManifestImport } | { error: string; message?: string };
-type OwnedAgent = {
-  mint: string;
-  name: string;
-  network: 'solana-devnet' | 'solana-mainnet';
-  owner_wallet: string;
+type Stage = 'review' | 'submitted';
+type PaymentLinkInspectResult = {
+  id: string;
+  label: string;
+  description: string | null;
+  owner_agent: string;
+  method: 'GET' | 'POST';
+  protocol: PaymentRail;
+  price: string;
+  currency: StableCurrency;
+  accepts_currencies: StableCurrency[];
+  metadata?: Record<string, unknown>;
 };
 
 /**
  * Discovery-only creator flow:
- *   1. Choose a manifest, blank draft, example, or prefilled monetized endpoint.
- *   2. Review provider metadata and one or more payable endpoints.
+ *   1. Build provider metadata by hand.
+ *   2. Paste one or more payable endpoints and read their payment metadata.
  *   3. Publish the listing directly to marketplace discovery.
  */
 export default function CreatorListPage() {
@@ -63,43 +53,12 @@ export default function CreatorListPage() {
   const searchParams = useSearchParams();
   const { getAccessToken } = usePrivy();
 
-  const [stage, setStage] = React.useState<Stage>('choose');
-  const [draft, setDraft] = React.useState<ListingDraft>(EMPTY_DRAFT);
+  const [stage, setStage] = React.useState<Stage>('review');
+  const [draft, setDraft] = React.useState<ListingDraft>(() => blankDraft());
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
-  const [agents, setAgents] = React.useState<OwnedAgent[]>([]);
-  const [agentsBusy, setAgentsBusy] = React.useState(true);
-  const [agentsError, setAgentsError] = React.useState<string | null>(null);
   const [selectedAgentMint, setSelectedAgentMint] = React.useState('');
   const appliedPrefill = React.useRef(false);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    async function loadAgents() {
-      setAgentsBusy(true);
-      setAgentsError(null);
-      try {
-        const res = await privyAuthedFetch(getAccessToken, '/api/agents');
-        const body = (await res.json().catch(() => null)) as {
-          items?: OwnedAgent[];
-          message?: string;
-        } | null;
-        if (!res.ok) throw new Error(body?.message ?? `HTTP ${res.status}`);
-        const items = body?.items ?? [];
-        if (cancelled) return;
-        setAgents(items);
-        setSelectedAgentMint((current) => current || items[0]?.mint || '');
-      } catch (err) {
-        if (!cancelled) setAgentsError((err as Error).message);
-      } finally {
-        if (!cancelled) setAgentsBusy(false);
-      }
-    }
-    void loadAgents();
-    return () => {
-      cancelled = true;
-    };
-  }, [getAccessToken]);
 
   React.useEffect(() => {
     if (appliedPrefill.current) return;
@@ -109,6 +68,8 @@ export default function CreatorListPage() {
     const endpointDescription = searchParams.get('endpoint_description') ?? 'Payable endpoint';
     const providerUrl = searchParams.get('provider_url') ?? originFromUrl(endpointUrl);
     const pricing = pricingFromParams(searchParams);
+    const ownerAgent = searchParams.get('endpoint_owner_agent') ?? '';
+    if (ownerAgent) setSelectedAgentMint(ownerAgent);
     setDraft({
       slug: slugify(endpointDescription) || 'payable-endpoint',
       name: titleFromDescription(endpointDescription),
@@ -131,34 +92,13 @@ export default function CreatorListPage() {
     setStage('review');
   }, [searchParams]);
 
-  async function importFromUrl(url: string) {
-    setError(null);
-    setBusy(true);
-    try {
-      const res = await privyAuthedFetch(getAccessToken, '/api/listings/from-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      });
-      const body = (await res.json()) as ImportResp;
-      if (!res.ok || !('manifest' in body)) {
-        throw new Error('message' in body && body.message ? body.message : 'import failed');
-      }
-      setDraft(manifestToDraft(body.manifest));
-      setStage('review');
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function publishListing() {
     setError(null);
     if (!selectedAgentMint) {
-      setError('Select the agent identity that owns this capability before publishing.');
+      setError('Paste a Leash payable endpoint first so we can read its owner identity.');
       return;
     }
+    const discoveryPricing = draft.endpoints[0]?.pricing ?? draft.pricing;
     setBusy(true);
     try {
       const res = await privyAuthedFetch(getAccessToken, '/api/listings', {
@@ -171,7 +111,7 @@ export default function CreatorListPage() {
           category: draft.category,
           seller_agent_mint: selectedAgentMint,
           endpoint: draft.endpoint,
-          pricing: draft.pricing,
+          pricing: discoveryPricing,
           endpoints: draft.endpoints,
           ...(draft.docsUrl ? { docs_url: draft.docsUrl } : {}),
           ...(draft.freeTier > 0 ? { free_tier: draft.freeTier } : {}),
@@ -207,39 +147,16 @@ export default function CreatorListPage() {
         </p>
       </header>
 
-      <StageBar stage={stage} />
-
-      {stage === 'choose' ? (
-        <ChooseStage
-          onUrl={importFromUrl}
-          busy={busy}
-          error={error}
-          onManual={() => {
-            setError(null);
-            setDraft(EMPTY_DRAFT);
-            setStage('review');
-          }}
-          onExample={() => {
-            setError(null);
-            setDraft(EXAMPLE_DRAFT);
-            setStage('review');
-          }}
-        />
-      ) : null}
-
       {stage === 'review' ? (
         <ReviewStage
           draft={draft}
           setDraft={setDraft}
-          agents={agents}
-          agentsBusy={agentsBusy}
-          agentsError={agentsError}
           selectedAgentMint={selectedAgentMint}
           setSelectedAgentMint={setSelectedAgentMint}
           error={error}
-          onBack={() => setStage('choose')}
           onPublish={publishListing}
           busy={busy}
+          getAccessToken={getAccessToken}
         />
       ) : null}
 
@@ -248,183 +165,29 @@ export default function CreatorListPage() {
   );
 }
 
-function StageBar({ stage }: { stage: Stage }) {
-  const steps: Array<{ id: Stage; label: string }> = [
-    { id: 'choose', label: 'Source' },
-    { id: 'review', label: 'Discovery details' },
-    { id: 'submitted', label: 'Published' },
-  ];
-  const currentIdx = steps.findIndex((s) => s.id === stage);
-  return (
-    <ol className="flex flex-wrap items-center gap-2 text-xs">
-      {steps.map((s, i) => (
-        <React.Fragment key={s.id}>
-          <li
-            className={cn(
-              'flex min-h-8 items-center gap-2 rounded-full border px-3 py-1',
-              i <= currentIdx ? 'border-brand bg-brand/15 text-fg' : 'border-border text-fg-subtle',
-            )}
-          >
-            <span
-              className={cn(
-                'grid size-4 place-items-center rounded-full text-[10px] font-medium',
-                i <= currentIdx ? 'bg-brand text-white' : 'bg-bg-elev-2 text-fg-subtle',
-              )}
-            >
-              {i < currentIdx ? <CheckCircle2 className="size-2.5" aria-hidden="true" /> : i + 1}
-            </span>
-            {s.label}
-          </li>
-          {i < steps.length - 1 ? <span className="hidden h-px w-4 bg-border sm:block" /> : null}
-        </React.Fragment>
-      ))}
-    </ol>
-  );
-}
-
-function ChooseStage({
-  onUrl,
-  busy,
-  error,
-  onManual,
-  onExample,
-}: {
-  onUrl: (url: string) => void;
-  busy: boolean;
-  error: string | null;
-  onManual: () => void;
-  onExample: () => void;
-}) {
-  const [url, setUrl] = React.useState('');
-  return (
-    <Tabs defaultValue="url">
-      <TabsList>
-        <TabsTrigger value="url">From manifest URL</TabsTrigger>
-        <TabsTrigger value="manual">Build by hand</TabsTrigger>
-        <TabsTrigger value="example">Try an example</TabsTrigger>
-      </TabsList>
-
-      <TabsContent value="url">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <FileJson className="size-4 text-brand-strong" aria-hidden="true" />
-              <CardTitle>Paste your manifest URL</CardTitle>
-            </div>
-            <CardDescription>
-              Import provider metadata and payable endpoints from{' '}
-              <code className="font-mono text-fg">/.well-known/leash-mcp.json</code>.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form
-              className="space-y-3"
-              onSubmit={(e) => {
-                e.preventDefault();
-                onUrl(url);
-              }}
-            >
-              <Field id="manifest-url" label="Manifest URL">
-                <Input
-                  id="manifest-url"
-                  type="url"
-                  inputMode="url"
-                  required
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://search.example.com/.well-known/leash-mcp.json"
-                  className="font-mono"
-                />
-              </Field>
-              {error ? <InlineError message={error} /> : null}
-              <div className="flex justify-end pt-1">
-                <Button type="submit" disabled={busy || url.length === 0}>
-                  {busy ? 'Importing...' : 'Import manifest'}
-                  {!busy ? <ArrowRight className="size-4" aria-hidden="true" /> : null}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      <TabsContent value="manual">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Wand2 className="size-4 text-brand-strong" aria-hidden="true" />
-              <CardTitle>Build a listing by hand</CardTitle>
-            </div>
-            <CardDescription>
-              Use this when your payable endpoint already exists and you want it in discovery.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={onManual} variant="default">
-              Start blank <ArrowRight className="size-4" aria-hidden="true" />
-            </Button>
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      <TabsContent value="example">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Sparkles className="size-4 text-brand-strong" aria-hidden="true" />
-              <CardTitle>Pre-fill with the Premium Web Search demo</CardTitle>
-            </div>
-            <CardDescription>
-              Shows the provider URL plus two payable endpoints with different methods and prices.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <pre className="overflow-x-auto rounded-md border bg-bg p-4 font-mono text-[11px] leading-relaxed text-fg-muted scrollbar-thin">
-              {`{
-  "name": "Premium Web Search",
-  "endpoint": "https://search.demo.leash.market",
-  "endpoints": [
-    { "method": "POST", "url": "https://api.leash.market/x/premium-search" }
-  ]
-}`}
-            </pre>
-            <Button onClick={onExample}>
-              Use the example <ArrowRight className="size-4" aria-hidden="true" />
-            </Button>
-          </CardContent>
-        </Card>
-      </TabsContent>
-    </Tabs>
-  );
-}
-
 function ReviewStage({
   draft,
   setDraft,
-  agents,
-  agentsBusy,
-  agentsError,
   selectedAgentMint,
   setSelectedAgentMint,
   error,
-  onBack,
   onPublish,
   busy,
+  getAccessToken,
 }: {
   draft: ListingDraft;
   setDraft: React.Dispatch<React.SetStateAction<ListingDraft>>;
-  agents: OwnedAgent[];
-  agentsBusy: boolean;
-  agentsError: string | null;
   selectedAgentMint: string;
   setSelectedAgentMint: React.Dispatch<React.SetStateAction<string>>;
   error: string | null;
-  onBack: () => void;
   onPublish: () => void;
   busy: boolean;
+  getAccessToken: () => Promise<string | null>;
 }) {
-  const selectedAgent = agents.find((agent) => agent.mint === selectedAgentMint) ?? null;
-  const canPublish = isDraftComplete(draft) && selectedAgent != null && !agentsBusy;
+  const [inspectErrors, setInspectErrors] = React.useState<Record<number, string>>({});
+  const [inspecting, setInspecting] = React.useState<Record<number, boolean>>({});
+  const inspectedUrls = React.useRef<Record<number, string>>({});
+  const canPublish = isDraftComplete(draft) && selectedAgentMint.length > 0;
 
   const updateEndpoint = React.useCallback(
     (index: number, patch: Partial<ListingEndpoint>) => {
@@ -471,17 +234,87 @@ function ReviewStage({
     [setDraft],
   );
 
+  const applyEndpointMetadata = React.useCallback(
+    (index: number, url: string, link: PaymentLinkInspectResult) => {
+      const pricing = pricingFromPaymentLink(link);
+      const providerUrl = providerUrlFromPaymentLink(link) || originFromUrl(url);
+      setSelectedAgentMint((current) => current || link.owner_agent);
+      setDraft((d) => ({
+        ...d,
+        endpoint: d.endpoint || providerUrl || d.endpoint,
+        pricing: index === 0 ? pricing : d.pricing,
+        endpoints: d.endpoints.map((endpoint, j) =>
+          j === index
+            ? {
+                ...endpoint,
+                method: link.method,
+                description:
+                  endpoint.description && endpoint.description !== 'Payable endpoint'
+                    ? endpoint.description
+                    : link.description || link.label,
+                pricing,
+                protocol: [link.protocol],
+                supported_usd: stableCurrenciesFromPaymentLink(link),
+              }
+            : endpoint,
+        ),
+      }));
+    },
+    [setDraft, setSelectedAgentMint],
+  );
+
+  const inspectEndpoint = React.useCallback(
+    async (index: number, url: string) => {
+      if (!url.trim()) return;
+      inspectedUrls.current[index] = url;
+      setInspecting((current) => ({ ...current, [index]: true }));
+      setInspectErrors((current) => {
+        const next = { ...current };
+        delete next[index];
+        return next;
+      });
+      try {
+        const res = await privyAuthedFetch(getAccessToken, '/api/payment-links/inspect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        const body = (await res.json().catch(() => null)) as
+          | PaymentLinkInspectResult
+          | { message?: string; error?: string }
+          | null;
+        if (!res.ok || !body || !('owner_agent' in body)) {
+          const err = body && !('owner_agent' in body) ? body : null;
+          throw new Error(err?.message ?? err?.error ?? `HTTP ${res.status}`);
+        }
+        applyEndpointMetadata(index, url, body as PaymentLinkInspectResult);
+      } catch (err) {
+        setInspectErrors((current) => ({ ...current, [index]: (err as Error).message }));
+      } finally {
+        setInspecting((current) => ({ ...current, [index]: false }));
+      }
+    },
+    [applyEndpointMetadata, getAccessToken],
+  );
+
+  React.useEffect(() => {
+    const timers = draft.endpoints.map((endpoint, index) => {
+      const url = endpoint.url.trim();
+      if (!url || inspectedUrls.current[index] === url || !/^https?:\/\//i.test(url)) return null;
+      return window.setTimeout(() => {
+        void inspectEndpoint(index, url);
+      }, 700);
+    });
+    return () => {
+      timers.forEach((timer) => {
+        if (timer) window.clearTimeout(timer);
+      });
+    };
+  }, [draft.endpoints, inspectEndpoint]);
+
   return (
     <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <div className="min-w-0 space-y-6">
-        <SellerIdentitySelector
-          agents={agents}
-          busy={agentsBusy}
-          error={agentsError}
-          selectedAgentMint={selectedAgentMint}
-          setSelectedAgentMint={setSelectedAgentMint}
-        />
-
         <Card>
           <CardHeader>
             <CardTitle>Provider details</CardTitle>
@@ -547,82 +380,15 @@ function ReviewStage({
               </Field>
             </div>
 
-            <div className="rounded-lg border bg-bg/40 p-4 space-y-3">
-              <Label>Discovery price summary</Label>
-              <p className="text-xs text-fg-muted">
-                Used for browse filters and cards. Individual endpoint rows below carry the exact
-                payable price and rail.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {(['free', 'per_call', 'variable'] as const).map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => setDraft((d) => ({ ...d, pricing: { ...d.pricing, type } }))}
-                    className={cn(
-                      'min-h-10 rounded-md border px-3 py-2 text-xs uppercase tracking-wide transition-colors focus-visible:ring-2 focus-visible:ring-brand/60',
-                      draft.pricing.type === type
-                        ? 'border-brand bg-brand/15 text-brand-strong'
-                        : 'border-border text-fg-muted hover:border-border-strong',
-                    )}
-                  >
-                    {type.replace('_', ' ')}
-                  </button>
-                ))}
-              </div>
-              {draft.pricing.type !== 'free' ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field id="listing-amount" label="Amount">
-                    <Input
-                      id="listing-amount"
-                      value={draft.pricing.amount ?? ''}
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          pricing: { ...d.pricing, amount: e.target.value },
-                        }))
-                      }
-                      inputMode="decimal"
-                      placeholder="0.001"
-                      className="font-mono"
-                    />
-                  </Field>
-                  <Field id="listing-currency" label="Currency">
-                    <SafeSelect
-                      id="listing-currency"
-                      value={(draft.pricing.currency as StableCurrency | undefined) ?? 'USDC'}
-                      onChange={(value) =>
-                        setDraft((d) => ({
-                          ...d,
-                          pricing: { ...d.pricing, currency: value as StableCurrency },
-                        }))
-                      }
-                      options={STABLE_CURRENCIES.map((c) => ({ value: c, label: c }))}
-                      buttonClassName="font-mono"
-                    />
-                  </Field>
-                </div>
-              ) : null}
-              <Field id="free-tier" label="Free tier calls / day">
-                <Input
-                  id="free-tier"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={draft.freeTier}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, freeTier: Number(e.target.value || 0) }))
-                  }
-                  placeholder="0"
-                />
-              </Field>
-            </div>
-
             <PayableEndpointEditor
               draft={draft}
               setDraft={setDraft}
               updateEndpoint={updateEndpoint}
               updateEndpointPricing={updateEndpointPricing}
               toggleEndpointCurrency={toggleEndpointCurrency}
+              inspectEndpoint={inspectEndpoint}
+              inspectErrors={inspectErrors}
+              inspecting={inspecting}
             />
 
             {error ? <InlineError message={error} /> : null}
@@ -641,8 +407,12 @@ function ReviewStage({
               <Badge variant="outline" className="font-mono text-[10px] uppercase">
                 {draft.category || 'misc'}
               </Badge>
-              <Badge variant={draft.pricing.type === 'free' ? 'free' : 'paid'}>
-                {formatPricing(draft.pricing)}
+              <Badge
+                variant={
+                  (draft.endpoints[0]?.pricing ?? draft.pricing).type === 'free' ? 'free' : 'paid'
+                }
+              >
+                {formatPricing(draft.endpoints[0]?.pricing ?? draft.pricing)}
               </Badge>
             </div>
             <div className="font-semibold">{draft.name || 'Untitled capability'}</div>
@@ -651,19 +421,6 @@ function ReviewStage({
             </p>
             <div className="text-[11px] text-fg-subtle">
               {draft.endpoints.length} payable endpoint{draft.endpoints.length === 1 ? '' : 's'}
-            </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
-              {selectedAgent ? (
-                <>
-                  <ShieldCheck className="size-3 text-emerald-300" aria-hidden="true" />
-                  {selectedAgent.name} - {selectedAgent.network.replace('solana-', '')}
-                </>
-              ) : (
-                <>
-                  <AlertTriangle className="size-3 text-amber-300" aria-hidden="true" />
-                  Select seller identity
-                </>
-              )}
             </div>
           </div>
 
@@ -684,17 +441,14 @@ function ReviewStage({
             <Button onClick={onPublish} disabled={busy || !canPublish}>
               {busy ? 'Publishing...' : 'Publish to discovery'}
             </Button>
-            <Button variant="ghost" onClick={onBack}>
-              <ArrowLeft className="size-4" aria-hidden="true" /> Back to source
-            </Button>
             {!isDraftComplete(draft) ? (
               <p className="text-[11px] text-fg-subtle">
                 Add name, slug, description, provider URL, and at least one payable endpoint.
               </p>
             ) : null}
-            {isDraftComplete(draft) && !selectedAgent ? (
+            {isDraftComplete(draft) && !selectedAgentMint ? (
               <p className="text-[11px] text-fg-subtle">
-                Pick an owned agent identity so this capability can carry seller proof.
+                Paste a Leash payable endpoint so the listing can use its owner identity.
               </p>
             ) : null}
           </div>
@@ -710,12 +464,18 @@ function PayableEndpointEditor({
   updateEndpoint,
   updateEndpointPricing,
   toggleEndpointCurrency,
+  inspectEndpoint,
+  inspectErrors,
+  inspecting,
 }: {
   draft: ListingDraft;
   setDraft: React.Dispatch<React.SetStateAction<ListingDraft>>;
   updateEndpoint: (index: number, patch: Partial<ListingEndpoint>) => void;
   updateEndpointPricing: (index: number, patch: Partial<ListingPricing>) => void;
   toggleEndpointCurrency: (index: number, currency: StableCurrency) => void;
+  inspectEndpoint: (index: number, url: string) => Promise<void>;
+  inspectErrors: Record<number, string>;
+  inspecting: Record<number, boolean>;
 }) {
   return (
     <div>
@@ -750,6 +510,7 @@ function PayableEndpointEditor({
                   <Input
                     value={endpoint.url}
                     onChange={(e) => updateEndpoint(index, { url: e.target.value })}
+                    onBlur={() => void inspectEndpoint(index, endpoint.url)}
                     type="url"
                     inputMode="url"
                     className="min-w-0 font-mono text-[11px]"
@@ -776,6 +537,10 @@ function PayableEndpointEditor({
                   placeholder="What this payable endpoint does"
                   aria-label={`Endpoint ${index + 1} description`}
                 />
+                {inspecting[index] ? (
+                  <p className="text-[11px] text-fg-muted">Reading payment metadata...</p>
+                ) : null}
+                {inspectErrors[index] ? <InlineError message={inspectErrors[index]} /> : null}
                 <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <SafeSelect
                     aria-label={`Endpoint ${index + 1} pricing type`}
@@ -861,7 +626,7 @@ function PayableEndpointEditor({
               {
                 method: 'POST',
                 url: '',
-                description: '',
+                description: 'Payable endpoint',
                 pricing: d.pricing,
                 protocol: ['x402'],
                 supported_usd: ['USDC'],
@@ -873,66 +638,6 @@ function PayableEndpointEditor({
         + Add payable endpoint
       </Button>
     </div>
-  );
-}
-
-function SellerIdentitySelector({
-  agents,
-  busy,
-  error,
-  selectedAgentMint,
-  setSelectedAgentMint,
-}: {
-  agents: OwnedAgent[];
-  busy: boolean;
-  error: string | null;
-  selectedAgentMint: string;
-  setSelectedAgentMint: React.Dispatch<React.SetStateAction<string>>;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="size-4 text-brand-strong" aria-hidden="true" />
-          <CardTitle>Seller identity</CardTitle>
-        </div>
-        <CardDescription>
-          New native listings are anchored to an agent identity for trust checks and reputation.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <Field id="seller-agent" label="Agent identity">
-          <SafeSelect
-            id="seller-agent"
-            value={selectedAgentMint}
-            onChange={setSelectedAgentMint}
-            disabled={busy || agents.length === 0}
-            placeholder={busy ? 'Loading identities...' : 'No agent identities found'}
-            options={agents.map((agent) => ({
-              value: agent.mint,
-              label: `${compactLabel(agent.name)} - ${agent.network.replace('solana-', '')} - ${shortMint(
-                agent.mint,
-              )}`,
-              description: agent.mint,
-            }))}
-          />
-        </Field>
-        {error ? (
-          <InlineError message={error} />
-        ) : agents.length === 0 && !busy ? (
-          <p className="text-xs text-fg-muted">
-            Create an agent identity first, then return here to list the capability.{' '}
-            <a className="text-brand hover:underline" href={`${NEXT_PUBLIC_AGENTS_URL}/profile`}>
-              Open agents
-            </a>
-          </p>
-        ) : (
-          <p className="text-xs text-fg-muted">
-            This identity is shown on marketplace cards and verification decisions.
-          </p>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -986,14 +691,6 @@ function InlineError({ message }: { message: string }) {
   );
 }
 
-function shortMint(mint: string): string {
-  return `${mint.slice(0, 4)}...${mint.slice(-4)}`;
-}
-
-function compactLabel(value: string): string {
-  return value.length > 28 ? `${value.slice(0, 25)}...` : value;
-}
-
 function formatPricing(pricing: ListingPricing): string {
   if (pricing.type === 'free') return 'Free';
   if (pricing.type === 'variable') return 'Variable';
@@ -1001,6 +698,22 @@ function formatPricing(pricing: ListingPricing): string {
 }
 
 type SearchParamReader = { get(name: string): string | null };
+
+function blankDraft(): ListingDraft {
+  return {
+    ...EMPTY_DRAFT,
+    endpoints: [
+      {
+        method: 'POST',
+        url: '',
+        description: 'Payable endpoint',
+        pricing: EMPTY_DRAFT.pricing,
+        protocol: ['x402'],
+        supported_usd: ['USDC'],
+      },
+    ],
+  };
+}
 
 function pricingFromParams(params: SearchParamReader): ListingPricing {
   const rawType = params.get('endpoint_pricing_type');
@@ -1015,6 +728,39 @@ function pricingFromParams(params: SearchParamReader): ListingPricing {
     ...(params.get('endpoint_amount') ? { amount: params.get('endpoint_amount')! } : {}),
     currency,
   };
+}
+
+function pricingFromPaymentLink(link: PaymentLinkInspectResult): ListingPricing {
+  const rawType = link.metadata?.pricing_type;
+  const type: ListingPricing['type'] =
+    rawType === 'free' || rawType === 'variable' || rawType === 'per_call'
+      ? rawType
+      : amountFromPrice(link.price) === '0'
+        ? 'free'
+        : 'per_call';
+  if (type === 'free') return { type };
+  return {
+    type,
+    amount: amountFromPrice(link.price),
+    currency: link.currency,
+  };
+}
+
+function stableCurrenciesFromPaymentLink(link: PaymentLinkInspectResult): StableCurrency[] {
+  return Array.from(new Set([link.currency, ...link.accepts_currencies])).filter(
+    (currency): currency is StableCurrency =>
+      (STABLE_CURRENCIES as readonly string[]).includes(currency),
+  );
+}
+
+function providerUrlFromPaymentLink(link: PaymentLinkInspectResult): string {
+  const providerUrl = link.metadata?.provider_url;
+  return typeof providerUrl === 'string' ? providerUrl : '';
+}
+
+function amountFromPrice(price: string): string {
+  const match = price.trim().match(/[0-9]+(?:\.[0-9]+)?/);
+  return match?.[0] ?? '0';
 }
 
 function supportedFromParams(params: SearchParamReader): StableCurrency[] {

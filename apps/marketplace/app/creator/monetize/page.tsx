@@ -54,6 +54,7 @@ type PaymentLinkResult = {
   id: string;
   share_url: string;
   protocol: PaymentRail;
+  owner_agent?: string;
   method?: 'GET' | 'POST';
   price?: string;
   currency?: StableCurrency;
@@ -63,6 +64,7 @@ type PricingType = 'free' | 'per_call' | 'variable';
 
 type CreatedEndpointDraft = {
   upstreamUrl: string;
+  method: 'GET' | 'POST';
   pricingType: PricingType;
   amount: string;
   currency: StableCurrency;
@@ -74,6 +76,7 @@ export default function CreatorMonetizePage() {
   const router = useRouter();
   const { getAccessToken } = usePrivy();
   const [upstreamUrl, setUpstreamUrl] = React.useState('');
+  const [method, setMethod] = React.useState<'GET' | 'POST'>('POST');
   const [pricingType, setPricingType] = React.useState<PricingType>('per_call');
   const [amount, setAmount] = React.useState('0.001');
   const [currency, setCurrency] = React.useState<StableCurrency>('USDC');
@@ -176,6 +179,7 @@ export default function CreatorMonetizePage() {
       const generatedLabel = labelFromUrl(upstreamUrl);
       const createdDraft: CreatedEndpointDraft = {
         upstreamUrl,
+        method,
         pricingType,
         amount: amount.trim(),
         currency,
@@ -200,6 +204,7 @@ export default function CreatorMonetizePage() {
           label: generatedLabel,
           description: undefined,
           owner_agent: selectedAgentMint,
+          method,
           protocol: rail,
           price: `${quotedAmount} ${currency}`,
           currency,
@@ -238,8 +243,9 @@ export default function CreatorMonetizePage() {
       provider_url:
         originFromUrl(createdEndpointDraft.upstreamUrl) || createdEndpointDraft.upstreamUrl,
       endpoint_url: paymentLink.share_url,
-      endpoint_method: paymentLink.method ?? 'GET',
+      endpoint_method: paymentLink.method ?? createdEndpointDraft.method,
       endpoint_description: generatedLabel,
+      endpoint_owner_agent: paymentLink.owner_agent ?? selectedAgentMint,
       endpoint_pricing_type: createdEndpointDraft.pricingType,
       endpoint_currency: createdEndpointDraft.currency,
       endpoint_protocol: createdEndpointDraft.rail,
@@ -278,7 +284,7 @@ export default function CreatorMonetizePage() {
                 Provide the current URL for the endpoint you want to monetize.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="grid gap-4 md:grid-cols-[minmax(0,1fr)_140px]">
               <Field id="upstream-url" label="Existing endpoint URL">
                 <Input
                   id="upstream-url"
@@ -289,6 +295,18 @@ export default function CreatorMonetizePage() {
                   placeholder="https://api.example.com/v1/search"
                   className="font-mono text-xs"
                   required
+                />
+              </Field>
+              <Field id="endpoint-method" label="Request type">
+                <SafeSelect
+                  id="endpoint-method"
+                  value={method}
+                  onChange={(value) => setMethod(value as 'GET' | 'POST')}
+                  options={[
+                    { value: 'POST', label: 'POST' },
+                    { value: 'GET', label: 'GET' },
+                  ]}
+                  buttonClassName="font-mono"
                 />
               </Field>
             </CardContent>
@@ -518,6 +536,9 @@ export default function CreatorMonetizePage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={pricingType === 'free' ? 'free' : 'paid'}>
                     {pricingType === 'free' ? 'Free' : `${amount || '?'} ${currency}`}
+                  </Badge>
+                  <Badge variant="outline" className="font-mono">
+                    {method}
                   </Badge>
                   <Badge variant="outline" className="font-mono">
                     {rail.toUpperCase()}
