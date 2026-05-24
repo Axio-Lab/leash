@@ -122,12 +122,12 @@ const result = await buyer.fetch('https://quotes.example.com/quote');
 ## 4. Monetise an existing API in one call (HTTP, no-code)
 
 ```bash
-# Create a hosted x402 paywall at /x/{id}
+# Create a hosted x402 paywall at /x/{id} that forwards to an existing API
 curl -sS https://api.leash.market/v1/payment-links \
   -H "Authorization: Bearer $LEASH_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "label":"SOL/USD quote",
+    "label":"JSONPlaceholder posts",
     "owner_agent":"<sellerAgentAsset>",
     "method":"GET",
     "price":"$0.001",
@@ -135,13 +135,32 @@ curl -sS https://api.leash.market/v1/payment-links \
     "response":{
       "status":200,
       "mimeType":"application/json",
-      "body":{ "pair":"SOL/USD", "price":142.71 }
+      "body":{
+        "ok":true,
+        "message":"Payment accepted. Call the protected endpoint to receive live data."
+      }
+    },
+    "metadata":{
+      "upstream_url":"https://jsonplaceholder.typicode.com/posts",
+      "provider_url":"https://jsonplaceholder.typicode.com",
+      "pricing_type":"fixed"
     }
   }'
 # → { id, url: "https://api.leash.market/x/<id>?network=solana-devnet", accepts:[...] }
 ```
 
-For a SaaS endpoint you already host, set `response.proxy: { url: 'https://your-api/quote' }` instead of `body` — Leash forwards the call after settlement.
+Runtime behavior: the unpaid call returns `402`; the buyer-kit paid retry settles on Solana, Leash forwards to `metadata.upstream_url`, and the buyer receives the live upstream response. Without `metadata.upstream_url`, Leash returns the configured `response.body` template.
+
+The same flow from CLI:
+
+```bash
+leash sell create-link \
+  --label "JSONPlaceholder posts" \
+  --amount 0.001 \
+  --currency USDC \
+  --method GET \
+  --upstream-url https://jsonplaceholder.typicode.com/posts
+```
 
 ## 5. Mount real x402 on your own Hono app (SDK)
 

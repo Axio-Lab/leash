@@ -616,7 +616,7 @@ const seoSpecs: ProgrammaticArticleSpec[] = [
     useCase:
       'A team may already run an internal agent API that creates reports or actions. Leash lets them sell access without making the internal system public.',
     mechanics:
-      'Use hosted payment links for simple responses or seller-kit for dynamic forwarding to your private API after settlement.',
+      'Use hosted payment links to forward paid calls to a stored upstream URL after settlement, or use seller-kit when you want to run the payment middleware inside your own service.',
     checklist:
       'Choose the public shape, create a paid wrapper, avoid leaking internal URLs in responses, and list only the hosted payable endpoint.',
     faqs: [

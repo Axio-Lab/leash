@@ -5,7 +5,8 @@ description: Hosted x402 or MPP payment links at /x/{id} for identity-linked pai
 
 A **payment link** is a small JSON document describing one paid HTTP
 endpoint: a method, a path, a price, an accepted stablecoin set, and
-the response template to return on success. Optional **`protocol`**
+either a response template or a stored upstream URL to forward to after payment.
+Optional **`protocol`**
 selects the paywall rail: **`x402`** (default) or **`mpp`**. Once you POST it to the
 API, it shows up at a public URL anyone can pay:
 
@@ -20,7 +21,9 @@ See [MPP on Solana (Leash)](/standards/mpp-on-solana).
 
 The link runs as a real gated HTTP resource. Buyers (or any agent driving
 [`@leashmarket/buyer-kit`](/sdk/buyer-kit)) probe, pay, replay, and receive your
-configured response. Funds settle directly into the **owner agent's
+configured response. If `metadata.upstream_url` is set, the settled replay is
+forwarded to that existing API and the buyer receives the live upstream response.
+Funds settle directly into the **owner agent's
 Asset Signer PDA** (the same treasury balance you see on `GET /v1/agents/{mint}/treasury/balances`).
 
 You don't need to host anything. You don't need to run a server. The
@@ -138,6 +141,44 @@ Response:
 }
 ```
 
+### Monetize an existing endpoint
+
+To turn an API you already host into a payable endpoint, store it in
+`metadata.upstream_url`. The `response` remains a fallback/template for reads and
+for links without an upstream.
+
+```http
+POST /v1/payment-links
+Authorization: Bearer lsh_test_...
+Content-Type: application/json
+
+{
+  "label": "JSONPlaceholder posts",
+  "owner_agent": "BcN4ToBs8jE3dbYNhYqDJqGnKPjH3zRX8gsDUDH72JQp",
+  "method": "GET",
+  "price": "$0.001",
+  "currency": "USDC",
+  "protocol": "x402",
+  "response": {
+    "status": 200,
+    "mimeType": "application/json",
+    "body": {
+      "ok": true,
+      "message": "Payment accepted. Call the protected endpoint to receive live data."
+    }
+  },
+  "metadata": {
+    "upstream_url": "https://jsonplaceholder.typicode.com/posts",
+    "provider_url": "https://jsonplaceholder.typicode.com",
+    "pricing_type": "fixed"
+  }
+}
+```
+
+At runtime the first call to `/x/{id}` returns payment instructions. The paid
+retry settles, forwards to `metadata.upstream_url`, and returns the upstream JSON
+response to the buyer.
+
 The fields you set:
 
 | Field                | Required | Notes                                                                               |
@@ -153,7 +194,7 @@ The fields you set:
 | `response.body`      | Yes      | Object or string. Returned verbatim on settlement.                                  |
 | `webhook_url`        | No       | Optional per-link webhook. Fires on `payment_link.settled`.                         |
 | `wrap_receipt`       | No       | When `true`, the response body wraps your template alongside the receipt.           |
-| `metadata`           | No       | Free-form JSON returned on every read.                                              |
+| `metadata`           | No       | Free-form JSON returned on every read. Set `upstream_url` to forward paid calls.    |
 | `id`                 | No       | Pick your own slug (URL-safe). When omitted, the API mints a ULID.                  |
 
 Pricing uses the same `parsePrice` semantics as the SDK — see
@@ -254,9 +295,11 @@ To pay, the buyer:
 2. Signs it.
 3. Replays the request with the signed transaction in the `X-PAYMENT` header.
 
-The API hands the signed tx to the configured facilitator, the
-facilitator settles the SPL transfer on chain, and the API returns
-your configured `response.body` plus a `PAYMENT-RESPONSE` header
+The API hands the signed tx to the configured facilitator and the
+facilitator settles the SPL transfer on chain. If the link has
+`metadata.upstream_url`, the API forwards the request there and returns
+the upstream response. Otherwise it returns your configured
+`response.body`. In both cases it includes a `PAYMENT-RESPONSE` header
 containing the tx signature.
 
 ```bash

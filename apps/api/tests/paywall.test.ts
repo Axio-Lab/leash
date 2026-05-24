@@ -16,14 +16,14 @@
  *     payment_link.settled), and is idempotent across replays.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { authedFetch, createTestRig } from './helpers.js';
 import { execute } from '../src/storage/turso.js';
 import { listEvents } from '../src/storage/events.js';
 import { getPaymentLink } from '../src/storage/payment-links.js';
 import { getReceiptByHash } from '../src/storage/receipts.js';
-import { ingestPaywallReceipt } from '../src/routes/paywall.js';
+import { ingestPaywallReceipt, settledPaymentLinkResponse } from '../src/routes/paywall.js';
 import type { ReceiptV1 } from '@leashmarket/schemas';
 import { getCache } from '../src/storage/redis.js';
 
@@ -181,6 +181,78 @@ describe('GET /x/{id} MPP protocol', () => {
     expect(json.type).toBe('https://paymentauth.org/problems/payment-required');
     expect(json.challengeId.length).toBeGreaterThan(4);
     expect(json.request.feePayer).toBe('11111111111111111111111111111111');
+  });
+});
+
+describe('settled payment link response', () => {
+  it('returns the configured response template when no upstream_url is stored', async () => {
+    const rig = await createTestRig();
+    const created = await createLink(rig, defaultLinkBody({ id: 'template-fallback' }));
+    const link = await getPaymentLink(rig.db, 'solana-devnet', created.id);
+    expect(link).not.toBeNull();
+
+    const res = await settledPaymentLinkResponse(
+      link!,
+      new Request(`http://test.local/x/${created.id}?network=solana-devnet`),
+      vi.fn(),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    expect(await res.json()).toEqual({ hello: 'paid' });
+  });
+
+  it('forwards a settled request to metadata.upstream_url without payment headers', async () => {
+    const rig = await createTestRig();
+    const created = await createLink(
+      rig,
+      defaultLinkBody({
+        id: 'forwarded',
+        method: 'POST',
+        metadata: { upstream_url: 'https://seller.example/run?existing=1' },
+      }),
+    );
+    const link = await getPaymentLink(rig.db, 'solana-devnet', created.id);
+    expect(link).not.toBeNull();
+    const fetchImpl = vi.fn(async (_input: Parameters<typeof fetch>[0], _init?: RequestInit) => {
+      return new Response(JSON.stringify({ ok: true, forwarded: true }), {
+        status: 201,
+        headers: {
+          'content-type': 'application/json',
+          'content-encoding': 'gzip',
+          'x-upstream': 'yes',
+        },
+      });
+    });
+
+    const res = await settledPaymentLinkResponse(
+      link!,
+      new Request(`http://test.local/x/${created.id}?network=solana-devnet&job=abc`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: 'PaymentScheme abc',
+          'x-payment': 'secret-payment',
+          'x-custom': 'keep-me',
+        },
+        body: JSON.stringify({ prompt: 'hello' }),
+      }),
+      fetchImpl,
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.headers.get('x-upstream')).toBe('yes');
+    expect(res.headers.has('content-encoding')).toBe(false);
+    expect(await res.json()).toEqual({ ok: true, forwarded: true });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [input, init] = fetchImpl.mock.calls[0]!;
+    expect(String(input)).toBe('https://seller.example/run?existing=1&job=abc');
+    expect(init?.method).toBe('POST');
+    const headers = new Headers(init?.headers);
+    expect(headers.get('x-custom')).toBe('keep-me');
+    expect(headers.has('authorization')).toBe(false);
+    expect(headers.has('x-payment')).toBe(false);
+    expect(headers.has('host')).toBe(false);
   });
 });
 

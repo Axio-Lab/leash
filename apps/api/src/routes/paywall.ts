@@ -14,8 +14,9 @@
  *      for probes too — both the unpaid 402 and the paid retry hit
  *      this counter).
  *   3. Spin up a per-request `Hono` sub-app and register exactly one
- *      route at `link.method link.path` whose handler returns the
- *      configured response template (status / mimeType / body).
+ *      route at `link.method link.path` whose handler calls the stored
+ *      upstream URL after settlement, falling back to the configured
+ *      response template when no upstream is attached.
  *   4. Wrap that sub-app with `createSeller` (x402) or `createMppSeller`
  *      (MPP) so probes return the right 402 shape, then settle on the
  *      matching credential (`X-PAYMENT` vs `Authorization: PaymentScheme`).
@@ -237,9 +238,9 @@ function finalizeResponse(
 }
 
 /**
- * Build a single-route Hono app whose only handler returns the
- * configured response template, fronted by x402 (`createSeller`) or MPP
- * (`createMppSeller`) middleware.
+ * Build a single-route Hono app whose only handler returns the upstream
+ * response or configured response template, fronted by x402
+ * (`createSeller`) or MPP (`createMppSeller`) middleware.
  */
 function buildSellerSubApp(
   deps: PaywallRoutesDeps,
@@ -297,15 +298,125 @@ function buildSellerSubApp(
     });
   }
 
-  sub.on(link.method, link.path, () => {
-    const r = link.response;
-    const body = typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
-    return new Response(body, {
-      status: r.status,
-      headers: { 'content-type': r.mimeType },
-    });
-  });
+  sub.on(link.method, link.path, (c) => settledPaymentLinkResponse(link, c.req.raw));
   return sub;
+}
+
+export async function settledPaymentLinkResponse(
+  link: PaymentLinkRow,
+  req: Request,
+  fetchImpl: typeof globalThis.fetch = globalThis.fetch,
+): Promise<Response> {
+  const upstreamUrl = upstreamUrlFromMetadata(link.metadata);
+  if (!upstreamUrl) return templateResponse(link);
+
+  let target: URL;
+  try {
+    target = new URL(upstreamUrl);
+  } catch {
+    return upstreamError('invalid upstream_url configured on payment link', 502);
+  }
+
+  const incoming = new URL(req.url);
+  for (const [key, value] of incoming.searchParams) {
+    if (key === 'network') continue;
+    target.searchParams.append(key, value);
+  }
+
+  try {
+    const upstream = await fetchImpl(target, {
+      method: link.method,
+      headers: forwardedHeaders(req.headers),
+      body: methodCanHaveBody(link.method) ? req.body : undefined,
+      redirect: 'manual',
+      // Required by Node fetch when forwarding a ReadableStream body.
+      ...(methodCanHaveBody(link.method) ? { duplex: 'half' as const } : {}),
+    });
+    return sanitizeUpstreamResponse(upstream);
+  } catch (err) {
+    return upstreamError(err instanceof Error ? err.message : 'upstream request failed', 502);
+  }
+}
+
+function templateResponse(link: PaymentLinkRow): Response {
+  const r = link.response;
+  const body = typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
+  return new Response(body, {
+    status: r.status,
+    headers: { 'content-type': r.mimeType },
+  });
+}
+
+function upstreamUrlFromMetadata(metadata: Record<string, unknown>): string | null {
+  const value = metadata.upstream_url;
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+    return url.toString();
+  } catch {
+    return trimmed;
+  }
+}
+
+function methodCanHaveBody(method: string): boolean {
+  return method !== 'GET' && method !== 'HEAD';
+}
+
+const HOP_BY_HOP_HEADERS = new Set([
+  'connection',
+  'content-encoding',
+  'content-length',
+  'host',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+]);
+
+const PAYMENT_HEADERS = new Set([
+  'authorization',
+  'x-payment',
+  'x-leash-callback',
+  'payment-required',
+  'x-payment-response',
+  'payment-response',
+]);
+
+function forwardedHeaders(headers: Headers): Headers {
+  const next = new Headers();
+  headers.forEach((value, key) => {
+    const lower = key.toLowerCase();
+    if (HOP_BY_HOP_HEADERS.has(lower) || PAYMENT_HEADERS.has(lower)) return;
+    next.set(key, value);
+  });
+  return next;
+}
+
+function sanitizeUpstreamResponse(upstream: Response): Response {
+  const headers = new Headers();
+  upstream.headers.forEach((value, key) => {
+    const lower = key.toLowerCase();
+    if (HOP_BY_HOP_HEADERS.has(lower)) return;
+    headers.set(key, value);
+  });
+  return new Response(upstream.body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers,
+  });
+}
+
+function upstreamError(message: string, status: number): Response {
+  return new Response(JSON.stringify({ error: 'upstream_failed', message }), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
 }
 
 /**

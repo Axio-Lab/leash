@@ -28,7 +28,7 @@ on the same identity** — one mint, two roles.
 | -------------------------------------------------------- | ------------------------------------------------------------------------- |
 | Drive Leash from Python / Go / Rust / curl               | The HTTPS API at `api.leash.market` — see `REFERENCE.md`                  |
 | Ship a TS app with no remote dependency                  | The `@leashmarket/*` SDK packages — see `EXAMPLES.md`                     |
-| Charge per call on a SaaS endpoint you already host      | Hosted **payment links** (`POST /v1/payment-links`)                       |
+| Charge per call on a SaaS endpoint you already host      | Hosted **payment links** with `metadata.upstream_url`                     |
 | Mount real x402 middleware on your own Hono app          | `@leashmarket/seller-kit` `createSeller`                                  |
 | Script an agent that pays an x402 endpoint               | `@leashmarket/buyer-kit` `createBuyer`                                    |
 | Mint a brand-new agent (asset + AgentIdentity) in one tx | `@leashmarket/registry-utils` `createAgent`, or `POST /v1/agents/prepare` |
@@ -43,7 +43,7 @@ Leash ships three first-class surfaces for autonomous agents. They all
 delegate to the same `LeashHost` contract in `@leashmarket/mcp-core`, so the
 behavior is identical across them; only the wire protocol differs.
 
-### `@leashmarket/mcp` — 14-tool STDIO MCP server
+### `@leashmarket/mcp` — 17-tool STDIO MCP server
 
 Drop into Cursor, Claude Desktop, Cline, Continue, ChatGPT-MCP, or any
 host that speaks Model Context Protocol over STDIO. Settlement happens
@@ -55,7 +55,7 @@ the local executive keypair and returns the on-chain receipt.
 | `leash_register_agent`         | Two-step provisioning (generate / import executive → fund → mint + delegate + record).                                                                                                                                                                                                       |
 | `leash_get_identity`           | Self-introspection: agent mint, treasury PDA, executive pubkey, network.                                                                                                                                                                                                                     |
 | `leash_check_treasury_balance` | List SOL + SPL stable balances on the treasury PDA.                                                                                                                                                                                                                                          |
-| `leash_create_payment_link`    | Mint a hosted x402 paywall (`/v1/payment-links`).                                                                                                                                                                                                                                            |
+| `leash_create_payment_link`    | Mint a hosted x402/MPP paywall (`/v1/payment-links`). If `upstream_url` is provided, the paid call forwards to that existing endpoint after settlement.                                                                                                                                      |
 | `leash_pay_payment_link`       | Probe → policy-check → sign → settle → finalise receipt for an x402 URL.                                                                                                                                                                                                                     |
 | `leash_withdraw_treasury`      | Owner-driven SOL or stable withdrawal via `mpl-core::Execute`.                                                                                                                                                                                                                               |
 | `leash_set_spend_limit`        | Update the SPL `Approve` delegation (unlimited / amount / revoke).                                                                                                                                                                                                                           |
@@ -107,6 +107,7 @@ leash receipt <receipt_hash>
 leash history [--days N] [--direction outgoing|incoming|both] [--limit N]
 leash daily   [--days N]
 leash pay <link-url>
+leash sell create-link --label L --amount N [--method GET|POST] [--upstream-url URL] [--protocol x402|mpp]
 leash doctor
 ```
 
@@ -229,8 +230,13 @@ want.
 5. **Wire the role:**
    - Buyer → `createBuyer({ agent, signer, sourceTokenAccount, ... })`,
      then `await buyer.fetch(url)`.
-   - Seller → `createSeller(app, { umi, sellerAgent, routes, ... })` on
-     a Hono app, OR `POST /v1/payment-links` for the no-code path.
+
+- Seller → `createSeller(app, { umi, sellerAgent, routes, ... })` on
+  a Hono app, OR `POST /v1/payment-links` for the no-code path. To
+  monetize an API that already exists, set `metadata.upstream_url`;
+  after settlement Leash forwards the paid request there and returns
+  the live upstream response.
+
 6. **Verify on the explorer** — the agent page lists treasury balances,
    spend/earn receipts, and lifecycle events.
 

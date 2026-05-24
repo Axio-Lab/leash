@@ -31,6 +31,7 @@
     "test": "vitest run",
     "e2e:devnet": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/e2e-devnet.ts",
     "e2e:devnet:mpp": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/e2e-devnet.ts",
+    "e2e:upstream-paywall": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/e2e-upstream-paywall.ts",
     "withdraw": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/withdraw.ts",
     "fund": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/fund.ts",
     "facilitator:smoke": "node --env-file-if-exists=.env --env-file-if-exists=.env.e2e --import tsx ./scripts/facilitator-sdk-smoke.ts",

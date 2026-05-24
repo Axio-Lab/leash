@@ -8,8 +8,6 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['@privy-io/server-auth', '@libsql/client', 'ioredis'],
   async redirects() {
     return [
-      // Old /dev/* and /settings/api-keys URLs — keep inbound links alive while
-      // the surface is rebranded around creators.
       { source: '/dev', destination: '/creator', permanent: false },
       { source: '/dev/dashboard', destination: '/creator', permanent: false },
       { source: '/dev/list', destination: '/creator/list', permanent: false },

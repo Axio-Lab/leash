@@ -84,6 +84,10 @@ export const LEASH_AGENT_MODEL: string = resolveAgentModel(DEFAULT_AGENT_MODEL_T
 export const NEXT_PUBLIC_EXPLORER_URL: string =
   process.env.NEXT_PUBLIC_EXPLORER_URL?.replace(/\/+$/, '') ?? 'https://explorer.leash.market';
 
+/** Marketplace base URL (public). */
+export const NEXT_PUBLIC_MARKETPLACE_URL: string =
+  process.env.NEXT_PUBLIC_MARKETPLACE_URL?.replace(/\/+$/, '') ?? 'https://leash.market';
+
 /**
  * Server-only env. These fields are read inside route handlers; the
  * accessor throws to fail loudly in deployment when a secret is missing

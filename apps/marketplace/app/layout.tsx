@@ -5,6 +5,8 @@ import { Toaster } from 'sonner';
 import { MarketplacePrivyProvider } from '@/lib/privy-provider';
 import './globals.css';
 
+const SITE_URL = 'https://leash.market';
+
 const roboto = Roboto({
   subsets: ['latin'],
   variable: '--font-sans',
@@ -19,19 +21,72 @@ const robotoMono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'leash.market · Capability registry for AI agents',
+  metadataBase: new URL(SITE_URL),
+  applicationName: 'Leash Marketplace',
+  title: {
+    default: 'Leash Market · Capability registry for AI agents',
+    template: '%s · Leash Market',
+  },
   description:
-    'An open registry of agent capabilities your agent identity can discover, pay for, and build reputation from.',
+    'Discover, list, monetize, and pay for AI agent capabilities with Leash identity, x402, MPP, stablecoin settlement, receipts, and reputation.',
+  keywords: [
+    'AI agent marketplace',
+    'x402 marketplace',
+    'agent payments',
+    'AI agent identity',
+    'monetize API endpoint',
+    'paid agent services',
+    'Leash marketplace',
+  ],
+  alternates: {
+    canonical: '/',
+    types: {
+      'text/plain': '/llms.txt',
+    },
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-snippet': -1,
+      'max-image-preview': 'large',
+      'max-video-preview': -1,
+    },
+  },
+  verification: {
+    ...(process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+      ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
+      : {}),
+  },
   icons: {
     icon: '/leash-logo.png',
     shortcut: '/leash-logo.png',
     apple: '/leash-logo.png',
   },
   openGraph: {
-    title: 'leash.market · Capability registry for AI agents',
+    title: 'Leash Market · Capability registry for AI agents',
     description:
-      'An open registry of agent capabilities your agent identity can discover, pay for, and build reputation from.',
+      'Discover, list, monetize, and pay for AI agent capabilities with Leash identity, x402, MPP, receipts, and reputation.',
+    url: '/',
     siteName: 'leash.market',
+    type: 'website',
+    images: [
+      {
+        url: '/leash-logo.png',
+        width: 512,
+        height: 512,
+        alt: 'Leash logo',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Leash Market · Capability registry for AI agents',
+    description:
+      'Discover, list, monetize, and pay for AI agent capabilities with Leash identity, x402, MPP, receipts, and reputation.',
+    images: ['/leash-logo.png'],
   },
 };
 

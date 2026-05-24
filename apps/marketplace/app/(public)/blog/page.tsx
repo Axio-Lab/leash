@@ -78,7 +78,7 @@ export default async function BlogIndexPage({ searchParams }: BlogIndexPageProps
           </div>
         </div>
 
-        <form action="/blog" className="w-full max-w-sm lg:pt-8" role="search">
+        <form action="/blog" method="get" className="w-full max-w-sm lg:pt-8" role="search">
           <label htmlFor="blog-search" className="sr-only">
             Search blog articles
           </label>
@@ -92,6 +92,7 @@ export default async function BlogIndexPage({ searchParams }: BlogIndexPageProps
                 id="blog-search"
                 name="q"
                 type="search"
+                enterKeyHint="search"
                 defaultValue={query}
                 placeholder="Search articles"
                 className="pl-9"
