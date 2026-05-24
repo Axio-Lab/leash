@@ -891,7 +891,7 @@ const programmaticArticleSpecs: ProgrammaticArticleSpec[] = [
     title: 'How to monetize an API endpoint with Leash seller-kit',
     seoTitle: 'Monetize an API endpoint with x402, MPP, and Leash seller-kit',
     seoDescription:
-      'Turn an API route into a paid x402 or MPP endpoint using @leashmarket/seller-kit, hosted payment links, marketplace discovery, and explorer-ready receipts.',
+      'Turn an existing GET or POST API route into a paid x402 or MPP endpoint, then list the payable URL on Leash marketplace for agent discovery.',
     eyebrow: 'Endpoint monetization',
     category: 'Packages',
     audience: 'API builders selling capabilities to AI agents',
@@ -907,25 +907,26 @@ const programmaticArticleSpecs: ProgrammaticArticleSpec[] = [
     tags: ['Seller kit', 'API monetization', 'x402', 'MPP', 'Explorer'],
     takeaways: [
       'seller-kit needs your Leash agent address because payTo is derived from that agent identity.',
-      'The Monetize endpoint flow creates hosted x402 or MPP payable endpoints from an active marketplace API key.',
-      'The List capability flow publishes your provider URL plus one or more payable endpoints to discovery.',
+      'The Monetize endpoint flow starts from your existing URL and stores its GET or POST request type on the payment link.',
+      'The List capability flow reads method, owner identity, rail, price, currency, and accepted stablecoins from the pasted payable URL.',
       'Explorer visibility requires receipt ingestion or an API-aware transaction path, not only a raw on-chain transfer.',
     ],
     useCase:
-      'A useful API endpoint can become an agent-readable product when it advertises a price, accepts x402 or MPP payment, and ties every successful call to a Leash agent identity. First create a hosted payable endpoint in /creator/monetize; then publish the provider URL and payable endpoint in /creator/list so agents can discover what they can buy.',
+      'A useful API endpoint can become an agent-readable product when it advertises a price, accepts x402 or MPP payment, and ties every successful call to a Leash agent identity. First paste the existing URL into /creator/monetize and choose whether buyers should call it with GET or POST; then publish the hosted payable URL in /creator/list so agents can discover what they can buy.',
     mechanics:
       'seller-kit mounts payment middleware onto your Hono app. `createSeller` speaks x402; `createMppSeller` speaks MPP. Both receive your Leash agent address, derive the seller Asset Signer PDA as the on-chain destination, advertise accepted stablecoins through the facilitator, and only call your route handler after the buyer signs and settlement succeeds.',
     checklist:
-      'Create or reuse a Leash agent, select or create an active marketplace API key, choose x402 or MPP, pick USDC/USDT/USDG, create a hosted payable endpoint, list the provider plus payable endpoints in discovery when desired, wrap dynamic endpoints with seller-kit, and forward receipts to the Leash API or runner when you want explorer pages to update immediately.',
+      'Create or reuse a Leash agent, select or create an active marketplace API key, paste the existing endpoint URL, choose GET or POST, choose x402 or MPP, pick USDC/USDT/USDG, create the hosted payable endpoint, then paste that payable URL into /creator/list so Leash can import the request type, pricing, rail, accepted currencies, and owner identity.',
     codeBlocks: [
       codeBlock('Create a hosted payable endpoint from the creator flow', 'txt', [
         '1. Open /creator/monetize.',
-        '2. Pick your Leash agent address.',
-        '3. Choose x402 or MPP and USDC, USDT, or USDG.',
-        '4. Select an active marketplace API key, or create one when the selector says no key found.',
-        '5. Click Create payable endpoint.',
-        '6. Optional: click Add to marketplace discovery to prefill /creator/list.',
-        '7. In /creator/list, publish the provider URL and payable endpoint description.',
+        '2. Paste your existing endpoint URL.',
+        '3. Choose GET or POST as the request type buyers should use.',
+        '4. Choose x402 or MPP and USDC, USDT, or USDG pricing.',
+        '5. Select the seller identity and active marketplace API key.',
+        '6. Click Create payable endpoint.',
+        '7. Optional: click Add to marketplace discovery, or paste the hosted URL into /creator/list later.',
+        '8. In /creator/list, Leash reads the payable endpoint metadata and uses the endpoint owner identity for trust checks.',
       ]),
       codeBlock('Seller-kit route', 'ts', [
         "import { Hono } from 'hono';",
@@ -1019,6 +1020,7 @@ const programmaticArticleSpecs: ProgrammaticArticleSpec[] = [
     docsLinks: [
       docs('/sdk/seller-kit', 'seller-kit docs'),
       docs('/guides/create-an-endpoint', 'Create an endpoint'),
+      docs('/guides/list-agent-capability', 'List an agent capability'),
       docs('/api/payment-links', 'Payment links API'),
     ],
     relatedArticles: [

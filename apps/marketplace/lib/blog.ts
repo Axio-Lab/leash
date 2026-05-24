@@ -1,4 +1,8 @@
-import { articlesGenerated20260521, type BlogArticle } from '@/lib/articles';
+import {
+  articlesGenerated20260521,
+  articlesGenerated20260523,
+  type BlogArticle,
+} from '@/lib/articles';
 
 export type {
   BlogArticle,
@@ -8,7 +12,10 @@ export type {
   BlogFaq,
 } from '@/lib/articles';
 
-export const blogArticles: BlogArticle[] = [...articlesGenerated20260521];
+export const blogArticles: BlogArticle[] = [
+  ...articlesGenerated20260523,
+  ...articlesGenerated20260521,
+];
 
 export function getBlogArticle(slug: string): BlogArticle | undefined {
   return blogArticles.find((article) => article.slug === slug);

@@ -1,12 +1,7 @@
 /**
- * Listing draft model and helpers used by the "list a tool" flow on
- * `leash.market/dev/list`.
- *
- * The flow itself is deliberately deterministic in Phase 2: we don't run
- * a chat LLM yet. The user pastes a manifest URL, we ask `apps/api` to
- * fetch + validate it (`POST /v1/marketplace/listings/from-url`), then
- * the user reviews + tweaks before submission. Phase 3 polish can swap
- * the form for a real LLM helper without changing the wire shape.
+ * Listing draft model and helpers used by the creator "List capability" flow.
+ * The page is discovery-only: payable endpoints are created elsewhere, then
+ * pasted here so Leash can publish provider metadata and endpoint rows.
  */
 
 export type ListingPricing = {

@@ -7,7 +7,6 @@ import { usePrivy } from '@privy-io/react-auth';
 import Image from 'next/image';
 import {
   ArrowUpRight,
-  BookOpen,
   Compass,
   KeyRound,
   LayoutDashboard,
@@ -17,6 +16,7 @@ import {
   PackagePlus,
   Shield,
   Sparkles,
+  UserCog,
   X,
 } from 'lucide-react';
 
@@ -44,6 +44,7 @@ type NavItem = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
+  external?: boolean;
 };
 
 const PRIMARY: NavItem[] = [
@@ -54,8 +55,13 @@ const PRIMARY: NavItem[] = [
 ];
 
 const SECONDARY: NavItem[] = [
+  {
+    href: `${NEXT_PUBLIC_AGENTS_URL}/profile/agent`,
+    label: 'Manage agent',
+    icon: UserCog,
+    external: true,
+  },
   { href: '/creator/api-keys', label: 'API keys', icon: KeyRound },
-  { href: '/creator/docs', label: 'How it works', icon: BookOpen },
 ];
 
 export function CreatorShell({ children }: { children: React.ReactNode }) {
@@ -267,8 +273,9 @@ function NavGroup({
           const active = isActive(item.href);
           return (
             <li key={item.href}>
-              <Link
-                href={item.href}
+              <NavLink
+                item={item}
+                active={active}
                 className={cn(
                   'group flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors',
                   active
@@ -288,12 +295,38 @@ function NavGroup({
                     {item.badge}
                   </Badge>
                 ) : null}
-              </Link>
+                {item.external ? <ArrowUpRight className="size-3.5 text-fg-subtle" /> : null}
+              </NavLink>
             </li>
           );
         })}
       </ul>
     </div>
+  );
+}
+
+function NavLink({
+  item,
+  active,
+  className,
+  children,
+}: {
+  item: NavItem;
+  active: boolean;
+  className: string;
+  children: React.ReactNode;
+}) {
+  if (item.external) {
+    return (
+      <a href={item.href} target="_blank" rel="noreferrer" className={className}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <Link href={item.href} className={className} aria-current={active ? 'page' : undefined}>
+      {children}
+    </Link>
   );
 }
 
@@ -329,7 +362,6 @@ function titleForPath(p: string): string {
   if (p.startsWith('/creator/list')) return 'List capability';
   if (p.startsWith('/creator/snippets')) return 'List capability';
   if (p.startsWith('/creator/api-keys')) return 'API keys';
-  if (p.startsWith('/creator/docs')) return 'How it works';
   if (p.startsWith('/creator/admin')) return 'Admin';
   return 'Creator';
 }

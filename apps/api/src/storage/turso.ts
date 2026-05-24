@@ -526,10 +526,9 @@ const SCHEMA_SQL: readonly string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_automation_runs_idempotency ON automation_runs(automation_id, idempotency_key) WHERE idempotency_key IS NOT NULL`,
 
   // ─────────────────────────────────────────────────────────────────────
-  // Marketplace listings (v9) — third-party MCP servers published on
-  // leash.market. `pricing` and `tools` are JSON blobs validated at
-  // POST time. `health_status` is updated by the hourly health-check
-  // worker that pings each listing's `/.well-known/leash-mcp.json`.
+  // Marketplace listings (v9) — third-party providers published on
+  // leash.market. `pricing` and payable endpoint rows are JSON blobs
+  // validated at POST time. `health_status` is updated by probes.
   // FK to platform_users intentionally omitted — listings can be
   // backfilled by ops scripts or seed data before the user has logged
   // into the BFF (which is what creates the platform_users row).

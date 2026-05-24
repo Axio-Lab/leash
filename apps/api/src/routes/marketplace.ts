@@ -7,7 +7,6 @@
  *
  * Admin-gated (Privy-bound via BFFs):
  *   POST   /v1/marketplace/listings              — create (status=approved)
- *   POST   /v1/marketplace/listings/from-url     — fetch+validate manifest
  *   PATCH  /v1/marketplace/listings/{id}/status  — approve/reject/disable
  *   POST   /v1/marketplace/listings/{id}/rating  — set rating
  *   POST   /v1/marketplace/listings/{id}/reviews — add review
@@ -39,7 +38,6 @@ import { getPlatformAgent } from '../storage/platform-agents.js';
 import type { CacheClient } from '../storage/redis.js';
 import type { DbClient } from '../storage/turso.js';
 import { invalidRequest, notFound } from '../util/errors.js';
-import { fetchAndValidateManifest, validateManifest } from '../util/mcp-manifest.js';
 import {
   publicIdentitySummary,
   syncMarketplaceCapabilityCard,
@@ -213,7 +211,6 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
   const app = new OpenAPIHono();
 
   // Admin gate ONLY for mutating + reviewing endpoints; browse stays public.
-  app.use('/v1/marketplace/listings/from-url', adminAuth(deps.config.adminSecret));
   app.use('/v1/marketplace/listings', async (c, next) => {
     if (c.req.method === 'POST') {
       return adminAuth(deps.config.adminSecret)(c, next);
@@ -383,55 +380,6 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
       });
       await syncMarketplaceCapabilityCard(deps.db, listingCapabilityPayload(created));
       return c.json(await listingToWireWithIdentity(deps.db, created), 200);
-    },
-  );
-
-  app.openapi(
-    createRoute({
-      method: 'post',
-      path: '/v1/marketplace/listings/from-url',
-      tags: ['marketplace'],
-      summary: 'Fetch and validate a /.well-known/leash-mcp.json manifest',
-      security: [{ AdminSecret: [] }],
-      request: {
-        body: {
-          required: true,
-          content: {
-            'application/json': { schema: z.object({ url: z.string().url() }) },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'ok',
-          content: {
-            'application/json': {
-              schema: z.object({
-                manifest: z.object({
-                  name: z.string(),
-                  slug: z.string().nullable(),
-                  description: z.string(),
-                  category: z.string(),
-                  endpoint: z.string(),
-                  endpoints: z.array(ListingEndpointSchema),
-                  pricing: PricingSchema,
-                  docs_url: z.string().optional(),
-                  free_tier: z.number().int().optional(),
-                }),
-              }),
-            },
-          },
-        },
-        422: {
-          description: 'invalid',
-          content: { 'application/json': { schema: ApiErrorSchema } },
-        },
-      },
-    }),
-    async (c) => {
-      const { url } = c.req.valid('json');
-      const manifest = await fetchAndValidateManifest(url);
-      return c.json({ manifest }, 200);
     },
   );
 
@@ -632,7 +580,3 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
 
   return app;
 }
-
-// Re-export validateManifest so callers (e.g. seed scripts, future
-// background workers) can validate without going through HTTP.
-export { validateManifest };

@@ -85,12 +85,6 @@ export const leashMarketplace = {
     }>(`/v1/marketplace/listings/${encodeURIComponent(slug)}`),
   createListing: (body: unknown) =>
     go<unknown>('/v1/marketplace/listings', { method: 'POST', body: JSON.stringify(body) }, true),
-  fromUrl: (url: string) =>
-    go<{ manifest: unknown }>(
-      '/v1/marketplace/listings/from-url',
-      { method: 'POST', body: JSON.stringify({ url }) },
-      true,
-    ),
   listReviews: (id: string) => go<{ items: unknown[] }>(`/v1/marketplace/listings/${id}/reviews`),
   addReview: (id: string, body: unknown) =>
     go<unknown>(

@@ -8,7 +8,6 @@ import { CreatorShell } from '@/components/creator-shell';
  *   /creator/monetize           — create hosted x402/MPP payable endpoints
  *   /creator/list               — list provider + payable endpoints in discovery
  *   /creator/api-keys           — keys
- *   /creator/docs               — onboarding doc
  *   /creator/admin/queue        — moderation queue (admin allowlist)
  */
 export default function CreatorLayout({ children }: { children: React.ReactNode }) {

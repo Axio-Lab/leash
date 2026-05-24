@@ -7,7 +7,7 @@
  * upstream handler run as normal.
  *
  * The runtime list is intentionally short and production-facing: a Hono
- * seller, receipt forwarding, a manifest, and a buyer-side probe.
+ * seller, receipt forwarding, and a buyer-side probe.
  */
 
 export type SnippetParams = {
@@ -47,12 +47,11 @@ function merge(p: SnippetParams): Required<SnippetParams> {
   return { ...DEFAULTS, ...Object.fromEntries(Object.entries(p).filter(([, v]) => Boolean(v))) };
 }
 
-export type SnippetLanguage = 'hono' | 'receipts' | 'manifest' | 'curl';
+export type SnippetLanguage = 'hono' | 'receipts' | 'curl';
 
 export const LANGUAGES: Array<{ id: SnippetLanguage; label: string; sub: string }> = [
   { id: 'hono', label: 'Hono seller', sub: 'TS · @leashmarket/seller-kit' },
   { id: 'receipts', label: 'Receipts', sub: 'Explorer forwarding' },
-  { id: 'manifest', label: 'leash-mcp.json', sub: 'Manifest file' },
   { id: 'curl', label: 'curl', sub: 'Buyer-side test' },
 ];
 
@@ -63,8 +62,6 @@ export function snippet(language: SnippetLanguage, params: SnippetParams): strin
       return honoSnippet(p);
     case 'receipts':
       return receiptsSnippet(p);
-    case 'manifest':
-      return manifestSnippet(p);
     case 'curl':
       return curlSnippet(p);
   }
@@ -238,43 +235,6 @@ createSeller(app, {
     });
   },
 });`;
-}
-
-function manifestSnippet(p: Required<SnippetParams>): string {
-  return JSON.stringify(
-    {
-      name: capitalize(p.slug.replace(/-/g, ' ')),
-      slug: p.slug,
-      description: 'One-line description of what your capability does for agents.',
-      category: 'misc',
-      endpoint: `https://your-domain.com/mcp`,
-      seller_agent: p.sellerAgent,
-      protocol: p.rail,
-      pricing: {
-        type: p.amount === '0' ? 'free' : 'per_call',
-        amount: p.amount,
-        currency: p.currency,
-      },
-      endpoints: [
-        {
-          method: 'POST',
-          url: `https://your-domain.com/${p.slug}/${p.toolName}`,
-          description: 'What this payable endpoint does, in one sentence.',
-          pricing: {
-            type: p.amount === '0' ? 'free' : 'per_call',
-            amount: p.amount,
-            currency: p.currency,
-          },
-          protocol: [p.rail],
-          supported_usd: [p.currency],
-        },
-      ],
-      docs_url: 'https://your-domain.com/docs',
-      free_tier: 100,
-    },
-    null,
-    2,
-  );
 }
 
 function curlSnippet(p: Required<SnippetParams>): string {

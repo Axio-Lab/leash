@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import { createTestRig } from './helpers.js';
 import { createListing, setListingStatus } from '../src/storage/listings.js';
-import { validateManifest } from '../src/util/mcp-manifest.js';
 
 const ADMIN_SECRET = 'a'.repeat(48);
 const PRIVY_ID = 'did:privy:owner';
@@ -318,44 +317,5 @@ describe('marketplace listings', () => {
     expect(publicBody.capability_cards).toMatchObject([
       { id: `marketplace:${created.id}`, visibility: 'public', slug: baseListing.slug },
     ]);
-  });
-});
-
-describe('manifest validation', () => {
-  it('accepts a complete manifest', () => {
-    const m = validateManifest({
-      name: 'X',
-      slug: 'x',
-      description: 'd',
-      endpoint: 'https://x.example/mcp',
-      endpoints: [{ method: 'POST', url: 'https://x.example/mcp/t', description: 'd' }],
-      pricing: { type: 'free' },
-    });
-    expect(m.name).toBe('X');
-    expect(m.category).toBe('misc');
-  });
-
-  it('rejects bad pricing type', () => {
-    expect(() =>
-      validateManifest({
-        name: 'X',
-        description: 'd',
-        endpoint: 'https://x.example/mcp',
-        endpoints: [{ method: 'POST', url: 'https://x.example/mcp/t', description: 'd' }],
-        pricing: { type: 'gift' },
-      }),
-    ).toThrow();
-  });
-
-  it('rejects malformed endpoint entries', () => {
-    expect(() =>
-      validateManifest({
-        name: 'X',
-        description: 'd',
-        endpoint: 'https://x.example/mcp',
-        endpoints: [{ method: 'POST', description: 'missing url' }],
-        pricing: { type: 'free' },
-      }),
-    ).toThrow();
   });
 });

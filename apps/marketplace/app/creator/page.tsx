@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, BookOpen, Code2, KeyRound, PackagePlus, Sparkles, Wallet } from 'lucide-react';
+import { ArrowRight, Code2, KeyRound, PackagePlus, Sparkles, Wallet } from 'lucide-react';
 import useSWR from 'swr';
 import { usePrivy } from '@privy-io/react-auth';
 
@@ -53,12 +53,8 @@ export default function CreatorOverviewPage() {
               Building an agent capability?
             </h1>
             <p className="mt-2 max-w-xl text-fg-muted">
-              Drop in your{' '}
-              <code className="rounded bg-bg-elev px-1.5 py-0.5 font-mono text-fg">
-                leash-mcp.json
-              </code>
-              , or monetize one HTTP endpoint first. Verified agent identities can discover, call,
-              and pay you within minutes.
+              Monetize a GET or POST endpoint, list it as an agent capability, and let verified
+              agent identities discover, call, and pay you within minutes.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -108,8 +104,8 @@ export default function CreatorOverviewPage() {
         />
       </section>
 
-      {/* Earnings + how it works */}
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* Earnings */}
+      <section>
         <Card>
           <CardHeader className="space-y-1">
             <div className="flex items-center gap-2">
@@ -124,34 +120,6 @@ export default function CreatorOverviewPage() {
           <CardContent>
             <div className="rounded-md border border-dashed bg-bg-elev/40 p-8 text-center text-sm text-fg-muted">
               No receipts yet. Buyers settle on-chain on first paid call.
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="space-y-1">
-            <div className="flex items-center gap-2">
-              <BookOpen className="size-4 text-brand-strong" />
-              <CardTitle>How leash.market works</CardTitle>
-            </div>
-            <CardDescription>Two focused flows from raw endpoint to discovery.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <Step n={1} title="Monetize the endpoint">
-              Wrap a raw HTTP endpoint with x402 or MPP and get a hosted payable URL.
-            </Step>
-            <Step n={2} title="List the capability">
-              Publish the provider URL and payable endpoints so agents can find the service.
-            </Step>
-            <Step n={3} title="Iterate endpoints">
-              Add more GET or POST payable endpoints as your provider surface grows.
-            </Step>
-            <div className="pt-2">
-              <Button asChild variant="link" className="px-0">
-                <Link href="/creator/docs">
-                  Read the full guide <ArrowRight className="size-3.5" />
-                </Link>
-              </Button>
             </div>
           </CardContent>
         </Card>
@@ -221,19 +189,5 @@ function ActionCard({
         </Link>
       </div>
     </Card>
-  );
-}
-
-function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-start gap-3">
-      <span className="grid size-6 shrink-0 place-items-center rounded-full border bg-bg text-xs font-mono text-fg-muted">
-        {n}
-      </span>
-      <div>
-        <div className="font-medium">{title}</div>
-        <p className="text-fg-muted">{children}</p>
-      </div>
-    </div>
   );
 }
