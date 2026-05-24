@@ -76,10 +76,10 @@ export function IdentityFeaturesSection() {
         <AnimatedContainer
           delay={0.16}
           reduceMotion={!!shouldReduceMotion}
-          className="grid grid-cols-1 divide-y divide-dashed divide-border overflow-hidden rounded-xl border border-dashed border-border bg-bg/40 sm:grid-cols-2 sm:divide-x md:grid-cols-3"
+          className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-dashed border-border bg-border md:grid-cols-3"
         >
           {features.map((feature) => (
-            <FeatureCard key={feature.title} feature={feature} />
+            <FeatureCard key={feature.title} feature={feature} className="bg-bg/80" />
           ))}
         </AnimatedContainer>
       </div>

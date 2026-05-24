@@ -18,7 +18,7 @@ export function FeatureCard({ feature, className, ...props }: FeatureCardProps) 
   return (
     <div
       className={cn(
-        'group relative min-h-[196px] overflow-hidden p-6 transition-colors duration-150 hover:bg-bg-elev/50',
+        'group relative min-h-[172px] overflow-hidden p-4 transition-colors duration-150 hover:bg-bg-elev/50 sm:min-h-[196px] sm:p-6',
         className,
       )}
       {...props}
@@ -40,7 +40,7 @@ export function FeatureCard({ feature, className, ...props }: FeatureCardProps) 
         strokeWidth={1.5}
         aria-hidden="true"
       />
-      <h3 className="relative z-10 mt-10 text-sm font-medium text-fg md:text-base">
+      <h3 className="relative z-10 mt-6 text-sm font-medium text-fg sm:mt-10 md:text-base">
         {feature.title}
       </h3>
       <p className="relative z-10 mt-2 text-xs leading-relaxed text-fg-muted">

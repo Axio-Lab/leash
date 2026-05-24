@@ -74,13 +74,13 @@ export function CallToAction({
         </p>
       </div>
 
-      <div className="flex flex-col items-stretch justify-center gap-2 sm:flex-row sm:items-center">
+      <div className="flex flex-wrap items-center justify-center gap-2">
         {secondary ? (
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" className="shrink-0 px-3 text-xs sm:px-5 sm:text-sm">
             <ActionLink action={secondary} />
           </Button>
         ) : null}
-        <Button asChild>
+        <Button asChild className="shrink-0 px-3 text-xs sm:px-5 sm:text-sm">
           <ActionLink action={primary}>
             <span>{primary.label}</span>
             <ArrowRightIcon className="ml-1 size-4" aria-hidden="true" />
