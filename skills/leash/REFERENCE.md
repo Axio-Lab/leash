@@ -173,7 +173,7 @@ currency, asset, receipt_hash, tx_sig? }`.
 | ------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `LEASH_API_URL`                       | SDK         | Default `https://api.leash.market`. Override for self-host.                                                                                         |
 | `LEASH_API_KEY`                       | SDK         | Used by `@leashmarket/seller-kit` `onReceipt` default to forward receipts to the API.                                                               |
-| `LEASH_API_FACILITATOR_URL`           | API server  | Override the facilitator URL the hosted paywall uses (default: `devnet-facilitator.leash.market` on devnet, `facilitator.leash.market` on mainnet). |
+| `LEASH_API_FACILITATOR_URL`           | API server  | Override the facilitator URL the hosted paywall uses (default: `facilitator-devnet.leash.market` on devnet, `facilitator.leash.market` on mainnet). |
 | `LEASH_API_ADMIN_SECRET`              | API server  | Bearer secret for `/v1/admin/*` routes.                                                                                                             |
 | `LEASH_API_REDIS_URL`                 | API server  | Required for rate limits, idempotency, SSE Pub/Sub. Defaults to in-memory.                                                                          |
 | `LEASH_FACILITATOR_SECRET_KEY`        | Facilitator | Solana keypair (JSON byte array OR base58). MUST be separate from any buyer key.                                                                    |
@@ -196,7 +196,7 @@ currency, asset, receipt_hash, tx_sig? }`.
 | Solana CAIP-2 devnet      | `solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1`                     |
 | Public devnet RPC         | `https://api.devnet.solana.com`                               |
 | Devnet USDC faucet        | `https://faucet.circle.com`                                   |
-| Leash devnet facilitator  | `https://devnet-facilitator.leash.market` (SDK + API default) |
+| Leash devnet facilitator  | `https://facilitator-devnet.leash.market` (SDK + API default) |
 | Leash mainnet facilitator | `https://facilitator.leash.market` (SDK + API default)        |
 
 ## Error model

@@ -1,24 +1,25 @@
 /**
- * Listing draft model and helpers used by the "list a tool" flow on
- * `leash.market/dev/list`.
- *
- * The flow itself is deliberately deterministic in Phase 2: we don't run
- * a chat LLM yet. The user pastes a manifest URL, we ask `apps/api` to
- * fetch + validate it (`POST /v1/marketplace/listings/from-url`), then
- * the user reviews + tweaks before submission. Phase 3 polish can swap
- * the form for a real LLM helper without changing the wire shape.
+ * Listing draft model and helpers used by the creator "List capability" flow.
+ * The page is discovery-only: payable endpoints are created elsewhere, then
+ * pasted here so Leash can publish provider metadata and endpoint rows.
  */
 
 export type ListingPricing = {
   type: 'free' | 'per_call' | 'variable';
   amount?: string;
-  currency?: string;
+  currency?: ListingStableCurrency;
 };
 
-export type ListingTool = {
-  name: string;
+export type ListingPaymentProtocol = 'x402' | 'mpp';
+export type ListingStableCurrency = 'USDC' | 'USDT' | 'USDG';
+
+export type ListingEndpoint = {
+  method: 'GET' | 'POST';
+  url: string;
   description: string;
-  inputSchema?: unknown;
+  pricing?: ListingPricing;
+  protocol?: ListingPaymentProtocol[];
+  supported_usd?: ListingStableCurrency[];
 };
 
 export type ListingDraft = {
@@ -28,7 +29,7 @@ export type ListingDraft = {
   category: string;
   endpoint: string;
   pricing: ListingPricing;
-  tools: ListingTool[];
+  endpoints: ListingEndpoint[];
   docsUrl?: string;
   freeTier: number;
 };
@@ -40,7 +41,7 @@ export const EMPTY_DRAFT: ListingDraft = {
   category: 'misc',
   endpoint: '',
   pricing: { type: 'free' },
-  tools: [],
+  endpoints: [],
   freeTier: 0,
 };
 
@@ -50,7 +51,8 @@ export type ManifestImport = {
   description: string;
   category: string;
   endpoint: string;
-  tools: ListingTool[];
+  endpoints?: ListingEndpoint[];
+  tools?: Array<{ name: string; description: string }>;
   pricing: ListingPricing;
   docs_url?: string;
   free_tier?: number;
@@ -64,7 +66,15 @@ export function manifestToDraft(m: ManifestImport): ListingDraft {
     category: m.category || 'misc',
     endpoint: m.endpoint,
     pricing: m.pricing,
-    tools: m.tools,
+    endpoints:
+      m.endpoints && m.endpoints.length > 0
+        ? m.endpoints
+        : (m.tools ?? []).map((tool) => ({
+            method: 'POST' as const,
+            url: m.endpoint,
+            description: tool.description || tool.name,
+            pricing: m.pricing,
+          })),
     ...(m.docs_url ? { docsUrl: m.docs_url } : {}),
     freeTier: m.free_tier ?? 0,
   };
@@ -86,6 +96,6 @@ export function isDraftComplete(d: ListingDraft): boolean {
     d.name.trim().length > 0 &&
     d.description.trim().length > 0 &&
     d.endpoint.trim().length > 0 &&
-    d.tools.length > 0
+    d.endpoints.length > 0
   );
 }

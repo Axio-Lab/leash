@@ -6,8 +6,7 @@
  *   GET /v1/marketplace/listings/{slug}    — listing detail + rating summary
  *
  * Admin-gated (Privy-bound via BFFs):
- *   POST   /v1/marketplace/listings              — create (status=pending)
- *   POST   /v1/marketplace/listings/from-url     — fetch+validate manifest
+ *   POST   /v1/marketplace/listings              — create (status=approved)
  *   PATCH  /v1/marketplace/listings/{id}/status  — approve/reject/disable
  *   POST   /v1/marketplace/listings/{id}/rating  — set rating
  *   POST   /v1/marketplace/listings/{id}/reviews — add review
@@ -31,15 +30,14 @@ import {
   recordListingHealth,
   setListingRating,
   setListingStatus,
+  type ListingEndpoint,
   type ListingPricing,
   type ListingStatus,
-  type ListingTool,
 } from '../storage/listings.js';
 import { getPlatformAgent } from '../storage/platform-agents.js';
 import type { CacheClient } from '../storage/redis.js';
 import type { DbClient } from '../storage/turso.js';
 import { invalidRequest, notFound } from '../util/errors.js';
-import { fetchAndValidateManifest, validateManifest } from '../util/mcp-manifest.js';
 import {
   publicIdentitySummary,
   syncMarketplaceCapabilityCard,
@@ -52,17 +50,23 @@ const PricingSchema = z
   .object({
     type: z.enum(['free', 'per_call', 'variable']),
     amount: z.string().optional(),
-    currency: z.string().optional(),
+    currency: z.enum(['USDC', 'USDT', 'USDG']).optional(),
   })
   .openapi('ListingPricing');
 
-const ToolSchema = z
+const ListingPaymentProtocolSchema = z.enum(['x402', 'mpp']);
+const ListingStableCurrencySchema = z.enum(['USDC', 'USDT', 'USDG']);
+
+const ListingEndpointSchema = z
   .object({
-    name: z.string(),
+    method: z.enum(['GET', 'POST']).default('POST'),
+    url: z.string().url(),
     description: z.string(),
-    inputSchema: z.unknown().optional(),
+    pricing: PricingSchema.optional(),
+    protocol: z.array(ListingPaymentProtocolSchema).optional(),
+    supported_usd: z.array(ListingStableCurrencySchema).optional(),
   })
-  .openapi('ListingTool');
+  .openapi('ListingEndpoint');
 
 const ListingStatusSchema = z.enum(['pending', 'approved', 'rejected', 'disabled']);
 
@@ -137,7 +141,7 @@ const ListingSchema = z
     seller_identity: PublicIdentitySummarySchema.nullable(),
     endpoint: z.string().url(),
     pricing: PricingSchema,
-    tools: z.array(ToolSchema),
+    endpoints: z.array(ListingEndpointSchema),
     docs_url: z.string().nullable(),
     free_tier: z.number().int(),
     health_status: z.enum(['ok', 'warn', 'down']).nullable(),
@@ -186,7 +190,7 @@ function listingToWire(
     seller_identity: sellerIdentity,
     endpoint: l.endpoint,
     pricing: l.pricing,
-    tools: l.tools,
+    endpoints: l.endpoints,
     docs_url: l.docsUrl,
     free_tier: l.freeTier,
     health_status: l.healthStatus,
@@ -207,7 +211,6 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
   const app = new OpenAPIHono();
 
   // Admin gate ONLY for mutating + reviewing endpoints; browse stays public.
-  app.use('/v1/marketplace/listings/from-url', adminAuth(deps.config.adminSecret));
   app.use('/v1/marketplace/listings', async (c, next) => {
     if (c.req.method === 'POST') {
       return adminAuth(deps.config.adminSecret)(c, next);
@@ -312,7 +315,7 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
       method: 'post',
       path: '/v1/marketplace/listings',
       tags: ['marketplace'],
-      summary: 'Create a listing (status=pending)',
+      summary: 'Create a listing (status=approved)',
       security: [{ AdminSecret: [] }],
       request: {
         body: {
@@ -333,7 +336,7 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
                 seller_agent_mint: PubkeySchema,
                 endpoint: z.string().url(),
                 pricing: PricingSchema,
-                tools: z.array(ToolSchema).min(1),
+                endpoints: z.array(ListingEndpointSchema).min(1),
                 docs_url: z.string().url().optional(),
                 free_tier: z.number().int().nonnegative().optional(),
               }),
@@ -370,61 +373,13 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
         sellerAgentMint: b.seller_agent_mint,
         endpoint: b.endpoint,
         pricing: b.pricing as ListingPricing,
-        tools: b.tools as ListingTool[],
+        endpoints: b.endpoints as ListingEndpoint[],
         ...(b.docs_url ? { docsUrl: b.docs_url } : {}),
         ...(b.free_tier !== undefined ? { freeTier: b.free_tier } : {}),
+        status: 'approved',
       });
       await syncMarketplaceCapabilityCard(deps.db, listingCapabilityPayload(created));
       return c.json(await listingToWireWithIdentity(deps.db, created), 200);
-    },
-  );
-
-  app.openapi(
-    createRoute({
-      method: 'post',
-      path: '/v1/marketplace/listings/from-url',
-      tags: ['marketplace'],
-      summary: 'Fetch and validate a /.well-known/leash-mcp.json manifest',
-      security: [{ AdminSecret: [] }],
-      request: {
-        body: {
-          required: true,
-          content: {
-            'application/json': { schema: z.object({ url: z.string().url() }) },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'ok',
-          content: {
-            'application/json': {
-              schema: z.object({
-                manifest: z.object({
-                  name: z.string(),
-                  slug: z.string().nullable(),
-                  description: z.string(),
-                  category: z.string(),
-                  endpoint: z.string(),
-                  tools: z.array(ToolSchema),
-                  pricing: PricingSchema,
-                  docs_url: z.string().optional(),
-                  free_tier: z.number().int().optional(),
-                }),
-              }),
-            },
-          },
-        },
-        422: {
-          description: 'invalid',
-          content: { 'application/json': { schema: ApiErrorSchema } },
-        },
-      },
-    }),
-    async (c) => {
-      const { url } = c.req.valid('json');
-      const manifest = await fetchAndValidateManifest(url);
-      return c.json({ manifest }, 200);
     },
   );
 
@@ -625,7 +580,3 @@ export function buildMarketplaceRoutes(deps: MarketplaceDeps): OpenAPIHono {
 
   return app;
 }
-
-// Re-export validateManifest so callers (e.g. seed scripts, future
-// background workers) can validate without going through HTTP.
-export { validateManifest };

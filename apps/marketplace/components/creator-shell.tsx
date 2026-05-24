@@ -7,16 +7,16 @@ import { usePrivy } from '@privy-io/react-auth';
 import Image from 'next/image';
 import {
   ArrowUpRight,
-  BookOpen,
-  Code2,
   Compass,
   KeyRound,
   LayoutDashboard,
+  Link2,
   LogOut,
   Menu,
   PackagePlus,
   Shield,
   Sparkles,
+  UserCog,
   X,
 } from 'lucide-react';
 
@@ -44,18 +44,24 @@ type NavItem = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
+  external?: boolean;
 };
 
 const PRIMARY: NavItem[] = [
   { href: '/creator', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/creator/tools', label: 'My capabilities', icon: PackagePlus },
-  { href: '/creator/list', label: 'List capability', icon: Sparkles, badge: 'New' },
-  { href: '/creator/snippets', label: 'Seller kit', icon: Code2 },
+  { href: '/creator/monetize', label: 'Monetize endpoint', icon: Link2, badge: 'New' },
+  { href: '/creator/list', label: 'List capability', icon: Sparkles },
 ];
 
 const SECONDARY: NavItem[] = [
+  {
+    href: `${NEXT_PUBLIC_AGENTS_URL}/profile/agent`,
+    label: 'Manage agent',
+    icon: UserCog,
+    external: true,
+  },
   { href: '/creator/api-keys', label: 'API keys', icon: KeyRound },
-  { href: '/creator/docs', label: 'How it works', icon: BookOpen },
 ];
 
 export function CreatorShell({ children }: { children: React.ReactNode }) {
@@ -94,11 +100,16 @@ function Inner({ children }: { children: React.ReactNode }) {
   const wallet = user?.wallet?.address ?? solana?.address ?? '';
   const short = wallet ? `${wallet.slice(0, 4)}…${wallet.slice(-4)}` : 'connected';
 
+  async function handleLogout() {
+    await logout();
+    router.replace('/');
+  }
+
   return (
-    <div className="min-h-dvh grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
+    <div className="grid min-h-dvh grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
       {/* Sidebar — desktop */}
-      <aside className="hidden border-r border-border bg-bg-elev/40 lg:flex lg:flex-col">
-        <SidebarBody pathname={pathname} short={short} onLogout={logout} />
+      <aside className="sticky top-0 hidden h-dvh border-r border-border bg-bg-elev/40 lg:flex lg:flex-col">
+        <SidebarBody pathname={pathname} short={short} onLogout={handleLogout} />
       </aside>
 
       {/* Sidebar — mobile drawer */}
@@ -110,16 +121,13 @@ function Inner({ children }: { children: React.ReactNode }) {
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setDrawerOpen(false)}
           />
-          <aside className="absolute left-0 top-0 flex h-full w-[280px] flex-col border-r border-border bg-bg-elev">
-            <button
-              type="button"
-              aria-label="Close menu"
-              onClick={() => setDrawerOpen(false)}
-              className="absolute right-3 top-3 rounded-md border p-1 text-fg-muted hover:text-fg"
-            >
-              <X className="size-4" />
-            </button>
-            <SidebarBody pathname={pathname} short={short} onLogout={logout} />
+          <aside className="absolute left-0 top-0 flex h-dvh w-[min(320px,calc(100vw-2rem))] flex-col border-r border-border bg-bg-elev">
+            <SidebarBody
+              pathname={pathname}
+              short={short}
+              onLogout={handleLogout}
+              onClose={() => setDrawerOpen(false)}
+            />
           </aside>
         </div>
       ) : null}
@@ -127,6 +135,23 @@ function Inner({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-dvh flex-col">
         {/* Top bar */}
         <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-bg/80 px-4 backdrop-blur-xl lg:px-6">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 font-semibold tracking-tight lg:hidden"
+            aria-label="leash.market"
+          >
+            <Image
+              src="/leash-logo.png"
+              alt=""
+              width={20}
+              height={20}
+              className="shrink-0 filter-[brightness(0)_invert(1)]"
+              priority
+            />
+            <span className="whitespace-nowrap text-sm">
+              leash<span className="text-fg-muted">.market</span>
+            </span>
+          </Link>
           <button
             type="button"
             aria-label="Open menu"
@@ -170,16 +195,18 @@ function SidebarBody({
   pathname,
   short,
   onLogout,
+  onClose,
 }: {
   pathname: string;
   short: string;
   onLogout: () => void;
+  onClose?: () => void;
 }) {
   const isActive = (href: string) =>
     href === '/creator' ? pathname === '/creator' : pathname.startsWith(href);
   return (
     <>
-      <div className="flex items-center gap-2 border-b border-border px-5 py-4">
+      <div className="flex min-h-14 items-center gap-2 border-b border-border px-5 py-4">
         <Image
           src="/leash-logo.png"
           alt="Leash"
@@ -194,14 +221,24 @@ function SidebarBody({
         <Badge variant="outline" className="ml-auto font-mono uppercase">
           Creator
         </Badge>
+        {onClose ? (
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={onClose}
+            className="-mr-1 grid size-8 place-items-center rounded-md border text-fg-muted hover:text-fg"
+          >
+            <X className="size-4" />
+          </button>
+        ) : null}
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto scrollbar-thin">
+      <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4 scrollbar-thin">
         <NavGroup label="Build" items={PRIMARY} isActive={isActive} />
         <NavGroup label="Settings" items={SECONDARY} isActive={isActive} />
       </nav>
 
-      <div className="border-t border-border p-3 space-y-2">
+      <div className="mt-auto shrink-0 space-y-2 border-t border-border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="rounded-lg border bg-bg p-3">
           <div className="text-[10px] uppercase tracking-widest text-fg-subtle">Wallet</div>
           <div className="mt-1 font-mono text-xs">{short}</div>
@@ -236,8 +273,9 @@ function NavGroup({
           const active = isActive(item.href);
           return (
             <li key={item.href}>
-              <Link
-                href={item.href}
+              <NavLink
+                item={item}
+                active={active}
                 className={cn(
                   'group flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors',
                   active
@@ -257,12 +295,38 @@ function NavGroup({
                     {item.badge}
                   </Badge>
                 ) : null}
-              </Link>
+                {item.external ? <ArrowUpRight className="size-3.5 text-fg-subtle" /> : null}
+              </NavLink>
             </li>
           );
         })}
       </ul>
     </div>
+  );
+}
+
+function NavLink({
+  item,
+  active,
+  className,
+  children,
+}: {
+  item: NavItem;
+  active: boolean;
+  className: string;
+  children: React.ReactNode;
+}) {
+  if (item.external) {
+    return (
+      <a href={item.href} target="_blank" rel="noreferrer" className={className}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <Link href={item.href} className={className} aria-current={active ? 'page' : undefined}>
+      {children}
+    </Link>
   );
 }
 
@@ -294,10 +358,10 @@ function SignInGate({ onLogin }: { onLogin: () => void }) {
 function titleForPath(p: string): string {
   if (p === '/creator') return 'Dashboard';
   if (p.startsWith('/creator/tools')) return 'My capabilities';
+  if (p.startsWith('/creator/monetize')) return 'Monetize endpoint';
   if (p.startsWith('/creator/list')) return 'List capability';
-  if (p.startsWith('/creator/snippets')) return 'Seller kit';
+  if (p.startsWith('/creator/snippets')) return 'List capability';
   if (p.startsWith('/creator/api-keys')) return 'API keys';
-  if (p.startsWith('/creator/docs')) return 'How it works';
   if (p.startsWith('/creator/admin')) return 'Admin';
   return 'Creator';
 }

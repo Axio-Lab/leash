@@ -9,7 +9,7 @@ import { requirePrivySession } from '@/lib/privy-server';
  * `GET /api/listings`  — public browse, proxies to `apps/api`.
  * `POST /api/listings` — authenticated; binds the listing to the
  *                       signed-in user's wallet + privy id and submits
- *                       it as `pending`.
+ *                       it as immediately discoverable.
  *
  * Single listing by human slug: `GET /api/listings/by-slug/{slug}` (see
  * `by-slug/[slug]/route.ts`). ULID-scoped rating/reviews stay under

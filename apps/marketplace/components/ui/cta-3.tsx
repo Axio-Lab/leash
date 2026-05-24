@@ -74,13 +74,20 @@ export function CallToAction({
         </p>
       </div>
 
-      <div className="flex flex-col items-stretch justify-center gap-2 sm:flex-row sm:items-center">
+      <div className="flex items-center justify-center gap-2 sm:gap-3">
         {secondary ? (
-          <Button asChild variant="outline">
-            <ActionLink action={secondary} />
-          </Button>
+          <div className="rounded-[14px] border border-brand/30 bg-foreground/10 p-0.5">
+            <Button asChild size="lg" className="rounded-xl px-3 text-xs sm:px-5 sm:text-sm">
+              <ActionLink action={secondary} />
+            </Button>
+          </div>
         ) : null}
-        <Button asChild>
+        <Button
+          asChild
+          size="lg"
+          variant="ghost"
+          className="h-11 min-w-0 rounded-xl px-3 text-xs sm:px-5 sm:text-sm"
+        >
           <ActionLink action={primary}>
             <span>{primary.label}</span>
             <ArrowRightIcon className="ml-1 size-4" aria-hidden="true" />
@@ -91,16 +98,27 @@ export function CallToAction({
   );
 }
 
-function ActionLink({ action, children }: { action: Action; children?: React.ReactNode }) {
+function ActionLink({
+  action,
+  children,
+  ...props
+}: {
+  action: Action;
+  children?: React.ReactNode;
+} & Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'>) {
   const content = children ?? action.label;
 
   if (action.external) {
     return (
-      <a href={action.href} target="_blank" rel="noreferrer">
+      <a href={action.href} target="_blank" rel="noreferrer" {...props}>
         {content}
       </a>
     );
   }
 
-  return <Link href={action.href}>{content}</Link>;
+  return (
+    <Link href={action.href} {...props}>
+      {content}
+    </Link>
+  );
 }

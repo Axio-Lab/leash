@@ -44,7 +44,7 @@
 - [Withdraw treasury funds](https://docs.leash.market/guides/withdraw-funds.md): Owner-driven withdraw of stablecoins + native SOL via MPL Core Execute.
 - [Launch an agent token](https://docs.leash.market/guides/launch-agent-token.md): Bonding-curve token via Metaplex Genesis. Creator fees route to the treasury PDA automatically.
 - [Pause an agent](https://docs.leash.market/guides/pause-an-agent.md): Env breaker plus on-chain `AppData` mirror.
-- [Run a Leash facilitator](https://docs.leash.market/guides/run-a-facilitator.md): Use `facilitator.leash.market` (mainnet) / `devnet-facilitator.leash.market` (devnet), or self-host `@leashmarket/facilitator`.
+- [Run a Leash facilitator](https://docs.leash.market/guides/run-a-facilitator.md): Use `facilitator.leash.market` (mainnet) / `facilitator-devnet.leash.market` (devnet), or self-host `@leashmarket/facilitator`.
 
 ## API — `api.leash.market`
 

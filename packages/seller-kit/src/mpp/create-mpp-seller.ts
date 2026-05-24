@@ -58,7 +58,7 @@ export type CreateMppSellerOptions = {
   network?: LeashSellerNetwork;
   /**
    * MPP facilitator URL or pre-built client. Defaults to
-   * `https://devnet-facilitator.leash.market` (which Phase 5 extends to
+   * `https://facilitator-devnet.leash.market` (which Phase 5 extends to
    * speak the `/mpp/settle` endpoint alongside the x402 routes).
    */
   facilitator?: string | MppFacilitatorClient;
@@ -87,7 +87,7 @@ type SellerState = {
   prevReceiptHash: string | null;
 };
 
-const DEFAULT_MPP_FACILITATOR_URL = 'https://devnet-facilitator.leash.market';
+const DEFAULT_MPP_FACILITATOR_URL = 'https://facilitator-devnet.leash.market';
 
 export function createMppSeller(app: Hono, opts: CreateMppSellerOptions): MppSeller {
   const payTo = resolveSellerPayTo(opts.umi, opts.sellerAgent);

@@ -22,11 +22,11 @@ describe('manifestToDraft', () => {
       description: 'd',
       category: 'search',
       endpoint: 'https://x/mcp',
-      tools: [{ name: 'search', description: 'd' }],
+      endpoints: [{ method: 'POST', url: 'https://x/mcp/search', description: 'd' }],
       pricing: { type: 'free' },
     });
     expect(draft.slug).toBe('premium-search');
-    expect(draft.tools).toHaveLength(1);
+    expect(draft.endpoints).toHaveLength(1);
   });
 
   it('respects explicit slug', () => {
@@ -36,7 +36,7 @@ describe('manifestToDraft', () => {
       description: 'd',
       category: 'misc',
       endpoint: 'https://x',
-      tools: [{ name: 't', description: 'd' }],
+      endpoints: [{ method: 'POST', url: 'https://x/t', description: 'd' }],
       pricing: { type: 'per_call', amount: '0.001', currency: 'USDC' },
       docs_url: 'https://docs',
       free_tier: 100,
@@ -59,7 +59,7 @@ describe('isDraftComplete', () => {
       description: 'd',
       category: 'misc',
       endpoint: 'https://x',
-      tools: [{ name: 't', description: 'd' }],
+      endpoints: [{ method: 'POST', url: 'https://x/t', description: 'd' }],
       pricing: { type: 'free' },
     });
     expect(isDraftComplete(ok)).toBe(true);
@@ -72,7 +72,7 @@ describe('isDraftComplete', () => {
       description: 'd',
       category: 'misc',
       endpoint: 'https://x',
-      tools: [{ name: 't', description: 'd' }],
+      endpoints: [{ method: 'POST', url: 'https://x/t', description: 'd' }],
       pricing: { type: 'free' },
     });
     // manifestToDraft preserves explicit slug verbatim (capped to 80)

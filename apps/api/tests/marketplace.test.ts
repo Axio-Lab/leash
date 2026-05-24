@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import { createTestRig } from './helpers.js';
 import { createListing, setListingStatus } from '../src/storage/listings.js';
-import { validateManifest } from '../src/util/mcp-manifest.js';
 
 const ADMIN_SECRET = 'a'.repeat(48);
 const PRIVY_ID = 'did:privy:owner';
@@ -27,7 +26,16 @@ const baseListing = {
   seller_agent_mint: SELLER_MINT,
   endpoint: 'https://airtime.example/mcp',
   pricing: { type: 'per_call', amount: '0.10', currency: 'USDC' },
-  tools: [{ name: 'buy_airtime', description: 'Buy airtime' }],
+  endpoints: [
+    {
+      method: 'POST',
+      url: 'https://airtime.example/mcp/buy_airtime',
+      description: 'Buy airtime',
+      pricing: { type: 'per_call', amount: '0.10', currency: 'USDC' },
+      protocol: ['x402'],
+      supported_usd: ['USDC'],
+    },
+  ],
   free_tier: 5,
 };
 
@@ -79,23 +87,7 @@ describe('marketplace listings', () => {
     );
     expect(create.status).toBe(200);
     const created = (await create.json()) as { id: string; status: string };
-    expect(created.status).toBe('pending');
-
-    const browseEmpty = await rig.app.fetch(
-      new Request('http://test.local/v1/marketplace/listings'),
-    );
-    expect(browseEmpty.status).toBe(200);
-    const empty = (await browseEmpty.json()) as { items: unknown[] };
-    expect(empty.items).toHaveLength(0);
-
-    const approve = await rig.app.fetch(
-      new Request(`http://test.local/v1/marketplace/listings/${created.id}/status`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ status: 'approved' }),
-      }),
-    );
-    expect(approve.status).toBe(200);
+    expect(created.status).toBe('approved');
 
     const browse = await rig.app.fetch(new Request('http://test.local/v1/marketplace/listings'));
     expect(browse.status).toBe(200);
@@ -273,7 +265,9 @@ describe('marketplace listings', () => {
       ownerWallet: WALLET,
       endpoint: 'https://legacy.example/mcp',
       pricing: { type: 'free' },
-      tools: [{ name: 'legacy', description: 'Legacy tool' }],
+      endpoints: [
+        { method: 'POST', url: 'https://legacy.example/mcp', description: 'Legacy tool' },
+      ],
     });
     await setListingStatus(rig.db, legacy.id, 'approved');
 
@@ -311,16 +305,9 @@ describe('marketplace listings', () => {
       capability_cards: Array<{ id: string; visibility: string }>;
     };
     expect(ownerBody.capability_cards).toMatchObject([
-      { id: `marketplace:${created.id}`, visibility: 'private' },
+      { id: `marketplace:${created.id}`, visibility: 'public' },
     ]);
 
-    await rig.app.fetch(
-      new Request(`http://test.local/v1/marketplace/listings/${created.id}/status`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ status: 'approved' }),
-      }),
-    );
     const publicProfile = await rig.app.fetch(
       new Request(`http://test.local/v1/identity/${SELLER_MINT}`),
     );
@@ -330,44 +317,5 @@ describe('marketplace listings', () => {
     expect(publicBody.capability_cards).toMatchObject([
       { id: `marketplace:${created.id}`, visibility: 'public', slug: baseListing.slug },
     ]);
-  });
-});
-
-describe('manifest validation', () => {
-  it('accepts a complete manifest', () => {
-    const m = validateManifest({
-      name: 'X',
-      slug: 'x',
-      description: 'd',
-      endpoint: 'https://x.example/mcp',
-      tools: [{ name: 't', description: 'd' }],
-      pricing: { type: 'free' },
-    });
-    expect(m.name).toBe('X');
-    expect(m.category).toBe('misc');
-  });
-
-  it('rejects bad pricing type', () => {
-    expect(() =>
-      validateManifest({
-        name: 'X',
-        description: 'd',
-        endpoint: 'https://x.example/mcp',
-        tools: [{ name: 't', description: 'd' }],
-        pricing: { type: 'gift' },
-      }),
-    ).toThrow();
-  });
-
-  it('rejects malformed tool entries', () => {
-    expect(() =>
-      validateManifest({
-        name: 'X',
-        description: 'd',
-        endpoint: 'https://x.example/mcp',
-        tools: [{ description: 'no name' }],
-        pricing: { type: 'free' },
-      }),
-    ).toThrow();
   });
 });

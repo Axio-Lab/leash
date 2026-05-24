@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import * as React from 'react';
-import { ArrowRight, ChevronRight, Search, ShieldCheck, WalletCards } from 'lucide-react';
+import { ArrowRight, ChevronRight } from 'lucide-react';
 import { useReducedMotion, type Variants } from 'motion/react';
 
 import { SegmentedVideo } from '@/components/marketplace/segmented-video';
@@ -66,15 +66,20 @@ export function MarketplaceHero() {
               discover services, settle <StablecoinWord /> with x402, and turn receipts into
               reputation.
             </p>
-            <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row sm:items-center">
+            <div className="mt-8 flex items-center justify-center gap-2 sm:mt-9 sm:gap-3">
               <div className="rounded-[14px] border border-brand/30 bg-foreground/10 p-0.5">
-                <Button asChild size="lg" className="rounded-xl px-5">
+                <Button asChild size="lg" className="rounded-xl px-3 text-xs sm:px-5 sm:text-sm">
                   <Link href="/browse">
                     Browse capabilities <ArrowRight className="size-4" aria-hidden="true" />
                   </Link>
                 </Button>
               </div>
-              <Button asChild size="lg" variant="ghost" className="h-11 rounded-xl px-5">
+              <Button
+                asChild
+                size="lg"
+                variant="ghost"
+                className="h-11 min-w-0 rounded-xl px-3 text-xs sm:px-5 sm:text-sm"
+              >
                 <a href={NEXT_PUBLIC_AGENTS_URL} target="_blank" rel="noreferrer">
                   Create an agent <ChevronRight className="size-4" aria-hidden="true" />
                 </a>
@@ -108,11 +113,6 @@ export function MarketplaceHero() {
                 aria-label="Leash marketplace product preview"
               />
               <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-bg/88 via-transparent to-transparent" />
-              <div className="pointer-events-none absolute inset-x-3 bottom-3 grid gap-2 sm:grid-cols-3">
-                <PreviewMetric icon={Search} label="discover" value="tools" />
-                <PreviewMetric icon={ShieldCheck} label="verify" value="identity" />
-                <PreviewMetric icon={WalletCards} label="settle" value="USDC" />
-              </div>
             </div>
           </div>
         </AnimatedGroup>
@@ -123,7 +123,7 @@ export function MarketplaceHero() {
 
 function CapabilityWord() {
   const shouldReduceMotion = useReducedMotion();
-  const [index, setIndex] = React.useState(0);
+  const [index, setIndex] = React.useState(1);
 
   React.useEffect(() => {
     if (shouldReduceMotion) return undefined;
@@ -134,7 +134,7 @@ function CapabilityWord() {
   }, [shouldReduceMotion]);
 
   return (
-    <span className="inline-flex min-w-40 justify-center text-brand-strong">
+    <span className="inline-block text-brand-strong sm:inline-flex sm:min-w-40 sm:justify-center">
       {CAPABILITY_WORDS[index]}
     </span>
   );
@@ -153,28 +153,8 @@ function StablecoinWord() {
   }, [shouldReduceMotion]);
 
   return (
-    <span className="relative inline-flex min-w-17 justify-center px-1 font-semibold text-brand-strong decoration-brand decoration-2 underline underline-offset-4">
+    <span className="relative inline font-semibold text-brand-strong decoration-brand decoration-2 underline underline-offset-4 sm:inline-flex sm:min-w-17 sm:justify-center sm:px-1">
       {STABLECOINS[index]}
     </span>
-  );
-}
-
-function PreviewMetric({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-bg/80 px-3 py-2 backdrop-blur-md">
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-fg-subtle">
-        <Icon className="size-3 text-brand-strong" aria-hidden="true" />
-        {label}
-      </div>
-      <div className="mt-1 font-mono text-sm text-fg">{value}</div>
-    </div>
   );
 }

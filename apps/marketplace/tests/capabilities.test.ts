@@ -15,11 +15,11 @@ describe('capability labels', () => {
     expect(capabilityCountHint(item)).toBe('1 payable endpoint');
   });
 
-  it('falls back to the service endpoint for native listings with no tools', () => {
-    const item = { source: 'leash' as const, tools: [] };
+  it('counts native listing endpoints', () => {
+    const item = { source: 'leash' as const, endpoints: [{ method: 'POST' }] };
     expect(capabilityCount(item)).toBe(1);
     expect(capabilityCountLabel(item)).toBe('1 capability');
-    expect(capabilityCountHint(item)).toBe('1 service endpoint');
+    expect(capabilityCountHint(item)).toBe('1 payable endpoint');
   });
 
   it('builds a safe provider detail path for pay.sh FQNs', () => {

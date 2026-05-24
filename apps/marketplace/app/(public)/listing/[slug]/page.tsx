@@ -7,7 +7,7 @@ import useSWR from 'swr';
 
 import { StarRating } from '@/components/ratings';
 import { ReviewBlock } from '@/components/review-form';
-import { ToolsTable, type Tool } from '@/components/tools-table';
+import { ToolsTable, type PayableEndpoint } from '@/components/tools-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,7 +23,7 @@ type Listing = {
   category: string;
   endpoint: string;
   pricing: { type: string; amount?: string; currency?: string };
-  tools: Tool[];
+  endpoints: PayableEndpoint[];
   docs_url: string | null;
   free_tier: number;
   health_status: 'ok' | 'warn' | 'down' | null;
@@ -90,8 +90,8 @@ export default function ListingDetailPage({ params }: { params: Promise<{ slug: 
     source: 'leash',
     q: data.listing.name || data.listing.slug,
   }).toString()}`;
-  const count = capabilityCount({ source: 'leash', tools: data.listing.tools });
-  const countHint = capabilityCountHint({ source: 'leash', tools: data.listing.tools });
+  const count = capabilityCount({ source: 'leash', endpoints: data.listing.endpoints });
+  const countHint = capabilityCountHint({ source: 'leash', endpoints: data.listing.endpoints });
 
   return (
     <div className="space-y-8">
@@ -148,7 +148,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ slug: 
             </CardHeader>
             <CardContent>
               <p className="mb-3 text-xs text-fg-subtle">{countHint}</p>
-              <ToolsTable tools={data.listing.tools} />
+              <ToolsTable endpoints={data.listing.endpoints} />
             </CardContent>
           </Card>
           <Card>

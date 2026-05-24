@@ -39,7 +39,7 @@ describe('createBuyer', () => {
     });
     expect(response.status).toBe(200);
     expect(receipt.decision).toBe('allow');
-    expect(receipt.facilitator).toBe('https://devnet-facilitator.leash.market');
+    expect(receipt.facilitator).toBe('https://facilitator-devnet.leash.market');
     expect(seen).toHaveLength(1);
   });
 

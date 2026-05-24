@@ -16,7 +16,8 @@ type Listing = {
   description: string;
   category: string;
   pricing: { type: string; amount?: string; currency?: string };
-  tools: Array<{ name: string }>;
+  tools?: Array<{ name: string }>;
+  endpoints?: Array<{ method: string; url: string; description: string }>;
   endpoint_count?: number;
   rating?: { avg: number; count: number };
 };
@@ -32,7 +33,8 @@ type DiscoverItem = {
   pricing_type: 'free' | 'per_call' | 'variable';
   rating: number | null;
   endpoint_count?: number;
-  tools: Array<{ name: string }>;
+  tools?: Array<{ name: string }>;
+  endpoints?: Array<{ method: string; url: string; description: string }>;
 };
 
 const fetcher = (url: string) =>
@@ -51,6 +53,7 @@ function normalizeListing(item: DiscoverItem): Listing {
       ...(item.price_usdc ? { amount: item.price_usdc, currency: 'USDC' } : {}),
     },
     tools: item.tools ?? [],
+    endpoints: item.endpoints ?? [],
     ...(typeof item.endpoint_count === 'number' ? { endpoint_count: item.endpoint_count } : {}),
     ...(typeof item.rating === 'number' ? { rating: { avg: item.rating * 5, count: 1 } } : {}),
   };

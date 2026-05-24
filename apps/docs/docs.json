@@ -55,6 +55,7 @@
               "guides/bring-your-own-keypair",
               "guides/fund-an-agent",
               "guides/create-an-endpoint",
+              "guides/list-agent-capability",
               "guides/build-a-seller",
               "guides/build-a-buyer",
               "guides/build-a-merged-agent",

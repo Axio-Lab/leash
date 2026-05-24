@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { blogArticles, getBlogSearchText, getRelatedArticles } from '@/lib/blog';
 
 describe('programmatic blog articles', () => {
-  it('ships the existing article plus thirty SEO guides', () => {
-    expect(blogArticles).toHaveLength(31);
-    expect(blogArticles[0]?.slug).toBe('identity-layer-for-ai-agents');
+  it('ships the existing articles plus the latest marketplace SEO guides', () => {
+    expect(blogArticles).toHaveLength(48);
+    expect(blogArticles[0]?.slug).toBe('how-to-list-trained-agent-on-leash-marketplace');
   });
 
   it('keeps article slugs unique and related links resolvable', () => {

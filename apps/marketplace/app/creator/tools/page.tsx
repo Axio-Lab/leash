@@ -24,7 +24,7 @@ type Listing = {
   status: 'pending' | 'approved' | 'rejected' | 'disabled';
   category: string;
   pricing: { type: string; amount?: string; currency?: string };
-  tools: Array<{ name: string }>;
+  endpoints: Array<{ method: string; url: string; description: string }>;
   health_status: 'ok' | 'warn' | 'down' | null;
   created_at: string;
 };
@@ -53,7 +53,7 @@ export default function MyToolsPage() {
           </Badge>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">My capabilities</h1>
           <p className="text-fg-muted text-sm mt-1">
-            Capabilities you've listed on leash.market. Approval is manual today; expect ~24h.
+            Capabilities you've listed on leash.market. New discovery listings go live immediately.
           </p>
         </div>
         <Button asChild>
@@ -119,7 +119,8 @@ function ToolRow({ listing }: { listing: Listing }) {
                 : `${listing.pricing.amount ?? '?'} ${listing.pricing.currency ?? 'USDC'}/call`}
             </Badge>
             <span>
-              · {listing.tools.length} callable tool{listing.tools.length === 1 ? '' : 's'}
+              · {listing.endpoints.length} payable endpoint
+              {listing.endpoints.length === 1 ? '' : 's'}
             </span>
             {listing.health_status ? <span>· {listing.health_status}</span> : null}
           </div>

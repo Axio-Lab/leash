@@ -54,7 +54,7 @@ export type LeashApiConfig = {
    * paywall on `/x/{id}`. Same URL is recorded on every `earn` receipt
    * the paywall emits, so explorers can verify settlement out-of-band.
    *
-   * Devnet default: `https://devnet-facilitator.leash.market`
+   * Devnet default: `https://facilitator-devnet.leash.market`
    * Override with `LEASH_API_FACILITATOR_URL` (devnet) and
    * `LEASH_API_FACILITATOR_URL_MAINNET` (mainnet). For mainnet keys,
    * also set `LEASH_API_FACILITATOR_URL_MAINNET=https://facilitator.leash.market`.
@@ -222,7 +222,7 @@ export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConf
     docsEnabled: readBool(env.LEASH_API_DOCS_ENABLED, docsDefault),
     facilitatorUrlDevnet: readEnv(
       'LEASH_API_FACILITATOR_URL_DEVNET',
-      'https://devnet-facilitator.leash.market',
+      'https://facilitator-devnet.leash.market',
     ),
     ...(env.LEASH_API_FACILITATOR_URL_MAINNET?.trim()
       ? { facilitatorUrlMainnet: env.LEASH_API_FACILITATOR_URL_MAINNET.trim() }
@@ -254,7 +254,7 @@ export function createConfig(env: NodeJS.ProcessEnv = process.env): LeashApiConf
  * Used as fallback when no explicit env override is provided.
  */
 const LEASH_FACILITATORS: Record<SvmNetwork, string> = {
-  'solana-devnet': 'https://devnet-facilitator.leash.market',
+  'solana-devnet': 'https://facilitator-devnet.leash.market',
   'solana-mainnet': 'https://facilitator.leash.market',
 };
 

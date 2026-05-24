@@ -1,6 +1,7 @@
 export type CapabilityCountInput = {
   source?: 'leash' | 'pay-skills';
   tools?: Array<unknown>;
+  endpoints?: Array<unknown>;
   endpoint_count?: number;
 };
 
@@ -10,6 +11,7 @@ export function capabilityCount(item: CapabilityCountInput): number {
       ? Math.max(0, Math.floor(item.endpoint_count))
       : null;
   if (endpoints != null) return Math.max(1, endpoints);
+  if (item.endpoints && item.endpoints.length > 0) return item.endpoints.length;
   return Math.max(1, item.tools?.length ?? 0);
 }
 
@@ -21,6 +23,9 @@ export function capabilityCountLabel(item: CapabilityCountInput): string {
 export function capabilityCountHint(item: CapabilityCountInput): string {
   const count = capabilityCount(item);
   if (item.source === 'pay-skills') {
+    return `${count} payable endpoint${count === 1 ? '' : 's'}`;
+  }
+  if ((item.endpoints?.length ?? 0) > 0) {
     return `${count} payable endpoint${count === 1 ? '' : 's'}`;
   }
   if ((item.tools?.length ?? 0) > 0) {

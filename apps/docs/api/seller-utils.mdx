@@ -44,7 +44,7 @@ Authorization: Bearer lsh_test_...
     {
       "network": "solana-devnet",
       "caip2": "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
-      "facilitator": "https://devnet-facilitator.leash.market",
+      "facilitator": "https://facilitator-devnet.leash.market",
       "accepts": ["USDC", "USDT", "USDG"],
       "tokens": [
         {
@@ -92,14 +92,14 @@ Authorization: Bearer lsh_test_...
 ```json
 {
   "network": "solana-devnet",
-  "facilitator": "https://devnet-facilitator.leash.market",
+  "facilitator": "https://facilitator-devnet.leash.market",
   "source": "default"
 }
 ```
 
 `source` is `"config"` when the API operator has pinned
 `LEASH_API_FACILITATOR_URL`, and `"default"` when we fell back to
-the Leash default for the cluster (`devnet-facilitator.leash.market` on
+the Leash default for the cluster (`facilitator-devnet.leash.market` on
 devnet, `facilitator.leash.market` on mainnet). Other facilitators can
 be used — see [Run a Leash facilitator](/guides/run-a-facilitator).
 

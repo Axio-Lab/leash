@@ -6,41 +6,52 @@
  * an HTTP 402 if no `x-payment` header is present, otherwise lets the
  * upstream handler run as normal.
  *
- * The runtime list is intentionally short (Hono, Express, FastAPI, raw)
- * — the goal is "drop-in within minutes", not "every framework on
- * earth". The MCP example uses `@modelcontextprotocol/sdk` patterns.
+ * The runtime list is intentionally short and production-facing: a Hono
+ * seller, receipt forwarding, and a buyer-side probe.
  */
 
 export type SnippetParams = {
   slug: string;
   toolName?: string;
   amount?: string;
-  currency?: string;
+  currency?: StableCurrency | string;
   network?: 'solana-devnet' | 'solana-mainnet';
-  payTo?: string;
+  sellerAgent?: string;
+  upstreamUrl?: string;
+  rail?: PaymentRail;
+  feePayerAddress?: string;
 };
 
+export type StableCurrency = 'USDC' | 'USDT' | 'USDG';
+export type PaymentRail = 'x402' | 'mpp';
+
+export const STABLE_CURRENCIES: StableCurrency[] = ['USDC', 'USDT', 'USDG'];
+export const PAYMENT_RAILS: Array<{ id: PaymentRail; label: string; description: string }> = [
+  { id: 'x402', label: 'x402', description: 'HTTP 402 payment-required header' },
+  { id: 'mpp', label: 'MPP', description: 'problem+json challenge and PaymentScheme retry' },
+];
+
 const DEFAULTS: Required<SnippetParams> = {
-  slug: 'my-tool',
+  slug: 'premium-search',
   toolName: 'search',
   amount: '0.001',
   currency: 'USDC',
   network: 'solana-devnet',
-  payTo: '<your-wallet-address>',
+  sellerAgent: '<your-leash-agent-address>',
+  upstreamUrl: 'https://api.example-search.com/v1/search',
+  rail: 'x402',
+  feePayerAddress: '<facilitator-fee-payer-address>',
 };
 
 function merge(p: SnippetParams): Required<SnippetParams> {
   return { ...DEFAULTS, ...Object.fromEntries(Object.entries(p).filter(([, v]) => Boolean(v))) };
 }
 
-export type SnippetLanguage = 'hono' | 'express' | 'fastapi' | 'mcp' | 'manifest' | 'curl';
+export type SnippetLanguage = 'hono' | 'receipts' | 'curl';
 
 export const LANGUAGES: Array<{ id: SnippetLanguage; label: string; sub: string }> = [
-  { id: 'hono', label: 'Hono', sub: 'TS · Cloudflare / Bun / Node' },
-  { id: 'express', label: 'Express', sub: 'TS · Node' },
-  { id: 'fastapi', label: 'FastAPI', sub: 'Python · Uvicorn' },
-  { id: 'mcp', label: 'MCP server', sub: 'TS · @modelcontextprotocol/sdk' },
-  { id: 'manifest', label: 'leash-mcp.json', sub: 'Manifest file' },
+  { id: 'hono', label: 'Hono seller', sub: 'TS · @leashmarket/seller-kit' },
+  { id: 'receipts', label: 'Receipts', sub: 'Explorer forwarding' },
   { id: 'curl', label: 'curl', sub: 'Buyer-side test' },
 ];
 
@@ -49,166 +60,199 @@ export function snippet(language: SnippetLanguage, params: SnippetParams): strin
   switch (language) {
     case 'hono':
       return honoSnippet(p);
-    case 'express':
-      return expressSnippet(p);
-    case 'fastapi':
-      return fastapiSnippet(p);
-    case 'mcp':
-      return mcpSnippet(p);
-    case 'manifest':
-      return manifestSnippet(p);
+    case 'receipts':
+      return receiptsSnippet(p);
     case 'curl':
       return curlSnippet(p);
   }
 }
 
 function honoSnippet(p: Required<SnippetParams>): string {
-  return `// Hono — drop in front of any tool route
+  return p.rail === 'mpp' ? mppHonoSnippet(p) : x402HonoSnippet(p);
+}
+
+function x402HonoSnippet(p: Required<SnippetParams>): string {
+  return `// Hono — gate a route with @leashmarket/seller-kit using x402
 import { Hono } from 'hono';
-import { x402Middleware } from '@leashmarket/seller-kit/hono';
+import { serve } from '@hono/node-server';
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
+import { mplCore } from '@metaplex-foundation/mpl-core';
+import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
+import { createSeller } from '@leashmarket/seller-kit';
 
 const app = new Hono();
+const umi = createUmi(process.env.SOLANA_RPC)
+  .use(mplCore())
+  .use(mplToolbox());
 
-app.use(
-  '/${p.slug}/*',
-  x402Middleware({
-    price: { amount: '${p.amount}', currency: '${p.currency}' },
-    network: '${p.network}',
-    payTo: '${p.payTo}',
-    facilitator: 'https://facilitator-devnet.leash.market',
-  }),
-);
+process.env.LEASH_API_URL = 'https://api.leash.market';
+process.env.LEASH_API_KEY = '<your-leash-api-key>';
+
+createSeller(app, {
+  umi,
+  // This is your Leash agent address, not an arbitrary receiving wallet.
+  // seller-kit derives the on-chain payTo PDA from this identity.
+  sellerAgent: { asset: '${p.sellerAgent}' },
+  network: '${p.network}',
+  facilitator: '${facilitatorFor(p.network)}',
+  routes: {
+    'POST /${p.slug}/${p.toolName}': {
+      description: '${capitalize(p.slug.replace(/-/g, ' '))} ${p.toolName} endpoint',
+      price: '${p.amount} ${p.currency}',
+      currency: '${p.currency}',
+      acceptsCurrencies: ['USDT', 'USDG'],
+    },
+  },
+  // With LEASH_API_URL + LEASH_API_KEY set, seller-kit forwards earn receipts
+  // so explorer.leash.market can show successful paid calls.
+});
 
 app.post('/${p.slug}/${p.toolName}', async (c) => {
-  const body = await c.req.json();
-  // payment is verified before this runs
-  return c.json({ ok: true, query: body.query });
+  const { query } = await c.req.json();
+
+  // Payment is verified before this runs. Put the API you want to monetize here.
+  const upstream = await fetch('${p.upstreamUrl}', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ query, limit: 5 }),
+  });
+
+  if (!upstream.ok) {
+    return c.json({ error: 'search_failed' }, 502);
+  }
+
+  const data = await upstream.json();
+  return c.json({
+    ok: true,
+    query,
+    results: data.results,
+  });
 });
 
-export default app;`;
+serve({ fetch: app.fetch, port: 8080 });`;
 }
 
-function expressSnippet(p: Required<SnippetParams>): string {
-  return `// Express — drop in front of any tool route
-import express from 'express';
-import { x402Express } from '@leashmarket/seller-kit/express';
+function mppHonoSnippet(p: Required<SnippetParams>): string {
+  return `// Hono — gate a route with @leashmarket/seller-kit using MPP
+import { Hono } from 'hono';
+import { serve } from '@hono/node-server';
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
+import { mplCore } from '@metaplex-foundation/mpl-core';
+import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';
+import { createMppSeller } from '@leashmarket/seller-kit';
 
-const app = express();
+const app = new Hono();
+const umi = createUmi(process.env.SOLANA_RPC)
+  .use(mplCore())
+  .use(mplToolbox());
 
-app.use(express.json());
-app.use(
-  '/${p.slug}',
-  x402Express({
-    price: { amount: '${p.amount}', currency: '${p.currency}' },
-    network: '${p.network}',
-    payTo: '${p.payTo}',
-    facilitator: 'https://facilitator-devnet.leash.market',
-  }),
-);
+process.env.LEASH_API_URL = 'https://api.leash.market';
+process.env.LEASH_API_KEY = '<your-leash-api-key>';
 
-app.post('/${p.slug}/${p.toolName}', (req, res) => {
-  // payment is verified before this runs
-  res.json({ ok: true, query: req.body.query });
+createMppSeller(app, {
+  umi,
+  // This is your Leash agent address, not an arbitrary receiving wallet.
+  // seller-kit derives the on-chain payTo PDA from this identity.
+  sellerAgent: { asset: '${p.sellerAgent}' },
+  network: '${p.network}',
+  facilitator: '${facilitatorFor(p.network)}',
+  // MPP challenges include the facilitator fee payer that co-signs settlement.
+  feePayerAddress: process.env.LEASH_MPP_FEE_PAYER ?? '${p.feePayerAddress}',
+  routes: {
+    'POST /${p.slug}/${p.toolName}': {
+      description: '${capitalize(p.slug.replace(/-/g, ' '))} ${p.toolName} endpoint',
+      price: '${p.amount} ${p.currency}',
+      currency: '${p.currency}',
+    },
+  },
+  // Use a shared challengeStore (Redis/KV) when running multiple instances.
 });
 
-app.listen(8080);`;
-}
+app.post('/${p.slug}/${p.toolName}', async (c) => {
+  const { query } = await c.req.json();
 
-function fastapiSnippet(p: Required<SnippetParams>): string {
-  return `# FastAPI — drop in front of any tool route
-from fastapi import FastAPI, Request
-from leash_seller_kit.fastapi import x402_required
-
-app = FastAPI()
-
-@app.post("/${p.slug}/${p.toolName}")
-@x402_required(
-    amount="${p.amount}",
-    currency="${p.currency}",
-    network="${p.network}",
-    pay_to="${p.payTo}",
-    facilitator="https://facilitator-devnet.leash.market",
-)
-async def ${p.toolName}(request: Request):
-    body = await request.json()
-    # payment is verified before this runs
-    return {"ok": True, "query": body.get("query")}`;
-}
-
-function mcpSnippet(p: Required<SnippetParams>): string {
-  return `// MCP server — every tool call gated by x402
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { z } from 'zod';
-import { withX402 } from '@leashmarket/seller-kit/mcp';
-
-const server = new McpServer({ name: '${p.slug}', version: '0.1.0' });
-
-server.tool(
-  '${p.toolName}',
-  'Description shown to the agent',
-  { query: z.string() },
-  withX402(
-    {
-      price: { amount: '${p.amount}', currency: '${p.currency}' },
-      network: '${p.network}',
-      payTo: '${p.payTo}',
+  // Payment is verified before this runs. Put the API you want to monetize here.
+  const upstream = await fetch('${p.upstreamUrl}', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
     },
-    async ({ query }) => {
-      // payment is verified before this runs
-      const results = await mySearchAPI(query);
-      return { content: [{ type: 'text', text: JSON.stringify(results) }] };
-    },
-  ),
-);
+    body: JSON.stringify({ query, limit: 5 }),
+  });
 
-server.start();`;
+  if (!upstream.ok) {
+    return c.json({ error: 'search_failed' }, 502);
+  }
+
+  const data = await upstream.json();
+  return c.json({
+    ok: true,
+    query,
+    results: data.results,
+  });
+});
+
+serve({ fetch: app.fetch, port: 8080 });`;
 }
 
-function manifestSnippet(p: Required<SnippetParams>): string {
-  return JSON.stringify(
-    {
-      name: capitalize(p.slug.replace(/-/g, ' ')),
-      slug: p.slug,
-      description: 'One-line description of what your capability does for agents.',
-      category: 'misc',
-      endpoint: `https://your-domain.com/mcp`,
-      pricing: {
-        type: p.amount === '0' ? 'free' : 'per_call',
-        amount: p.amount,
-        currency: p.currency,
+function receiptsSnippet(p: Required<SnippetParams>): string {
+  return `// Explorer visibility needs receipt ingestion, not just an on-chain transfer.
+const routes = {
+  'POST /${p.slug}/${p.toolName}': {
+    description: '${capitalize(p.slug.replace(/-/g, ' '))} ${p.toolName} endpoint',
+    price: '${p.amount} ${p.currency}',
+    currency: '${p.currency}',
+  },
+};
+
+// Option A: let seller-kit use its built-in env-based receipt sink.
+process.env.LEASH_API_URL = 'https://api.leash.market';
+process.env.LEASH_API_KEY = '<your-leash-api-key>';
+
+createSeller(app, {
+  umi,
+  sellerAgent: { asset: '${p.sellerAgent}' },
+  network: '${p.network}',
+  routes,
+});
+
+// Option B: forward explicitly.
+createSeller(app, {
+  umi,
+  sellerAgent: { asset: '${p.sellerAgent}' },
+  network: '${p.network}',
+  routes,
+  onReceipt: async (receipt) => {
+    await fetch(\`https://api.leash.market/v1/receipts/\${receipt.agent}\`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: \`Bearer \${process.env.LEASH_API_KEY}\`,
       },
-      tools: [
-        {
-          name: p.toolName,
-          description: 'What this callable tool does, in one sentence.',
-          inputSchema: {
-            type: 'object',
-            properties: { query: { type: 'string' } },
-            required: ['query'],
-          },
-        },
-      ],
-      docs_url: 'https://your-domain.com/docs',
-      free_tier: 100,
-    },
-    null,
-    2,
-  );
+      body: JSON.stringify(receipt),
+    });
+  },
+});`;
 }
 
 function curlSnippet(p: Required<SnippetParams>): string {
-  return `# Test it from the buyer side. The first call returns 402 with payment instructions.
+  return `# Test the public endpoint. The first call returns 402 with payment instructions.
 curl -X POST https://your-domain.com/${p.slug}/${p.toolName} \\
   -H 'content-type: application/json' \\
   -d '{"query":"hello"}'
 
-# Then sign + retry with the leash buyer-kit:
-npx @leashmarket/buyer-kit pay \\
-  --url https://your-domain.com/${p.slug}/${p.toolName} \\
-  --key lsh_live_… \\
-  --body '{"query":"hello"}'`;
+# Then pay from an agent treasury with @leashmarket/buyer-kit.
+# The buyer agent needs balance + delegation before this can settle.`;
 }
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function facilitatorFor(network: Required<SnippetParams>['network']): string {
+  return network === 'solana-mainnet'
+    ? 'https://facilitator.leash.market'
+    : 'https://facilitator-devnet.leash.market';
 }

@@ -36,7 +36,7 @@
  *   LEASH_TEST_TOPUP_USDC           Top up the delegation to this many USDC if
  *                                   the current allowance can't cover the call
  *                                   (default: enough for one call).
- *   LEASH_FACILITATOR_URL           Override the facilitator (defaults to devnet-facilitator.leash.market).
+ *   LEASH_FACILITATOR_URL           Override the facilitator (defaults to facilitator-devnet.leash.market).
  *   LEASH_TEST_PORT                 Local seller port (default 3050).
  *
  * Pre-conditions on-chain:

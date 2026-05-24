@@ -1,11 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, BookOpen, Code2, KeyRound, PackagePlus, Sparkles, Wallet } from 'lucide-react';
+import { ArrowRight, Code2, KeyRound, PackagePlus, Sparkles, Wallet } from 'lucide-react';
 import useSWR from 'swr';
 import { usePrivy } from '@privy-io/react-auth';
 
-import { McpSimulation } from '@/components/marketplace/mcp-simulation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,7 +28,6 @@ export default function CreatorOverviewPage() {
   const items = data?.items ?? [];
   const totals = {
     total: items.length,
-    pending: items.filter((l) => l.status === 'pending').length,
     live: items.filter((l) => l.status === 'approved').length,
     paid: items.filter((l) => l.pricing.type !== 'free').length,
   };
@@ -42,7 +40,6 @@ export default function CreatorOverviewPage() {
 
   return (
     <div className="space-y-10">
-      {/* Hero / animated simulator */}
       <section className="space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -56,29 +53,23 @@ export default function CreatorOverviewPage() {
               Building an agent capability?
             </h1>
             <p className="mt-2 max-w-xl text-fg-muted">
-              Drop in your{' '}
-              <code className="rounded bg-bg-elev px-1.5 py-0.5 font-mono text-fg">
-                leash-mcp.json
-              </code>
-              , set a price, and let verified agent identities discover, call, and pay you within
-              minutes.
+              Monetize a GET or POST endpoint, list it as an agent capability, and let verified
+              agent identities discover, call, and pay you within minutes.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild>
-              <Link href="/creator/list">
-                <Sparkles className="size-4" /> List your capability
+              <Link href="/creator/monetize">
+                <Code2 className="size-4" /> Monetize endpoint
               </Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/creator/snippets">
-                <Code2 className="size-4" /> Get the seller kit
+              <Link href="/creator/list">
+                <Sparkles className="size-4" /> List capability
               </Link>
             </Button>
           </div>
         </div>
-
-        <McpSimulation />
       </section>
 
       {/* Numbers */}
@@ -86,7 +77,7 @@ export default function CreatorOverviewPage() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <Stat label="Listings" value={totals.total} loading={isLoading} />
           <Stat label="Live" value={totals.live} loading={isLoading} accent="emerald" />
-          <Stat label="Pending" value={totals.pending} loading={isLoading} accent="amber" />
+          <Stat label="Instant discovery" value={totals.live} loading={isLoading} accent="brand" />
           <Stat label="Paid capabilities" value={totals.paid} loading={isLoading} accent="brand" />
         </div>
       </section>
@@ -96,14 +87,14 @@ export default function CreatorOverviewPage() {
         <ActionCard
           icon={PackagePlus}
           title="List a capability"
-          body="Paste your manifest URL or hand-build one. We validate, you approve, agent identities discover."
+          body="Publish a provider URL plus one or more payable endpoints to marketplace discovery."
           href="/creator/list"
         />
         <ActionCard
           icon={Code2}
-          title="Make any API x402-compliant"
-          body="Drop the seller-kit middleware into Hono / Express / FastAPI. Payment in front of your handler in minutes."
-          href="/creator/snippets"
+          title="Monetize an endpoint"
+          body="Take a raw GET or POST endpoint, choose x402 or MPP, set a stablecoin price, and get a hosted payable URL."
+          href="/creator/monetize"
         />
         <ActionCard
           icon={KeyRound}
@@ -113,8 +104,8 @@ export default function CreatorOverviewPage() {
         />
       </section>
 
-      {/* Earnings + how it works */}
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* Earnings */}
+      <section>
         <Card>
           <CardHeader className="space-y-1">
             <div className="flex items-center gap-2">
@@ -122,43 +113,13 @@ export default function CreatorOverviewPage() {
               <CardTitle>Earnings (preview)</CardTitle>
             </div>
             <CardDescription>
-              Per-call USDC settlement lands directly in your wallet. Charts arrive next batch.
+              Per-call stablecoin settlement lands directly in your wallet. Charts arrive next
+              batch.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="rounded-md border border-dashed bg-bg-elev/40 p-8 text-center text-sm text-fg-muted">
               No receipts yet. Buyers settle on-chain on first paid call.
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="space-y-1">
-            <div className="flex items-center gap-2">
-              <BookOpen className="size-4 text-brand-strong" />
-              <CardTitle>How leash.market works</CardTitle>
-            </div>
-            <CardDescription>Three steps from idea to a paid agent capability.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <Step n={1} title="Drop your manifest">
-              Host <code className="font-mono text-fg">/.well-known/leash-mcp.json</code> on your
-              endpoint. We'll fetch it, validate it, and prefill the listing.
-            </Step>
-            <Step n={2} title="Set a price">
-              Free, per-call USDC, or variable. Free tier gives agent identities a chance to try
-              your capability risk-free.
-            </Step>
-            <Step n={3} title="Wrap your handler">
-              Paste the seller-kit snippet so x402 settles before your code runs. Receipts post
-              automatically.
-            </Step>
-            <div className="pt-2">
-              <Button asChild variant="link" className="px-0">
-                <Link href="/creator/docs">
-                  Read the full guide <ArrowRight className="size-3.5" />
-                </Link>
-              </Button>
             </div>
           </CardContent>
         </Card>
@@ -228,19 +189,5 @@ function ActionCard({
         </Link>
       </div>
     </Card>
-  );
-}
-
-function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-start gap-3">
-      <span className="grid size-6 shrink-0 place-items-center rounded-full border bg-bg text-xs font-mono text-fg-muted">
-        {n}
-      </span>
-      <div>
-        <div className="font-medium">{title}</div>
-        <p className="text-fg-muted">{children}</p>
-      </div>
-    </div>
   );
 }

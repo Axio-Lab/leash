@@ -1,8 +1,10 @@
 import type { NextConfig } from 'next';
+import { join } from 'node:path';
 
 const nextConfig: NextConfig = {
   transpilePackages: ['@leashmarket/platform-auth'],
   output: 'standalone',
+  outputFileTracingRoot: join(process.cwd(), '../..'),
   serverExternalPackages: ['@privy-io/server-auth', '@libsql/client', 'ioredis'],
   async redirects() {
     return [

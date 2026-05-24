@@ -18,7 +18,8 @@ export type Listing = {
   category: string;
   endpoint: string;
   pricing: { type: string; amount?: string; currency?: string };
-  tools: Array<{ name: string }>;
+  endpoints?: Array<{ method: string; url: string; description: string }>;
+  tools?: Array<{ name: string }>;
   endpoint_count?: number;
   seller_agent_mint?: string | null;
   seller_identity?: {

@@ -11,24 +11,22 @@ export const EXAMPLE_MANIFEST: ManifestImport = {
   description: 'Search 50M curated sources with citations. Built for agents that need fresh facts.',
   category: 'search',
   endpoint: 'https://search.demo.leash.market/mcp',
-  tools: [
+  endpoints: [
     {
-      name: 'search',
+      method: 'POST',
+      url: 'https://search.demo.leash.market/mcp/tools/search',
       description: 'Returns the top results for a query, with citations.',
-      inputSchema: {
-        type: 'object',
-        properties: { query: { type: 'string' }, limit: { type: 'number' } },
-        required: ['query'],
-      },
+      pricing: { type: 'per_call', amount: '0.001', currency: 'USDC' },
+      protocol: ['x402'],
+      supported_usd: ['USDC', 'USDT', 'USDG'],
     },
     {
-      name: 'fetch_url',
+      method: 'GET',
+      url: 'https://search.demo.leash.market/mcp/tools/fetch_url',
       description: 'Fetch a single URL and return cleaned markdown.',
-      inputSchema: {
-        type: 'object',
-        properties: { url: { type: 'string' } },
-        required: ['url'],
-      },
+      pricing: { type: 'variable' },
+      protocol: ['x402'],
+      supported_usd: ['USDC'],
     },
   ],
   pricing: { type: 'per_call', amount: '0.001', currency: 'USDC' },
@@ -43,7 +41,7 @@ export const EXAMPLE_DRAFT: ListingDraft = {
   category: EXAMPLE_MANIFEST.category,
   endpoint: EXAMPLE_MANIFEST.endpoint,
   pricing: EXAMPLE_MANIFEST.pricing,
-  tools: EXAMPLE_MANIFEST.tools,
+  endpoints: EXAMPLE_MANIFEST.endpoints ?? [],
   ...(EXAMPLE_MANIFEST.docs_url ? { docsUrl: EXAMPLE_MANIFEST.docs_url } : {}),
   freeTier: EXAMPLE_MANIFEST.free_tier ?? 0,
 };

@@ -12,9 +12,9 @@ description: 'Approve a spend allowance from your agent treasury so the executiv
 
 ## Why a delegation (not a per-call wrap)?
 
-Every production Solana x402 facilitator (`devnet-facilitator.leash.market`,
-`facilitator.leash.market`, `devnet-facilitator.leash.market`, Coinbase CDP, and others) only
-settles vanilla SPL `TransferChecked` transactions. Wrapping the transfer in
+Every production Solana x402 facilitator (`facilitator-devnet.leash.market`,
+`facilitator.leash.market`, Coinbase CDP, and others) only settles vanilla SPL
+`TransferChecked` transactions. Wrapping the transfer in
 `mpl-core::Execute` would require facilitator-side changes the seller doesn't
 control. Instead Leash uses a **one-time `SPL.Approve`** wrapped in
 `mpl-core::Execute`:

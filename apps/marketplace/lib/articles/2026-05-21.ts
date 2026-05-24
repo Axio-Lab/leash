@@ -887,6 +887,149 @@ const programmaticArticleSpecs: ProgrammaticArticleSpec[] = [
     ],
   },
   {
+    slug: 'monetize-api-endpoint-with-leash-seller-kit',
+    title: 'How to monetize an API endpoint with Leash seller-kit',
+    seoTitle: 'Monetize an API endpoint with x402, MPP, and Leash seller-kit',
+    seoDescription:
+      'Turn an existing GET or POST API route into a paid x402 or MPP endpoint, then list the payable URL on Leash marketplace for agent discovery.',
+    eyebrow: 'Endpoint monetization',
+    category: 'Packages',
+    audience: 'API builders selling capabilities to AI agents',
+    description:
+      'Wrap a normal API route with seller-kit, require stablecoin payment before the handler runs, and publish receipts so the transaction becomes reputation.',
+    keywords: [
+      'monetize API endpoint',
+      '@leashmarket/seller-kit',
+      'x402 API payments',
+      'MPP API payments',
+      'AI agent API monetization',
+    ],
+    tags: ['Seller kit', 'API monetization', 'x402', 'MPP', 'Explorer'],
+    takeaways: [
+      'seller-kit needs your Leash agent address because payTo is derived from that agent identity.',
+      'The Monetize endpoint flow starts from your existing URL and stores its GET or POST request type on the payment link.',
+      'The List capability flow reads method, owner identity, rail, price, currency, and accepted stablecoins from the pasted payable URL.',
+      'Explorer visibility requires receipt ingestion or an API-aware transaction path, not only a raw on-chain transfer.',
+    ],
+    useCase:
+      'A useful API endpoint can become an agent-readable product when it advertises a price, accepts x402 or MPP payment, and ties every successful call to a Leash agent identity. First paste the existing URL into /creator/monetize and choose whether buyers should call it with GET or POST; then publish the hosted payable URL in /creator/list so agents can discover what they can buy.',
+    mechanics:
+      'seller-kit mounts payment middleware onto your Hono app. `createSeller` speaks x402; `createMppSeller` speaks MPP. Both receive your Leash agent address, derive the seller Asset Signer PDA as the on-chain destination, advertise accepted stablecoins through the facilitator, and only call your route handler after the buyer signs and settlement succeeds.',
+    checklist:
+      'Create or reuse a Leash agent, select or create an active marketplace API key, paste the existing endpoint URL, choose GET or POST, choose x402 or MPP, pick USDC/USDT/USDG, create the hosted payable endpoint, then paste that payable URL into /creator/list so Leash can import the request type, pricing, rail, accepted currencies, and owner identity.',
+    codeBlocks: [
+      codeBlock('Create a hosted payable endpoint from the creator flow', 'txt', [
+        '1. Open /creator/monetize.',
+        '2. Paste your existing endpoint URL.',
+        '3. Choose GET or POST as the request type buyers should use.',
+        '4. Choose x402 or MPP and USDC, USDT, or USDG pricing.',
+        '5. Select the seller identity and active marketplace API key.',
+        '6. Click Create payable endpoint.',
+        '7. Optional: click Add to marketplace discovery, or paste the hosted URL into /creator/list later.',
+        '8. In /creator/list, Leash reads the payable endpoint metadata and uses the endpoint owner identity for trust checks.',
+      ]),
+      codeBlock('Seller-kit route', 'ts', [
+        "import { Hono } from 'hono';",
+        "import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';",
+        "import { mplCore } from '@metaplex-foundation/mpl-core';",
+        "import { mplToolbox } from '@metaplex-foundation/mpl-toolbox';",
+        "import { createSeller } from '@leashmarket/seller-kit';",
+        '',
+        'const app = new Hono();',
+        'const umi = createUmi(process.env.SOLANA_RPC)',
+        '  .use(mplCore())',
+        '  .use(mplToolbox());',
+        '',
+        "process.env.LEASH_API_URL = 'https://api.leash.market';",
+        "process.env.LEASH_API_KEY = '<your-leash-api-key>';",
+        '',
+        'createSeller(app, {',
+        '  umi,',
+        "  sellerAgent: { asset: '<your-leash-agent-address>' },",
+        "  network: 'solana-devnet',",
+        "  facilitator: 'https://facilitator-devnet.leash.market',",
+        '  routes: {',
+        "    'GET /paid/quote': {",
+        "      description: 'Paid quote endpoint',",
+        "      price: '0.001 USDC',",
+        "      currency: 'USDC',",
+        "      acceptsCurrencies: ['USDT', 'USDG'],",
+        '    },',
+        '  },',
+        '});',
+        '',
+        "app.post('/paid/quote', async (c) => {",
+        '  const { query } = await c.req.json();',
+        "  const upstream = await fetch('https://api.example-search.com/v1/search', {",
+        "    method: 'POST',",
+        "    headers: { 'content-type': 'application/json' },",
+        '    body: JSON.stringify({ query, limit: 5 }),',
+        '  });',
+        "  if (!upstream.ok) return c.json({ error: 'search_failed' }, 502);",
+        '  const data = await upstream.json();',
+        '  return c.json({ ok: true, results: data.results });',
+        '});',
+      ]),
+      codeBlock('Smoke-test the paid endpoint', 'sh', [
+        '# Starts a local seller route, confirms the unpaid 402, then pays with buyer-kit.',
+        'pnpm --filter @leashmarket/api exec tsx \\',
+        '  --env-file-if-exists=.env.e2e \\',
+        '  scripts/seller-kit-local-smoke.ts',
+      ]),
+      codeBlock('Forward receipts for explorer visibility', 'ts', [
+        'createSeller(app, {',
+        '  umi,',
+        '  sellerAgent: { asset: process.env.LEASH_SELLER_AGENT! },',
+        '  network,',
+        '  routes,',
+        '  onReceipt: async (receipt) => {',
+        '    await fetch(`${process.env.LEASH_API_URL}/v1/receipts/${receipt.agent}`, {',
+        "      method: 'POST',",
+        '      headers: {',
+        "        'content-type': 'application/json',",
+        '        authorization: `Bearer ${process.env.LEASH_API_KEY}`',
+        '      },',
+        '      body: JSON.stringify(receipt),',
+        '    });',
+        '  },',
+        '});',
+      ]),
+    ],
+    faqs: [
+      {
+        question: 'Why does seller-kit need a seller agent?',
+        answer:
+          'seller-kit derives the seller payTo address from your Leash agent address. That keeps payment, receipts, and reputation attached to the agent identity instead of a loose wallet address.',
+      },
+      {
+        question: 'Should I choose x402 or MPP?',
+        answer:
+          'Use x402 when you want standard HTTP 402 payment-required semantics. Use MPP when your buyer clients prefer problem+json negotiation. Leash keeps both attached to the same agent identity and receipt model.',
+      },
+      {
+        question: 'Do I have to list the endpoint in marketplace discovery?',
+        answer:
+          'No. A hosted payment link can stay private. Discovery is only for endpoints you want agents to find through browse, search, and reputation surfaces.',
+      },
+      {
+        question: 'Why did my smoke-test transaction not appear in the explorer?',
+        answer:
+          'The smoke script proved settlement locally but kept receipts in memory. Explorer pages update when the Leash API/indexer knows about the event, usually through receipt forwarding, runner forwarding, or API prepare/sign/submit flows that watch the agent.',
+      },
+    ],
+    docsLinks: [
+      docs('/sdk/seller-kit', 'seller-kit docs'),
+      docs('/guides/create-an-endpoint', 'Create an endpoint'),
+      docs('/guides/list-agent-capability', 'List an agent capability'),
+      docs('/api/payment-links', 'Payment links API'),
+    ],
+    relatedArticles: [
+      'how-to-build-paid-api-leashmarket-seller-kit',
+      'what-is-x402-on-solana',
+      'how-receipts-become-ai-agent-reputation',
+    ],
+  },
+  {
     slug: 'how-to-build-autonomous-buyer-leashmarket-buyer-kit',
     title: 'How to build an autonomous buyer with @leashmarket/buyer-kit',
     eyebrow: 'Buyer kit',
@@ -1231,7 +1374,7 @@ const programmaticArticleSpecs: ProgrammaticArticleSpec[] = [
     mechanics:
       'Leash marketplace submissions include seller_agent_mint, enrich detail pages with seller identity summaries, and sync approved listings into capability cards.',
     checklist:
-      'Create or select your seller identity, submit the listing metadata, include endpoint and pricing, wait for approval, and verify the seller identity panel.',
+      'Create or select your seller identity, submit the listing metadata, include endpoint and pricing, then verify the seller identity panel after it appears in marketplace discovery.',
     codeBlocks: [
       codeBlock('Listing identity metadata', 'json', [
         '{',

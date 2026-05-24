@@ -41,7 +41,7 @@ When someone pays a link, an x402 **facilitator** verifies the buyer’s signed 
 
 | Network (`solana-*`) | Default URL                               | Notes                                                                              |
 | -------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------- |
-| `solana-devnet`      | `https://devnet-facilitator.leash.market` | Leash-operated devnet facilitator. Gas-sponsored; Token-2022 + `exact` SVM scheme. |
+| `solana-devnet`      | `https://facilitator-devnet.leash.market` | Leash-operated devnet facilitator. Gas-sponsored; Token-2022 + `exact` SVM scheme. |
 | `solana-mainnet`     | `https://facilitator.leash.market`        | Leash-operated mainnet facilitator. Gas-sponsored; same wire contract.             |
 
 ### Other facilitators (fully supported)
@@ -51,7 +51,7 @@ You are **not locked in** to the Leash facilitators. Any HTTPS base URL that imp
 - `facilitator: 'https://…'` on `createBuyer` / `createSeller`, or
 - `LEASH_FACILITATOR_URL` / `NEXT_PUBLIC_LEASH_FACILITATOR_URL` / `LEASH_API_FACILITATOR_URL` (depending on surface).
 
-Third-party examples: `devnet-facilitator.leash.market` (devnet), `facilitator.leash.market` (mainnet), community deployments, or your own self-hosted instance. Resolution order: [`defaultFacilitatorFor`](https://github.com/leash-market/leash/blob/main/packages/core/src/x402/facilitator.ts).
+Third-party examples: `facilitator-devnet.leash.market` (devnet), `facilitator.leash.market` (mainnet), community deployments, or your own self-hosted instance. Resolution order: [`defaultFacilitatorFor`](https://github.com/leash-market/leash/blob/main/packages/core/src/x402/facilitator.ts).
 
 ### Playground (`apps/playground`)
 
@@ -66,7 +66,7 @@ Payment links served at `https://api.leash.market/x/{id}` use whatever the API o
 
 ### Self-hosting or using a third-party facilitator (optional)
 
-The Leash defaults work for most users. If you need a custom settlement path — self-hosted [`@leashmarket/facilitator`](/guides/run-a-facilitator), a community host, or a third-party provider like `devnet-facilitator.leash.market` / `facilitator.leash.market` — pass a `facilitator:` override or set the env var. The wire contract is the same across all of them. See [Run a Leash facilitator](/guides/run-a-facilitator).
+The Leash defaults work for most users. If you need a custom settlement path — self-hosted [`@leashmarket/facilitator`](/guides/run-a-facilitator), a community host, or a third-party provider like `facilitator-devnet.leash.market` / `facilitator.leash.market` — pass a `facilitator:` override or set the env var. The wire contract is the same across all of them. See [Run a Leash facilitator](/guides/run-a-facilitator).
 
 ### Related docs
 
@@ -113,7 +113,7 @@ each settlement the runner will POST a versioned `WebhookPayload`:
     "agent": "33Qv…",
     "network": "solana-devnet",
     "amount": { "amount": "1000", "currency": "USDC" },
-    "facilitator": "https://devnet-facilitator.leash.market",
+    "facilitator": "https://facilitator-devnet.leash.market",
     "explorer": {
       "tx": "https://solscan.io/tx/5J7…?cluster=devnet",
       "agent": "https://yourapp/agents/33Qv…",
@@ -194,7 +194,7 @@ curl https://yourapp/x/<id>
 #     "payTo":"…",
 #     …
 #   },
-#   "facilitator": "https://devnet-facilitator.leash.market"
+#   "facilitator": "https://facilitator-devnet.leash.market"
 # }
 ```
 
@@ -264,7 +264,7 @@ browser callers (CORS-safe).
   unpaid request.
 - Resolves the seller `payTo` to your agent's Asset Signer PDA — no extra
   key, no wallet to fund.
-- Settles via [`devnet-facilitator.leash.market`](https://devnet-facilitator.leash.market)
+- Settles via [`facilitator-devnet.leash.market`](https://facilitator-devnet.leash.market)
   by default (Leash-operated, gas-sponsored). Override with `LEASH_FACILITATOR_URL` or `facilitator:` option.
 - Emits an `earn` `ReceiptV1` to the runner under
   `/a/<owner_agent>/receipts` — so the agent's profile feed updates in

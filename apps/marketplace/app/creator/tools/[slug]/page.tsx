@@ -21,7 +21,7 @@ type Detail = {
     category: string;
     endpoint: string;
     pricing: { type: string; amount?: string; currency?: string };
-    tools: Array<{ name: string; description: string }>;
+    endpoints: Array<{ method: string; url: string; description: string }>;
     health_status: 'ok' | 'warn' | 'down' | null;
     created_at: string;
   };
@@ -106,7 +106,7 @@ export default function ManageListingPage({ params }: { params: Promise<{ slug: 
           <StarRating value={data.rating.avg} count={data.rating.count} />
         </Stat>
         <Stat label="Health">{data.listing.health_status ?? '—'}</Stat>
-        <Stat label="Callable tools">{data.listing.tools.length}</Stat>
+        <Stat label="Payable endpoints">{data.listing.endpoints.length}</Stat>
       </div>
 
       <Card>
@@ -122,14 +122,19 @@ export default function ManageListingPage({ params }: { params: Promise<{ slug: 
 
       <Card>
         <CardHeader>
-          <CardTitle>Callable tools</CardTitle>
+          <CardTitle>Payable endpoints</CardTitle>
         </CardHeader>
         <CardContent>
           <ul className="divide-y divide-border">
-            {data.listing.tools.map((t) => (
-              <li key={t.name} className="flex items-start gap-3 py-3 text-sm">
-                <code className="min-w-[10ch] font-mono text-brand-strong">{t.name}</code>
-                <span className="text-fg-muted">{t.description}</span>
+            {data.listing.endpoints.map((endpoint, index) => (
+              <li key={`${endpoint.method}-${endpoint.url}-${index}`} className="py-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <code className="rounded border bg-bg px-2 py-1 font-mono text-[11px] text-brand-strong">
+                    {endpoint.method}
+                  </code>
+                  <code className="break-all font-mono text-xs text-fg-muted">{endpoint.url}</code>
+                </div>
+                <p className="mt-2 text-fg-muted">{endpoint.description}</p>
               </li>
             ))}
           </ul>
