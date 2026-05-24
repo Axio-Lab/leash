@@ -384,6 +384,11 @@ export type PaymentLinkCreateInput = {
   response: PaymentLinkResponseTemplate;
   webhook_url?: string;
   wrap_receipt?: boolean;
+  /**
+   * Free-form metadata. Set `metadata.upstream_url` to monetize an existing
+   * HTTP endpoint; after settlement, the hosted paywall forwards the paid
+   * request to that upstream URL instead of returning only the response template.
+   */
   metadata?: Record<string, unknown>;
 };
 

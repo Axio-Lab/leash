@@ -1,6 +1,7 @@
 import {
   articlesGenerated20260521,
   articlesGenerated20260523,
+  articlesGenerated20260524,
   type BlogArticle,
 } from '@/lib/articles';
 
@@ -13,6 +14,7 @@ export type {
 } from '@/lib/articles';
 
 export const blogArticles: BlogArticle[] = [
+  ...articlesGenerated20260524,
   ...articlesGenerated20260523,
   ...articlesGenerated20260521,
 ];

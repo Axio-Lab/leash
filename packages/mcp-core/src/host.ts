@@ -40,6 +40,10 @@ export type CreatePaymentLinkArgs = {
   currency: StableSymbol;
   label: string;
   description?: string;
+  /** Existing API URL to call after settlement. When omitted, returns the static response template. */
+  upstream_url?: string;
+  /** HTTP method buyers should use for the hosted paywall. Defaults to GET. */
+  method?: 'GET' | 'POST';
   /** Hosted paywall rail. Defaults to x402 (`payment-required`). */
   protocol?: 'x402' | 'mpp';
 };

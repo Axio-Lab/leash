@@ -384,19 +384,36 @@ class StdioHost implements LeashHost {
     }
 
     try {
+      const method = args.method ?? 'GET';
+      const upstreamUrl = args.upstream_url?.trim();
       const body = {
         label: args.label,
         description: args.description,
         owner_agent: this.agentMint,
-        method: 'GET',
+        method,
         price: `${args.amount} ${args.currency}`,
         currency: args.currency,
         protocol: args.protocol ?? 'x402',
         response: {
           status: 200,
           mimeType: 'application/json',
-          body: { ok: true, label: args.label },
+          body: upstreamUrl
+            ? {
+                ok: true,
+                message: 'Payment accepted. Call the protected endpoint to receive live data.',
+                upstream_url: upstreamUrl,
+              }
+            : { ok: true, label: args.label },
         },
+        ...(upstreamUrl
+          ? {
+              metadata: {
+                upstream_url: upstreamUrl,
+                provider_url: new URL(upstreamUrl).origin,
+                pricing_type: 'fixed',
+              },
+            }
+          : {}),
       };
       const res = await fetch(`${this.apiBaseUrl}/v1/payment-links`, {
         method: 'POST',
@@ -428,7 +445,9 @@ class StdioHost implements LeashHost {
         price: `${args.amount} ${args.currency}`,
         currency: args.currency,
         label: args.label,
+        method,
         protocol: args.protocol ?? 'x402',
+        ...(upstreamUrl ? { upstream_url: upstreamUrl } : {}),
         network: json.network,
         owner_agent: json.owner_agent,
       });

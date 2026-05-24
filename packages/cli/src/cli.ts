@@ -33,7 +33,7 @@
  *   leash reputation <agent_mint>   Reputation snapshot (public).
  *   leash receipts [--limit N]      Recent receipts for the active agent.
  *   leash pay <link-url> [--method …]   Pay an x402 or MPP paywall (auto-detected).
- *   leash sell create-link …            Create a hosted link (--protocol x402|mpp).
+ *   leash sell create-link …            Create a hosted link or monetize an endpoint (--protocol x402|mpp).
  *   leash doctor                    Config + RPC + API reachability check.
  *   leash help / -h                 Full help.
  *   leash version / -v              Show installed version.
@@ -768,9 +768,10 @@ async function runSell(args: string[]): Promise<void> {
     return;
   }
   process.stderr.write(
-    'usage: leash sell create-link --label <text> --amount <n> [--currency USDC|USDG|USDT] [--description <text>] [--protocol x402|mpp] [--json]\n' +
+    'usage: leash sell create-link --label <text> --amount <n> [--currency USDC|USDG|USDT] [--description <text>] [--method GET|POST] [--upstream-url <url>] [--protocol x402|mpp] [--json]\n' +
       '\n' +
       'Creates a hosted payment link via the Leash API (requires LEASH_API_KEY).\n' +
+      'Pass --upstream-url to monetize an existing API endpoint; paid calls forward there after settlement.\n' +
       'Use --protocol mpp for MPP (`problem+json`) paywalls instead of default x402.\n',
   );
   process.exit(2);
@@ -783,13 +784,15 @@ async function runSellCreateLink(args: string[]): Promise<void> {
   const amount = numArg(args, '--amount');
   const currency = (optArg(args, '--currency') ?? 'USDC').toUpperCase() as 'USDC' | 'USDG' | 'USDT';
   const description = optArg(args, '--description');
+  const upstreamUrl = optArg(args, '--upstream-url');
+  const methodRaw = (optArg(args, '--method') ?? 'GET').toUpperCase();
   const protoRaw = optArg(args, '--protocol')?.toLowerCase();
   const protocol =
     protoRaw === 'mpp' ? ('mpp' as const) : protoRaw === 'x402' ? ('x402' as const) : undefined;
 
   if (!label || amount == null || !(amount > 0)) {
     process.stderr.write(
-      'usage: leash sell create-link --label <text> --amount <positive number> [--currency USDC|USDG|USDT] [--description <text>] [--protocol x402|mpp]\n',
+      'usage: leash sell create-link --label <text> --amount <positive number> [--currency USDC|USDG|USDT] [--description <text>] [--method GET|POST] [--upstream-url <url>] [--protocol x402|mpp]\n',
     );
     process.exit(2);
   }
@@ -801,12 +804,27 @@ async function runSellCreateLink(args: string[]): Promise<void> {
     process.stderr.write('--protocol must be x402 or mpp\n');
     process.exit(2);
   }
+  if (methodRaw !== 'GET' && methodRaw !== 'POST') {
+    process.stderr.write('--method must be GET or POST\n');
+    process.exit(2);
+  }
+  if (upstreamUrl) {
+    try {
+      const url = new URL(upstreamUrl);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('bad protocol');
+    } catch {
+      process.stderr.write('--upstream-url must be a valid http(s) URL\n');
+      process.exit(2);
+    }
+  }
 
   const result = await hostRef.createPaymentLink({
     label,
     amount,
     currency,
     ...(description ? { description } : {}),
+    method: methodRaw as 'GET' | 'POST',
+    ...(upstreamUrl ? { upstream_url: upstreamUrl } : {}),
     ...(protocol ? { protocol } : {}),
   });
   printResult(result, json, (payload) => {
@@ -817,6 +835,8 @@ async function runSellCreateLink(args: string[]): Promise<void> {
       `  id:          ${payload.id}`,
       `  url:         ${payload.url}`,
       `  price:       ${payload.price}`,
+      `  method:      ${payload.method ?? methodRaw}`,
+      ...(payload.upstream_url ? [`  upstream:   ${payload.upstream_url}`] : []),
       `  network:     ${payload.network}`,
       `  owner_agent: ${payload.owner_agent}`,
     ].join('\n');
@@ -1009,8 +1029,9 @@ function printHelp(): void {
       '                                     x402 + MPP links are probed automatically; use POST',
       '                                     when the seller endpoint requires it.',
       '  sell create-link --label L --amount N [--currency C] [--description …]',
-      '                    [--protocol x402|mpp]',
+      '                    [--method GET|POST] [--upstream-url URL] [--protocol x402|mpp]',
       '                                     create a hosted payment link (needs LEASH_API_KEY).',
+      '                                     Pass --upstream-url to monetize an existing API endpoint.',
       '                                     Default protocol is x402; use mpp for MPP paywalls.',
       '',
       'misc:',

@@ -25,6 +25,8 @@ Next.js app exposes them at
    - **Price** — dollar-style (`$0.001`), suffixed (`0.01 USDC`), or bare decimal (uses settlement currency).
    - **Custom slug** (optional) — the bit after `/x/`.
    - **Response body** — JSON returned verbatim after settlement.
+   - **Upstream URL** (optional) — an existing API URL to call after settlement.
+     If present, paid calls forward to this URL and return its live response.
    - **Post-payment hooks** (all optional, see below):
      - `webhook_url` — fire-and-forget POST of `{ payment, response }`.
      - `wrap_receipt` — embed the receipt envelope in the JSON body.

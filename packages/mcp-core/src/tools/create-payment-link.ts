@@ -17,6 +17,17 @@ const inputSchema = z.object({
     .max(120)
     .describe('Human-readable label for the link (e.g. "Coffee — large").'),
   description: z.string().max(500).optional(),
+  upstream_url: z
+    .string()
+    .url()
+    .optional()
+    .describe(
+      'Existing GET or POST API endpoint to monetize. When provided, the hosted payment link forwards paid calls to this URL after settlement.',
+    ),
+  method: z
+    .enum(['GET', 'POST'])
+    .optional()
+    .describe('HTTP method buyers should use for the payable endpoint. Defaults to GET.'),
   protocol: z
     .enum(['x402', 'mpp'])
     .optional()
@@ -29,6 +40,7 @@ export const createPaymentLinkTool = defineTool({
   name: 'leash_create_payment_link',
   description: [
     'Create a payment link (x402 or MPP) the user (or another agent) can call to pay this agent in USDC/USDG/USDT.',
+    'If upstream_url is provided, this monetizes that existing endpoint: paid calls are forwarded to the upstream URL after settlement.',
     'Requires an on-chain agent (treasury). Returns the public share URL on success — quote it back as a markdown link.',
   ].join(' '),
   inputSchema,

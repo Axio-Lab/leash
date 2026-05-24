@@ -212,6 +212,26 @@ const link = await leash.createPaymentLink({
 
 console.log('share this:', link.share_url); // -> https://api.leash.market/x/<id>
 
+const monetized = await leash.createPaymentLink({
+  label: 'JSONPlaceholder posts',
+  owner_agent: 'AjfeyP...',
+  method: 'GET',
+  price: '$0.001',
+  currency: 'USDC',
+  response: {
+    status: 200,
+    mimeType: 'application/json',
+    body: { ok: true, message: 'Payment accepted. Forwarding to upstream.' },
+  },
+  metadata: {
+    upstream_url: 'https://jsonplaceholder.typicode.com/posts',
+    provider_url: 'https://jsonplaceholder.typicode.com',
+    pricing_type: 'fixed',
+  },
+});
+
+console.log('paid upstream URL:', monetized.share_url);
+
 const all = await leash.listPaymentLinks({ limit: 25 });
 const one = await leash.getPaymentLink(link.id);
 await leash.updatePaymentLink(link.id, { price: '$0.02' });

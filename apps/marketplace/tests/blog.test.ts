@@ -4,8 +4,8 @@ import { blogArticles, getBlogSearchText, getRelatedArticles } from '@/lib/blog'
 
 describe('programmatic blog articles', () => {
   it('ships the existing articles plus the latest marketplace SEO guides', () => {
-    expect(blogArticles).toHaveLength(48);
-    expect(blogArticles[0]?.slug).toBe('how-to-list-trained-agent-on-leash-marketplace');
+    expect(blogArticles).toHaveLength(49);
+    expect(blogArticles[0]?.slug).toBe('how-to-verify-an-agent-domain-on-leash');
   });
 
   it('keeps article slugs unique and related links resolvable', () => {

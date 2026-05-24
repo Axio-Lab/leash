@@ -91,6 +91,8 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
           amount: args.amount,
           currency: args.currency,
           protocol: args.protocol,
+          method: args.method,
+          upstreamUrl: args.upstream_url,
         });
         return jsonResult({
           kind: 'payment_link',
@@ -100,6 +102,8 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
           price: `${args.amount} ${args.currency}`,
           currency: args.currency,
           protocol: args.protocol ?? 'x402',
+          method: args.method ?? 'GET',
+          ...(args.upstream_url ? { upstream_url: args.upstream_url } : {}),
           label: args.label,
           network: created.network,
           owner_agent: created.owner_agent,
@@ -862,6 +866,8 @@ type CreatePaymentLinkOnBehalfArgs = {
   amount: number;
   currency: 'USDC' | 'USDG' | 'USDT';
   protocol?: 'x402' | 'mpp';
+  method?: 'GET' | 'POST';
+  upstreamUrl?: string;
 };
 
 type PaymentLinkResponseBody = {
@@ -905,20 +911,37 @@ async function createPaymentLinkOnBehalfOfUser(
     );
   }
 
+  const method = args.method ?? 'GET';
+  const upstreamUrl = args.upstreamUrl?.trim();
   const body = {
     label: args.label,
     description: args.description,
     owner_agent: args.ownerAgent,
     ...(args.ownerWallet ? { owner_wallet: args.ownerWallet } : {}),
-    method: 'GET',
+    method,
     price: `${args.amount} ${args.currency}`,
     currency: args.currency,
     protocol: args.protocol ?? 'x402',
     response: {
       status: 200,
       mimeType: 'application/json',
-      body: { ok: true, label: args.label },
+      body: upstreamUrl
+        ? {
+            ok: true,
+            message: 'Payment accepted. Call the protected endpoint to receive live data.',
+            upstream_url: upstreamUrl,
+          }
+        : { ok: true, label: args.label },
     },
+    ...(upstreamUrl
+      ? {
+          metadata: {
+            upstream_url: upstreamUrl,
+            provider_url: new URL(upstreamUrl).origin,
+            pricing_type: 'fixed',
+          },
+        }
+      : {}),
   };
 
   const res = await fetch(`${env.leashApiUrl}/v1/payment-links`, {

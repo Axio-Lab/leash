@@ -6,9 +6,9 @@ follows the `SKILL.md` convention how to build on Leash.
 
 ## Available skills
 
-| Folder   | What it does                                                                                 |
-| -------- | -------------------------------------------------------------------------------------------- |
-| `leash/` | Build, monetise, and operate Solana agents that pay each other in real SPL stables via x402. |
+| Folder   | What it does                                                                                                                                                                    |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `leash/` | Build, monetise, and operate Solana agents that pay each other in real SPL stables via x402/MPP, including hosted payment links that forward to existing APIs after settlement. |
 
 ## Install in 30 seconds
 
