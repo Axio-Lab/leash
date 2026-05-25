@@ -41,9 +41,9 @@ capabilities attached to that identity.
 | Package                                                  | Purpose                                                                                                                        |
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | [`@leashmarket/sdk`](packages/sdk)                       | TypeScript client for identity lookup, discovery, verification, disclosures, webhooks, and API calls.                          |
-| [`@leashmarket/cli`](packages/cli)                       | Human CLI for minting, resolving, verifying, funding, paying, and operating agent identities.                                  |
-| [`@leashmarket/mcp`](packages/mcp)                       | Standalone MCP server that gives AI hosts Leash tools over STDIO.                                                              |
-| [`@leashmarket/mcp-core`](packages/mcp-core)             | Reusable MCP tool implementations and helpers.                                                                                 |
+| [`@leashmarket/cli`](packages/cli)                       | Human CLI for minting, resolving, verifying, funding, paying, operating identities, and creating hosted paywalls.              |
+| [`@leashmarket/mcp`](packages/mcp)                       | Standalone MCP server that gives AI hosts Leash tools over STDIO, including payment-link creation and payment.                 |
+| [`@leashmarket/mcp-core`](packages/mcp-core)             | Reusable MCP tool implementations and helpers, including payment-link schemas shared by CLI/MCP/agent hosts.                   |
 | [`@leashmarket/schemas`](packages/schemas)               | Canonical schemas for receipts, rules, registration, identity profiles, verification decisions, disclosures, and capabilities. |
 | [`@leashmarket/core`](packages/core)                     | Low-level x402, MPP, policy, treasury, receipt, token, and explorer utilities.                                                 |
 | [`@leashmarket/registry-utils`](packages/registry-utils) | Metaplex agent identity creation, registration, delegation, operator, and treasury helpers.                                    |
@@ -52,6 +52,13 @@ capabilities attached to that identity.
 | [`@leashmarket/facilitator`](packages/facilitator)       | x402/MPP facilitator server and settlement logic.                                                                              |
 | [`@leashmarket/runner`](packages/runner)                 | Local runner for receipt feeds, payment links, endpoints, and kill-switch behavior.                                            |
 | [`@leashmarket/testing`](packages/testing)               | Fixtures, conformance helpers, and mock facilitator/server utilities.                                                          |
+
+Hosted payment links can monetize existing APIs with
+`metadata.upstream_url`. For `POST` endpoints, creators can also set
+`metadata.expected_request_body` (or CLI `--expected-body '{}'`) to describe the
+JSON shape buyers should send. The buyer still sends the real body later to the
+hosted `/x/{id}` URL; Leash settles payment first, then forwards that body to the
+upstream endpoint.
 
 ## Requirements
 

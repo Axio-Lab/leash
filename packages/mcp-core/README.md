@@ -23,6 +23,20 @@ pnpm add @leashmarket/mcp-core
 | `LEASH_TOOLS`              | Canonical tool list adapters iterate — discover, pay, receipts, spend limits, etc.                     |
 | `helpers/*`                | Pure utilities: `probePaymentLink`, `fetchDiscover`, `fetchReputation`, token catalog, address helpers |
 
+## Payment-link tool contract
+
+`leash_create_payment_link` is the shared tool definition used by
+`@leashmarket/mcp`, `@leashmarket/cli`, and in-product agent hosts. It supports:
+
+- `method: "GET" | "POST"` — how buyers call the hosted paywall.
+- `upstream_url` — an existing API endpoint to call after settlement.
+- `expected_request_body` — arbitrary JSON metadata describing the POST body
+  buyers should send.
+
+`expected_request_body` is not the live request body. The buyer supplies the real
+body later through `leash_pay_payment_link` or another x402/MPP client, and the
+hosted paywall forwards it to `upstream_url` only after payment settles.
+
 ## Usage
 
 ```ts

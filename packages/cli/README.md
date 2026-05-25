@@ -78,6 +78,17 @@ leash reputation <agent_mint>
 
 # 7. Pay something.
 leash pay https://example.com/x/abc123
+leash pay https://api.leash.market/x/design-agent \
+  --method POST \
+  --body '{"prompt":"Design a landing page","style":"premium dark mode"}'
+
+# 7b. Create a hosted paywall for an existing POST endpoint.
+leash sell create-link \
+  --label "Design agent" \
+  --amount 1 \
+  --method POST \
+  --upstream-url https://api.example.com/design \
+  --expected-body '{"prompt":"string","style":"string","format":"string"}'
 
 # 8. Inspect activity.
 leash receipts                                # latest receipts (newest first)
@@ -141,7 +152,12 @@ activity:
   daily [--days N]                   per-day P&L buckets for the last N days
                                      (default 7). One row per UTC day with
                                      sent_usd, received_usd, net_usd, counts.
-  pay <link-url>                     probe → sign → settle an x402 paywall
+  pay <link-url> [--method GET|POST] [--body <json>]
+                                     probe → sign → settle x402/MPP paywall
+  sell create-link --label L --amount N [--currency C] [--description …]
+                    [--method GET|POST] [--upstream-url URL]
+                    [--expected-body JSON] [--protocol x402|mpp]
+                                     create a hosted payment link
 
 misc:
   doctor                             config + RPC + API reachability check
@@ -151,6 +167,34 @@ misc:
 global flags:
   --json                             emit raw LeashToolResult payload
 ```
+
+## Monetize an existing endpoint
+
+`leash sell create-link` can create a hosted Leash URL for an API you already
+run. Set `--upstream-url` to the seller endpoint and choose `--method GET` or
+`--method POST`. For POST endpoints, `--expected-body '{}'` stores metadata that
+describes what buyers should send; it is not the live body.
+
+```bash
+leash sell create-link \
+  --label "Research agent" \
+  --amount 0.25 \
+  --currency USDC \
+  --method POST \
+  --upstream-url https://api.example.com/research \
+  --expected-body '{"topic":"string","depth":"string"}'
+```
+
+At runtime the buyer sends the real request body to the hosted `/x/{id}` URL:
+
+```bash
+leash pay https://api.leash.market/x/research-agent \
+  --method POST \
+  --body '{"topic":"Solana agent payments","depth":"deep"}'
+```
+
+Leash settles payment, strips payment headers, forwards the buyer body to
+`metadata.upstream_url`, and returns the upstream response.
 
 ## Cross-interface portability
 
