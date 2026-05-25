@@ -213,21 +213,21 @@ X-PAYMENT: <payment-proof>
 
 The fields you set:
 
-| Field                | Required | Notes                                                                               |
-| -------------------- | -------- | ----------------------------------------------------------------------------------- |
-| `label`              | Yes      | Short human name. Shows up in the explorer + dashboards.                            |
-| `owner_agent`        | Yes      | Mint of the agent that receives funds. Must be on the caller-scoped network.        |
-| `method`             | Yes      | `GET` / `POST` / `PUT` / `PATCH` / `DELETE`. Picks how buyers call the link.        |
-| `price`              | Yes      | Display string. Same parser as `@leashmarket/seller-kit`: `"$0.001"`, `"0.5 USDT"`. |
-| `currency`           | No       | Default `USDC`. The primary stable used for the atomic amount.                      |
-| `accepts_currencies` | No       | Up to 3 extra stables advertised in `accepts[]` (cross-stable settlement).          |
-| `response.status`    | No       | Default `200`. Status code returned on a settled call.                              |
-| `response.mimeType`  | No       | Default `application/json`.                                                         |
-| `response.body`      | Yes      | Object or string. Returned verbatim on settlement.                                  |
-| `webhook_url`        | No       | Optional per-link webhook. Fires on `payment_link.settled`.                         |
-| `wrap_receipt`       | No       | When `true`, the response body wraps your template alongside the receipt.           |
+| Field                | Required | Notes                                                                                                                                                     |
+| -------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `label`              | Yes      | Short human name. Shows up in the explorer + dashboards.                                                                                                  |
+| `owner_agent`        | Yes      | Mint of the agent that receives funds. Must be on the caller-scoped network.                                                                              |
+| `method`             | Yes      | `GET` / `POST` / `PUT` / `PATCH` / `DELETE`. Picks how buyers call the link.                                                                              |
+| `price`              | Yes      | Display string. Same parser as `@leashmarket/seller-kit`: `"$0.001"`, `"0.5 USDT"`.                                                                       |
+| `currency`           | No       | Default `USDC`. The primary stable used for the atomic amount.                                                                                            |
+| `accepts_currencies` | No       | Up to 3 extra stables advertised in `accepts[]` (cross-stable settlement).                                                                                |
+| `response.status`    | No       | Default `200`. Status code returned on a settled call.                                                                                                    |
+| `response.mimeType`  | No       | Default `application/json`.                                                                                                                               |
+| `response.body`      | Yes      | Object or string. Returned verbatim on settlement.                                                                                                        |
+| `webhook_url`        | No       | Optional per-link webhook. Fires on `payment_link.settled`.                                                                                               |
+| `wrap_receipt`       | No       | When `true`, the response body wraps your template alongside the receipt.                                                                                 |
 | `metadata`           | No       | Free-form JSON returned on every read. Set `upstream_url` to forward paid calls and `expected_request_body` to describe the POST body buyers should send. |
-| `id`                 | No       | Pick your own slug (URL-safe). When omitted, the API mints a ULID.                  |
+| `id`                 | No       | Pick your own slug (URL-safe). When omitted, the API mints a ULID.                                                                                        |
 
 Pricing uses the same `parsePrice` semantics as the SDK — see
 [Seller utilities → parse-price](/api/seller-utils#parse-price) for
