@@ -24,6 +24,12 @@ const inputSchema = z.object({
     .describe(
       'Existing GET or POST API endpoint to monetize. When provided, the hosted payment link forwards paid calls to this URL after settlement.',
     ),
+  expected_request_body: z
+    .record(z.unknown())
+    .optional()
+    .describe(
+      'Arbitrary JSON object that describes the body buyers should send when calling a POST payable endpoint. This is metadata, not the live body.',
+    ),
   method: z
     .enum(['GET', 'POST'])
     .optional()
@@ -41,6 +47,7 @@ export const createPaymentLinkTool = defineTool({
   description: [
     'Create a payment link (x402 or MPP) the user (or another agent) can call to pay this agent in USDC/USDG/USDT.',
     'If upstream_url is provided, this monetizes that existing endpoint: paid calls are forwarded to the upstream URL after settlement.',
+    'For POST endpoints, expected_request_body can document the JSON shape buyers should send to the hosted paywall.',
     'Requires an on-chain agent (treasury). Returns the public share URL on success — quote it back as a markdown link.',
   ].join(' '),
   inputSchema,

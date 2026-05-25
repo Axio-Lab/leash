@@ -768,10 +768,11 @@ async function runSell(args: string[]): Promise<void> {
     return;
   }
   process.stderr.write(
-    'usage: leash sell create-link --label <text> --amount <n> [--currency USDC|USDG|USDT] [--description <text>] [--method GET|POST] [--upstream-url <url>] [--protocol x402|mpp] [--json]\n' +
+    'usage: leash sell create-link --label <text> --amount <n> [--currency USDC|USDG|USDT] [--description <text>] [--method GET|POST] [--upstream-url <url>] [--expected-body <json-object>] [--protocol x402|mpp] [--json]\n' +
       '\n' +
       'Creates a hosted payment link via the Leash API (requires LEASH_API_KEY).\n' +
       'Pass --upstream-url to monetize an existing API endpoint; paid calls forward there after settlement.\n' +
+      "Pass --expected-body '{}' to describe the JSON body buyers should send to POST links.\n" +
       'Use --protocol mpp for MPP (`problem+json`) paywalls instead of default x402.\n',
   );
   process.exit(2);
@@ -785,6 +786,7 @@ async function runSellCreateLink(args: string[]): Promise<void> {
   const currency = (optArg(args, '--currency') ?? 'USDC').toUpperCase() as 'USDC' | 'USDG' | 'USDT';
   const description = optArg(args, '--description');
   const upstreamUrl = optArg(args, '--upstream-url');
+  const expectedBodyRaw = optArg(args, '--expected-body');
   const methodRaw = (optArg(args, '--method') ?? 'GET').toUpperCase();
   const protoRaw = optArg(args, '--protocol')?.toLowerCase();
   const protocol =
@@ -792,7 +794,7 @@ async function runSellCreateLink(args: string[]): Promise<void> {
 
   if (!label || amount == null || !(amount > 0)) {
     process.stderr.write(
-      'usage: leash sell create-link --label <text> --amount <positive number> [--currency USDC|USDG|USDT] [--description <text>] [--method GET|POST] [--upstream-url <url>] [--protocol x402|mpp]\n',
+      'usage: leash sell create-link --label <text> --amount <positive number> [--currency USDC|USDG|USDT] [--description <text>] [--method GET|POST] [--upstream-url <url>] [--expected-body <json-object>] [--protocol x402|mpp]\n',
     );
     process.exit(2);
   }
@@ -817,6 +819,17 @@ async function runSellCreateLink(args: string[]): Promise<void> {
       process.exit(2);
     }
   }
+  let expectedRequestBody: Record<string, unknown> | undefined;
+  if (expectedBodyRaw !== undefined) {
+    try {
+      const parsed = JSON.parse(expectedBodyRaw) as unknown;
+      if (!isPlainObject(parsed)) throw new Error('not an object');
+      expectedRequestBody = parsed;
+    } catch {
+      process.stderr.write("--expected-body must be a valid JSON object, for example '{}'\n");
+      process.exit(2);
+    }
+  }
 
   const result = await hostRef.createPaymentLink({
     label,
@@ -825,6 +838,7 @@ async function runSellCreateLink(args: string[]): Promise<void> {
     ...(description ? { description } : {}),
     method: methodRaw as 'GET' | 'POST',
     ...(upstreamUrl ? { upstream_url: upstreamUrl } : {}),
+    ...(expectedRequestBody !== undefined ? { expected_request_body: expectedRequestBody } : {}),
     ...(protocol ? { protocol } : {}),
   });
   printResult(result, json, (payload) => {
@@ -837,6 +851,7 @@ async function runSellCreateLink(args: string[]): Promise<void> {
       `  price:       ${payload.price}`,
       `  method:      ${payload.method ?? methodRaw}`,
       ...(payload.upstream_url ? [`  upstream:   ${payload.upstream_url}`] : []),
+      ...(payload.expected_request_body ? ['  expected:   request body metadata set'] : []),
       `  network:     ${payload.network}`,
       `  owner_agent: ${payload.owner_agent}`,
     ].join('\n');
@@ -877,6 +892,10 @@ function numArg(args: string[], flag: string): number | undefined {
   if (v === undefined) return undefined;
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -1029,9 +1048,11 @@ function printHelp(): void {
       '                                     x402 + MPP links are probed automatically; use POST',
       '                                     when the seller endpoint requires it.',
       '  sell create-link --label L --amount N [--currency C] [--description …]',
-      '                    [--method GET|POST] [--upstream-url URL] [--protocol x402|mpp]',
+      '                    [--method GET|POST] [--upstream-url URL]',
+      '                    [--expected-body JSON] [--protocol x402|mpp]',
       '                                     create a hosted payment link (needs LEASH_API_KEY).',
       '                                     Pass --upstream-url to monetize an existing API endpoint.',
+      "                                     Pass --expected-body '{}' to describe POST body metadata.",
       '                                     Default protocol is x402; use mpp for MPP paywalls.',
       '',
       'misc:',

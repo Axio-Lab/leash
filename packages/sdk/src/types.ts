@@ -388,6 +388,9 @@ export type PaymentLinkCreateInput = {
    * Free-form metadata. Set `metadata.upstream_url` to monetize an existing
    * HTTP endpoint; after settlement, the hosted paywall forwards the paid
    * request to that upstream URL instead of returning only the response template.
+   * For POST endpoints, set `metadata.expected_request_body` to an arbitrary
+   * JSON object that describes the body buyers should send to the hosted URL.
+   * This is documentation/discovery metadata, not the live request body.
    */
   metadata?: Record<string, unknown>;
 };

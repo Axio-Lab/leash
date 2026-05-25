@@ -34,6 +34,7 @@ const baseListing = {
       pricing: { type: 'per_call', amount: '0.10', currency: 'USDC' },
       protocol: ['x402'],
       supported_usd: ['USDC'],
+      expected_request_body: { phone: 'string', amount: 'number' },
     },
   ],
   free_tier: 5,
@@ -91,10 +92,20 @@ describe('marketplace listings', () => {
 
     const browse = await rig.app.fetch(new Request('http://test.local/v1/marketplace/listings'));
     expect(browse.status).toBe(200);
-    const list = (await browse.json()) as { items: Array<{ slug: string; status: string }> };
+    const list = (await browse.json()) as {
+      items: Array<{
+        slug: string;
+        status: string;
+        endpoints: Array<{ expected_request_body?: Record<string, unknown> }>;
+      }>;
+    };
     expect(list.items).toHaveLength(1);
     expect(list.items[0]!.slug).toBe('usdc-airtime');
     expect(list.items[0]!.status).toBe('approved');
+    expect(list.items[0]!.endpoints[0]!.expected_request_body).toEqual({
+      phone: 'string',
+      amount: 'number',
+    });
   });
 
   it('rejects creates without admin secret', async () => {

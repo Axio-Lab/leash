@@ -162,6 +162,22 @@ leash sell create-link \
   --upstream-url https://jsonplaceholder.typicode.com/posts
 ```
 
+For POST endpoints, describe the expected buyer body with arbitrary JSON metadata:
+
+```bash
+leash sell create-link \
+  --label "Design agent" \
+  --amount 1 \
+  --currency USDC \
+  --method POST \
+  --upstream-url https://api.example.com/design \
+  --expected-body '{"prompt":"string","style":"string","format":"string"}'
+```
+
+`--expected-body` is not the live request body. The buyer sends the real body
+later to the hosted Leash URL, and Leash forwards it to `metadata.upstream_url`
+after settlement.
+
 ## 5. Mount real x402 on your own Hono app (SDK)
 
 ```ts

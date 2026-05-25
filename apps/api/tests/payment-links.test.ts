@@ -192,6 +192,37 @@ describe('POST /v1/payment-links', () => {
     const link = (await res.json()) as PaymentLink;
     expect(link.protocol).toBe('mpp');
   });
+
+  it('preserves expected POST request body metadata on create and read', async () => {
+    const rig = await createTestRig();
+    const expected = {
+      prompt: 'string',
+      style: 'string',
+      format: 'svg|png|html',
+    };
+    const res = await authedFetch(rig, '/v1/payment-links', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(
+        defaultBody({
+          id: 'expected-body-link',
+          method: 'POST',
+          metadata: {
+            upstream_url: 'https://seller.example/design',
+            expected_request_body: expected,
+          },
+        }),
+      ),
+    });
+    expect(res.status).toBe(200);
+    const created = (await res.json()) as PaymentLink;
+    expect(created.metadata.expected_request_body).toEqual(expected);
+
+    const read = await authedFetch(rig, '/v1/payment-links/expected-body-link');
+    expect(read.status).toBe(200);
+    const link = (await read.json()) as PaymentLink;
+    expect(link.metadata.expected_request_body).toEqual(expected);
+  });
 });
 
 describe('GET /v1/payment-links + GET /v1/payment-links/{id}', () => {

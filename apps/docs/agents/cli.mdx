@@ -108,6 +108,12 @@ leash pay https://example.com/x/abc123
 #     Default paywall is x402; add --protocol mpp for MPP (problem+json).
 leash sell create-link --label "Coffee" --amount 0.50 --currency USDC
 leash sell create-link --label "MPP tier" --amount 1 --protocol mpp
+leash sell create-link \
+  --label "Design agent" \
+  --amount 1 \
+  --method POST \
+  --upstream-url https://api.example.com/design \
+  --expected-body '{"prompt":"string","style":"string"}'
 
 # 8. Inspect or change the SPL spend authority. By default the agent
 #    is minted with unlimited USDC delegation; tighten, revoke, or
@@ -210,8 +216,11 @@ activity:
                                      x402 + MPP are auto-detected; use POST/body
                                      when the seller route requires it.
   sell create-link --label L --amount N [--currency C]
-                    [--description …] [--protocol x402|mpp]
+                    [--description …] [--method GET|POST]
+                    [--upstream-url URL] [--expected-body JSON]
+                    [--protocol x402|mpp]
                                      create a hosted payment link (LEASH_API_KEY).
+                                     --expected-body documents POST body metadata.
                                      Default protocol x402; mpp for MPP paywalls.
 
 misc:

@@ -908,6 +908,7 @@ const programmaticArticleSpecs: ProgrammaticArticleSpec[] = [
     takeaways: [
       'seller-kit needs your Leash agent address because payTo is derived from that agent identity.',
       'The Monetize endpoint flow starts from your existing URL and stores its GET or POST request type on the payment link.',
+      'POST endpoints can include metadata.expected_request_body so buyer agents know what JSON body to send to the hosted paywall.',
       'The List capability flow reads method, owner identity, rail, price, currency, and accepted stablecoins from the pasted payable URL.',
       'Explorer visibility requires receipt ingestion or an API-aware transaction path, not only a raw on-chain transfer.',
     ],
@@ -916,17 +917,18 @@ const programmaticArticleSpecs: ProgrammaticArticleSpec[] = [
     mechanics:
       'seller-kit mounts payment middleware onto your Hono app. `createSeller` speaks x402; `createMppSeller` speaks MPP. Both receive your Leash agent address, derive the seller Asset Signer PDA as the on-chain destination, advertise accepted stablecoins through the facilitator, and only call your route handler after the buyer signs and settlement succeeds.',
     checklist:
-      'Create or reuse a Leash agent, select or create an active marketplace API key, paste the existing endpoint URL, choose GET or POST, choose x402 or MPP, pick USDC/USDT/USDG, create the hosted payable endpoint, then paste that payable URL into /creator/list so Leash can import the request type, pricing, rail, accepted currencies, and owner identity.',
+      'Create or reuse a Leash agent, select or create an active marketplace API key, paste the existing endpoint URL, choose GET or POST, add expected_request_body metadata for POST endpoints, choose x402 or MPP, pick USDC/USDT/USDG, create the hosted payable endpoint, then paste that payable URL into /creator/list so Leash can import the request type, pricing, rail, accepted currencies, expected request body, and owner identity.',
     codeBlocks: [
       codeBlock('Create a hosted payable endpoint from the creator flow', 'txt', [
         '1. Open /creator/monetize.',
         '2. Paste your existing endpoint URL.',
         '3. Choose GET or POST as the request type buyers should use.',
-        '4. Choose x402 or MPP and USDC, USDT, or USDG pricing.',
-        '5. Select the seller identity and active marketplace API key.',
-        '6. Click Create payable endpoint.',
-        '7. Optional: click Add to marketplace discovery, or paste the hosted URL into /creator/list later.',
-        '8. In /creator/list, Leash reads the payable endpoint metadata and uses the endpoint owner identity for trust checks.',
+        '4. For POST, add an expected request body JSON object such as {"prompt":"string"}.',
+        '5. Choose x402 or MPP and USDC, USDT, or USDG pricing.',
+        '6. Select the seller identity and active marketplace API key.',
+        '7. Click Create payable endpoint.',
+        '8. Optional: click Add to marketplace discovery, or paste the hosted URL into /creator/list later.',
+        '9. In /creator/list, Leash reads the payable endpoint metadata and uses the endpoint owner identity for trust checks.',
       ]),
       codeBlock('Example: monetize an existing GET API', 'txt', [
         'Existing endpoint:',
@@ -947,6 +949,21 @@ const programmaticArticleSpecs: ProgrammaticArticleSpec[] = [
         '3. The buyer-kit paid retry settles the payment.',
         '4. After settlement, Leash forwards the request to metadata.upstream_url.',
         '5. The buyer receives the live upstream JSON response, not a template body.',
+      ]),
+      codeBlock('Example: monetize an existing POST agent API', 'txt', [
+        'Existing endpoint:',
+        'POST https://api.example.com/design',
+        '',
+        'Creator → Monetize endpoint stores:',
+        'method: POST',
+        'metadata.upstream_url: https://api.example.com/design',
+        'metadata.expected_request_body: {"prompt":"string","style":"string","format":"string"}',
+        '',
+        'Buyer runtime request:',
+        'POST https://api.leash.market/x/design-agent?network=solana-devnet',
+        '{"prompt":"Design a hero section","style":"premium dark mode","format":"html"}',
+        '',
+        'After settlement, Leash forwards that buyer body to the upstream design endpoint.',
       ]),
       codeBlock('Seller-kit route', 'ts', [
         "import { Hono } from 'hono';",

@@ -4,6 +4,7 @@ export type PayableEndpoint = {
   method: 'GET' | 'POST';
   url: string;
   description: string;
+  expected_request_body?: Record<string, unknown>;
 };
 
 export function ToolsTable({ endpoints }: { endpoints: PayableEndpoint[] }) {
@@ -27,6 +28,16 @@ export function ToolsTable({ endpoints }: { endpoints: PayableEndpoint[] }) {
             </code>
           </div>
           <p className="mt-2 text-fg-muted">{endpoint.description}</p>
+          {endpoint.expected_request_body !== undefined ? (
+            <div className="mt-2 rounded-md border bg-bg/60 p-2">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-fg-subtle">
+                Expected request body
+              </div>
+              <pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap wrap-break-word font-mono text-[11px] leading-relaxed text-fg-muted">
+                {JSON.stringify(endpoint.expected_request_body, null, 2)}
+              </pre>
+            </div>
+          ) : null}
         </li>
       ))}
     </ul>

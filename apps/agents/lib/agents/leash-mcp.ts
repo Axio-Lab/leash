@@ -93,6 +93,7 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
           protocol: args.protocol,
           method: args.method,
           upstreamUrl: args.upstream_url,
+          expectedRequestBody: args.expected_request_body,
         });
         return jsonResult({
           kind: 'payment_link',
@@ -104,6 +105,9 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
           protocol: args.protocol ?? 'x402',
           method: args.method ?? 'GET',
           ...(args.upstream_url ? { upstream_url: args.upstream_url } : {}),
+          ...(args.expected_request_body !== undefined
+            ? { expected_request_body: args.expected_request_body }
+            : {}),
           label: args.label,
           network: created.network,
           owner_agent: created.owner_agent,
@@ -868,6 +872,7 @@ type CreatePaymentLinkOnBehalfArgs = {
   protocol?: 'x402' | 'mpp';
   method?: 'GET' | 'POST';
   upstreamUrl?: string;
+  expectedRequestBody?: Record<string, unknown>;
 };
 
 type PaymentLinkResponseBody = {
@@ -913,6 +918,7 @@ async function createPaymentLinkOnBehalfOfUser(
 
   const method = args.method ?? 'GET';
   const upstreamUrl = args.upstreamUrl?.trim();
+  const expectedRequestBody = args.expectedRequestBody;
   const body = {
     label: args.label,
     description: args.description,
@@ -933,11 +939,18 @@ async function createPaymentLinkOnBehalfOfUser(
           }
         : { ok: true, label: args.label },
     },
-    ...(upstreamUrl
+    ...(upstreamUrl || expectedRequestBody !== undefined
       ? {
           metadata: {
-            upstream_url: upstreamUrl,
-            provider_url: new URL(upstreamUrl).origin,
+            ...(upstreamUrl
+              ? {
+                  upstream_url: upstreamUrl,
+                  provider_url: new URL(upstreamUrl).origin,
+                }
+              : {}),
+            ...(expectedRequestBody !== undefined
+              ? { expected_request_body: expectedRequestBody }
+              : {}),
             pricing_type: 'fixed',
           },
         }

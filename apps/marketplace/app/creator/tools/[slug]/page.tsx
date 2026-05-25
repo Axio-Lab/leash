@@ -21,7 +21,12 @@ type Detail = {
     category: string;
     endpoint: string;
     pricing: { type: string; amount?: string; currency?: string };
-    endpoints: Array<{ method: string; url: string; description: string }>;
+    endpoints: Array<{
+      method: string;
+      url: string;
+      description: string;
+      expected_request_body?: Record<string, unknown>;
+    }>;
     health_status: 'ok' | 'warn' | 'down' | null;
     created_at: string;
   };
@@ -135,6 +140,16 @@ export default function ManageListingPage({ params }: { params: Promise<{ slug: 
                   <code className="break-all font-mono text-xs text-fg-muted">{endpoint.url}</code>
                 </div>
                 <p className="mt-2 text-fg-muted">{endpoint.description}</p>
+                {endpoint.expected_request_body !== undefined ? (
+                  <div className="mt-2 rounded-md border bg-bg/60 p-2">
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-fg-subtle">
+                      Expected request body
+                    </div>
+                    <pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap wrap-break-word font-mono text-[11px] leading-relaxed text-fg-muted">
+                      {JSON.stringify(endpoint.expected_request_body, null, 2)}
+                    </pre>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>

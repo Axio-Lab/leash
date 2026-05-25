@@ -103,17 +103,24 @@ describe('LEASH_TOOLS', () => {
         label: 'demo',
         method: 'GET' as const,
         upstream_url: 'https://jsonplaceholder.typicode.com/posts',
+        expected_request_body: { prompt: 'string' },
       },
       echoHost,
     );
     const parsed = JSON.parse(result.content[0]!.text) as {
       kind: string;
-      args: { label: string; method: string; upstream_url: string };
+      args: {
+        label: string;
+        method: string;
+        upstream_url: string;
+        expected_request_body: { prompt: string };
+      };
     };
     expect(parsed.kind).toBe('echo:create_payment_link');
     expect(parsed.args.label).toBe('demo');
     expect(parsed.args.method).toBe('GET');
     expect(parsed.args.upstream_url).toBe('https://jsonplaceholder.typicode.com/posts');
+    expect(parsed.args.expected_request_body).toEqual({ prompt: 'string' });
   });
 
   it('every tool has a non-empty description and a Zod input schema', () => {

@@ -37,7 +37,7 @@
 - [Create an agent](https://docs.leash.market/guides/create-an-agent.md): Mint a Core asset and register an `AgentIdentity` in one transaction with `@leashmarket/registry-utils`.
 - [Bring your own keypair](https://docs.leash.market/guides/bring-your-own-keypair.md): Mint and run an agent without Privy — local keypair, server env var, or generated operator key.
 - [Fund an agent](https://docs.leash.market/guides/fund-an-agent.md): Approve a spend allowance from your agent treasury so the executive can pay x402 calls on its behalf.
-- [Create a payment link](https://docs.leash.market/guides/create-an-endpoint.md): No-code x402/MPP paywalls. Pick an agent, declare a price + response, or set `metadata.upstream_url` to forward paid calls to an existing API.
+- [Create a payment link](https://docs.leash.market/guides/create-an-endpoint.md): No-code x402/MPP paywalls. Pick an agent, declare a price + response, or set `metadata.upstream_url` and `metadata.expected_request_body` to monetize an existing GET/POST API.
 - [Build a seller](https://docs.leash.market/guides/build-a-seller.md): Wire a Hono app behind a Leash seller agent with real x402.
 - [Build a buyer](https://docs.leash.market/guides/build-a-buyer.md): Script an agent that pays an x402 endpoint with real SPL stables.
 - [Build a merged agent](https://docs.leash.market/guides/build-a-merged-agent.md): One asset that both sells and buys, sharing a single feed.
@@ -54,7 +54,7 @@
 - [Agents](https://docs.leash.market/api/agents.md): Mint, read, and manage Leash agents over HTTP — the same flow the SDK exposes, callable from any language.
 - [Identity API](https://docs.leash.market/api/identity.md): Resolve identities by mint, handle, or domain; inspect operator history; request allow/warn/deny verification decisions; manage capability cards, verified domains, claims, and selective disclosure links.
 - [Monetise an existing API](https://docs.leash.market/api/monetize-api.md): Charge per call on a SaaS endpoint you already host, without rewriting it.
-- [Payment links](https://docs.leash.market/api/payment-links.md): Create hosted x402/MPP payment links served at `/x/{id}`. Static response templates and monetized upstream APIs are both supported; `metadata.upstream_url` forwards paid calls after settlement.
+- [Payment links](https://docs.leash.market/api/payment-links.md): Create hosted x402/MPP payment links served at `/x/{id}`. Static templates and monetized upstream APIs are both supported; `metadata.upstream_url` forwards paid calls and `metadata.expected_request_body` documents POST bodies.
 - [Seller utilities](https://docs.leash.market/api/seller-utils.md): HTTP parity for the `@leashmarket/seller-kit` helpers — networks, facilitator, parse-price, pay-to.
 - [Buyer endpoints](https://docs.leash.market/api/buyer.md): HTTP parity for `@leashmarket/buyer-kit` — quote, policy gate, payment prepare/execute, receipt finalize/verify.
 - [Protocol fee](https://docs.leash.market/api/protocol-fee.md): The 1% Leash protocol fee on every settlement — wire shape (`extra['leash.fee']`), math, allowance gross-up, and how to enforce or relax it on a self-hosted facilitator.
@@ -78,6 +78,7 @@
 
 - [Leash Market Blog](https://leash.market/blog): Searchable marketplace articles, implementation guides, SEO pages, and agent-commerce explainers for LLMs and builders.
 - [Monetize an API endpoint with Leash seller-kit](https://leash.market/blog/monetize-api-endpoint-with-leash-seller-kit): Existing URL → hosted payable endpoint → buyer pays → Leash forwards to `metadata.upstream_url` and returns the live API response.
+- [How request bodies work for Leash paywalls](https://leash.market/blog/how-request-bodies-work-for-leash-paywalls): Sellers define `metadata.expected_request_body`; buyers send the real POST body to the hosted Leash URL at payment time.
 - [How to list a trained agent on Leash marketplace](https://leash.market/blog/how-to-list-trained-agent-on-leash-marketplace): Create payable endpoints for a trained agent, list them as capabilities, and let other agents rent/pay per call.
 - [How to verify an agent domain on Leash](https://leash.market/blog/how-to-verify-an-agent-domain-on-leash): Publish `/.well-known/leash-agent.json` so marketplaces, explorers, and agent buyers can trust the agent’s domain.
 - [How to get your AI agent paid on Leash](https://leash.market/blog/how-to-get-your-ai-agent-paid-on-leash): Identity-backed payment links, marketplace listings, receipts, and reputation for earning agents.

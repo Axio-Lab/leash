@@ -4,7 +4,8 @@ Standalone MCP server for the Leash identity layer for AI agents. It
 lets any AI agent in any MCP host (Cursor, Claude Desktop, Cline,
 Continue, ChatGPT-MCP, …) resolve and verify identities, inspect proof
 trails, sign on-chain Solana transactions, pay x402 paywalls, and
-check its treasury balance — without a browser in the loop.
+MPP paywalls, create hosted payment links, and check its treasury balance —
+without a browser in the loop.
 
 ## Install
 
@@ -92,7 +93,7 @@ blob asking the LLM to onboard the user. (The frictionless
 }
 ```
 
-## Tools (v0.1 — 17 canonical)
+## Tools (17 canonical)
 
 | Tool                           | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -101,8 +102,8 @@ blob asking the LLM to onboard the user. (The frictionless
 | `leash_resolve_identity`       | Resolve another agent by mint, handle, or verified domain. Returns public profile, verified domains, public capability cards, public claims, and reputation summary.                                                                                                                                                                                                                                                                               |
 | `leash_verify_identity`        | Verify that a mint, handle, or domain resolves to a live Leash identity. Add intent/capability/thresholds to get an allow/warn/deny trust verdict before paying, trusting a claim, or calling a capability.                                                                                                                                                                                                                                        |
 | `leash_check_treasury_balance` | Read SOL + USDC/USDG/USDT balances on the agent treasury PDA.                                                                                                                                                                                                                                                                                                                                                                                      |
-| `leash_pay_payment_link`       | Probe an x402 link, sign + settle the SPL transfer locally, return the receipt.                                                                                                                                                                                                                                                                                                                                                                    |
-| `leash_create_payment_link`    | Mint an x402 paywall the user can share. Requires `LEASH_API_KEY` until X-Leash-Sig auth lands.                                                                                                                                                                                                                                                                                                                                                    |
+| `leash_pay_payment_link`       | Probe an x402/MPP link, sign + settle the SPL transfer locally, and return the receipt. Accepts `method` + `body` for POST paywalls.                                                                                                                                                                                                                                                                                                               |
+| `leash_create_payment_link`    | Mint an x402/MPP paywall the user can share. Set `upstream_url` to monetize an existing API and `expected_request_body` to document POST body metadata. Requires `LEASH_API_KEY` until X-Leash-Sig auth lands.                                                                                                                                                                                                                                     |
 | `leash_withdraw_treasury`      | Owner-driven withdrawal of SOL or an SPL stable to any wallet (mpl-core::Execute).                                                                                                                                                                                                                                                                                                                                                                 |
 | `leash_set_spend_limit`        | Owner-driven update of the SPL `Approve` delegation that lets the executive spend stables from the treasury. `mode: 'unlimited' \| 'revoke' \| 'amount'` — tighten, pause, or restore the cap.                                                                                                                                                                                                                                                     |
 | `leash_get_spend_limit`        | Read the current SPL delegation + treasury balance for a stable. Reports delegate, remaining cap (atomic + decimal), and balance.                                                                                                                                                                                                                                                                                                                  |
@@ -133,6 +134,44 @@ can be `export`ed, dropped into Claude Desktop, and `import`ed into
 its config — same on-chain identity, same treasury, same reputation.
 Same JSON also pastes cleanly into the chat product's
 _Profile → Agent → Import_ page (forthcoming).
+
+## Hosted paywalls for existing APIs
+
+`leash_create_payment_link` can create a hosted `/x/{id}` URL in front of an API
+you already run:
+
+```json
+{
+  "label": "Design agent",
+  "amount": 1,
+  "currency": "USDC",
+  "method": "POST",
+  "protocol": "x402",
+  "upstream_url": "https://api.example.com/design",
+  "expected_request_body": {
+    "prompt": "string",
+    "style": "string",
+    "format": "string"
+  }
+}
+```
+
+`expected_request_body` is discovery metadata only. The buyer agent sends the
+real JSON body later through `leash_pay_payment_link`:
+
+```json
+{
+  "url": "https://api.leash.market/x/design-agent?network=solana-devnet",
+  "method": "POST",
+  "body": "{\"prompt\":\"Design a landing page\",\"style\":\"premium dark mode\"}"
+}
+```
+
+After settlement, Leash forwards that buyer body to `upstream_url` and returns
+the upstream response.
+
+Use `protocol: "mpp"` when the hosted paywall should speak the MPP
+problem+json flow instead of x402's HTTP 402 flow.
 
 ## Try the read path
 

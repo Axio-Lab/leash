@@ -18,7 +18,7 @@ import { ShowKeyOnceModal } from '@/components/show-key-once';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Input, Textarea } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SafeSelect } from '@/components/ui/safe-select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -70,6 +70,7 @@ type CreatedEndpointDraft = {
   currency: StableCurrency;
   rail: PaymentRail;
   acceptedCurrencies: StableCurrency[];
+  expectedRequestBody?: Record<string, unknown>;
 };
 
 export default function CreatorMonetizePage() {
@@ -87,6 +88,7 @@ export default function CreatorMonetizePage() {
   ]);
   const [freeTier, setFreeTier] = React.useState('0');
   const [rail, setRail] = React.useState<PaymentRail>('x402');
+  const [expectedBody, setExpectedBody] = React.useState('{}');
   const [agents, setAgents] = React.useState<OwnedAgent[]>([]);
   const [agentsBusy, setAgentsBusy] = React.useState(true);
   const [agentsError, setAgentsError] = React.useState<string | null>(null);
@@ -175,6 +177,8 @@ export default function CreatorMonetizePage() {
     try {
       if (!selectedApiKeyId) throw new Error('Select or create a marketplace API key.');
       if (!selectedAgentMint) throw new Error('Select the seller identity for this endpoint.');
+      const expectedRequestBody =
+        method === 'POST' ? parseExpectedRequestBody(expectedBody) : undefined;
       const quotedAmount = pricingType === 'free' ? '0' : amount.trim();
       const generatedLabel = labelFromUrl(upstreamUrl);
       const createdDraft: CreatedEndpointDraft = {
@@ -185,6 +189,7 @@ export default function CreatorMonetizePage() {
         currency,
         rail,
         acceptedCurrencies,
+        ...(expectedRequestBody !== undefined ? { expectedRequestBody } : {}),
       };
       const response = {
         status: 200,
@@ -215,6 +220,9 @@ export default function CreatorMonetizePage() {
             provider_url: originFromUrl(upstreamUrl),
             pricing_type: pricingType,
             free_tier: Number(freeTier || 0),
+            ...(expectedRequestBody !== undefined
+              ? { expected_request_body: expectedRequestBody }
+              : {}),
           },
         }),
       });
@@ -229,6 +237,7 @@ export default function CreatorMonetizePage() {
       setPaymentLink(body);
       setCreatedEndpointDraft(createdDraft);
       setUpstreamUrl('');
+      setExpectedBody('{}');
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -253,6 +262,12 @@ export default function CreatorMonetizePage() {
     });
     if (createdEndpointDraft.pricingType !== 'free') {
       params.set('endpoint_amount', createdEndpointDraft.amount);
+    }
+    if (createdEndpointDraft.expectedRequestBody !== undefined) {
+      params.set(
+        'endpoint_expected_body',
+        JSON.stringify(createdEndpointDraft.expectedRequestBody),
+      );
     }
     router.push(`/creator/list?${params.toString()}`);
   }
@@ -311,6 +326,36 @@ export default function CreatorMonetizePage() {
               </Field>
             </CardContent>
           </Card>
+
+          {method === 'POST' ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Expected request body</CardTitle>
+                <CardDescription>
+                  Describe the JSON object buyers should send when they call the hosted payable URL.
+                  This is metadata only; the buyer sends the real body at payment time.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Label htmlFor="expected-body">Expected body JSON</Label>
+                <Textarea
+                  id="expected-body"
+                  value={expectedBody}
+                  onChange={(e) => setExpectedBody(e.target.value)}
+                  rows={7}
+                  spellCheck={false}
+                  className="font-mono text-xs"
+                  placeholder='{"prompt":"string","style":"string"}'
+                  aria-describedby="expected-body-help"
+                />
+                <p id="expected-body-help" className="text-xs text-fg-muted">
+                  Use any JSON object shape your endpoint expects, for example{' '}
+                  <code className="font-mono">{'{"prompt":"string"}'}</code>. Leave as{' '}
+                  <code className="font-mono">{'{}'}</code> if callers can send any body.
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
 
           <Card>
             <CardHeader>
@@ -687,4 +732,23 @@ function slugFromUrl(value: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 80);
   return slug || `endpoint-${Date.now()}`;
+}
+
+function parseExpectedRequestBody(value: string): Record<string, unknown> | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!isPlainObject(parsed)) {
+      throw new Error('Expected request body must be a JSON object like {}.');
+    }
+    return parsed;
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('JSON object')) throw err;
+    throw new Error('Expected request body must be valid JSON, for example {"prompt":"string"}.');
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

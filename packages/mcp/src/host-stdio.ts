@@ -386,6 +386,7 @@ class StdioHost implements LeashHost {
     try {
       const method = args.method ?? 'GET';
       const upstreamUrl = args.upstream_url?.trim();
+      const expectedRequestBody = args.expected_request_body;
       const body = {
         label: args.label,
         description: args.description,
@@ -405,11 +406,18 @@ class StdioHost implements LeashHost {
               }
             : { ok: true, label: args.label },
         },
-        ...(upstreamUrl
+        ...(upstreamUrl || expectedRequestBody !== undefined
           ? {
               metadata: {
-                upstream_url: upstreamUrl,
-                provider_url: new URL(upstreamUrl).origin,
+                ...(upstreamUrl
+                  ? {
+                      upstream_url: upstreamUrl,
+                      provider_url: new URL(upstreamUrl).origin,
+                    }
+                  : {}),
+                ...(expectedRequestBody !== undefined
+                  ? { expected_request_body: expectedRequestBody }
+                  : {}),
                 pricing_type: 'fixed',
               },
             }
@@ -448,6 +456,9 @@ class StdioHost implements LeashHost {
         method,
         protocol: args.protocol ?? 'x402',
         ...(upstreamUrl ? { upstream_url: upstreamUrl } : {}),
+        ...(expectedRequestBody !== undefined
+          ? { expected_request_body: expectedRequestBody }
+          : {}),
         network: json.network,
         owner_agent: json.owner_agent,
       });

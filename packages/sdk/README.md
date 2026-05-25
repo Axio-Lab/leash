@@ -12,7 +12,8 @@ JavaScript runtime — browsers, Bun, Deno, Node, edge — to:
 - Record a client-minted agent on the platform (`leash.recordAgent`)
 - Manage agent-scoped webhooks signed with X-Leash-Sig
 - Pull receipts for an agent (legacy API-key auth)
-- Create + manage payment links (legacy API-key auth)
+- Create + manage x402/MPP payment links, including upstream API paywalls with
+  expected POST body metadata (legacy API-key auth)
 
 > Provisioning agents (generating keypairs, minting MPL Core assets,
 > setting USDC delegation) is **not** in the SDK — use
@@ -83,6 +84,46 @@ const recorded = await leash.recordAgent({
 });
 console.log('recorded', recorded.mint, 'treasury', recorded.treasury);
 ```
+
+## Payment links and expected POST bodies
+
+Payment links are hosted x402/MPP paywalls served at `/x/{id}`. Set
+`metadata.upstream_url` to monetize an API you already host. The settled request
+forwards to that upstream URL and returns the live upstream response. For POST
+endpoints, set `metadata.expected_request_body` to describe the JSON shape buyers
+should send to the hosted Leash URL.
+
+```ts
+const link = await leash.createPaymentLink({
+  label: 'Design agent',
+  owner_agent: 'AjfeyP...',
+  method: 'POST',
+  protocol: 'x402',
+  price: '1 USDC',
+  currency: 'USDC',
+  response: {
+    status: 200,
+    mimeType: 'application/json',
+    body: { ok: true, message: 'Payment accepted. Forwarding to upstream.' },
+  },
+  metadata: {
+    upstream_url: 'https://api.example.com/design',
+    provider_url: 'https://api.example.com',
+    pricing_type: 'fixed',
+    expected_request_body: {
+      prompt: 'string',
+      style: 'string',
+      format: 'string',
+    },
+  },
+});
+
+console.log(link.share_url);
+```
+
+The SDK creates and reads the metadata. Paying requires Solana signing, so buyer
+agents should use `@leashmarket/buyer-kit`, `leash pay --method POST --body ...`,
+or `leash_pay_payment_link` to send the actual runtime body.
 
 ## Authenticated calls
 

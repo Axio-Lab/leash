@@ -232,6 +232,31 @@ const monetized = await leash.createPaymentLink({
 
 console.log('paid upstream URL:', monetized.share_url);
 
+const postAgent = await leash.createPaymentLink({
+  label: 'Design agent',
+  owner_agent: 'AjfeyP...',
+  method: 'POST',
+  price: '1 USDC',
+  currency: 'USDC',
+  response: {
+    status: 200,
+    mimeType: 'application/json',
+    body: { ok: true, message: 'Payment accepted. Forwarding to design agent.' },
+  },
+  metadata: {
+    upstream_url: 'https://api.example.com/design',
+    provider_url: 'https://api.example.com',
+    pricing_type: 'fixed',
+    expected_request_body: {
+      prompt: 'string',
+      style: 'string',
+      format: 'string',
+    },
+  },
+});
+
+console.log('POST paywall with expected body metadata:', postAgent.share_url);
+
 const all = await leash.listPaymentLinks({ limit: 25 });
 const one = await leash.getPaymentLink(link.id);
 await leash.updatePaymentLink(link.id, { price: '$0.02' });
