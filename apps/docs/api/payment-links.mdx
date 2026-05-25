@@ -179,6 +179,38 @@ At runtime the first call to `/x/{id}` returns payment instructions. The paid
 retry settles, forwards to `metadata.upstream_url`, and returns the upstream JSON
 response to the buyer.
 
+For `POST` endpoints, the buyer sends the real request body to the Leash hosted
+URL. Leash settles the payment first, then forwards that same body to your
+upstream URL. Creation-time metadata should only describe the expected shape.
+
+```json
+{
+  "method": "POST",
+  "metadata": {
+    "upstream_url": "https://api.example.com/design",
+    "expected_request_body": {
+      "prompt": "string",
+      "style": "string",
+      "format": "string"
+    }
+  }
+}
+```
+
+The actual paid request is sent later by the buyer:
+
+```http
+POST /x/design-agent?network=solana-devnet
+Content-Type: application/json
+X-PAYMENT: <payment-proof>
+
+{
+  "prompt": "Design a landing page for a Solana app",
+  "style": "premium dark mode",
+  "format": "html"
+}
+```
+
 The fields you set:
 
 | Field                | Required | Notes                                                                               |
@@ -194,7 +226,7 @@ The fields you set:
 | `response.body`      | Yes      | Object or string. Returned verbatim on settlement.                                  |
 | `webhook_url`        | No       | Optional per-link webhook. Fires on `payment_link.settled`.                         |
 | `wrap_receipt`       | No       | When `true`, the response body wraps your template alongside the receipt.           |
-| `metadata`           | No       | Free-form JSON returned on every read. Set `upstream_url` to forward paid calls.    |
+| `metadata`           | No       | Free-form JSON returned on every read. Set `upstream_url` to forward paid calls and `expected_request_body` to describe the POST body buyers should send. |
 | `id`                 | No       | Pick your own slug (URL-safe). When omitted, the API mints a ULID.                  |
 
 Pricing uses the same `parsePrice` semantics as the SDK — see
