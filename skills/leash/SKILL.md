@@ -2,23 +2,24 @@
 name: leash
 description: >-
   Build, monetise, and operate Solana agents that pay each other in real
-  SPL stables (USDC / USDT / USDG) via the x402 protocol. Use whenever the
-  user mentions Leash, leash.market, agent treasuries, x402, agent-to-agent
+  SPL stables (USDC / USDT / USDG) via x402 or MPP. Use whenever the user
+  mentions Leash, leash.market, agent treasuries, x402, MPP, agent-to-agent
   payments, agent payment links, agent paywalls, MPL Core agents on Solana,
   monetise an API per call on Solana, or wants to build a buyer / seller /
   merged agent. Covers the @leashmarket/* SDK, the api.leash.market HTTPS surface,
   the prepare → sign → submit lifecycle, hosted payment links at /x/{id},
-  the explorer at explorer.leash.market, the local facilitator, and the
-  fund / withdraw flows on the agent treasury PDA.
+  upstream forwarding with metadata.upstream_url, expected POST bodies with
+  metadata.expected_request_body, the explorer at explorer.leash.market, the
+  local facilitator, and the fund / withdraw flows on the agent treasury PDA.
 ---
 
-# Leash — Agent payments on Solana via x402
+# Leash — Agent payments on Solana via x402 / MPP
 
 Leash is the operating system for agent-to-agent commerce.
 
 Leash gives every agent a wallet (an MPL Core asset whose **Asset Signer
 PDA** is the treasury), a capped spend allowance the owner controls (an
-SPL token delegation), real x402 settlement in USDC / USDT / USDG, and a
+SPL token delegation), real x402/MPP settlement in USDC / USDT / USDG, and a
 hash-chained `ReceiptV1` audit log. Buyer and seller are **capabilities
 on the same identity** — one mint, two roles.
 
@@ -30,7 +31,7 @@ on the same identity** — one mint, two roles.
 | Ship a TS app with no remote dependency                  | The `@leashmarket/*` SDK packages — see `EXAMPLES.md`                                               |
 | Charge per call on a SaaS endpoint you already host      | Hosted **payment links** with `metadata.upstream_url` and optional `metadata.expected_request_body` |
 | Mount real x402 middleware on your own Hono app          | `@leashmarket/seller-kit` `createSeller`                                                            |
-| Script an agent that pays an x402 endpoint               | `@leashmarket/buyer-kit` `createBuyer`                                                              |
+| Script an agent that pays an x402/MPP endpoint           | `@leashmarket/buyer-kit` `createBuyer`                                                              |
 | Mint a brand-new agent (asset + AgentIdentity) in one tx | `@leashmarket/registry-utils` `createAgent`, or `POST /v1/agents/prepare`                           |
 | Inspect agents / receipts / events with a UI             | `https://explorer.leash.market`                                                                     |
 | Settle locally without depending on hosted infra         | `@leashmarket/facilitator` (devnet) — see `REFERENCE.md`                                            |
@@ -56,7 +57,7 @@ the local executive keypair and returns the on-chain receipt.
 | `leash_get_identity`           | Self-introspection: agent mint, treasury PDA, executive pubkey, network.                                                                                                                                                                                                                     |
 | `leash_check_treasury_balance` | List SOL + SPL stable balances on the treasury PDA.                                                                                                                                                                                                                                          |
 | `leash_create_payment_link`    | Mint a hosted x402/MPP paywall (`/v1/payment-links`). If `upstream_url` is provided, the paid call forwards to that existing endpoint after settlement. For POST endpoints, `expected_request_body` documents the buyer body shape.                                                          |
-| `leash_pay_payment_link`       | Probe → policy-check → sign → settle → finalise receipt for an x402 URL.                                                                                                                                                                                                                     |
+| `leash_pay_payment_link`       | Probe → policy-check → sign → settle → finalise receipt for an x402/MPP URL. Accepts method/body for POST paywalls.                                                                                                                                                                          |
 | `leash_withdraw_treasury`      | Owner-driven SOL or stable withdrawal via `mpl-core::Execute`.                                                                                                                                                                                                                               |
 | `leash_set_spend_limit`        | Update the SPL `Approve` delegation (unlimited / amount / revoke).                                                                                                                                                                                                                           |
 | `leash_get_spend_limit`        | Read the live delegation + treasury balance for an SPL stable.                                                                                                                                                                                                                               |
@@ -232,10 +233,13 @@ want.
      then `await buyer.fetch(url)`.
 
 - Seller → `createSeller(app, { umi, sellerAgent, routes, ... })` on
-  a Hono app, OR `POST /v1/payment-links` for the no-code path. To
-  monetize an API that already exists, set `metadata.upstream_url`;
-  after settlement Leash forwards the paid request there and returns
-  the live upstream response.
+  a Hono app, OR `POST /v1/payment-links` for the no-code hosted path.
+  To monetize an API that already exists, set `metadata.upstream_url`
+  and choose `protocol: 'x402' | 'mpp'`. For POST endpoints, set
+  `metadata.expected_request_body` to document the JSON shape buyers
+  should send. After settlement Leash forwards the paid request,
+  including the buyer's real POST body, and returns the live upstream
+  response.
 
 6. **Verify on the explorer** — the agent page lists treasury balances,
    spend/earn receipts, and lifecycle events.

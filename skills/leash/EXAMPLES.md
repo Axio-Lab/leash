@@ -122,7 +122,7 @@ const result = await buyer.fetch('https://quotes.example.com/quote');
 ## 4. Monetise an existing API in one call (HTTP, no-code)
 
 ```bash
-# Create a hosted x402 paywall at /x/{id} that forwards to an existing API
+# Create a hosted x402/MPP paywall at /x/{id} that forwards to an existing API
 curl -sS https://api.leash.market/v1/payment-links \
   -H "Authorization: Bearer $LEASH_API_KEY" \
   -H "Content-Type: application/json" \
@@ -130,6 +130,7 @@ curl -sS https://api.leash.market/v1/payment-links \
     "label":"JSONPlaceholder posts",
     "owner_agent":"<sellerAgentAsset>",
     "method":"GET",
+    "protocol":"x402",
     "price":"$0.001",
     "currency":"USDC",
     "response":{
@@ -159,6 +160,7 @@ leash sell create-link \
   --amount 0.001 \
   --currency USDC \
   --method GET \
+  --protocol x402 \
   --upstream-url https://jsonplaceholder.typicode.com/posts
 ```
 
@@ -170,6 +172,7 @@ leash sell create-link \
   --amount 1 \
   --currency USDC \
   --method POST \
+  --protocol x402 \
   --upstream-url https://api.example.com/design \
   --expected-body '{"prompt":"string","style":"string","format":"string"}'
 ```
