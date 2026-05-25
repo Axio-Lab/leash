@@ -42,6 +42,8 @@ export type CreatePaymentLinkArgs = {
   description?: string;
   /** Existing API URL to call after settlement. When omitted, returns the static response template. */
   upstream_url?: string;
+  /** JSON object describing the POST body buyers should send to the hosted paywall. */
+  expected_request_body?: Record<string, unknown>;
   /** HTTP method buyers should use for the hosted paywall. Defaults to GET. */
   method?: 'GET' | 'POST';
   /** Hosted paywall rail. Defaults to x402 (`payment-required`). */
