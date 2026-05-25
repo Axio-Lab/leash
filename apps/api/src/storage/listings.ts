@@ -28,6 +28,7 @@ export type ListingEndpoint = {
   pricing?: ListingPricing;
   protocol?: ListingPaymentProtocol[];
   supported_usd?: ListingStableCurrency[];
+  expected_request_body?: Record<string, unknown>;
 };
 
 export type ListingStatus = 'pending' | 'approved' | 'rejected' | 'disabled';
@@ -86,6 +87,9 @@ function rowToListing(row: Record<string, unknown>): Listing {
               ? {
                   supported_usd: record.supported_usd.filter(isListingStableCurrency),
                 }
+              : {}),
+            ...(record.expected_request_body && typeof record.expected_request_body === 'object'
+              ? { expected_request_body: record.expected_request_body as Record<string, unknown> }
               : {}),
           };
         }

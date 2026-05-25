@@ -23,6 +23,7 @@ type PaySkillsEndpoint = {
   protocol?: string[];
   supported_usd?: string[];
   probe_status?: string;
+  expected_request_body?: Record<string, unknown>;
 };
 
 type PaySkillsProvider = {
@@ -173,6 +174,16 @@ export default function PaySkillsCapabilityPage({
                               <p className="mt-1 line-clamp-3 text-xs leading-snug text-fg-muted">
                                 {endpoint.description}
                               </p>
+                            ) : null}
+                            {endpoint.expected_request_body !== undefined ? (
+                              <div className="mt-2 rounded-md border bg-bg/60 p-2">
+                                <div className="text-[10px] font-medium uppercase tracking-wide text-fg-subtle">
+                                  Expected request body
+                                </div>
+                                <pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap wrap-break-word font-mono text-[11px] leading-relaxed text-fg-muted">
+                                  {JSON.stringify(endpoint.expected_request_body, null, 2)}
+                                </pre>
+                              </div>
                             ) : null}
                           </div>
                           <Badge variant="paid">{endpointPrice(endpoint)}</Badge>

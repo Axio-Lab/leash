@@ -20,6 +20,7 @@ export type ListingEndpoint = {
   pricing?: ListingPricing;
   protocol?: ListingPaymentProtocol[];
   supported_usd?: ListingStableCurrency[];
+  expected_request_body?: Record<string, unknown>;
 };
 
 export type ListingDraft = {

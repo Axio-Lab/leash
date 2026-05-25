@@ -69,6 +69,7 @@ export default function CreatorListPage() {
     const providerUrl = searchParams.get('provider_url') ?? originFromUrl(endpointUrl);
     const pricing = pricingFromParams(searchParams);
     const ownerAgent = searchParams.get('endpoint_owner_agent') ?? '';
+    const expectedRequestBody = expectedBodyFromParams(searchParams);
     if (ownerAgent) setSelectedAgentMint(ownerAgent);
     setDraft({
       slug: slugify(endpointDescription) || 'payable-endpoint',
@@ -85,6 +86,9 @@ export default function CreatorListPage() {
           pricing,
           protocol: [searchParams.get('endpoint_protocol') === 'mpp' ? 'mpp' : 'x402'],
           supported_usd: supportedFromParams(searchParams),
+          ...(expectedRequestBody !== undefined
+            ? { expected_request_body: expectedRequestBody }
+            : {}),
         },
       ],
       freeTier: 0,
@@ -255,6 +259,7 @@ function ReviewStage({
                 pricing,
                 protocol: [link.protocol],
                 supported_usd: stableCurrenciesFromPaymentLink(link),
+                ...expectedBodyPatchFromPaymentLink(link),
               }
             : endpoint,
         ),
@@ -541,6 +546,16 @@ function PayableEndpointEditor({
                   <p className="text-[11px] text-fg-muted">Reading payment metadata...</p>
                 ) : null}
                 {inspectErrors[index] ? <InlineError message={inspectErrors[index]} /> : null}
+                {endpoint.expected_request_body !== undefined ? (
+                  <div className="rounded-lg border bg-bg/60 p-3">
+                    <div className="text-[11px] font-medium uppercase tracking-wide text-fg-subtle">
+                      Expected request body
+                    </div>
+                    <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap wrap-break-word rounded-md bg-bg-elev p-3 font-mono text-[11px] leading-relaxed text-fg-muted">
+                      {JSON.stringify(endpoint.expected_request_body, null, 2)}
+                    </pre>
+                  </div>
+                ) : null}
                 <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
                   <SafeSelect
                     aria-label={`Endpoint ${index + 1} pricing type`}
@@ -772,6 +787,35 @@ function supportedFromParams(params: SearchParamReader): StableCurrency[] {
     .filter((currency): currency is StableCurrency =>
       STABLE_CURRENCIES.includes(currency as StableCurrency),
     );
+}
+
+function expectedBodyFromParams(params: SearchParamReader): Record<string, unknown> | undefined {
+  const raw = params.get('endpoint_expected_body');
+  if (!raw) return undefined;
+  return parseExpectedBody(raw);
+}
+
+function expectedBodyPatchFromPaymentLink(
+  link: PaymentLinkInspectResult,
+): Pick<ListingEndpoint, 'expected_request_body'> {
+  const parsed = parseExpectedBody(link.metadata?.expected_request_body);
+  return parsed !== undefined ? { expected_request_body: parsed } : {};
+}
+
+function parseExpectedBody(value: unknown): Record<string, unknown> | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (isPlainObject(value)) return value;
+  if (typeof value !== 'string' || value.trim().length === 0) return undefined;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return isPlainObject(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function titleFromDescription(description: string): string {

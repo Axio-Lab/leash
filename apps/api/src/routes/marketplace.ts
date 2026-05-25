@@ -65,6 +65,7 @@ const ListingEndpointSchema = z
     pricing: PricingSchema.optional(),
     protocol: z.array(ListingPaymentProtocolSchema).optional(),
     supported_usd: z.array(ListingStableCurrencySchema).optional(),
+    expected_request_body: z.record(z.unknown()).optional(),
   })
   .openapi('ListingEndpoint');
 
