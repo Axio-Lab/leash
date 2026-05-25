@@ -4,12 +4,14 @@ description: >-
   Build, monetise, and operate Solana agents that pay each other in real
   SPL stables (USDC / USDT / USDG) via x402 or MPP. Use whenever the user
   mentions Leash, leash.market, agent treasuries, x402, MPP, agent-to-agent
-  payments, agent payment links, agent paywalls, MPL Core agents on Solana,
-  monetise an API per call on Solana, or wants to build a buyer / seller /
-  merged agent. Covers the @leashmarket/* SDK, the api.leash.market HTTPS surface,
-  the prepare → sign → submit lifecycle, hosted payment links at /x/{id},
-  upstream forwarding with metadata.upstream_url, expected POST bodies with
-  metadata.expected_request_body, the explorer at explorer.leash.market, the
+  payments, agent payment links, agent paywalls, agent handles, verified
+  domains, marketplace listings, MPL Core agents on Solana, monetise an API per
+  call on Solana, or wants to build a buyer / seller / merged agent. Covers the
+  @leashmarket/* SDK, the api.leash.market HTTPS surface, the prepare → sign →
+  submit lifecycle, hosted payment links at /x/{id}, upstream forwarding with
+  metadata.upstream_url, expected POST bodies with metadata.expected_request_body,
+  identity profiles, capability cards, selective disclosures, the marketplace
+  listing flow, LLM-friendly docs, the explorer at explorer.leash.market, the
   local facilitator, and the fund / withdraw flows on the agent treasury PDA.
 ---
 
@@ -18,25 +20,28 @@ description: >-
 Leash is the operating system for agent-to-agent commerce.
 
 Leash gives every agent a wallet (an MPL Core asset whose **Asset Signer
-PDA** is the treasury), a capped spend allowance the owner controls (an
-SPL token delegation), real x402/MPP settlement in USDC / USDT / USDG, and a
-hash-chained `ReceiptV1` audit log. Buyer and seller are **capabilities
-on the same identity** — one mint, two roles.
+PDA** is the treasury), a public identity profile (handle, verified domains,
+capability cards, claims, reputation), a capped spend allowance the owner
+controls (an SPL token delegation), real x402/MPP settlement in USDC / USDT /
+USDG, and a hash-chained `ReceiptV1` audit log. Buyer and seller are
+**capabilities on the same identity** — one mint, two roles.
 
 ## Pick your surface
 
-| You want to…                                             | Reach for                                                                                           |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Drive Leash from Python / Go / Rust / curl               | The HTTPS API at `api.leash.market` — see `REFERENCE.md`                                            |
-| Ship a TS app with no remote dependency                  | The `@leashmarket/*` SDK packages — see `EXAMPLES.md`                                               |
-| Charge per call on a SaaS endpoint you already host      | Hosted **payment links** with `metadata.upstream_url` and optional `metadata.expected_request_body` |
-| Mount real x402 middleware on your own Hono app          | `@leashmarket/seller-kit` `createSeller`                                                            |
-| Script an agent that pays an x402/MPP endpoint           | `@leashmarket/buyer-kit` `createBuyer`                                                              |
-| Mint a brand-new agent (asset + AgentIdentity) in one tx | `@leashmarket/registry-utils` `createAgent`, or `POST /v1/agents/prepare`                           |
-| Inspect agents / receipts / events with a UI             | `https://explorer.leash.market`                                                                     |
-| Settle locally without depending on hosted infra         | `@leashmarket/facilitator` (devnet) — see `REFERENCE.md`                                            |
-| Drop Leash tools into a coding agent (Cursor / Claude)   | `@leashmarket/mcp` STDIO MCP — see "Agent surfaces" below                                           |
-| Run agent ops from the terminal                          | `leash` CLI in `@leashmarket/cli` — see "Agent surfaces" below                                      |
+| You want to…                                             | Reach for                                                                                                              |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Drive Leash from Python / Go / Rust / curl               | The HTTPS API at `api.leash.market` — see `REFERENCE.md`                                                               |
+| Ship a TS app with no remote dependency                  | The `@leashmarket/*` SDK packages — see `EXAMPLES.md`                                                                  |
+| Charge per call on a SaaS endpoint you already host      | Hosted **payment links** with `metadata.upstream_url` and optional `metadata.expected_request_body`                    |
+| List a trained agent or API for discovery                | Marketplace **List capability** flow; endpoint metadata imports method, rail, price, owner identity, and expected body |
+| Claim trust metadata for an agent                        | Identity profile: handle, verified domains, capability cards, signed claims, selective disclosure                      |
+| Mount real x402 middleware on your own Hono app          | `@leashmarket/seller-kit` `createSeller`                                                                               |
+| Script an agent that pays an x402/MPP endpoint           | `@leashmarket/buyer-kit` `createBuyer`                                                                                 |
+| Mint a brand-new agent (asset + AgentIdentity) in one tx | `@leashmarket/registry-utils` `createAgent`, or `POST /v1/agents/prepare`                                              |
+| Inspect agents / receipts / events with a UI             | `https://explorer.leash.market`                                                                                        |
+| Settle locally without depending on hosted infra         | `@leashmarket/facilitator` (devnet) — see `REFERENCE.md`                                                               |
+| Drop Leash tools into a coding agent (Cursor / Claude)   | `@leashmarket/mcp` STDIO MCP — see "Agent surfaces" below                                                              |
+| Run agent ops from the terminal                          | `leash` CLI in `@leashmarket/cli` — see "Agent surfaces" below                                                         |
 
 ## Agent surfaces — MCP / CLI / SDK
 
@@ -55,6 +60,8 @@ the local executive keypair and returns the on-chain receipt.
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `leash_register_agent`         | Two-step provisioning (generate / import executive → fund → mint + delegate + record).                                                                                                                                                                                                       |
 | `leash_get_identity`           | Self-introspection: agent mint, treasury PDA, executive pubkey, network.                                                                                                                                                                                                                     |
+| `leash_resolve_identity`       | Resolve public identity by mint, handle, or verified domain; returns profile, domains, public cards, claims, and reputation.                                                                                                                                                                 |
+| `leash_verify_identity`        | Machine-readable allow/warn/deny trust preflight before paying, trusting claims, or calling a capability.                                                                                                                                                                                    |
 | `leash_check_treasury_balance` | List SOL + SPL stable balances on the treasury PDA.                                                                                                                                                                                                                                          |
 | `leash_create_payment_link`    | Mint a hosted x402/MPP paywall (`/v1/payment-links`). If `upstream_url` is provided, the paid call forwards to that existing endpoint after settlement. For POST endpoints, `expected_request_body` documents the buyer body shape.                                                          |
 | `leash_pay_payment_link`       | Probe → policy-check → sign → settle → finalise receipt for an x402/MPP URL. Accepts method/body for POST paywalls.                                                                                                                                                                          |
@@ -142,20 +149,41 @@ All three surfaces enforce the same network binding as the API: a
 
 1. **Agent.** A single MPL Core asset (MIP-104 Agent Identity). Owner
    keypair owns the asset; treasury is its Asset Signer PDA.
-2. **Treasury.** PDA derived from the asset. Receives SOL + SPL tokens
+2. **Identity profile.** Human and agent-readable metadata attached to that
+   mint: handle, name, verified domains, capability cards, public claims,
+   operator history, reputation, and selective disclosure links.
+3. **Treasury.** PDA derived from the asset. Receives SOL + SPL tokens
    without any private key. Withdrawals route through MPL Core `Execute`,
    signed by the **owner** keypair.
-3. **Spend allowance.** SPL token `Approve` from the treasury ATA to the
+4. **Spend allowance.** SPL token `Approve` from the treasury ATA to the
    **executive** keypair (the runtime "agent operator"). The executive
    then signs x402 `TransferChecked`s up to that allowance. Owner
    revokes by re-approving 0.
-4. **Policy (`RulesV1`).** Pure JSON — daily budget, per-call cap,
+5. **Policy (`RulesV1`).** Pure JSON — daily budget, per-call cap,
    allowed hosts, triggers. Evaluated by `@leashmarket/core` before any
    payment leaves the wallet.
-5. **Receipt (`ReceiptV1`).** Hash-chained JSONL row written for every
+6. **Receipt (`ReceiptV1`).** Hash-chained JSONL row written for every
    gated call. `prev_receipt_hash` chains, `tx_sig` is the on-chain
    settlement signature, `payment_requirements_hash` proves the payer
    saw the price you asked for.
+
+## Identity, marketplace, and discoverability
+
+- **Agent profile.** The agent app's Profile → Agent page is where owners
+  create/edit handles, explain verified domains, view capability cards, and
+  reason about signed claims / selective disclosures. Public surfaces should
+  prefer profile labels over raw wallet addresses.
+- **Verified domains.** A domain is verified by serving
+  `/.well-known/leash-agent.json` over HTTPS with the agent mint and optional
+  network. Verified domains feed explorer and marketplace trust checks.
+- **Marketplace listing.** First create one or more payable endpoints, then use
+  Creator → List capability. Pasting a Leash payable URL imports method, rail,
+  price, currency, accepted stablecoins, owner agent identity, upstream metadata,
+  and `expected_request_body`.
+- **LLM/SEO docs.** Public docs and market surfaces expose `llms.txt`, blog
+  articles, sitemap, and robots metadata. When answering from docs, prefer
+  `https://docs.leash.market/llms.txt`, `https://leash.market/llms.txt`, and
+  article pages under `https://leash.market/blog`.
 
 ## The three identities (memorise these — every guide assumes them)
 

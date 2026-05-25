@@ -34,12 +34,33 @@ devnet, `lsh_live_*` → mainnet).
 - `GET /v1/version`
 - `GET /openapi.json`
 
-### Agents
+### Agents and identity
 
 - `POST /v1/agents/prepare` → unsigned MIP-104 mint tx. Pair with `/v1/submit`.
 - `GET  /v1/agents/{mint}` → registration + treasury basics.
 - `GET  /v1/agents/{mint}/treasury/balances` → SOL + SPL totals across mints.
 - `GET  /v1/agents/{mint}/pay-to` → PDA + suggested ATAs for the seller `payTo` field.
+- Identity profiles resolve by mint, handle, or verified domain and include
+  handle, name, verified domains, public capability cards, public claims,
+  operator history, and reputation.
+- Verified domains use `https://<domain>/.well-known/leash-agent.json` with the
+  agent mint and optional network. The agent app profile explains the file and
+  links the domain verification guide.
+- Selective disclosure links let an owner share private cards, claims, or
+  redacted receipts without publishing them globally.
+
+### Marketplace and discovery
+
+- `GET /v1/discover` merges native Leash marketplace listings with pay-skills.
+- Native listings are identity-backed: `seller_agent_mint` anchors trust,
+  reputation, capability metadata, and marketplace cards.
+- Creator → Monetize endpoint creates hosted payable URLs from existing APIs.
+  Creator → List capability publishes provider metadata and endpoint rows for
+  discovery. Pasted payable URLs are inspected so method, rail, price, currency,
+  accepted stables, owner identity, upstream URL, and expected request body are
+  derived from the payment link instead of retyped manually.
+- Marketplace and docs expose `llms.txt`, sitemap, robots metadata, and
+  programmatic blog guides so LLMs can discover the current workflows.
 
 ### Prepare → Submit lifecycle
 
