@@ -29,6 +29,7 @@ pnpm add @leashmarket/mcp-core
 `@leashmarket/mcp`, `@leashmarket/cli`, and in-product agent hosts. It supports:
 
 - `method: "GET" | "POST"` — how buyers call the hosted paywall.
+- `protocol: "x402" | "mpp"` — which payment rail the hosted paywall speaks.
 - `upstream_url` — an existing API endpoint to call after settlement.
 - `expected_request_body` — arbitrary JSON metadata describing the POST body
   buyers should send.
@@ -36,6 +37,8 @@ pnpm add @leashmarket/mcp-core
 `expected_request_body` is not the live request body. The buyer supplies the real
 body later through `leash_pay_payment_link` or another x402/MPP client, and the
 hosted paywall forwards it to `upstream_url` only after payment settles.
+`leash_pay_payment_link` mirrors the same contract with `method` and raw `body`
+arguments for POST calls.
 
 ## Usage
 
@@ -62,7 +65,7 @@ for (const tool of LEASH_TOOLS) {
 ```ts
 import { probePaymentLink, fetchDiscover } from '@leashmarket/mcp-core/helpers';
 
-// Check if a URL is a valid x402 paywall
+// Check if a URL is a valid x402/MPP paywall
 const result = await probePaymentLink('https://api.example.com/endpoint');
 
 // Browse the discover catalog

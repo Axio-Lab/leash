@@ -4,7 +4,8 @@ Standalone MCP server for the Leash identity layer for AI agents. It
 lets any AI agent in any MCP host (Cursor, Claude Desktop, Cline,
 Continue, ChatGPT-MCP, …) resolve and verify identities, inspect proof
 trails, sign on-chain Solana transactions, pay x402 paywalls, and
-check its treasury balance — without a browser in the loop.
+MPP paywalls, create hosted payment links, and check its treasury balance —
+without a browser in the loop.
 
 ## Install
 
@@ -92,7 +93,7 @@ blob asking the LLM to onboard the user. (The frictionless
 }
 ```
 
-## Tools (v0.1 — 17 canonical)
+## Tools (17 canonical)
 
 | Tool                           | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -145,6 +146,7 @@ you already run:
   "amount": 1,
   "currency": "USDC",
   "method": "POST",
+  "protocol": "x402",
   "upstream_url": "https://api.example.com/design",
   "expected_request_body": {
     "prompt": "string",
@@ -167,6 +169,9 @@ real JSON body later through `leash_pay_payment_link`:
 
 After settlement, Leash forwards that buyer body to `upstream_url` and returns
 the upstream response.
+
+Use `protocol: "mpp"` when the hosted paywall should speak the MPP
+problem+json flow instead of x402's HTTP 402 flow.
 
 ## Try the read path
 

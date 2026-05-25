@@ -12,8 +12,8 @@ JavaScript runtime — browsers, Bun, Deno, Node, edge — to:
 - Record a client-minted agent on the platform (`leash.recordAgent`)
 - Manage agent-scoped webhooks signed with X-Leash-Sig
 - Pull receipts for an agent (legacy API-key auth)
-- Create + manage payment links, including upstream API paywalls with expected
-  POST body metadata (legacy API-key auth)
+- Create + manage x402/MPP payment links, including upstream API paywalls with
+  expected POST body metadata (legacy API-key auth)
 
 > Provisioning agents (generating keypairs, minting MPL Core assets,
 > setting USDC delegation) is **not** in the SDK — use
@@ -88,15 +88,17 @@ console.log('recorded', recorded.mint, 'treasury', recorded.treasury);
 ## Payment links and expected POST bodies
 
 Payment links are hosted x402/MPP paywalls served at `/x/{id}`. Set
-`metadata.upstream_url` to monetize an API you already host. For POST endpoints,
-set `metadata.expected_request_body` to describe the JSON shape buyers should
-send to the hosted Leash URL.
+`metadata.upstream_url` to monetize an API you already host. The settled request
+forwards to that upstream URL and returns the live upstream response. For POST
+endpoints, set `metadata.expected_request_body` to describe the JSON shape buyers
+should send to the hosted Leash URL.
 
 ```ts
 const link = await leash.createPaymentLink({
   label: 'Design agent',
   owner_agent: 'AjfeyP...',
   method: 'POST',
+  protocol: 'x402',
   price: '1 USDC',
   currency: 'USDC',
   response: {

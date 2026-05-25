@@ -29,6 +29,7 @@ environment variable overrides:
 | `LEASH_EXECUTIVE_KEY` | `5Jz...` (base58) or `[12,34,...]` (JSON arr) |
 | `LEASH_NETWORK`       | `solana-mainnet` (default) / `solana-devnet`  |
 | `LEASH_API_URL`       | `https://api.leash.market` (default)          |
+| `LEASH_API_KEY`       | required for `leash sell create-link`         |
 | `LEASH_RPC_URL`       | **strongly recommended** — see below          |
 | `LEASH_EXPLORER_URL`  | `https://explorer.leash.market` (default)     |
 
@@ -88,6 +89,7 @@ leash sell create-link \
   --amount 1 \
   --method POST \
   --upstream-url https://api.example.com/design \
+  --protocol x402 \
   --expected-body '{"prompt":"string","style":"string","format":"string"}'
 
 # 8. Inspect activity.
@@ -172,8 +174,10 @@ global flags:
 
 `leash sell create-link` can create a hosted Leash URL for an API you already
 run. Set `--upstream-url` to the seller endpoint and choose `--method GET` or
-`--method POST`. For POST endpoints, `--expected-body '{}'` stores metadata that
-describes what buyers should send; it is not the live body.
+`--method POST`. Use `--protocol x402` for standard HTTP 402 payment links or
+`--protocol mpp` for MPP problem+json paywalls. For POST endpoints,
+`--expected-body '{}'` stores metadata that describes what buyers should send; it
+is not the live body.
 
 ```bash
 leash sell create-link \
@@ -182,6 +186,7 @@ leash sell create-link \
   --currency USDC \
   --method POST \
   --upstream-url https://api.example.com/research \
+  --protocol x402 \
   --expected-body '{"topic":"string","depth":"string"}'
 ```
 
