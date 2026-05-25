@@ -122,7 +122,7 @@ const result = await buyer.fetch('https://quotes.example.com/quote');
 ## 4. Monetise an existing API in one call (HTTP, no-code)
 
 ```bash
-# Create a hosted x402 paywall at /x/{id} that forwards to an existing API
+# Create a hosted x402/MPP paywall at /x/{id} that forwards to an existing API
 curl -sS https://api.leash.market/v1/payment-links \
   -H "Authorization: Bearer $LEASH_API_KEY" \
   -H "Content-Type: application/json" \
@@ -130,6 +130,7 @@ curl -sS https://api.leash.market/v1/payment-links \
     "label":"JSONPlaceholder posts",
     "owner_agent":"<sellerAgentAsset>",
     "method":"GET",
+    "protocol":"x402",
     "price":"$0.001",
     "currency":"USDC",
     "response":{
@@ -159,6 +160,7 @@ leash sell create-link \
   --amount 0.001 \
   --currency USDC \
   --method GET \
+  --protocol x402 \
   --upstream-url https://jsonplaceholder.typicode.com/posts
 ```
 
@@ -170,6 +172,7 @@ leash sell create-link \
   --amount 1 \
   --currency USDC \
   --method POST \
+  --protocol x402 \
   --upstream-url https://api.example.com/design \
   --expected-body '{"prompt":"string","style":"string","format":"string"}'
 ```
@@ -178,7 +181,39 @@ leash sell create-link \
 later to the hosted Leash URL, and Leash forwards it to `metadata.upstream_url`
 after settlement.
 
-## 5. Mount real x402 on your own Hono app (SDK)
+## 5. Verify an agent domain
+
+Publish a public JSON file at `/.well-known/leash-agent.json` on the domain you
+want attached to the agent profile:
+
+```json
+{
+  "mint": "YOUR_AGENT_MINT_ADDRESS",
+  "network": "solana-devnet"
+}
+```
+
+Then verify the domain from the Agent app profile or via the identity API. Public
+marketplace and explorer surfaces can show the verified domain beside the agent
+handle/name instead of only a raw mint.
+
+## 6. List a trained agent capability
+
+Create the payable endpoint first, then list it for discovery:
+
+```text
+1. Open /creator/monetize.
+2. Paste the existing trained-agent endpoint.
+3. Choose GET or POST, x402 or MPP, price, accepted stablecoins, and expected body metadata.
+4. Create the hosted /x/{id} URL.
+5. Click "Add to marketplace discovery" or paste the hosted URL into /creator/list.
+6. Leash imports method, rail, price, currency, owner identity, and expected body metadata.
+```
+
+Buyer agents discover the capability, inspect the seller identity, call the
+payable endpoint, and receive the upstream agent response after settlement.
+
+## 7. Mount real x402 on your own Hono app (SDK)
 
 ```ts
 import { Hono } from 'hono';
@@ -203,7 +238,7 @@ createSeller(app, {
 app.get('/quote', (c) => c.json({ pair: 'SOL/USD', price: 142.71 }));
 ```
 
-## 6. Owner withdraw — drain treasury USDC to a wallet (HTTP)
+## 8. Owner withdraw — drain treasury USDC to a wallet (HTTP)
 
 ```bash
 # Step 1 — prepare
@@ -227,7 +262,7 @@ curl -sS https://api.leash.market/v1/submit \
 # → { signature }
 ```
 
-## 7. Run a local facilitator (devnet)
+## 9. Run a local facilitator (devnet)
 
 ```bash
 # 1. DEDICATED keypair (NEVER reuse buyer / executive keys)
@@ -250,7 +285,7 @@ LEASH_FACILITATOR_URL=http://localhost:8787 \
   pnpm --filter @leashmarket/api facilitator:smoke
 ```
 
-## 8. Subscribe to lifecycle events with a webhook
+## 10. Subscribe to lifecycle events with a webhook
 
 ```bash
 curl -sS https://api.leash.market/v1/webhooks \
@@ -263,7 +298,7 @@ curl -sS https://api.leash.market/v1/webhooks \
 # → { id, secret }   (HMAC body with `secret` to verify)
 ```
 
-## 9. Verify a receipt offline (SDK)
+## 11. Verify a receipt offline (SDK)
 
 ```ts
 import { ReceiptV1Schema } from '@leashmarket/schemas';
@@ -275,7 +310,7 @@ if (recomputed !== parsed.receipt_hash) throw new Error('tampered');
 const linksToPrev = chainReceipt(parsed, prevReceipt); // bool
 ```
 
-## 10. Discover and pay an external API (pay-skills)
+## 12. Discover and pay an external API (pay-skills)
 
 The `/v1/discover` feed merges Leash marketplace listings with the Solana
 Foundation [`pay-skills`](https://github.com/solana-foundation/pay-skills)

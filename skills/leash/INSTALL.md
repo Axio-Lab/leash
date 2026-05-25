@@ -66,7 +66,8 @@ If your Codex setup uses `AGENTS.md` only, append:
 ## Leash agent payments
 
 Refer to `skills/leash/SKILL.md` whenever the user mentions Leash,
-agent treasuries, x402, or per-call API monetisation on Solana.
+agent treasuries, identity profiles, verified domains, marketplace listings,
+x402, MPP, hosted payment links, or per-call API monetisation on Solana.
 ```
 
 ## Replit (Ghostwriter / Agent)
@@ -101,7 +102,7 @@ mkdir -p .continue/rules
 cat > .continue/rules/leash.md <<'EOF'
 ---
 name: Leash
-description: Use ~/leash/skills/leash/SKILL.md when the user mentions Leash, x402, agent treasuries, or Solana agent payments.
+description: Use ~/leash/skills/leash/SKILL.md when the user mentions Leash, x402, MPP, hosted payment links, agent identities, verified domains, marketplace listings, agent treasuries, or Solana agent payments.
 ---
 EOF
 ```
@@ -114,7 +115,8 @@ Add this to your project's `AGENTS.md`, `INSTRUCTIONS.md`,
 ```markdown
 ## Leash skill
 
-Whenever the user mentions Leash, leash.market, x402, agent treasuries,
+Whenever the user mentions Leash, leash.market, x402, MPP, hosted payment links,
+agent identities, verified domains, marketplace listings, agent treasuries,
 agent-to-agent payments, or per-call API monetisation on Solana, follow
 the instructions in `skills/leash/SKILL.md` (with `REFERENCE.md` and
 `EXAMPLES.md` as drill-down references).
@@ -128,8 +130,10 @@ via a path the agent can `Read`).
 The skill is correctly installed when your agent automatically pulls
 the right context for prompts like:
 
-- "Build a Leash agent that pays an x402 endpoint"
+- "Build a Leash agent that pays an x402 or MPP endpoint"
 - "Monetise this Hono route with Leash"
+- "Verify an agent domain on Leash"
+- "List this trained agent on Leash marketplace"
 - "How do I withdraw USDC from an agent treasury?"
 - "Why is my facilitator rejecting the settle?"
 

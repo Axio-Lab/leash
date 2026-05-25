@@ -9,16 +9,16 @@ agent asks "which package / route / env var does X?".
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@leashmarket/core`           | `Policy.evaluate`, `hashReceipt`, `chainReceipt`                                                                                       | Pure policy + receipt primitives. No I/O. Used by buyer + seller + runner alike.                                                                                                             |
 | `@leashmarket/seller-kit`     | `createSeller(app, opts)`                                                                                                              | Mounts the real `@x402/hono` middleware on a Hono app. PayTo = treasury PDA.                                                                                                                 |
-| `@leashmarket/buyer-kit`      | `createBuyer({ agent, signer, ... })`                                                                                                  | Returns a `fetch`-shaped function that runs policy + signs x402 transfers + finalises receipts.                                                                                              |
+| `@leashmarket/buyer-kit`      | `createBuyer({ agent, signer, ... })`                                                                                                  | Returns a `fetch`-shaped function that runs policy + signs x402/MPP transfers + finalises receipts.                                                                                          |
 | `@leashmarket/registry-utils` | `createAgent`, `prepareAgentMint`, `getSpendDelegation`, `prepareSetSpendDelegation`, `findAssetSignerPda`                             | Mint MIP-104 agents, derive treasury, manage delegations.                                                                                                                                    |
 | `@leashmarket/runner`         | `leash-runner` CLI / `createRunner`                                                                                                    | HTTP service hosting JSONL receipt feed + payment-link endpoints + kill switch.                                                                                                              |
-| `@leashmarket/facilitator`    | `leash-facilitator` CLI                                                                                                                | Run your own x402 facilitator (devnet in v0.1).                                                                                                                                              |
+| `@leashmarket/facilitator`    | `leash-facilitator` CLI                                                                                                                | Run your own x402/MPP facilitator.                                                                                                                                                           |
 | `@leashmarket/schemas`        | `ReceiptV1Schema`, `RulesV1Schema`, etc.                                                                                               | Zod + JSON-Schema for every wire shape.                                                                                                                                                      |
 | `@leashmarket/testing`        | `leash-conformance` CLI, in-memory facilitator                                                                                         | Conformance tests + offline fixtures.                                                                                                                                                        |
 | `@leashmarket/sdk`            | `LeashClient` (`discover`, `reputation`, `receipts`, `getReceipt`, `transactionHistory`, `dailyTransactions`, payment-links, webhooks) | Typed wrapper over `api.leash.market`. Browser/Bun/Deno-friendly; agent-signed + legacy bearer auth. Supports `metadata.upstream_url` and `metadata.expected_request_body` on payment links. |
-| `@leashmarket/mcp`            | `leash-mcp` STDIO MCP server, `mintAgentLocally`                                                                                       | Drop the 17-tool Leash MCP into Cursor / Claude / Cline / etc. Settles in-process.                                                                                                           |
-| `@leashmarket/cli`            | `leash` terminal CLI                                                                                                                   | Human-driven wrapper over the same `LeashHost`. `--json` for scripting.                                                                                                                      |
-| `@leashmarket/mcp-core`       | `LeashHost`, `LEASH_TOOLS`, `defineTool`                                                                                               | Host-agnostic core every Leash MCP surface implements. Author new tools here.                                                                                                                |
+| `@leashmarket/mcp`            | `leash-mcp` STDIO MCP server, `mintAgentLocally`                                                                                       | Drop the 17-tool Leash MCP into Cursor / Claude / Cline / etc. Settles in-process and can create upstream-backed paywalls.                                                                   |
+| `@leashmarket/cli`            | `leash` terminal CLI                                                                                                                   | Human-driven wrapper over the same `LeashHost`. `--json` for scripting, `--upstream-url` / `--expected-body` for hosted paywalls.                                                            |
+| `@leashmarket/mcp-core`       | `LeashHost`, `LEASH_TOOLS`, `defineTool`                                                                                               | Host-agnostic core every Leash MCP surface implements, including payment-link args for protocol, upstream_url, and expected_request_body.                                                    |
 
 ## HTTPS API — `https://api.leash.market`
 
@@ -34,12 +34,33 @@ devnet, `lsh_live_*` → mainnet).
 - `GET /v1/version`
 - `GET /openapi.json`
 
-### Agents
+### Agents and identity
 
 - `POST /v1/agents/prepare` → unsigned MIP-104 mint tx. Pair with `/v1/submit`.
 - `GET  /v1/agents/{mint}` → registration + treasury basics.
 - `GET  /v1/agents/{mint}/treasury/balances` → SOL + SPL totals across mints.
 - `GET  /v1/agents/{mint}/pay-to` → PDA + suggested ATAs for the seller `payTo` field.
+- Identity profiles resolve by mint, handle, or verified domain and include
+  handle, name, verified domains, public capability cards, public claims,
+  operator history, and reputation.
+- Verified domains use `https://<domain>/.well-known/leash-agent.json` with the
+  agent mint and optional network. The agent app profile explains the file and
+  links the domain verification guide.
+- Selective disclosure links let an owner share private cards, claims, or
+  redacted receipts without publishing them globally.
+
+### Marketplace and discovery
+
+- `GET /v1/discover` merges native Leash marketplace listings with pay-skills.
+- Native listings are identity-backed: `seller_agent_mint` anchors trust,
+  reputation, capability metadata, and marketplace cards.
+- Creator → Monetize endpoint creates hosted payable URLs from existing APIs.
+  Creator → List capability publishes provider metadata and endpoint rows for
+  discovery. Pasted payable URLs are inspected so method, rail, price, currency,
+  accepted stables, owner identity, upstream URL, and expected request body are
+  derived from the payment link instead of retyped manually.
+- Marketplace and docs expose `llms.txt`, sitemap, robots metadata, and
+  programmatic blog guides so LLMs can discover the current workflows.
 
 ### Prepare → Submit lifecycle
 
@@ -69,7 +90,7 @@ Submit:
 
 - `POST /v1/submit` — broadcasts a signed base64 tx returned by any `prepare*`.
 
-### Payment links (hosted x402 paywalls)
+### Payment links (hosted x402/MPP paywalls)
 
 - `POST /v1/payment-links` → returns `{ id, url, accepts[], facilitator, ... }`.
 - `GET  /v1/payment-links` (list), `/v1/payment-links/{id}` (read).
@@ -78,7 +99,7 @@ Submit:
 - Public path `/x/{id}?network=solana-devnet` — what you share with buyers; returns 402 + `payment-required` for unpaid calls, then 200 once settled.
 - To monetize an existing API, include `metadata.upstream_url` on the payment link. After settlement, Leash forwards the paid request to that upstream URL and returns the live upstream response. Without `metadata.upstream_url`, it returns the configured `response.body` template.
 - For POST endpoints, include `metadata.expected_request_body` as any JSON object that describes what buyers should send. This is discovery metadata, not the live body; buyers send the actual body when paying `/x/{id}`.
-- CLI/MCP/Agent surfaces expose the same path as `--upstream-url` / `upstream_url`, `--expected-body '{}'` / `expected_request_body`, plus `method: GET|POST`.
+- CLI/MCP/Agent surfaces expose the same path as `--upstream-url` / `upstream_url`, `--expected-body '{}'` / `expected_request_body`, plus `method: GET|POST` and `protocol: x402|mpp`.
 
 ### Seller utilities (HTTP parity with `@leashmarket/seller-kit` helpers)
 
@@ -180,7 +201,7 @@ currency, asset, receipt_hash, tx_sig? }`.
 | `LEASH_API_ADMIN_SECRET`              | API server  | Bearer secret for `/v1/admin/*` routes.                                                                                                             |
 | `LEASH_API_REDIS_URL`                 | API server  | Required for rate limits, idempotency, SSE Pub/Sub. Defaults to in-memory.                                                                          |
 | `LEASH_FACILITATOR_SECRET_KEY`        | Facilitator | Solana keypair (JSON byte array OR base58). MUST be separate from any buyer key.                                                                    |
-| `LEASH_FACILITATOR_NETWORKS`          | Facilitator | Comma list. Devnet only in v0.1.                                                                                                                    |
+| `LEASH_FACILITATOR_NETWORKS`          | Facilitator | Comma list such as `solana-devnet,solana-mainnet`.                                                                                                  |
 | `LEASH_FACILITATOR_PORT/HOST/RPC_URL` | Facilitator | HTTP listener + RPC override.                                                                                                                       |
 | `LEASH_FEE_BPS`                       | Facilitator | Override the protocol fee rate (default `100` = 1.00%). Set on the API server too if you self-host.                                                 |
 | `LEASH_FEE_ENFORCE`                   | Facilitator | `enforce` (default), `warn`, or `off`. Controls whether a missing or malformed fee leg is rejected, logged, or silently accepted.                   |
