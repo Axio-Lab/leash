@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   ExternalLink,
   Link2,
-  ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
@@ -647,19 +646,6 @@ export default function CreatorMonetizePage() {
               </CardContent>
             </Card>
           )}
-
-          <Card>
-            <CardContent className="flex items-start gap-2 p-4 text-xs text-fg-muted">
-              <ShieldCheck
-                className="mt-0.5 size-4 shrink-0 text-brand-strong"
-                aria-hidden="true"
-              />
-              <p>
-                Payment settings live on the hosted payable endpoint. Marketplace listings only
-                describe the provider and the payable endpoints agents can call.
-              </p>
-            </CardContent>
-          </Card>
         </aside>
       </div>
 
