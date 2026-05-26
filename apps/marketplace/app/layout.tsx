@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   applicationName: 'Leash Marketplace',
   title: {
-    default: 'Leash Market · Capability registry for AI agents',
+    default: 'leash.market · Capability registry for AI agents',
     template: '%s · Leash Market',
   },
   description:
