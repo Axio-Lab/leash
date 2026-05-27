@@ -1,17 +1,22 @@
 ---
 title: 'Authentication'
-description: API keys, prefix-driven network binding, idempotency, and rate limits.
+description: API keys, agent-signed X-Leash-Sig, prefix-driven network binding, idempotency, and rate limits.
 ---
 
-Every API call is authenticated with a single header:
+Leash has three auth modes:
+
+- **Public reads** for discovery, reputation, public identity, health, version, and docs.
+- **Agent-signed requests** using `X-Leash-Sig` for endpoints scoped to one agent identity.
+- **API keys** for legacy authenticated API surfaces such as receipts and payment-link CRUD.
+
+API-key calls use a single header:
 
 ```http
 Authorization: Bearer <your-api-key>
 ```
 
-Anonymous access is limited to two endpoints (`GET /v1/health`,
-`GET /v1/version`, and `GET /openapi.json`). Everything else is
-401 without a key.
+Public reads do not need a key. State-changing agent-scoped bootstrap flows such as
+`POST /v1/agents/{mint}/api-keys` use `X-Leash-Sig` instead.
 
 ## Key prefixes pick the network
 
@@ -37,13 +42,56 @@ Searching a devnet signature with a `lsh_live_*` key returns `404`
 even though the signature exists on devnet — this is the explorer's
 isolation guarantee.
 
-## Issuing keys
+## Agent-created keys
 
-Keys are issued out-of-band today — talk to us in
-[Discord](https://discord.gg/leashmarket) and we'll mint one for the right
-network. Self-service issuance through a hosted dashboard is on the
-[roadmap](/api/roadmap#self-service-api-key-management) and ships
-in the same release as billing.
+Agents can create their own API keys without a dashboard or admin secret:
+
+```http
+POST /v1/agents/{mint}/api-keys
+X-Leash-Agent: <agent mint>
+X-Leash-Timestamp: <ISO timestamp>
+X-Leash-Sig: <base58 ed25519 signature>
+Content-Type: application/json
+
+{ "label": "production worker" }
+```
+
+The API verifies that the signature was produced by the agent executive public
+key stored on the agent record. The created key is stored with:
+
+- `owner_wallet` = the agent executive public key.
+- `agent_mint` = the signed agent mint.
+- `scopes` = exactly `["agent"]`.
+
+The plaintext key is returned **once** on create. Store it immediately; list and
+revoke calls only return `prefix`, `last4`, metadata, and timestamps.
+
+```bash
+leash api-key create --label "local MCP"
+leash api-key list
+leash api-key revoke <id>
+```
+
+SDK and MCP equivalents:
+
+```ts
+const leash = new LeashClient({
+  agentMint: process.env.LEASH_AGENT_MINT!,
+  executiveSecretBase58: process.env.LEASH_EXECUTIVE_KEY!,
+});
+
+const { key, plaintext } = await leash.createAgentApiKey({ label: 'worker' });
+await leash.listAgentApiKeys();
+await leash.revokeAgentApiKey(key.id);
+```
+
+## UI and admin-issued keys
+
+The web apps can still create user/wallet keys for signed-in users, and platform
+operators can issue keys through admin routes. Those keys may carry broader
+surface scopes such as `agents`, `marketplace`, or `admin`. Agent-created keys
+are deliberately narrower: they carry only the `agent` scope and are bound to one
+agent mint.
 
 The prefix is purely a routing hint and tells you which cluster the
 key acts on at a glance. The opaque tail is high-entropy; treat the

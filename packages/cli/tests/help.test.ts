@@ -50,6 +50,7 @@ describe('leash CLI', () => {
     expect(code).toBe(0);
     expect(stdout).toContain('usage: leash');
     expect(stdout).toContain('agent create');
+    expect(stdout).toContain('api-key create');
     expect(stdout).toContain('treasury balance');
     expect(stdout).toContain('discover');
     expect(stdout).toContain('reputation');
@@ -68,6 +69,12 @@ describe('leash CLI', () => {
     expect(code).toBe(2);
     expect(stderr).toContain('usage:');
     expect(stderr).toContain('create-link');
+  });
+
+  it('api-key create requires a label', () => {
+    const { code, stderr } = runCli(['api-key', 'create']);
+    expect(code).toBe(2);
+    expect(stderr).toContain('usage: leash api-key create');
   });
 
   it('rejects unknown commands with code 2', () => {

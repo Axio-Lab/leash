@@ -10,7 +10,7 @@
  * Leash admin calls scoped to the user's wallet.
  */
 
-export type ApiScope = 'agents' | 'marketplace' | 'admin';
+export type ApiScope = 'agents' | 'marketplace' | 'admin' | 'agent';
 
 export type SvmNetwork = 'solana-devnet' | 'solana-mainnet';
 
@@ -21,6 +21,7 @@ export type LeashApiKeyRecord = {
   prefix: string;
   last4: string;
   owner_wallet: string | null;
+  agent_mint: string | null;
   scopes: ApiScope[] | null;
   created_at: string;
   disabled_at: string | null;

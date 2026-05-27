@@ -10,6 +10,7 @@ JavaScript runtime — browsers, Bun, Deno, Node, edge — to:
 - Read shareable selective-disclosure links (`leash.readIdentityDisclosure`)
 - Vet a counterparty's reputation (`leash.reputation`)
 - Record a client-minted agent on the platform (`leash.recordAgent`)
+- Create/list/revoke agent-owned API keys with X-Leash-Sig
 - Manage agent-scoped webhooks signed with X-Leash-Sig
 - Pull receipts for an agent (legacy API-key auth)
 - Create + manage x402/MPP payment links, including upstream API paywalls with
@@ -140,6 +141,12 @@ const leash = new LeashClient({
   executiveSecretBase58: process.env.LEASH_EXECUTIVE_KEY!,
 });
 
+const createdKey = await leash.createAgentApiKey({ label: 'local worker' });
+console.log('STORE ONCE:', createdKey.plaintext);
+
+const keys = await leash.listAgentApiKeys();
+await leash.revokeAgentApiKey(keys.items[0].id);
+
 const sub = await leash.createWebhook({
   url: 'https://my-app.example/leash-webhook',
   events: ['receipt.published', 'agent.treasury.withdraw'],
@@ -149,6 +156,10 @@ console.log('SAVE THIS SECRET:', sub.secret); // returned ONCE.
 const subs = await leash.listWebhooks();
 await leash.deleteWebhook(sub.id);
 ```
+
+Agent-created keys are bound to the active agent mint, owned by the executive
+public key, and scoped as exactly `agent`. Use them as `LEASH_API_KEY` for
+legacy bearer-token surfaces such as receipt reads and payment-link CRUD.
 
 ## Reputation cheat sheet
 

@@ -50,6 +50,23 @@ export type CreatePaymentLinkArgs = {
   protocol?: 'x402' | 'mpp';
 };
 
+export type CreateAgentApiKeyArgs = {
+  /** Friendly label for the key. Plaintext is returned once on create. */
+  label: string;
+};
+
+export type ListAgentApiKeysArgs = {
+  /** Include disabled/revoked keys. Defaults to false. */
+  include_disabled?: boolean;
+  /** Max items to return. Server-capped. */
+  limit?: number;
+};
+
+export type RevokeAgentApiKeyArgs = {
+  /** API key id returned by create/list. */
+  id: string;
+};
+
 export type PayArgs = {
   url: string;
   /** HTTP method for the paid request. Default GET (matches most `/x/<id>` links). */
@@ -276,6 +293,18 @@ export interface LeashHost {
    * platform API key; standalone MCP signs an X-Leash-Sig header).
    */
   createPaymentLink(args: CreatePaymentLinkArgs): Promise<LeashToolResult>;
+
+  /**
+   * Create an `agent` scoped Leash API key for the active agent using
+   * the executive keypair (`X-Leash-Sig`). Plaintext is returned once.
+   */
+  createAgentApiKey(args: CreateAgentApiKeyArgs): Promise<LeashToolResult>;
+
+  /** List the active agent's API keys. Plaintext is never returned. */
+  listAgentApiKeys(args: ListAgentApiKeysArgs): Promise<LeashToolResult>;
+
+  /** Disable/revoke one active-agent API key by id. */
+  revokeAgentApiKey(args: RevokeAgentApiKeyArgs): Promise<LeashToolResult>;
 
   /**
    * Pay an x402 link.

@@ -52,6 +52,7 @@ function makeApiKey(overrides: Partial<LeashApiKeyRecord> = {}): LeashApiKeyReco
     prefix: 'lsh_test_',
     last4: 'aaaa',
     owner_wallet: 'WALLET',
+    agent_mint: null,
     scopes: ['agents'],
     created_at: '2026-01-01T00:00:00.000Z',
     disabled_at: null,

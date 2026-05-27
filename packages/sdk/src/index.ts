@@ -16,8 +16,11 @@ export { LeashClient, LeashError, type LeashClientOptions } from './client.js';
 export { signRequest, buildEnvelope, type SigningHeaders, type SigningEnvelope } from './sign.js';
 
 export type {
+  AgentApiKey,
   AgentWebhook,
   AgentWebhookWithSecret,
+  CreateAgentApiKeyInput,
+  CreateAgentApiKeyResponse,
   DailyTransactionsResponse,
   DailyTxBucket,
   DiscoverItem,
@@ -42,6 +45,7 @@ export type {
   PaymentLinkPatchInput,
   PaymentLinkResponseTemplate,
   PaymentLinksListResponse,
+  ListAgentApiKeysResponse,
   PublicIdentityProfile,
   Receipt,
   ReceiptsResponse,

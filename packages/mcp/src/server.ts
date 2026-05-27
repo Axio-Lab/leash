@@ -47,6 +47,7 @@ import {
   fetchPaySkillsProvider,
   fetchReputation,
   type CheckTreasuryBalanceArgs,
+  type CreateAgentApiKeyArgs,
   type CreatePaymentLinkArgs,
   type DailyTransactionsArgs,
   type DiscoverArgs,
@@ -58,11 +59,13 @@ import {
   type LeashHost,
   type LeashTool,
   type LeashToolResult,
+  type ListAgentApiKeysArgs,
   type PayArgs,
   type PaySkillsProviderArgs,
   type ReceiptsArgs,
   type RegisterAgentArgs,
   type ReputationArgs,
+  type RevokeAgentApiKeyArgs,
   type SetSpendLimitArgs,
   type SvmNetwork,
   type TransactionHistoryArgs,
@@ -264,6 +267,15 @@ export class HostRef implements LeashHost {
   // ── settlement methods — pure delegation ──
   createPaymentLink(args: CreatePaymentLinkArgs): Promise<LeashToolResult> {
     return this.inner.createPaymentLink(args);
+  }
+  createAgentApiKey(args: CreateAgentApiKeyArgs): Promise<LeashToolResult> {
+    return this.inner.createAgentApiKey(args);
+  }
+  listAgentApiKeys(args: ListAgentApiKeysArgs): Promise<LeashToolResult> {
+    return this.inner.listAgentApiKeys(args);
+  }
+  revokeAgentApiKey(args: RevokeAgentApiKeyArgs): Promise<LeashToolResult> {
+    return this.inner.revokeAgentApiKey(args);
   }
   pay(args: PayArgs): Promise<LeashToolResult> {
     return this.inner.pay(args);
@@ -569,6 +581,15 @@ function makePlaceholderHost(defaults: LeashHostDefaults): LeashHost {
     apiBaseUrl: defaults.apiBaseUrl,
     async createPaymentLink() {
       return noAgent('payment_link');
+    },
+    async createAgentApiKey() {
+      return noAgent('agent_api_key');
+    },
+    async listAgentApiKeys() {
+      return noAgent('agent_api_keys');
+    },
+    async revokeAgentApiKey() {
+      return noAgent('agent_api_key');
     },
     async pay() {
       return noAgent('payment_receipt');

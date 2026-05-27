@@ -4,6 +4,145 @@ const publishedAt = '2026-05-27';
 
 export const articlesGenerated20260527: BlogArticle[] = [
   {
+    slug: 'how-agents-create-their-own-leash-api-keys',
+    title: 'How agents create their own Leash API keys',
+    seoTitle: 'How AI agents create their own Leash API keys with SDK, CLI, and MCP',
+    seoDescription:
+      'Learn what needs a Leash API key, what stays public or X-Leash-Sig signed, and how AI agents create agent-scoped API keys from the SDK, CLI, and MCP.',
+    eyebrow: 'Agent API keys',
+    description:
+      'Leash agents can now bootstrap their own API keys programmatically. The key is owned by the executive public key, bound to the agent mint, scoped as agent, and returned in plaintext only once.',
+    category: 'Agent infrastructure',
+    audience:
+      'AI agent developers, MCP host builders, SDK users, CLI operators, and teams integrating Leash into autonomous runtimes',
+    publishedAt,
+    readingMinutes: 10,
+    keywords: [
+      'Leash API key',
+      'AI agent API keys',
+      'X-Leash-Sig',
+      'agent scoped API key',
+      'MCP API key',
+      'Leash SDK',
+      'Leash CLI',
+    ],
+    tags: ['API keys', 'X-Leash-Sig', 'SDK', 'MCP', 'CLI', 'Agent identity'],
+    takeaways: [
+      'Public discovery, reputation, and identity checks do not need a Leash API key.',
+      'Agent-scoped bootstrap calls use X-Leash-Sig, proving control of the agent executive keypair.',
+      'Created API keys use owner_wallet = executive pubkey, agent_mint = the signed agent, and scopes = ["agent"].',
+      'The plaintext key is returned once, so agents and operators must store it immediately.',
+    ],
+    docsLinks: [
+      docs('/api/auth', 'Authentication'),
+      docs('/agents/sdk', 'TypeScript SDK'),
+      docs('/agents/cli', 'Leash CLI'),
+      docs('/agents/mcp', 'MCP server'),
+      docs('/sdk/mcp-core', 'MCP core'),
+    ],
+    relatedArticles: [
+      'why-leash-fits-agentic-wallets-and-agent-to-agent-settlement',
+      'leash-identity-is-all-your-agent-needs-to-get-paid',
+      'how-to-get-your-ai-agent-paid-on-leash',
+    ],
+    cta: { label: 'Read the API auth docs', href: 'https://docs.leash.market/api/auth' },
+    faqs: [
+      {
+        question: 'Does every Leash call need an API key?',
+        answer:
+          'No. Discovery, reputation, public identity resolution, and identity verification are public reads. Agent bootstrap calls such as creating an agent API key use X-Leash-Sig. Legacy surfaces such as payment-link CRUD and receipt reads still use bearer API keys.',
+      },
+      {
+        question: 'Who owns an agent-created Leash API key?',
+        answer:
+          'The key is attributed to the agent executive public key in owner_wallet and bound to the specific agent mint in agent_mint. That lets one executive manage multiple agents without one agent listing or revoking another agent’s keys.',
+      },
+      {
+        question: 'Can the plaintext API key be revealed later?',
+        answer:
+          'No. Agent-created keys return plaintext once on create. List and revoke operations return only metadata such as id, prefix, last4, scope, and timestamps.',
+      },
+    ],
+    sections: [
+      {
+        id: 'why-agent-created-api-keys-matter',
+        title: 'Why agent-created API keys matter',
+        body: [
+          'Autonomous agents should not have to open a dashboard just to get a credential. If an agent already has a Leash identity and controls its executive keypair, it can prove that control directly with X-Leash-Sig.',
+          'That proof is enough for Leash to issue a narrow API key owned by the executive public key and bound to the agent mint. The key can then be stored by the runtime and used for legacy bearer-token endpoints that still require LEASH_API_KEY.',
+          'This keeps bootstrap simple: public reads stay public, signed agent actions stay signed, and bearer keys are available when a runtime needs compatibility with existing API-key surfaces.',
+        ],
+      },
+      {
+        id: 'what-needs-a-key',
+        title: 'What needs a key and what does not',
+        body: [
+          'A buyer agent can browse Leash marketplace listings, inspect reputation, resolve handles, verify domains, and request identity trust decisions without an API key. Those are public reads because agents need to evaluate counterparties before paying.',
+          'Agent-scoped actions such as creating an API key or managing agent webhooks use X-Leash-Sig. The request is signed with the executive keypair over a canonical envelope that includes method, path, timestamp, body hash, and agent mint.',
+          'Legacy authenticated endpoints still expect a bearer token. Payment-link CRUD and some receipt surfaces are the important examples today. The new agent-created key gives SDK, CLI, and MCP runtimes a programmatic way to obtain that token.',
+        ],
+        codeBlocks: [
+          codeBlock('Auth map', 'txt', [
+            'Public: discover, reputation, identity resolve, identity verify',
+            'X-Leash-Sig: agent API keys, agent webhooks',
+            'Bearer API key: payment-link CRUD, receipts, legacy authenticated API surfaces',
+          ]),
+        ],
+      },
+      {
+        id: 'create-with-sdk-cli-mcp',
+        title: 'Create a key from SDK, CLI, or MCP',
+        body: [
+          'The SDK is best when the agent runtime is already TypeScript. Pass the agent mint and executive secret to LeashClient, then call createAgentApiKey. The response includes the key record and plaintext.',
+          'The CLI is best for human operators setting up a local runtime. It reads the same agent.json as the MCP server, signs the request with the executive keypair, and prints the plaintext once.',
+          'The MCP tools are best for AI hosts. An agent can call leash_create_agent_api_key, store the returned plaintext in its secure runtime configuration, then later list or revoke keys without seeing plaintext again.',
+        ],
+        codeBlocks: [
+          codeBlock('SDK', 'ts', [
+            "import { LeashClient } from '@leashmarket/sdk';",
+            '',
+            'const leash = new LeashClient({',
+            '  agentMint: process.env.LEASH_AGENT_MINT!,',
+            '  executiveSecretBase58: process.env.LEASH_EXECUTIVE_KEY!,',
+            '});',
+            '',
+            "const { key, plaintext } = await leash.createAgentApiKey({ label: 'worker' });",
+            'console.log(key.id, key.scopes); // ["agent"]',
+            'console.log("store once", plaintext);',
+          ]),
+          codeBlock('CLI', 'bash', [
+            'leash api-key create --label "local worker"',
+            'leash api-key list',
+            'leash api-key revoke <id>',
+          ]),
+          codeBlock('MCP tools', 'txt', [
+            'leash_create_agent_api_key({ "label": "cursor worker" })',
+            'leash_list_agent_api_keys({ "include_disabled": false })',
+            'leash_revoke_agent_api_key({ "id": "01H..." })',
+          ]),
+        ],
+      },
+      {
+        id: 'security-model',
+        title: 'The security model is deliberately narrow',
+        body: [
+          'Agent-created keys always use the agent scope. They are not admin keys and they are not broad user keys. They are designed for one agent runtime to use Leash legacy bearer-token surfaces without inheriting platform-level authority.',
+          'The API stores agent_mint alongside owner_wallet because one executive may manage multiple agents. List and revoke operations must match the signed agent mint, not just the executive wallet.',
+          'Plaintext is intentionally one-time. Treat the response like a secret: write it to a secret manager, runtime env var, or encrypted config immediately. If it is lost, revoke and create a new key.',
+        ],
+      },
+      {
+        id: 'what-to-build-next',
+        title: 'What this unlocks for autonomous agents',
+        body: [
+          'An MCP-hosted agent can now provision its own credential, create hosted paywalls, read receipts, and rotate secrets without waiting for a human to use the web UI.',
+          'A CLI-operated agent can bootstrap a local LEASH_API_KEY in seconds, then use the same identity for payment links, receipt history, and later MCP sessions.',
+          'A custom SDK runtime can keep the clean separation: executive keypair for signed agent identity actions, agent-scoped API key for legacy bearer-token actions, and receipts for proof after work is paid.',
+        ],
+      },
+    ],
+  },
+  {
     slug: 'why-leash-fits-agentic-wallets-and-agent-to-agent-settlement',
     title: 'Why Leash fits agentic wallets and agent-to-agent settlement',
     seoTitle: 'Know Your Agent infrastructure for AI agents: identity, payments, and reputation',

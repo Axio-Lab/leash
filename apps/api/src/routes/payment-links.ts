@@ -54,7 +54,7 @@ import { createPreparedEvent, markConfirmed } from '../storage/events.js';
 import { ensureWatched } from '../indexer/watchlist.js';
 import { umiReadOnly } from '../util/umi.js';
 import { ApiErrorSchema, NetworkSchema, PubkeySchema } from '../openapi/common.js';
-import { conflict, invalidRequest, notFound } from '../util/errors.js';
+import { conflict, invalidRequest, notFound, unauthorized } from '../util/errors.js';
 import { networkToCaip2 } from '../util/network.js';
 
 const StableSchema = z.enum(
@@ -279,6 +279,7 @@ export function buildPaymentLinkRoutes(
     async (c) => {
       const body = c.req.valid('json');
       const network = c.var.network;
+      assertAgentKeyCanOwn(c.var.apiKey, body.owner_agent);
       const tokenNetwork: TokenNetwork = network === 'solana-devnet' ? 'devnet' : 'mainnet';
 
       validatePriceForCurrencies(
@@ -638,6 +639,12 @@ export function buildPaymentLinkRoutes(
   );
 
   return app;
+}
+
+function assertAgentKeyCanOwn(apiKey: AuthVariables['apiKey'], ownerAgent: string): void {
+  if (apiKey.scopes?.includes('agent') && apiKey.agentMint !== ownerAgent) {
+    throw unauthorized('agent-scoped api keys can only create links for their own agent');
+  }
 }
 
 /**

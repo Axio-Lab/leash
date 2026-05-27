@@ -22,8 +22,11 @@
 
 import { signRequest } from './sign.js';
 import type {
+  AgentApiKey,
   AgentWebhook,
   AgentWebhookWithSecret,
+  CreateAgentApiKeyInput,
+  CreateAgentApiKeyResponse,
   DailyTransactionsResponse,
   DailyTxBucket,
   DiscoverResponse,
@@ -425,6 +428,45 @@ export class LeashClient {
       cursor = json.next_cursor;
     }
     return { items, truncated };
+  }
+
+  // ── agent API keys (X-Leash-Sig auth) ────────────────────────────
+
+  /**
+   * `POST /v1/agents/{mint}/api-keys` — create an `agent` scoped API key
+   * for the active agent. The plaintext is returned once; store it before
+   * dropping the response.
+   */
+  async createAgentApiKey(input: CreateAgentApiKeyInput): Promise<CreateAgentApiKeyResponse> {
+    this.requireAgentAuth();
+    return this.requestJson<CreateAgentApiKeyResponse>(
+      'POST',
+      `/v1/agents/${this.agentMint!}/api-keys`,
+      input,
+    );
+  }
+
+  async listAgentApiKeys(
+    query: { includeDisabled?: boolean; limit?: number } = {},
+  ): Promise<{ items: AgentApiKey[] }> {
+    this.requireAgentAuth();
+    const params = new URLSearchParams();
+    if (query.includeDisabled != null) {
+      params.set('include_disabled', query.includeDisabled ? 'true' : 'false');
+    }
+    if (query.limit) params.set('limit', String(query.limit));
+    return this.requestJson<{ items: AgentApiKey[] }>(
+      'GET',
+      `/v1/agents/${this.agentMint!}/api-keys${params.toString() ? `?${params}` : ''}`,
+    );
+  }
+
+  async revokeAgentApiKey(id: string): Promise<{ key: AgentApiKey }> {
+    this.requireAgentAuth();
+    return this.requestJson<{ key: AgentApiKey }>(
+      'POST',
+      `/v1/agents/${this.agentMint!}/api-keys/${encodeURIComponent(id)}/disable`,
+    );
   }
 
   // ── agent webhooks (X-Leash-Sig auth) ────────────────────────────

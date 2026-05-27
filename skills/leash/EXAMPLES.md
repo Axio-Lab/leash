@@ -90,6 +90,34 @@ const usdgTx = await prepareSetSpendDelegation(umi, {
 await usdgTx.sendAndConfirm(umi);
 ```
 
+## 2b. Create an agent-owned API key (SDK, CLI, MCP)
+
+Use this when an agent runtime needs a `LEASH_API_KEY` for legacy bearer-token
+surfaces such as payment-link CRUD or receipt reads. The request is signed with
+the agent executive keypair; no existing API key is required.
+
+```ts
+import { LeashClient } from '@leashmarket/sdk';
+
+const leash = new LeashClient({
+  agentMint: process.env.LEASH_AGENT_MINT!,
+  executiveSecretBase58: process.env.LEASH_EXECUTIVE_KEY!,
+});
+
+const { key, plaintext } = await leash.createAgentApiKey({ label: 'worker' });
+console.log(key.id, key.scopes); // ["agent"]
+console.log('store once:', plaintext);
+```
+
+```bash
+leash api-key create --label "local worker"
+leash api-key list
+leash api-key revoke <id>
+```
+
+MCP tools expose the same flow: `leash_create_agent_api_key`,
+`leash_list_agent_api_keys`, and `leash_revoke_agent_api_key`.
+
 ## 3. Build a paying buyer (SDK)
 
 ```ts

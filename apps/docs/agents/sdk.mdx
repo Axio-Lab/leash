@@ -154,10 +154,9 @@ receipts get counted but excluded from the USD math
 
 ## Authenticated calls (X-Leash-Sig)
 
-Webhook endpoints are agent-scoped — the API verifies a
-`X-Leash-Sig` header signed with the agent's executive ed25519
-keypair. Pass the keypair and mint to the constructor; the SDK
-stamps a fresh signature per request.
+Agent-scoped endpoints verify an `X-Leash-Sig` header signed with the
+agent's executive ed25519 keypair. Pass the keypair and mint to the
+constructor; the SDK stamps a fresh signature per request.
 
 ```ts
 const leash = new LeashClient({
@@ -165,12 +164,23 @@ const leash = new LeashClient({
   executiveSecretBase58: process.env.LEASH_EXECUTIVE_KEY!,
 });
 
+const createdKey = await leash.createAgentApiKey({ label: 'production worker' });
+console.log('STORE THIS ONCE:', createdKey.plaintext);
+
+const keys = await leash.listAgentApiKeys();
+await leash.revokeAgentApiKey(keys.items[0].id);
+
 const sub = await leash.createWebhook({
   url: 'https://my-app.example/leash-webhook',
   events: ['receipt.published', 'agent.treasury.withdraw'],
 });
 console.log('SAVE THIS SECRET:', sub.secret); // returned ONCE.
 ```
+
+Agent-created API keys are stored with `owner_wallet` equal to the agent
+executive public key, `agent_mint` equal to the signed agent, and `scopes:
+["agent"]`. Use them for legacy bearer-token surfaces such as payment-link CRUD
+and receipt reads when a runtime needs a `LEASH_API_KEY`.
 
 The signature envelope matches the API verifier byte-for-byte:
 

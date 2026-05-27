@@ -251,6 +251,92 @@ describe('LeashClient (public reads)', () => {
 });
 
 describe('LeashClient (X-Leash-Sig auth)', () => {
+  it('createAgentApiKey() signs the agent key bootstrap endpoint', async () => {
+    const exec = freshExecutive();
+    const mint = fakeMint();
+    const { fetch, calls } = makeFetch((req) => ({
+      status: 200,
+      body: {
+        key: {
+          id: 'key_1',
+          label: JSON.parse(req.body!).label,
+          network: 'solana-devnet',
+          prefix: 'lsh_test_',
+          last4: 'abcd',
+          owner_wallet: exec.pubkey,
+          agent_mint: mint,
+          scopes: ['agent'],
+          created_at: '2026-05-27T00:00:00.000Z',
+          disabled_at: null,
+        },
+        plaintext: 'lsh_test_exampleabcd',
+      },
+    }));
+
+    const client = new LeashClient({
+      baseUrl: 'https://api.test',
+      agentMint: mint,
+      executiveSecretBase58: exec.secretBase58,
+      fetchImpl: fetch,
+    });
+
+    const res = await client.createAgentApiKey({ label: 'Runtime key' });
+    expect(res.key.scopes).toEqual(['agent']);
+    expect(res.plaintext).toBe('lsh_test_exampleabcd');
+
+    const call = calls[0]!;
+    expect(call.method).toBe('POST');
+    expect(call.url).toBe(`https://api.test/v1/agents/${mint}/api-keys`);
+    expect(call.headers['x-leash-agent']).toBe(mint);
+    expect(call.headers['authorization']).toBeUndefined();
+    expect(JSON.parse(call.body!)).toEqual({ label: 'Runtime key' });
+  });
+
+  it('listAgentApiKeys() and revokeAgentApiKey() target signed agent routes', async () => {
+    const exec = freshExecutive();
+    const mint = fakeMint();
+    const { fetch, calls } = makeFetch((req) => {
+      if (req.method === 'GET') {
+        return { status: 200, body: { items: [] } };
+      }
+      return {
+        status: 200,
+        body: {
+          key: {
+            id: 'key_1',
+            label: 'Runtime key',
+            network: 'solana-devnet',
+            prefix: 'lsh_test_',
+            last4: 'abcd',
+            owner_wallet: exec.pubkey,
+            agent_mint: mint,
+            scopes: ['agent'],
+            created_at: '2026-05-27T00:00:00.000Z',
+            disabled_at: '2026-05-27T00:01:00.000Z',
+          },
+        },
+      };
+    });
+
+    const client = new LeashClient({
+      baseUrl: 'https://api.test',
+      agentMint: mint,
+      executiveSecretBase58: exec.secretBase58,
+      fetchImpl: fetch,
+    });
+
+    await client.listAgentApiKeys({ includeDisabled: true, limit: 5 });
+    await client.revokeAgentApiKey('key_1');
+
+    expect(calls[0]!.url).toBe(
+      `https://api.test/v1/agents/${mint}/api-keys?include_disabled=true&limit=5`,
+    );
+    expect(calls[0]!.headers['x-leash-agent']).toBe(mint);
+    expect(calls[1]!.url).toBe(`https://api.test/v1/agents/${mint}/api-keys/key_1/disable`);
+    expect(calls[1]!.method).toBe('POST');
+    expect(calls[1]!.headers['x-leash-agent']).toBe(mint);
+  });
+
   it('createWebhook() stamps a fresh signature whose envelope matches', async () => {
     const exec = freshExecutive();
     const mint = fakeMint();

@@ -44,6 +44,7 @@ import { buildPlatformTaskRoutes } from './routes/platform-tasks.js';
 import { buildAgentSelfRegisterRoutes } from './routes/agent-self-register.js';
 import { buildDiscoverReputationRoutes } from './routes/discover-reputation.js';
 import { buildAgentWebhookRoutes } from './routes/agent-webhooks.js';
+import { buildAgentApiKeyRoutes } from './routes/agent-api-keys.js';
 import { buildPaymentLinkRoutes } from './routes/payment-links.js';
 import { buildPaywallRoutes } from './routes/paywall.js';
 import { buildSellerUtilsRoutes } from './routes/seller-utils.js';
@@ -191,6 +192,10 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
     '/',
     buildDiscoverReputationRoutes({ config: deps.config, db: deps.db, cache: deps.cache }),
   );
+  // Agent-created API keys. Mounted before the authed sub-app because
+  // this is the bootstrap path for agents that do not have a Leash API
+  // key yet; the route module installs `X-Leash-Sig` auth itself.
+  app.route('/', buildAgentApiKeyRoutes({ config: deps.config, db: deps.db, cache: deps.cache }));
   // Agent-keyed webhooks. Mounted before the authed sub-app because
   // the auth model is `X-Leash-Sig` (executive-keypair signature),
   // not the platform API key — standalone-MCP / CLI agents don't have

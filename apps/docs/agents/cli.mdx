@@ -78,6 +78,12 @@ leash agent create
 # 4. Confirm identity.
 leash agent show
 
+# 4b. Create an agent-scoped API key for legacy bearer-token surfaces.
+#     The key is signed into existence by the executive keypair and plaintext
+#     is printed once.
+leash api-key create --label "local worker"
+leash api-key list
+
 # 5. Look at the marketplace. Searches the Leash registry AND the Solana
 #    Foundation `pay-skills` catalogue (https://github.com/solana-foundation/pay-skills);
 #    each row is tagged [leash] or [pay.sh] in the output.
@@ -159,6 +165,14 @@ agent commands:
   agent show                         print active agent identity
   agent export [--out PATH]          export agent.json
   agent import <PATH>                install an agent.json
+
+api key commands:
+  api-key create --label NAME [--network solana-devnet|solana-mainnet]
+                                     create an agent-scoped API key using
+                                     X-Leash-Sig; plaintext is printed once
+  api-key list [--include-disabled] [--limit N]
+                                     list this agent’s API keys (no plaintext)
+  api-key revoke <id>                disable one of this agent’s API keys
 
 treasury commands:
   treasury balance                   list SOL + token balances
