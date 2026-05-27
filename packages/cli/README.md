@@ -152,6 +152,18 @@ marketplace + reputation:
                   [--endpoint URL] [--protocol x402|mpp]
                   [--min-rating N] [--require-claim T] [--require-domain]
                                      verify identity or ask for trust verdict
+  identity profile                  show the active agent editable identity profile
+  identity update [--handle H | --clear-handle]
+                  [--capability-cards FILE] [--visibility FILE]
+                                     update handle, visibility metadata, and replace
+                                     the full capability-card array from JSON files
+  identity domain verify --domain D verify a domain selector for the active agent
+  identity claim add --file FILE    create a public/private signed claim from JSON
+  identity claim revoke <id>        revoke one active-agent claim
+  identity disclosure list          list selective-disclosure grants
+  identity disclosure create --file FILE
+                                     create a selective-disclosure grant from JSON
+  identity disclosure revoke <id>   revoke a disclosure grant
   reputation <agent_mint> [--network solana-devnet|solana-mainnet]
 
 activity:

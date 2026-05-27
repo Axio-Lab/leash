@@ -33,6 +33,11 @@
  *   leash identity resolve …        Resolve a mint / handle / verified domain.
  *   leash identity verify …         Verify a mint / handle / verified domain
  *                                   or request a full allow/warn/deny trust verdict.
+ *   leash identity profile          Show the active agent's editable profile.
+ *   leash identity update …         Update handle, visibility, and capability cards.
+ *   leash identity domain verify …  Verify a domain selector for the active agent.
+ *   leash identity claim …          Add/revoke identity claims.
+ *   leash identity disclosure …     Create/list/revoke selective disclosures.
  *   leash reputation <agent_mint>   Reputation snapshot (public).
  *   leash receipts [--limit N]      Recent receipts for the active agent.
  *   leash pay <link-url> [--method …]   Pay an x402 or MPP paywall (auto-detected).
@@ -659,75 +664,236 @@ async function runReputation(args: string[]): Promise<void> {
 
 async function runIdentity(args: string[]): Promise<void> {
   const sub = args[0];
-  if (sub !== 'resolve' && sub !== 'verify') {
-    process.stderr.write(
-      'usage: leash identity {resolve|verify} (--mint M | --handle H | --domain D) [--json]\n',
-    );
+  if (!sub) {
+    process.stderr.write(identityUsage());
     process.exit(2);
   }
-  const selector = identitySelector(args.slice(1));
   const { hostRef } = buildServerFromEnv();
   const json = wantJson(args);
-  const result =
-    sub === 'resolve'
-      ? await hostRef.resolveIdentity(selector)
-      : await hostRef.verifyIdentity(identityVerifyArgs(args.slice(1), selector));
-  printResult(result, json, (payload) => {
-    if (payload.status !== 'ok') return formatStatusError(payload);
-    if (sub === 'verify') {
-      if (typeof payload.verdict === 'string') {
-        const checks = (payload.checks ?? []) as Array<{
-          name: string;
-          passed: boolean;
-          severity: string;
-          detail: string;
-        }>;
-        const profile = payload.profile as
-          | {
-              handle?: string | null;
-              name?: string;
-              capability_cards_count?: number;
-              claims_count?: number;
-              reputation?: { rating?: number; settled_calls?: number };
-            }
-          | null
-          | undefined;
-        return [
-          `verdict: ${payload.verdict}`,
-          `score: ${payload.score}`,
-          `resolved_mint: ${payload.resolved_mint ?? '(none)'}`,
-          `network: ${payload.network ?? '(none)'}`,
-          profile
-            ? `profile: ${profile.handle ? `@${profile.handle}` : (profile.name ?? '(unnamed)')} · capabilities=${profile.capability_cards_count ?? 0} · claims=${profile.claims_count ?? 0} · rating=${Number(profile.reputation?.rating ?? 0).toFixed(4)}`
-            : 'profile: (none)',
-          ...checks.map(
-            (c) => `  ${c.passed ? 'ok' : 'fail'} ${c.name} [${c.severity}]: ${c.detail}`,
-          ),
-        ].join('\n');
+  if (sub === 'resolve' || sub === 'verify') {
+    const selector = identitySelector(args.slice(1));
+    const result =
+      sub === 'resolve'
+        ? await hostRef.resolveIdentity(selector)
+        : await hostRef.verifyIdentity(identityVerifyArgs(args.slice(1), selector));
+    printResult(result, json, (payload) => formatIdentityResolveOrVerify(payload, sub));
+    return;
+  }
+
+  if (sub === 'profile') {
+    const result = await hostRef.getIdentityProfile({});
+    printResult(result, json, formatIdentityProfilePayload);
+    return;
+  }
+
+  if (sub === 'update') {
+    const update: Parameters<LeashHost['updateIdentityProfile']>[0] = {};
+    const handle = optArg(args, '--handle');
+    if (handle !== undefined) update.handle = handle;
+    if (args.includes('--clear-handle')) update.handle = null;
+    const cardsFile = optArg(args, '--capability-cards');
+    if (cardsFile) {
+      const cards = readJsonFile(cardsFile);
+      if (!Array.isArray(cards)) {
+        process.stderr.write('--capability-cards must point to a JSON array\n');
+        process.exit(2);
       }
+      update.capability_cards = cards as Parameters<
+        LeashHost['updateIdentityProfile']
+      >[0]['capability_cards'];
+    }
+    const visibilityFile = optArg(args, '--visibility');
+    if (visibilityFile) {
+      const visibility = readJsonFile(visibilityFile);
+      if (!isPlainObject(visibility)) {
+        process.stderr.write('--visibility must point to a JSON object\n');
+        process.exit(2);
+      }
+      update.visibility = visibility;
+    }
+    if (Object.keys(update).length === 0) {
+      process.stderr.write(
+        'usage: leash identity update [--handle H | --clear-handle] [--capability-cards FILE] [--visibility FILE] [--json]\n',
+      );
+      process.exit(2);
+    }
+    const result = await hostRef.updateIdentityProfile(update);
+    printResult(result, json, formatIdentityProfilePayload);
+    return;
+  }
+
+  if (sub === 'domain' && args[1] === 'verify') {
+    const domain = optArg(args, '--domain');
+    if (!domain) {
+      process.stderr.write('usage: leash identity domain verify --domain D [--json]\n');
+      process.exit(2);
+    }
+    const result = await hostRef.verifyIdentityDomain({ domain });
+    printResult(result, json, (payload) => {
+      if (payload.status !== 'verified' && payload.status !== 'ok')
+        return formatStatusError(payload);
+      return `domain verified: ${payload.domain}`;
+    });
+    return;
+  }
+
+  if (sub === 'claim') {
+    const action = args[1];
+    if (action === 'add') {
+      const file = optArg(args, '--file');
+      if (!file) {
+        process.stderr.write('usage: leash identity claim add --file FILE [--json]\n');
+        process.exit(2);
+      }
+      const result = await hostRef.createIdentityClaim(
+        readJsonFile(file) as Parameters<LeashHost['createIdentityClaim']>[0],
+      );
+      printResult(result, json, (payload) => {
+        if (payload.status !== 'ok') return formatStatusError(payload);
+        return `claim added: ${payload.claim?.id ?? '(unknown)'} (${payload.claim?.type ?? 'claim'})`;
+      });
+      return;
+    }
+    if (action === 'revoke') {
+      const id = args[2];
+      if (!id) {
+        process.stderr.write('usage: leash identity claim revoke <id> [--json]\n');
+        process.exit(2);
+      }
+      const result = await hostRef.revokeIdentityClaim({ id });
+      printResult(result, json, (payload) => {
+        if (payload.status !== 'revoked' && payload.status !== 'ok')
+          return formatStatusError(payload);
+        return `claim revoked: ${payload.id ?? id}`;
+      });
+      return;
+    }
+  }
+
+  if (sub === 'disclosure') {
+    const action = args[1];
+    if (action === 'list') {
+      const result = await hostRef.listIdentityDisclosures({});
+      printResult(result, json, (payload) => {
+        if (payload.status !== 'ok') return formatStatusError(payload);
+        const items = (payload.items ?? []) as Array<{ id: string; expires_at?: string }>;
+        return [
+          `disclosures: ${payload.count ?? items.length}`,
+          ...items.map((item) => `  ${item.id} expires=${item.expires_at ?? '(unknown)'}`),
+        ].join('\n');
+      });
+      return;
+    }
+    if (action === 'create') {
+      const file = optArg(args, '--file');
+      if (!file) {
+        process.stderr.write('usage: leash identity disclosure create --file FILE [--json]\n');
+        process.exit(2);
+      }
+      const result = await hostRef.createIdentityDisclosure(
+        readJsonFile(file) as Parameters<LeashHost['createIdentityDisclosure']>[0],
+      );
+      printResult(result, json, (payload) => {
+        if (payload.status !== 'ok') return formatStatusError(payload);
+        return [
+          `disclosure created: ${payload.disclosure?.id ?? '(unknown)'}`,
+          `  url:   ${payload.url}`,
+          `  token: ${payload.token}`,
+          '  token is returned only once',
+        ].join('\n');
+      });
+      return;
+    }
+    if (action === 'revoke') {
+      const id = args[2];
+      if (!id) {
+        process.stderr.write('usage: leash identity disclosure revoke <id> [--json]\n');
+        process.exit(2);
+      }
+      const result = await hostRef.revokeIdentityDisclosure({ id });
+      printResult(result, json, (payload) => {
+        if (payload.status !== 'revoked' && payload.status !== 'ok')
+          return formatStatusError(payload);
+        return `disclosure revoked: ${payload.id ?? id}`;
+      });
+      return;
+    }
+  }
+
+  process.stderr.write(identityUsage());
+  process.exit(2);
+}
+
+function formatIdentityResolveOrVerify(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload: any,
+  sub: 'resolve' | 'verify',
+): string {
+  if (payload.status !== 'ok') return formatStatusError(payload);
+  if (sub === 'verify') {
+    if (typeof payload.verdict === 'string') {
       const checks = (payload.checks ?? []) as Array<{
         name: string;
         passed: boolean;
+        severity: string;
         detail: string;
       }>;
+      const profile = payload.profile as
+        | {
+            handle?: string | null;
+            name?: string;
+            capability_cards_count?: number;
+            claims_count?: number;
+            reputation?: { rating?: number; settled_calls?: number };
+          }
+        | null
+        | undefined;
       return [
-        `verified: ${payload.verified ? 'yes' : 'no'}`,
+        `verdict: ${payload.verdict}`,
+        `score: ${payload.score}`,
         `resolved_mint: ${payload.resolved_mint ?? '(none)'}`,
         `network: ${payload.network ?? '(none)'}`,
-        ...checks.map((c) => `  ${c.passed ? 'ok' : 'fail'} ${c.name}: ${c.detail}`),
+        profile
+          ? `profile: ${profile.handle ? `@${profile.handle}` : (profile.name ?? '(unnamed)')} · capabilities=${profile.capability_cards_count ?? 0} · claims=${profile.claims_count ?? 0} · rating=${Number(profile.reputation?.rating ?? 0).toFixed(4)}`
+          : 'profile: (none)',
+        ...checks.map(
+          (c) => `  ${c.passed ? 'ok' : 'fail'} ${c.name} [${c.severity}]: ${c.detail}`,
+        ),
       ].join('\n');
     }
+    const checks = (payload.checks ?? []) as Array<{
+      name: string;
+      passed: boolean;
+      detail: string;
+    }>;
     return [
-      `${payload.name ?? 'Agent'} (${payload.network})`,
-      `  mint:       ${payload.mint}`,
-      `  handle:     ${payload.handle ? `@${payload.handle}` : '(none)'}`,
-      `  treasury:   ${payload.treasury}`,
-      `  domains:    ${((payload.verified_domains as string[] | undefined) ?? []).join(', ') || '(none)'}`,
-      `  capability_cards: ${((payload.capability_cards as unknown[] | undefined) ?? []).length}`,
-      `  claims:           ${((payload.claims as unknown[] | undefined) ?? []).length}`,
-      `  reputation:       ${Number((payload.reputation as { rating?: number } | undefined)?.rating ?? 0).toFixed(4)}`,
+      `verified: ${payload.verified ? 'yes' : 'no'}`,
+      `resolved_mint: ${payload.resolved_mint ?? '(none)'}`,
+      `network: ${payload.network ?? '(none)'}`,
+      ...checks.map((c) => `  ${c.passed ? 'ok' : 'fail'} ${c.name}: ${c.detail}`),
     ].join('\n');
-  });
+  }
+  return formatIdentityProfile(payload);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function formatIdentityProfilePayload(payload: any): string {
+  if (payload.status !== 'ok') return formatStatusError(payload);
+  return formatIdentityProfile(payload.profile ?? payload);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function formatIdentityProfile(profile: any): string {
+  return [
+    `${profile.name ?? 'Agent'} (${profile.network})`,
+    `  mint:       ${profile.mint}`,
+    `  handle:     ${profile.handle ? `@${profile.handle}` : '(none)'}`,
+    `  treasury:   ${profile.treasury}`,
+    `  domains:    ${((profile.verified_domains as string[] | undefined) ?? []).join(', ') || '(none)'}`,
+    `  capability_cards: ${((profile.capability_cards as unknown[] | undefined) ?? []).length}`,
+    `  claims:           ${((profile.claims as unknown[] | undefined) ?? []).length}`,
+    `  reputation:       ${Number((profile.reputation as { rating?: number } | undefined)?.rating ?? 0).toFixed(4)}`,
+  ].join('\n');
 }
 
 async function runReceipts(args: string[]): Promise<void> {
@@ -1022,6 +1188,15 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function readJsonFile(path: string): unknown {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as unknown;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`failed to read JSON file ${path}: ${message}`);
+  }
+}
+
 function readPackageVersion(): string {
   try {
     const raw = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
@@ -1177,6 +1352,19 @@ function printHelp(): void {
       '                  [--endpoint URL] [--protocol x402|mpp]',
       '                  [--min-rating N] [--require-claim T] [--require-domain]',
       '                                     verify an identity or request a trust verdict',
+      '  identity profile                  show the active agent editable identity profile',
+      '  identity update [--handle H | --clear-handle]',
+      '                  [--capability-cards FILE] [--visibility FILE]',
+      '                                     update handle, visibility metadata, and replace',
+      '                                     the full capability-card array from JSON files',
+      '  identity domain verify --domain D',
+      '                                     verify a domain via /.well-known/leash-agent.json',
+      '  identity claim add --file FILE     create a public/private signed claim from JSON',
+      '  identity claim revoke <id>         revoke one active-agent claim',
+      '  identity disclosure list           list selective-disclosure grants',
+      '  identity disclosure create --file FILE',
+      '                                     create a selective-disclosure grant from JSON',
+      '  identity disclosure revoke <id>    revoke a disclosure grant',
       '  reputation <agent_mint> [--network solana-devnet|solana-mainnet]',
       '',
       'activity:',
@@ -1216,15 +1404,29 @@ function printHelp(): void {
   );
 }
 
+function identityUsage(): string {
+  return [
+    'usage: leash identity resolve (--mint M | --handle H | --domain D) [--json]',
+    '       leash identity verify (--mint M | --handle H | --domain D) [--json]',
+    '       leash identity profile [--json]',
+    '       leash identity update [--handle H | --clear-handle] [--capability-cards FILE] [--visibility FILE] [--json]',
+    '       leash identity domain verify --domain D [--json]',
+    '       leash identity claim add --file FILE [--json]',
+    '       leash identity claim revoke <id> [--json]',
+    '       leash identity disclosure list [--json]',
+    '       leash identity disclosure create --file FILE [--json]',
+    '       leash identity disclosure revoke <id> [--json]',
+    '',
+  ].join('\n');
+}
+
 function identitySelector(args: string[]): { mint?: string; handle?: string; domain?: string } {
   const mint = optArg(args, '--mint');
   const handle = optArg(args, '--handle');
   const domain = optArg(args, '--domain');
   const count = [mint, handle, domain].filter(Boolean).length;
   if (count !== 1) {
-    process.stderr.write(
-      'usage: leash identity {resolve|verify} (--mint M | --handle H | --domain D) [--json]\n',
-    );
+    process.stderr.write(identityUsage());
     process.exit(2);
   }
   return {
