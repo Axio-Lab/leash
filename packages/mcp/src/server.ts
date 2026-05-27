@@ -48,10 +48,13 @@ import {
   fetchReputation,
   type CheckTreasuryBalanceArgs,
   type CreateAgentApiKeyArgs,
+  type CreateIdentityClaimArgs,
+  type CreateIdentityDisclosureArgs,
   type CreatePaymentLinkArgs,
   type DailyTransactionsArgs,
   type DiscoverArgs,
   type GetIdentityArgs,
+  type GetIdentityProfileArgs,
   type IdentitySelectorArgs,
   type IdentityVerifyArgs,
   type GetReceiptArgs,
@@ -59,6 +62,7 @@ import {
   type LeashHost,
   type LeashTool,
   type LeashToolResult,
+  type ListIdentityDisclosuresArgs,
   type ListAgentApiKeysArgs,
   type PayArgs,
   type PaySkillsProviderArgs,
@@ -66,9 +70,13 @@ import {
   type RegisterAgentArgs,
   type ReputationArgs,
   type RevokeAgentApiKeyArgs,
+  type RevokeIdentityClaimArgs,
+  type RevokeIdentityDisclosureArgs,
   type SetSpendLimitArgs,
   type SvmNetwork,
   type TransactionHistoryArgs,
+  type UpdateIdentityProfileArgs,
+  type VerifyIdentityDomainArgs,
   type WithdrawArgs,
 } from '@leashmarket/mcp-core';
 
@@ -303,6 +311,30 @@ export class HostRef implements LeashHost {
   }
   verifyIdentity(args: IdentityVerifyArgs): Promise<LeashToolResult> {
     return this.inner.verifyIdentity(args);
+  }
+  getIdentityProfile(args: GetIdentityProfileArgs): Promise<LeashToolResult> {
+    return this.inner.getIdentityProfile(args);
+  }
+  updateIdentityProfile(args: UpdateIdentityProfileArgs): Promise<LeashToolResult> {
+    return this.inner.updateIdentityProfile(args);
+  }
+  verifyIdentityDomain(args: VerifyIdentityDomainArgs): Promise<LeashToolResult> {
+    return this.inner.verifyIdentityDomain(args);
+  }
+  createIdentityClaim(args: CreateIdentityClaimArgs): Promise<LeashToolResult> {
+    return this.inner.createIdentityClaim(args);
+  }
+  revokeIdentityClaim(args: RevokeIdentityClaimArgs): Promise<LeashToolResult> {
+    return this.inner.revokeIdentityClaim(args);
+  }
+  listIdentityDisclosures(args: ListIdentityDisclosuresArgs): Promise<LeashToolResult> {
+    return this.inner.listIdentityDisclosures(args);
+  }
+  createIdentityDisclosure(args: CreateIdentityDisclosureArgs): Promise<LeashToolResult> {
+    return this.inner.createIdentityDisclosure(args);
+  }
+  revokeIdentityDisclosure(args: RevokeIdentityDisclosureArgs): Promise<LeashToolResult> {
+    return this.inner.revokeIdentityDisclosure(args);
   }
   paySkillsProvider(args: PaySkillsProviderArgs): Promise<LeashToolResult> {
     return this.inner.paySkillsProvider(args);
@@ -636,6 +668,30 @@ function makePlaceholderHost(defaults: LeashHostDefaults): LeashHost {
         apiBaseUrl: defaults.apiBaseUrl,
         query: args,
       });
+    },
+    async getIdentityProfile() {
+      return noAgent('identity_profile');
+    },
+    async updateIdentityProfile() {
+      return noAgent('identity_profile');
+    },
+    async verifyIdentityDomain() {
+      return noAgent('identity_domain');
+    },
+    async createIdentityClaim() {
+      return noAgent('identity_claim');
+    },
+    async revokeIdentityClaim() {
+      return noAgent('identity_claim');
+    },
+    async listIdentityDisclosures() {
+      return noAgent('identity_disclosures');
+    },
+    async createIdentityDisclosure() {
+      return noAgent('identity_disclosure');
+    },
+    async revokeIdentityDisclosure() {
+      return noAgent('identity_disclosure');
     },
     async paySkillsProvider(args) {
       return fetchPaySkillsProvider({

@@ -17,7 +17,13 @@
  * implementer of this interface.
  */
 
-import type { IdentitySelector, IdentityVerificationDecisionRequest } from '@leashmarket/schemas';
+import type {
+  IdentityClaimCreate,
+  IdentityDisclosureCreate,
+  IdentityProfileUpdate,
+  IdentitySelector,
+  IdentityVerificationDecisionRequest,
+} from '@leashmarket/schemas';
 
 import type { LeashToolResult } from './tool.js';
 
@@ -177,6 +183,24 @@ export type ReputationArgs = {
 
 export type IdentitySelectorArgs = IdentitySelector;
 export type IdentityVerifyArgs = IdentityVerificationDecisionRequest;
+
+export type GetIdentityProfileArgs = Record<string, never>;
+export type UpdateIdentityProfileArgs = IdentityProfileUpdate;
+export type VerifyIdentityDomainArgs = {
+  /** Domain to verify via https://domain/.well-known/leash-agent.json. */
+  domain: string;
+};
+export type CreateIdentityClaimArgs = IdentityClaimCreate;
+export type RevokeIdentityClaimArgs = {
+  /** Claim id returned by create/list profile calls. */
+  id: string;
+};
+export type ListIdentityDisclosuresArgs = Record<string, never>;
+export type CreateIdentityDisclosureArgs = IdentityDisclosureCreate;
+export type RevokeIdentityDisclosureArgs = {
+  /** Disclosure grant id returned by create/list calls. */
+  id: string;
+};
 
 /**
  * Inputs for `leash_pay_skills_endpoints` — expand a chosen
@@ -378,6 +402,30 @@ export interface LeashHost {
    * identity. Public — does not require the active agent to exist.
    */
   verifyIdentity(args: IdentityVerifyArgs): Promise<LeashToolResult>;
+
+  /** Fetch the editable identity profile for the active signed agent. */
+  getIdentityProfile(args: GetIdentityProfileArgs): Promise<LeashToolResult>;
+
+  /** Update handle, visibility metadata, and capability cards for the active signed agent. */
+  updateIdentityProfile(args: UpdateIdentityProfileArgs): Promise<LeashToolResult>;
+
+  /** Verify a domain for the active signed agent via its well-known identity file. */
+  verifyIdentityDomain(args: VerifyIdentityDomainArgs): Promise<LeashToolResult>;
+
+  /** Attach a signed public/private claim to the active signed agent identity. */
+  createIdentityClaim(args: CreateIdentityClaimArgs): Promise<LeashToolResult>;
+
+  /** Revoke a claim owned by the active signed agent. */
+  revokeIdentityClaim(args: RevokeIdentityClaimArgs): Promise<LeashToolResult>;
+
+  /** List selective-disclosure grants created by the active signed agent. */
+  listIdentityDisclosures(args: ListIdentityDisclosuresArgs): Promise<LeashToolResult>;
+
+  /** Create a selective-disclosure bearer-token grant for private identity resources. */
+  createIdentityDisclosure(args: CreateIdentityDisclosureArgs): Promise<LeashToolResult>;
+
+  /** Revoke a selective-disclosure grant owned by the active signed agent. */
+  revokeIdentityDisclosure(args: RevokeIdentityDisclosureArgs): Promise<LeashToolResult>;
 
   /**
    * Expand a `pay-skills` discover item into its paid endpoints.

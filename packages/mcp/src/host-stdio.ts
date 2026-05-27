@@ -44,16 +44,20 @@ import {
   probePaymentLink,
   type CheckTreasuryBalanceArgs,
   type CreateAgentApiKeyArgs,
+  type CreateIdentityClaimArgs,
+  type CreateIdentityDisclosureArgs,
   type CreatePaymentLinkArgs,
   type DailyTransactionsArgs,
   type DiscoverArgs,
   type GetIdentityArgs,
+  type GetIdentityProfileArgs,
   type IdentitySelectorArgs,
   type IdentityVerifyArgs,
   type GetReceiptArgs,
   type GetSpendLimitArgs,
   type LeashHost,
   type LeashToolResult,
+  type ListIdentityDisclosuresArgs,
   type ListAgentApiKeysArgs,
   type PayArgs,
   type PaySkillsProviderArgs,
@@ -61,10 +65,14 @@ import {
   type RegisterAgentArgs,
   type ReputationArgs,
   type RevokeAgentApiKeyArgs,
+  type RevokeIdentityClaimArgs,
+  type RevokeIdentityDisclosureArgs,
   type SetSpendLimitArgs,
   type StableSymbol,
   type SvmNetwork,
   type TransactionHistoryArgs,
+  type UpdateIdentityProfileArgs,
+  type VerifyIdentityDomainArgs,
   type WithdrawArgs,
 } from '@leashmarket/mcp-core';
 import {
@@ -615,6 +623,277 @@ class StdioHost implements LeashHost {
     }
   }
 
+  async getIdentityProfile(_args: GetIdentityProfileArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('identity_profile');
+    try {
+      const res = await this.signedAgentApiFetch(`/v1/agents/${this.agentMint}/identity`, {
+        method: 'GET',
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        return jsonResult({
+          kind: 'identity_profile',
+          status: 'error',
+          agent_mint: this.agentMint,
+          message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+        });
+      }
+      return jsonResult({
+        kind: 'identity_profile',
+        status: 'ok',
+        agent_mint: this.agentMint,
+        profile: JSON.parse(text),
+      });
+    } catch (err) {
+      return jsonResult({
+        kind: 'identity_profile',
+        status: 'error',
+        agent_mint: this.agentMint,
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+
+  async updateIdentityProfile(args: UpdateIdentityProfileArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('identity_profile');
+    try {
+      const res = await this.signedAgentApiFetch(`/v1/agents/${this.agentMint}/identity`, {
+        method: 'PUT',
+        body: JSON.stringify(args),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        return jsonResult({
+          kind: 'identity_profile',
+          status: 'error',
+          agent_mint: this.agentMint,
+          message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+        });
+      }
+      return jsonResult({
+        kind: 'identity_profile',
+        status: 'ok',
+        agent_mint: this.agentMint,
+        profile: JSON.parse(text),
+      });
+    } catch (err) {
+      return jsonResult({
+        kind: 'identity_profile',
+        status: 'error',
+        agent_mint: this.agentMint,
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+
+  async verifyIdentityDomain(args: VerifyIdentityDomainArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('identity_domain');
+    try {
+      const res = await this.signedAgentApiFetch(
+        `/v1/agents/${this.agentMint}/identity/domains/verify`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ domain: args.domain }),
+        },
+      );
+      const text = await res.text();
+      if (!res.ok) {
+        return jsonResult({
+          kind: 'identity_domain',
+          status: 'error',
+          agent_mint: this.agentMint,
+          message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+        });
+      }
+      const json = JSON.parse(text) as { domain: string; status: string };
+      return jsonResult({
+        kind: 'identity_domain',
+        status: json.status,
+        agent_mint: this.agentMint,
+        domain: json.domain,
+      });
+    } catch (err) {
+      return jsonResult({
+        kind: 'identity_domain',
+        status: 'error',
+        agent_mint: this.agentMint,
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+
+  async createIdentityClaim(args: CreateIdentityClaimArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('identity_claim');
+    try {
+      const res = await this.signedAgentApiFetch(`/v1/agents/${this.agentMint}/identity/claims`, {
+        method: 'POST',
+        body: JSON.stringify(args),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        return jsonResult({
+          kind: 'identity_claim',
+          status: 'error',
+          agent_mint: this.agentMint,
+          message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+        });
+      }
+      return jsonResult({
+        kind: 'identity_claim',
+        status: 'ok',
+        agent_mint: this.agentMint,
+        claim: JSON.parse(text),
+      });
+    } catch (err) {
+      return jsonResult({
+        kind: 'identity_claim',
+        status: 'error',
+        agent_mint: this.agentMint,
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+
+  async revokeIdentityClaim(args: RevokeIdentityClaimArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('identity_claim');
+    try {
+      const id = encodeURIComponent(args.id);
+      const res = await this.signedAgentApiFetch(
+        `/v1/agents/${this.agentMint}/identity/claims/${id}`,
+        { method: 'DELETE' },
+      );
+      const text = await res.text();
+      if (!res.ok) {
+        return jsonResult({
+          kind: 'identity_claim',
+          status: 'error',
+          agent_mint: this.agentMint,
+          message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+        });
+      }
+      return jsonResult({
+        kind: 'identity_claim',
+        status: 'revoked',
+        agent_mint: this.agentMint,
+        id: args.id,
+      });
+    } catch (err) {
+      return jsonResult({
+        kind: 'identity_claim',
+        status: 'error',
+        agent_mint: this.agentMint,
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+
+  async listIdentityDisclosures(_args: ListIdentityDisclosuresArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('identity_disclosures');
+    try {
+      const res = await this.signedAgentApiFetch(
+        `/v1/agents/${this.agentMint}/identity/disclosures`,
+        { method: 'GET' },
+      );
+      const text = await res.text();
+      if (!res.ok) {
+        return jsonResult({
+          kind: 'identity_disclosures',
+          status: 'error',
+          agent_mint: this.agentMint,
+          message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+        });
+      }
+      const json = JSON.parse(text) as { items: unknown[] };
+      return jsonResult({
+        kind: 'identity_disclosures',
+        status: 'ok',
+        agent_mint: this.agentMint,
+        count: json.items.length,
+        items: json.items,
+      });
+    } catch (err) {
+      return jsonResult({
+        kind: 'identity_disclosures',
+        status: 'error',
+        agent_mint: this.agentMint,
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+
+  async createIdentityDisclosure(args: CreateIdentityDisclosureArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('identity_disclosure');
+    try {
+      const res = await this.signedAgentApiFetch(
+        `/v1/agents/${this.agentMint}/identity/disclosures`,
+        {
+          method: 'POST',
+          body: JSON.stringify(args),
+        },
+      );
+      const text = await res.text();
+      if (!res.ok) {
+        return jsonResult({
+          kind: 'identity_disclosure',
+          status: 'error',
+          agent_mint: this.agentMint,
+          message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+        });
+      }
+      const json = JSON.parse(text) as Record<string, unknown>;
+      return jsonResult({
+        kind: 'identity_disclosure',
+        status: 'ok',
+        agent_mint: this.agentMint,
+        disclosure: json,
+        token: json.token,
+        url: json.url,
+        warning:
+          'Bearer token is returned only once. Store or share it now; list calls only show grant metadata.',
+      });
+    } catch (err) {
+      return jsonResult({
+        kind: 'identity_disclosure',
+        status: 'error',
+        agent_mint: this.agentMint,
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+
+  async revokeIdentityDisclosure(args: RevokeIdentityDisclosureArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('identity_disclosure');
+    try {
+      const id = encodeURIComponent(args.id);
+      const res = await this.signedAgentApiFetch(
+        `/v1/agents/${this.agentMint}/identity/disclosures/${id}`,
+        { method: 'DELETE' },
+      );
+      const text = await res.text();
+      if (!res.ok) {
+        return jsonResult({
+          kind: 'identity_disclosure',
+          status: 'error',
+          agent_mint: this.agentMint,
+          message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+        });
+      }
+      return jsonResult({
+        kind: 'identity_disclosure',
+        status: 'revoked',
+        agent_mint: this.agentMint,
+        id: args.id,
+      });
+    } catch (err) {
+      return jsonResult({
+        kind: 'identity_disclosure',
+        status: 'error',
+        agent_mint: this.agentMint,
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+
   async receipts(args: ReceiptsArgs): Promise<LeashToolResult> {
     if (!this.agentMint) return noAgentResult('receipts');
     if (!this.config.apiKey) {
@@ -1086,7 +1365,7 @@ class StdioHost implements LeashHost {
 
   private async signedAgentApiFetch(
     pathWithQuery: string,
-    init: { method: 'GET' | 'POST'; body?: string },
+    init: { method: 'GET' | 'POST' | 'PUT' | 'DELETE'; body?: string },
   ): Promise<Response> {
     if (!this.agentMint) throw new Error('agent mint is required');
     const headers = await signAgentRequest({
