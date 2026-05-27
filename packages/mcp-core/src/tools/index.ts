@@ -10,6 +10,7 @@
 import type { LeashTool } from '../tool.js';
 
 import { createPaymentLinkTool } from './create-payment-link.js';
+import { createAgentApiKeyTool } from './create-agent-api-key.js';
 import { payPaymentLinkTool } from './pay-payment-link.js';
 import { checkBalancesTool } from './check-balances.js';
 import { withdrawTreasuryTool } from './withdraw-treasury.js';
@@ -26,9 +27,12 @@ import { getReceiptTool } from './get-receipt.js';
 import { transactionHistoryTool } from './transaction-history.js';
 import { dailyTransactionsTool } from './daily-transactions.js';
 import { verifyIdentityTool } from './verify-identity.js';
+import { listAgentApiKeysTool } from './list-agent-api-keys.js';
+import { revokeAgentApiKeyTool } from './revoke-agent-api-key.js';
 
 export {
   createPaymentLinkTool,
+  createAgentApiKeyTool,
   payPaymentLinkTool,
   checkBalancesTool,
   withdrawTreasuryTool,
@@ -45,23 +49,28 @@ export {
   transactionHistoryTool,
   dailyTransactionsTool,
   verifyIdentityTool,
+  listAgentApiKeysTool,
+  revokeAgentApiKeyTool,
 };
 
 /** Stable alphabetical export order so tools/list output is deterministic. */
 export const LEASH_TOOLS: ReadonlyArray<LeashTool> = [
   checkBalancesTool,
+  createAgentApiKeyTool,
   createPaymentLinkTool,
   dailyTransactionsTool,
   discoverTool,
   getIdentityTool,
   getReceiptTool,
   getSpendLimitTool,
+  listAgentApiKeysTool,
   payPaymentLinkTool,
   paySkillsEndpointsTool,
   receiptsTool,
   registerAgentTool,
   reputationTool,
   resolveIdentityTool,
+  revokeAgentApiKeyTool,
   setSpendLimitTool,
   transactionHistoryTool,
   verifyIdentityTool,

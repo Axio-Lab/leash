@@ -21,6 +21,15 @@ const echoHost: LeashHost = {
   async createPaymentLink(args) {
     return jsonResult({ kind: 'echo:create_payment_link', args });
   },
+  async createAgentApiKey(args) {
+    return jsonResult({ kind: 'echo:create_agent_api_key', args });
+  },
+  async listAgentApiKeys(args) {
+    return jsonResult({ kind: 'echo:list_agent_api_keys', args });
+  },
+  async revokeAgentApiKey(args) {
+    return jsonResult({ kind: 'echo:revoke_agent_api_key', args });
+  },
   async pay(args) {
     return jsonResult({ kind: 'echo:pay', args });
   },
@@ -75,18 +84,21 @@ describe('LEASH_TOOLS', () => {
   it('exposes the canonical tools in stable order', () => {
     expect(LEASH_TOOLS.map((t) => t.name)).toEqual([
       'leash_check_treasury_balance',
+      'leash_create_agent_api_key',
       'leash_create_payment_link',
       'leash_daily_transactions',
       'leash_discover',
       'leash_get_identity',
       'leash_get_receipt',
       'leash_get_spend_limit',
+      'leash_list_agent_api_keys',
       'leash_pay_payment_link',
       'leash_pay_skills_endpoints',
       'leash_receipts',
       'leash_register_agent',
       'leash_reputation',
       'leash_resolve_identity',
+      'leash_revoke_agent_api_key',
       'leash_set_spend_limit',
       'leash_transaction_history',
       'leash_verify_identity',
@@ -121,6 +133,29 @@ describe('LEASH_TOOLS', () => {
     expect(parsed.args.method).toBe('GET');
     expect(parsed.args.upstream_url).toBe('https://jsonplaceholder.typicode.com/posts');
     expect(parsed.args.expected_request_body).toEqual({ prompt: 'string' });
+  });
+
+  it('agent api key tools route to the host implementation', async () => {
+    const create = LEASH_TOOLS.find((t) => t.name === 'leash_create_agent_api_key')!;
+    const list = LEASH_TOOLS.find((t) => t.name === 'leash_list_agent_api_keys')!;
+    const revoke = LEASH_TOOLS.find((t) => t.name === 'leash_revoke_agent_api_key')!;
+
+    const createResult = await create.handler({ label: 'local runtime' }, echoHost);
+    const listResult = await list.handler({ include_disabled: true, limit: 5 }, echoHost);
+    const revokeResult = await revoke.handler({ id: 'key_123' }, echoHost);
+
+    expect(JSON.parse(createResult.content[0]!.text)).toEqual({
+      kind: 'echo:create_agent_api_key',
+      args: { label: 'local runtime' },
+    });
+    expect(JSON.parse(listResult.content[0]!.text)).toEqual({
+      kind: 'echo:list_agent_api_keys',
+      args: { include_disabled: true, limit: 5 },
+    });
+    expect(JSON.parse(revokeResult.content[0]!.text)).toEqual({
+      kind: 'echo:revoke_agent_api_key',
+      args: { id: 'key_123' },
+    });
   });
 
   it('every tool has a non-empty description and a Zod input schema', () => {

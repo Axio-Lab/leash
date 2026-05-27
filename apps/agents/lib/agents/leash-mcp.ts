@@ -36,6 +36,7 @@ import {
   noAgentResult,
   probePaymentLink,
   type CheckTreasuryBalanceArgs,
+  type CreateAgentApiKeyArgs,
   type CreatePaymentLinkArgs,
   type DiscoverArgs,
   type IdentitySelectorArgs,
@@ -43,9 +44,11 @@ import {
   type LeashHost,
   type LeashTool,
   type LeashToolResult,
+  type ListAgentApiKeysArgs,
   type PayArgs,
   type PaySkillsProviderArgs,
   type ReputationArgs,
+  type RevokeAgentApiKeyArgs,
   type WithdrawArgs,
 } from '@leashmarket/mcp-core';
 import { listPlatformKeys } from '@leashmarket/platform-auth';
@@ -121,6 +124,33 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
           message: `Could not create payment link: ${message}`,
         });
       }
+    },
+
+    async createAgentApiKey(_args: CreateAgentApiKeyArgs): Promise<LeashToolResult> {
+      return jsonResult({
+        kind: 'agent_api_key',
+        status: 'manual',
+        message:
+          'The chat UI does not expose the local executive secret needed for X-Leash-Sig key creation. Use the standalone CLI/MCP/SDK from the agent runtime, or create a UI key from the API keys page.',
+      });
+    },
+
+    async listAgentApiKeys(_args: ListAgentApiKeysArgs): Promise<LeashToolResult> {
+      return jsonResult({
+        kind: 'agent_api_keys',
+        status: 'manual',
+        message:
+          'Agent-created key listing requires the local executive signature. Use the standalone CLI/MCP/SDK from the agent runtime, or view UI-created keys on the API keys page.',
+      });
+    },
+
+    async revokeAgentApiKey(_args: RevokeAgentApiKeyArgs): Promise<LeashToolResult> {
+      return jsonResult({
+        kind: 'agent_api_key',
+        status: 'manual',
+        message:
+          'Agent-created key revocation requires the local executive signature. Use the standalone CLI/MCP/SDK from the agent runtime, or revoke UI-created keys on the API keys page.',
+      });
     },
 
     async pay(args: PayArgs): Promise<LeashToolResult> {

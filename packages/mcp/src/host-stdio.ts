@@ -18,6 +18,8 @@
  * response with a `message` it can surface.
  */
 
+import { createHash } from 'node:crypto';
+
 import {
   LEASH_EXPLORER_DEFAULT,
   TOKEN_2022_PROGRAM_ADDRESS,
@@ -41,6 +43,7 @@ import {
   noAgentResult,
   probePaymentLink,
   type CheckTreasuryBalanceArgs,
+  type CreateAgentApiKeyArgs,
   type CreatePaymentLinkArgs,
   type DailyTransactionsArgs,
   type DiscoverArgs,
@@ -51,11 +54,13 @@ import {
   type GetSpendLimitArgs,
   type LeashHost,
   type LeashToolResult,
+  type ListAgentApiKeysArgs,
   type PayArgs,
   type PaySkillsProviderArgs,
   type ReceiptsArgs,
   type RegisterAgentArgs,
   type ReputationArgs,
+  type RevokeAgentApiKeyArgs,
   type SetSpendLimitArgs,
   type StableSymbol,
   type SvmNetwork,
@@ -73,6 +78,7 @@ import {
 } from '@leashmarket/registry-utils';
 import { createBuyer } from '@leashmarket/buyer-kit';
 import { isReceiptV02, type ReceiptAny, type RulesV1 } from '@leashmarket/schemas';
+import { base58 } from '@metaplex-foundation/umi/serializers';
 
 import type { LeashAgentConfig } from './config.js';
 import { loadSigner, type LeashSigner } from './signer.js';
@@ -465,6 +471,109 @@ class StdioHost implements LeashHost {
     } catch (err) {
       return jsonResult({
         kind: 'payment_link',
+        status: 'error',
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+
+  async createAgentApiKey(args: CreateAgentApiKeyArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('agent_api_key');
+    try {
+      const res = await this.signedAgentApiFetch(`/v1/agents/${this.agentMint}/api-keys`, {
+        method: 'POST',
+        body: JSON.stringify({ label: args.label }),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        return jsonResult({
+          kind: 'agent_api_key',
+          status: 'error',
+          message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+        });
+      }
+      const json = JSON.parse(text) as {
+        key: AgentApiKeyWire;
+        plaintext: string;
+      };
+      return jsonResult({
+        kind: 'agent_api_key',
+        status: 'ok',
+        key: json.key,
+        plaintext: json.plaintext,
+        warning:
+          'Plaintext is returned only once. Store it securely now; future list/revoke calls cannot reveal it.',
+      });
+    } catch (err) {
+      return jsonResult({
+        kind: 'agent_api_key',
+        status: 'error',
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+
+  async listAgentApiKeys(args: ListAgentApiKeysArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('agent_api_keys');
+    try {
+      const url = new URL(`${this.apiBaseUrl}/v1/agents/${this.agentMint}/api-keys`);
+      if (args.include_disabled != null) {
+        url.searchParams.set('include_disabled', args.include_disabled ? 'true' : 'false');
+      }
+      if (args.limit) url.searchParams.set('limit', String(args.limit));
+      const pathWithQuery = `${url.pathname}${url.search}`;
+      const res = await this.signedAgentApiFetch(pathWithQuery, { method: 'GET' });
+      const text = await res.text();
+      if (!res.ok) {
+        return jsonResult({
+          kind: 'agent_api_keys',
+          status: 'error',
+          message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+        });
+      }
+      const json = JSON.parse(text) as { items: AgentApiKeyWire[] };
+      return jsonResult({
+        kind: 'agent_api_keys',
+        status: 'ok',
+        agent_mint: this.agentMint,
+        network: this.network,
+        count: json.items.length,
+        items: json.items,
+      });
+    } catch (err) {
+      return jsonResult({
+        kind: 'agent_api_keys',
+        status: 'error',
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+
+  async revokeAgentApiKey(args: RevokeAgentApiKeyArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('agent_api_key');
+    try {
+      const id = encodeURIComponent(args.id);
+      const res = await this.signedAgentApiFetch(
+        `/v1/agents/${this.agentMint}/api-keys/${id}/disable`,
+        { method: 'POST' },
+      );
+      const text = await res.text();
+      if (!res.ok) {
+        return jsonResult({
+          kind: 'agent_api_key',
+          status: 'error',
+          message: `Leash API ${res.status}: ${text.slice(0, 300)}`,
+        });
+      }
+      const json = JSON.parse(text) as { key: AgentApiKeyWire };
+      return jsonResult({
+        kind: 'agent_api_key',
+        status: 'revoked',
+        key: json.key,
+      });
+    } catch (err) {
+      return jsonResult({
+        kind: 'agent_api_key',
         status: 'error',
         message: err instanceof Error ? err.message : 'unknown error',
       });
@@ -974,6 +1083,72 @@ class StdioHost implements LeashHost {
       });
     }
   }
+
+  private async signedAgentApiFetch(
+    pathWithQuery: string,
+    init: { method: 'GET' | 'POST'; body?: string },
+  ): Promise<Response> {
+    if (!this.agentMint) throw new Error('agent mint is required');
+    const headers = await signAgentRequest({
+      signer: this.signer,
+      agentMint: this.agentMint,
+      method: init.method,
+      pathWithQuery,
+      body: init.body,
+      rpcUrl: this.rpcUrl,
+    });
+    return fetch(`${this.apiBaseUrl}${pathWithQuery}`, {
+      method: init.method,
+      headers: {
+        accept: 'application/json',
+        ...headers,
+        ...(init.body ? { 'content-type': 'application/json' } : {}),
+      },
+      ...(init.body ? { body: init.body } : {}),
+    });
+  }
+}
+
+type AgentApiKeyWire = {
+  id: string;
+  label: string;
+  network: SvmNetwork;
+  prefix: string;
+  last4: string;
+  owner_wallet: string;
+  agent_mint: string;
+  scopes: ['agent'];
+  created_at: string;
+  disabled_at: string | null;
+};
+
+async function signAgentRequest(args: {
+  signer: LeashSigner;
+  agentMint: string;
+  method: string;
+  pathWithQuery: string;
+  body: string | undefined;
+  rpcUrl: string;
+}): Promise<Record<string, string>> {
+  const bodyHash = createHash('sha256')
+    .update(args.body == null ? new Uint8Array(0) : new TextEncoder().encode(args.body))
+    .digest('hex');
+  const timestamp = new Date().toISOString();
+  const canonical = [
+    args.method.toUpperCase(),
+    args.pathWithQuery,
+    timestamp,
+    bodyHash,
+    args.agentMint,
+  ].join('\n');
+  const umi = args.signer.getUmi(args.rpcUrl);
+  const keypair = umi.eddsa.createKeypairFromSecretKey(args.signer.secret);
+  const sig = umi.eddsa.sign(new TextEncoder().encode(canonical), keypair);
+  return {
+    'x-leash-agent': args.agentMint,
+    'x-leash-timestamp': timestamp,
+    'x-leash-sig': base58.deserialize(sig)[0],
+  };
 }
 
 /**
