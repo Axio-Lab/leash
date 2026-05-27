@@ -265,6 +265,36 @@ export type AgentWebhook = {
 
 export type AgentWebhookWithSecret = AgentWebhook & { secret: string };
 
+export type AgentApiKey = {
+  id: string;
+  label: string;
+  network: SvmNetwork;
+  prefix: string;
+  last4: string;
+  /** The agent executive public key that created and owns the key. */
+  owner_wallet: string;
+  /** The Leash agent identity this key belongs to. */
+  agent_mint: string;
+  /** Agent-created keys always carry exactly the `agent` scope. */
+  scopes: ['agent'];
+  created_at: string;
+  disabled_at: string | null;
+};
+
+export type CreateAgentApiKeyInput = {
+  label: string;
+};
+
+export type CreateAgentApiKeyResponse = {
+  key: AgentApiKey;
+  /** Plaintext value. Returned once on create; store it securely. */
+  plaintext: string;
+};
+
+export type ListAgentApiKeysResponse = {
+  items: AgentApiKey[];
+};
+
 /**
  * Input for {@link LeashClient.recordAgent}. Mirrors `RecordMintBody`
  * in `apps/api/src/routes/agent-self-register.ts`.
