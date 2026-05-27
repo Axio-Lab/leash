@@ -34,7 +34,7 @@ import { invalidRequest, notFound } from '../util/errors.js';
 
 const NetworkSchema = z.enum(['solana-devnet', 'solana-mainnet']);
 
-const ScopeSchema = z.enum(['agents', 'marketplace', 'admin']);
+const ScopeSchema = z.enum(['agents', 'marketplace', 'admin', 'agent']);
 
 const ApiKeyRecordSchema = z
   .object({
@@ -47,9 +47,12 @@ const ApiKeyRecordSchema = z
       description:
         'Solana wallet (base58) this key is attributed to; null for keys created before owner tracking or bootstrap keys.',
     }),
+    agent_mint: z.string().nullable().openapi({
+      description: 'Agent identity mint this key belongs to; set for agent-created keys.',
+    }),
     scopes: z.array(ScopeSchema).nullable().openapi({
       description:
-        'Surface scopes for platform-issued keys (agents, marketplace, admin). null for legacy / unrestricted keys.',
+        'Surface scopes for platform-issued keys (agents, marketplace, admin, agent). null for legacy / unrestricted keys.',
     }),
     created_at: z.string(),
     disabled_at: z.string().nullable(),
@@ -66,7 +69,7 @@ const CreateApiKeyBody = z
     }),
     scopes: z.array(ScopeSchema).optional().openapi({
       description:
-        'Optional surface scopes (`agents`, `marketplace`, `admin`). Omit for unrestricted keys.',
+        'Optional surface scopes (`agents`, `marketplace`, `admin`, `agent`). Omit for unrestricted keys.',
     }),
   })
   .openapi('AdminCreateApiKeyBody');
@@ -84,7 +87,7 @@ type AdminApiScope = z.infer<typeof ScopeSchema>;
 
 function narrowScopes(scopes: string[] | null): AdminApiScope[] | null {
   if (scopes == null) return null;
-  const allowed: AdminApiScope[] = ['agents', 'marketplace', 'admin'];
+  const allowed: AdminApiScope[] = ['agents', 'marketplace', 'admin', 'agent'];
   const filtered = scopes.filter((s): s is AdminApiScope => (allowed as string[]).includes(s));
   return filtered;
 }
@@ -98,6 +101,7 @@ function recordToWire(r: Awaited<ReturnType<typeof getApiKeyById>>) {
     prefix: r.prefix,
     last4: r.last4,
     owner_wallet: r.ownerWallet,
+    agent_mint: r.agentMint,
     scopes: narrowScopes(r.scopes),
     created_at: r.createdAt,
     disabled_at: r.disabledAt,

@@ -58,6 +58,7 @@ const MAX_SKEW_MS = 5 * 60 * 1000;
 
 export type OnChainAuthVariables = {
   agent_mint: string;
+  executive_pubkey: string;
 };
 
 export type OnChainAuthDeps = {
@@ -183,7 +184,7 @@ export function onChainAuth<V extends OnChainAuthVariables = OnChainAuthVariable
     const buf = await c.req.arrayBuffer();
     const body = buf.byteLength === 0 ? undefined : new Uint8Array(buf);
     try {
-      const { agentMint } = await verifyOnChainSig({
+      const { agentMint, executivePubkey } = await verifyOnChainSig({
         config: deps.config,
         db: deps.db,
         method: c.req.method,
@@ -193,6 +194,8 @@ export function onChainAuth<V extends OnChainAuthVariables = OnChainAuthVariable
       });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (c as any).set('agent_mint', agentMint);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (c as any).set('executive_pubkey', executivePubkey);
       // Re-feed the body to downstream parsers. Hono v4 honours
       // `req.raw.bodyUsed` but our buffered re-read here is a no-op
       // for simple JSON routes that re-parse via `c.req.json()`.

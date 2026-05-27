@@ -52,8 +52,12 @@ async function lookupKey(deps: AuthDeps, plaintext: string): Promise<ApiKeyRecor
   if (cached) {
     try {
       const parsed = JSON.parse(cached) as Partial<ApiKeyRecord> & Pick<ApiKeyRecord, 'id'>;
-      // Older cache entries may pre-date `owner_wallet`; coerce for a warm-cache window.
-      return { ...parsed, ownerWallet: parsed.ownerWallet ?? null } as ApiKeyRecord;
+      // Older cache entries may pre-date `owner_wallet` / `agent_mint`; coerce for a warm-cache window.
+      return {
+        ...parsed,
+        ownerWallet: parsed.ownerWallet ?? null,
+        agentMint: parsed.agentMint ?? null,
+      } as ApiKeyRecord;
     } catch {
       // fall through and re-read from DB
     }

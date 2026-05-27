@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 19;
+const SCHEMA_VERSION = 20;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -50,6 +50,7 @@ const SCHEMA_SQL: readonly string[] = [
     last4 TEXT NOT NULL,
     hash TEXT NOT NULL UNIQUE,
     owner_wallet TEXT,
+    agent_mint TEXT,
     scopes TEXT,
     -- AES-GCM envelope (same format as user_llm_keys.envelope) of the
     -- plaintext key. Lets the BFF reveal the key on demand so users can
@@ -835,6 +836,13 @@ export async function runMigrations(db: Client): Promise<void> {
     await migrateListingsSellerAgentMint(db);
   }
 
+  // v20: agent-created API keys are owned by the executive wallet, but
+  // also need the concrete agent mint for list/revoke isolation when one
+  // executive manages multiple agents.
+  if (currentVersion < 20) {
+    await migrateApiKeysAgentMint(db);
+  }
+
   // Always-on index assertions. These run after every boot — they're
   // cheap (`IF NOT EXISTS`) and idempotent, and they cover the case
   // where a brand-new DB takes the latest `SCHEMA_SQL` directly and
@@ -847,6 +855,9 @@ export async function runMigrations(db: Client): Promise<void> {
   );
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_listings_seller_agent ON listings(seller_agent_mint) WHERE seller_agent_mint IS NOT NULL`,
+  );
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_api_keys_agent_mint ON api_keys(agent_mint) WHERE agent_mint IS NOT NULL`,
   );
 
   if (currentVersion < SCHEMA_VERSION) {
@@ -883,6 +894,17 @@ async function migrateApiKeysOwnerWallet(db: Client): Promise<void> {
   }
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_api_keys_owner_wallet ON api_keys(owner_wallet) WHERE owner_wallet IS NOT NULL`,
+  );
+}
+
+async function migrateApiKeysAgentMint(db: Client): Promise<void> {
+  const info = await db.execute('PRAGMA table_info(api_keys)');
+  const names = new Set(info.rows.map((r) => String((r as Record<string, unknown>).name ?? '')));
+  if (!names.has('agent_mint')) {
+    await db.execute('ALTER TABLE api_keys ADD COLUMN agent_mint TEXT');
+  }
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_api_keys_agent_mint ON api_keys(agent_mint) WHERE agent_mint IS NOT NULL`,
   );
 }
 

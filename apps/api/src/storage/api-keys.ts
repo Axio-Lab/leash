@@ -31,6 +31,8 @@ export type ApiKeyRecord = {
   last4: string;
   /** Solana wallet (base58 pubkey) this key was issued for; null if unset. */
   ownerWallet: string | null;
+  /** Agent identity this key belongs to; set for agent-created keys. */
+  agentMint: string | null;
   /**
    * Surface scopes for platform-issued keys (e.g. `['agents']`,
    * `['marketplace']`). `null` for legacy keys and bootstrap keys; the
@@ -94,6 +96,7 @@ export async function createApiKey(
     network: SvmNetwork;
     plaintext?: string;
     ownerWallet: string | null;
+    agentMint?: string | null;
     scopes?: string[] | null;
     /**
      * 32-byte hex encryption key used to seal the plaintext for later
@@ -120,8 +123,19 @@ export async function createApiKey(
   const envelope = args.encryptionKey ? encryptSecret(plaintext, args.encryptionKey) : null;
   await execute(
     db,
-    `INSERT INTO api_keys (id, label, network, prefix, last4, hash, owner_wallet, scopes, encrypted_plaintext) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, args.label, network, prefix, last4, hash, ownerWallet, scopesJson, envelope],
+    `INSERT INTO api_keys (id, label, network, prefix, last4, hash, owner_wallet, agent_mint, scopes, encrypted_plaintext) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      args.label,
+      network,
+      prefix,
+      last4,
+      hash,
+      ownerWallet,
+      args.agentMint ?? null,
+      scopesJson,
+      envelope,
+    ],
   );
   const created = await getApiKeyById(db, id);
   if (!created) throw new Error('api key insert succeeded but lookup failed');
@@ -138,7 +152,7 @@ export function revealApiKeyPlaintext(record: ApiKeyRecord, encryptionKey: strin
 }
 
 const SELECT_COLS =
-  'id, label, network, prefix, last4, owner_wallet, scopes, encrypted_plaintext, created_at, disabled_at';
+  'id, label, network, prefix, last4, owner_wallet, agent_mint, scopes, encrypted_plaintext, created_at, disabled_at';
 
 export async function getApiKeyByPlaintext(
   db: DbClient,
@@ -172,6 +186,8 @@ export type ListApiKeysArgs = {
   network?: SvmNetwork;
   /** When set, only keys attributed to this wallet (canonical base58). */
   ownerWallet?: string;
+  /** When set, only keys owned by this concrete agent identity. */
+  agentMint?: string;
   includeDisabled?: boolean;
   limit?: number;
 };
@@ -189,6 +205,10 @@ export async function listApiKeys(
   if (args.ownerWallet) {
     where.push('owner_wallet = ?');
     params.push(args.ownerWallet);
+  }
+  if (args.agentMint) {
+    where.push('agent_mint = ?');
+    params.push(args.agentMint);
   }
   if (!args.includeDisabled) {
     where.push('disabled_at IS NULL');
@@ -226,6 +246,7 @@ function rowToRecord(row: Record<string, unknown>): ApiKeyRecord {
     prefix: String(row.prefix),
     last4: String(row.last4),
     ownerWallet: row.owner_wallet != null ? String(row.owner_wallet) : null,
+    agentMint: row.agent_mint != null ? String(row.agent_mint) : null,
     scopes,
     encryptedPlaintext: row.encrypted_plaintext != null ? String(row.encrypted_plaintext) : null,
     createdAt: String(row.created_at),
