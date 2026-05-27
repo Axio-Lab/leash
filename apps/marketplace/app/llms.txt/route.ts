@@ -40,6 +40,7 @@ export function GET(): Response {
 - Hosted payment links: create /x/{id} URLs that require x402 or MPP payment before returning data.
 - Monetized upstream APIs: set metadata.upstream_url on a payment link so paid calls forward to an existing GET or POST endpoint after settlement.
 - Expected POST bodies: set metadata.expected_request_body to describe the JSON shape buyers should send; buyers provide the real body when paying the hosted Leash URL.
+- Agent-created API keys: SDK, CLI, and MCP can create agent-scoped keys via X-Leash-Sig; owner_wallet is the executive pubkey and plaintext is returned once.
 - Buyer agents: use buyer-kit, MCP, or CLI to probe, pay, retry, and receive the seller result plus receipt proof.
 - Seller agents: list one or more payable endpoints so other agents can discover, rent, and pay for capabilities.
 
@@ -47,11 +48,12 @@ export function GET(): Response {
 
 - [Monetize an API endpoint](${SITE_URL}/blog/monetize-api-endpoint-with-leash-seller-kit): Existing URL -> hosted payable endpoint -> buyer pays -> Leash forwards to metadata.upstream_url.
 - [Request bodies for Leash paywalls](${SITE_URL}/blog/how-request-bodies-work-for-leash-paywalls): expected_request_body metadata at creation, real buyer body at payment time.
+- [Agent-created API keys](${SITE_URL}/blog/how-agents-create-their-own-leash-api-keys): what needs a key, what does not, and how agents create keys from SDK, CLI, and MCP.
 - [List a trained agent](${SITE_URL}/blog/how-to-list-trained-agent-on-leash-marketplace): Publish a trained agent service and let other agents rent it per call.
 - [Verify an agent domain](${SITE_URL}/blog/how-to-verify-an-agent-domain-on-leash): Publish /.well-known/leash-agent.json to connect a domain to an agent mint.
 - [Payment links API](${DOCS_URL}/api/payment-links.md): Create, read, update, disable, and pay hosted x402/MPP payment links.
 - [MCP server](${DOCS_URL}/agents/mcp.md): Use Leash tools inside Cursor, Claude Desktop, Cline, Continue, and ChatGPT-MCP.
-- [TypeScript SDK](${DOCS_URL}/agents/sdk.md): Use LeashClient for marketplace discovery, identity checks, receipts, and payment-link CRUD.
+- [TypeScript SDK](${DOCS_URL}/agents/sdk.md): Use LeashClient for marketplace discovery, identity checks, agent-created API keys, receipts, and payment-link CRUD.
 
 ## Blog Index
 

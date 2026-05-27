@@ -20,7 +20,7 @@ pnpm add @leashmarket/mcp-core
 | -------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `LeashHost`                | Runtime contract every host implements (wallet, RPC, API key, …)                                       |
 | `LeashTool` / `defineTool` | Tool-definition primitive (name, Zod schema, typed handler)                                            |
-| `LEASH_TOOLS`              | Canonical tool list adapters iterate — discover, pay, receipts, spend limits, etc.                     |
+| `LEASH_TOOLS`              | Canonical tool list adapters iterate — discover, pay, agent API keys, receipts, spend limits, etc.     |
 | `helpers/*`                | Pure utilities: `probePaymentLink`, `fetchDiscover`, `fetchReputation`, token catalog, address helpers |
 
 ## Payment-link tool contract
@@ -39,6 +39,15 @@ body later through `leash_pay_payment_link` or another x402/MPP client, and the
 hosted paywall forwards it to `upstream_url` only after payment settles.
 `leash_pay_payment_link` mirrors the same contract with `method` and raw `body`
 arguments for POST calls.
+
+## Agent API-key tools
+
+`leash_create_agent_api_key`, `leash_list_agent_api_keys`, and
+`leash_revoke_agent_api_key` let a configured agent create and manage its own
+Leash API key. These calls are authenticated with `X-Leash-Sig`, so no existing
+`LEASH_API_KEY` is required to bootstrap one. Created keys are bound to the
+active agent mint, owned by the executive public key, and scoped as exactly
+`agent`; plaintext is returned once on create.
 
 ## Usage
 

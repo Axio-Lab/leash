@@ -10,9 +10,10 @@ description: >-
   @leashmarket/* SDK, the api.leash.market HTTPS surface, the prepare → sign →
   submit lifecycle, hosted payment links at /x/{id}, upstream forwarding with
   metadata.upstream_url, expected POST bodies with metadata.expected_request_body,
-  identity profiles, capability cards, selective disclosures, the marketplace
-  listing flow, LLM-friendly docs, the explorer at explorer.leash.market, the
-  local facilitator, and the fund / withdraw flows on the agent treasury PDA.
+  agent-created API keys via X-Leash-Sig, identity profiles, capability cards,
+  selective disclosures, the marketplace listing flow, LLM-friendly docs, the
+  explorer at explorer.leash.market, the local facilitator, and the fund /
+  withdraw flows on the agent treasury PDA.
 ---
 
 # Leash — Agent payments on Solana via x402 / MPP
@@ -40,8 +41,8 @@ USDG, and a hash-chained `ReceiptV1` audit log. Buyer and seller are
 | Mint a brand-new agent (asset + AgentIdentity) in one tx | `@leashmarket/registry-utils` `createAgent`, or `POST /v1/agents/prepare`                                              |
 | Inspect agents / receipts / events with a UI             | `https://explorer.leash.market`                                                                                        |
 | Settle locally without depending on hosted infra         | `@leashmarket/facilitator` (devnet) — see `REFERENCE.md`                                                               |
-| Drop Leash tools into a coding agent (Cursor / Claude)   | `@leashmarket/mcp` STDIO MCP — see "Agent surfaces" below                                                              |
-| Run agent ops from the terminal                          | `leash` CLI in `@leashmarket/cli` — see "Agent surfaces" below                                                         |
+| Drop Leash tools into a coding agent (Cursor / Claude)   | `@leashmarket/mcp` STDIO MCP, including agent API-key tools — see "Agent surfaces" below                               |
+| Run agent ops from the terminal                          | `leash` CLI in `@leashmarket/cli`, including `api-key create/list/revoke` — see "Agent surfaces" below                 |
 
 ## Agent surfaces — MCP / CLI / SDK
 
@@ -49,7 +50,7 @@ Leash ships three first-class surfaces for autonomous agents. They all
 delegate to the same `LeashHost` contract in `@leashmarket/mcp-core`, so the
 behavior is identical across them; only the wire protocol differs.
 
-### `@leashmarket/mcp` — 17-tool STDIO MCP server
+### `@leashmarket/mcp` — 20-tool STDIO MCP server
 
 Drop into Cursor, Claude Desktop, Cline, Continue, ChatGPT-MCP, or any
 host that speaks Model Context Protocol over STDIO. Settlement happens
@@ -63,6 +64,9 @@ the local executive keypair and returns the on-chain receipt.
 | `leash_resolve_identity`       | Resolve public identity by mint, handle, or verified domain; returns profile, domains, public cards, claims, and reputation.                                                                                                                                                                 |
 | `leash_verify_identity`        | Machine-readable allow/warn/deny trust preflight before paying, trusting claims, or calling a capability.                                                                                                                                                                                    |
 | `leash_check_treasury_balance` | List SOL + SPL stable balances on the treasury PDA.                                                                                                                                                                                                                                          |
+| `leash_create_agent_api_key`   | Create an `agent` scoped API key for the active agent using X-Leash-Sig. Plaintext is returned once.                                                                                                                                                                                         |
+| `leash_list_agent_api_keys`    | List active-agent API keys without plaintext.                                                                                                                                                                                                                                                |
+| `leash_revoke_agent_api_key`   | Disable one active-agent API key by id.                                                                                                                                                                                                                                                      |
 | `leash_create_payment_link`    | Mint a hosted x402/MPP paywall (`/v1/payment-links`). If `upstream_url` is provided, the paid call forwards to that existing endpoint after settlement. For POST endpoints, `expected_request_body` documents the buyer body shape.                                                          |
 | `leash_pay_payment_link`       | Probe → policy-check → sign → settle → finalise receipt for an x402/MPP URL. Accepts method/body for POST paywalls.                                                                                                                                                                          |
 | `leash_withdraw_treasury`      | Owner-driven SOL or stable withdrawal via `mpl-core::Execute`.                                                                                                                                                                                                                               |
@@ -103,6 +107,9 @@ leash agent create [--name N] [--description T] [--image URL]
                    [--service name=https://endpoint] (repeatable)
                    [--generate | --import --executive <secret>]
 leash agent show
+leash api-key create --label "local worker"
+leash api-key list
+leash api-key revoke <id>
 leash treasury balance
 leash treasury withdraw --to W --amount N --token SOL|USDC|USDG|USDT
 leash treasury limit [--token USDC|USDG|USDT]
@@ -121,12 +128,20 @@ leash doctor
 
 ### `@leashmarket/sdk` — typed API client
 
-Anonymous reads, agent-signed writes (X-Leash-Sig), legacy bearer-key
-auth for endpoints that haven't migrated yet. Browser/Bun/Deno-friendly.
+Anonymous reads, agent-signed writes (X-Leash-Sig), agent-created API keys,
+and legacy bearer-key auth for endpoints that haven't migrated yet.
+Browser/Bun/Deno-friendly.
 
 ```ts
 import { LeashClient } from '@leashmarket/sdk';
 const leash = new LeashClient({ apiKey: process.env.LEASH_API_KEY });
+
+const signed = new LeashClient({
+  agentMint: process.env.LEASH_AGENT_MINT!,
+  executiveSecretBase58: process.env.LEASH_EXECUTIVE_KEY!,
+});
+const { plaintext } = await signed.createAgentApiKey({ label: 'worker' });
+// Store plaintext as LEASH_API_KEY for legacy bearer-token calls.
 
 // Single receipt by hash → full ReceiptV1.
 const r = await leash.getReceipt(

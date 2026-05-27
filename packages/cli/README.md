@@ -29,7 +29,7 @@ environment variable overrides:
 | `LEASH_EXECUTIVE_KEY` | `5Jz...` (base58) or `[12,34,...]` (JSON arr) |
 | `LEASH_NETWORK`       | `solana-mainnet` (default) / `solana-devnet`  |
 | `LEASH_API_URL`       | `https://api.leash.market` (default)          |
-| `LEASH_API_KEY`       | required for `leash sell create-link`         |
+| `LEASH_API_KEY`       | legacy bearer key for receipts/payment links  |
 | `LEASH_RPC_URL`       | **strongly recommended** — see below          |
 | `LEASH_EXPLORER_URL`  | `https://explorer.leash.market` (default)     |
 
@@ -65,6 +65,11 @@ leash agent create
 
 # 4. Confirm identity.
 leash agent show
+
+# 4b. Create an agent-owned API key for legacy bearer-token surfaces.
+#     Plaintext is printed once; store it as LEASH_API_KEY where needed.
+leash api-key create --label "local worker"
+leash api-key list
 
 # 5. Look at the capability marketplace.
 leash discover -q ocr --max-price 0.10
@@ -115,6 +120,14 @@ agent commands:
   agent show                         print active agent identity
   agent export [--out PATH]          export agent.json
   agent import <PATH>                install an agent.json
+
+api key commands:
+  api-key create --label NAME [--network solana-devnet|solana-mainnet]
+                                     create an agent-scoped API key via X-Leash-Sig
+                                     (plaintext returned once)
+  api-key list [--include-disabled] [--limit N]
+                                     list this agent's keys (no plaintext)
+  api-key revoke <id>                disable one agent-owned key
 
 treasury commands:
   treasury balance                   list SOL + token balances

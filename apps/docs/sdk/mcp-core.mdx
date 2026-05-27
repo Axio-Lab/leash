@@ -78,11 +78,20 @@ describe what buyers should send to the hosted paywall URL.
 (`GET` \| `POST`) and **`body`** (string, e.g. JSON) for POST paywalls — same
 dual-protocol behaviour as the CLI `leash pay` command.
 
+**Agent API-key tools:** `leash_create_agent_api_key`,
+`leash_list_agent_api_keys`, and `leash_revoke_agent_api_key` let a configured
+agent bootstrap its own `agent` scoped API key by signing with the local
+executive keypair. The created key is bound to the active agent mint, owned by
+the executive public key, and returns plaintext only once.
+
 ## Built-in tools
 
 | Tool name                    | Description                                                         |
 | ---------------------------- | ------------------------------------------------------------------- |
 | `leash_discover`             | Browse the Leash + pay-skills provider catalog                      |
+| `leash_create_agent_api_key` | Create an agent-scoped API key with X-Leash-Sig                     |
+| `leash_list_agent_api_keys`  | List this agent's API keys (no plaintext)                           |
+| `leash_revoke_agent_api_key` | Disable an agent-owned API key                                      |
 | `leash_pay_payment_link`     | Pay an x402 or MPP payment link with the agent's treasury           |
 | `leash_pay_skills_endpoints` | Fetch endpoint list for a pay-skills provider                       |
 | `leash_create_payment_link`  | Create a new payable link for your own endpoints                    |

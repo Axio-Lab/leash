@@ -67,7 +67,8 @@ If your Codex setup uses `AGENTS.md` only, append:
 
 Refer to `skills/leash/SKILL.md` whenever the user mentions Leash,
 agent treasuries, identity profiles, verified domains, marketplace listings,
-x402, MPP, hosted payment links, or per-call API monetisation on Solana.
+agent-created API keys, x402, MPP, hosted payment links, or per-call API
+monetisation on Solana.
 ```
 
 ## Replit (Ghostwriter / Agent)
@@ -102,7 +103,7 @@ mkdir -p .continue/rules
 cat > .continue/rules/leash.md <<'EOF'
 ---
 name: Leash
-description: Use ~/leash/skills/leash/SKILL.md when the user mentions Leash, x402, MPP, hosted payment links, agent identities, verified domains, marketplace listings, agent treasuries, or Solana agent payments.
+description: Use ~/leash/skills/leash/SKILL.md when the user mentions Leash, x402, MPP, hosted payment links, agent-created API keys, agent identities, verified domains, marketplace listings, agent treasuries, or Solana agent payments.
 ---
 EOF
 ```
@@ -116,8 +117,8 @@ Add this to your project's `AGENTS.md`, `INSTRUCTIONS.md`,
 ## Leash skill
 
 Whenever the user mentions Leash, leash.market, x402, MPP, hosted payment links,
-agent identities, verified domains, marketplace listings, agent treasuries,
-agent-to-agent payments, or per-call API monetisation on Solana, follow
+agent-created API keys, agent identities, verified domains, marketplace listings,
+agent treasuries, agent-to-agent payments, or per-call API monetisation on Solana, follow
 the instructions in `skills/leash/SKILL.md` (with `REFERENCE.md` and
 `EXAMPLES.md` as drill-down references).
 ```
@@ -134,6 +135,7 @@ the right context for prompts like:
 - "Monetise this Hono route with Leash"
 - "Verify an agent domain on Leash"
 - "List this trained agent on Leash marketplace"
+- "Create an API key for my Leash agent"
 - "How do I withdraw USDC from an agent treasury?"
 - "Why is my facilitator rejecting the settle?"
 

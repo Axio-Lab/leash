@@ -6,9 +6,9 @@ follows the `SKILL.md` convention how to build on Leash.
 
 ## Available skills
 
-| Folder   | What it does                                                                                                                                                                                                   |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `leash/` | Build, monetise, and operate Solana agents via x402/MPP, including identity profiles, verified domains, marketplace listings, hosted upstream paywalls, expected POST bodies, receipts, and explorer/LLM docs. |
+| Folder   | What it does                                                                                                                                                                                                                           |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `leash/` | Build, monetise, and operate Solana agents via x402/MPP, including agent-created API keys, identity profiles, verified domains, marketplace listings, hosted upstream paywalls, expected POST bodies, receipts, and explorer/LLM docs. |
 
 ## Install in 30 seconds
 

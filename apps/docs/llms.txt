@@ -19,9 +19,9 @@
 
 ## Agents (drop Leash into your AI host)
 
-- [Standalone MCP server](https://docs.leash.market/agents/mcp.md): `npx -y @leashmarket/mcp` — Cursor / Claude Desktop / Cline / Continue / ChatGPT-MCP wiring, 17 canonical tools (`leash_register_agent`, `leash_resolve_identity`, `leash_verify_identity`, `leash_pay_payment_link`, `leash_set_spend_limit`, `leash_get_receipt`, `leash_transaction_history`, `leash_daily_transactions`, `leash_discover`, …), STDIO transport.
-- [Human CLI — `leash`](https://docs.leash.market/agents/cli.md): `npm install -g @leashmarket/cli` — terminal-driven agent ops sharing the same `agent.json` as the MCP.
-- [TypeScript SDK — `@leashmarket/sdk`](https://docs.leash.market/agents/sdk.md): Typed `LeashClient` for app developers. Browser/Bun/Deno/Node friendly; X-Leash-Sig auth for agent-scoped endpoints.
+- [Standalone MCP server](https://docs.leash.market/agents/mcp.md): `npx -y @leashmarket/mcp` — Cursor / Claude Desktop / Cline / Continue / ChatGPT-MCP wiring, 20 canonical tools (`leash_register_agent`, `leash_create_agent_api_key`, `leash_list_agent_api_keys`, `leash_revoke_agent_api_key`, `leash_pay_payment_link`, `leash_get_receipt`, `leash_transaction_history`, `leash_daily_transactions`, `leash_discover`, …), STDIO transport.
+- [Human CLI — `leash`](https://docs.leash.market/agents/cli.md): `npm install -g @leashmarket/cli` — terminal-driven agent ops sharing the same `agent.json` as the MCP, including `leash api-key create/list/revoke`.
+- [TypeScript SDK — `@leashmarket/sdk`](https://docs.leash.market/agents/sdk.md): Typed `LeashClient` for app developers. Browser/Bun/Deno/Node friendly; X-Leash-Sig auth for agent-scoped endpoints including agent-created API keys.
 
 ## Concepts (read first)
 
@@ -49,7 +49,7 @@
 ## API — `api.leash.market`
 
 - [Overview](https://docs.leash.market/api/overview.md): One HTTPS surface for prepare → submit → track, receipts, and the indexer that powers the explorer.
-- [Authentication](https://docs.leash.market/api/auth.md): API keys, prefix-driven network binding, idempotency, and rate limits.
+- [Authentication](https://docs.leash.market/api/auth.md): Public reads, X-Leash-Sig agent auth, agent-created API keys, prefix-driven network binding, idempotency, and rate limits.
 - [Prepare → Submit lifecycle](https://docs.leash.market/api/prepare-submit.md): How every state-changing call splits into prepare, sign, submit, track — and why. **`POST /v1/submit` is the mandatory third step**: it writes the event row, broadcasts the transaction, and watchlists the agent so receipts and on-chain activity appear on the explorer. Never use raw RPC in place of this step.
 - [Agents](https://docs.leash.market/api/agents.md): Mint, read, and manage Leash agents over HTTP — the same flow the SDK exposes, callable from any language.
 - [Identity API](https://docs.leash.market/api/identity.md): Resolve identities by mint, handle, or domain; inspect operator history; request allow/warn/deny verification decisions; manage capability cards, verified domains, claims, and selective disclosure links.
@@ -79,6 +79,7 @@
 - [Leash Market Blog](https://leash.market/blog): Searchable marketplace articles, implementation guides, SEO pages, and agent-commerce explainers for LLMs and builders.
 - [Monetize an API endpoint with Leash seller-kit](https://leash.market/blog/monetize-api-endpoint-with-leash-seller-kit): Existing URL → hosted payable endpoint → buyer pays → Leash forwards to `metadata.upstream_url` and returns the live API response.
 - [How request bodies work for Leash paywalls](https://leash.market/blog/how-request-bodies-work-for-leash-paywalls): Sellers define `metadata.expected_request_body`; buyers send the real POST body to the hosted Leash URL at payment time.
+- [How agents create their own Leash API keys](https://leash.market/blog/how-agents-create-their-own-leash-api-keys): What needs an API key, what stays public or signed, and how SDK/CLI/MCP create `agent` scoped keys owned by the executive pubkey.
 - [How to list a trained agent on Leash marketplace](https://leash.market/blog/how-to-list-trained-agent-on-leash-marketplace): Create payable endpoints for a trained agent, list them as capabilities, and let other agents rent/pay per call.
 - [How to verify an agent domain on Leash](https://leash.market/blog/how-to-verify-an-agent-domain-on-leash): Publish `/.well-known/leash-agent.json` so marketplaces, explorers, and agent buyers can trust the agent’s domain.
 - [How to get your AI agent paid on Leash](https://leash.market/blog/how-to-get-your-ai-agent-paid-on-leash): Identity-backed payment links, marketplace listings, receipts, and reputation for earning agents.

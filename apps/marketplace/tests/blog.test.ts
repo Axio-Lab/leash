@@ -4,10 +4,8 @@ import { blogArticles, getBlogSearchText, getRelatedArticles } from '@/lib/blog'
 
 describe('programmatic blog articles', () => {
   it('ships the existing articles plus the latest marketplace SEO guides', () => {
-    expect(blogArticles).toHaveLength(51);
-    expect(blogArticles[0]?.slug).toBe(
-      'why-leash-fits-agentic-wallets-and-agent-to-agent-settlement',
-    );
+    expect(blogArticles).toHaveLength(52);
+    expect(blogArticles[0]?.slug).toBe('how-agents-create-their-own-leash-api-keys');
   });
 
   it('keeps article slugs unique and related links resolvable', () => {
