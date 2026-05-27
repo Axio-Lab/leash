@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { ulid } from 'ulid';
 
 import { adminAuth } from '../auth/admin.js';
+import { onChainAuth, type OnChainAuthVariables } from '../auth/onchain.js';
 import type { LeashApiConfig } from '../config.js';
 import { ApiErrorSchema, NetworkSchema, PubkeySchema } from '../openapi/common.js';
 import {
@@ -16,6 +17,7 @@ import {
   revokeAgentIdentityClaim,
   upsertAgentIdentityDomain,
   upsertAgentIdentityProfile,
+  type AgentIdentityClaim,
   type IdentityCapabilityCard,
 } from '../storage/agent-identity.js';
 import {
@@ -32,7 +34,7 @@ import { getPlatformAgent } from '../storage/platform-agents.js';
 import { getReceiptByHash } from '../storage/receipts.js';
 import type { CacheClient } from '../storage/redis.js';
 import { execute, type DbClient } from '../storage/turso.js';
-import { conflict, invalidRequest, notFound } from '../util/errors.js';
+import { conflict, invalidRequest, notFound, unauthorized } from '../util/errors.js';
 import type { SvmNetwork } from '../util/network.js';
 
 export type AgentIdentityProfileDeps = {
@@ -259,6 +261,30 @@ const DisclosureReadResponseSchema = z
     }),
   })
   .openapi('IdentityDisclosureRead');
+
+const IdentityProfileUpdateBodySchema = z.object({
+  handle: z.string().nullable().optional(),
+  visibility: z.record(z.unknown()).optional(),
+  capability_cards: z.array(CapabilityCardSchema).optional(),
+});
+
+const DomainVerifyBodySchema = z.object({ domain: z.string().min(1) });
+
+const ClaimCreateBodySchema = z.object({
+  issuer: z.string().min(1).max(200),
+  subject_mint: PubkeySchema.optional(),
+  type: z.string().min(1).max(120),
+  value: z.string().min(1).max(2000),
+  evidence_url: z.string().url().max(800).optional().nullable(),
+  signature: z.string().min(16).max(5000),
+  visibility: z.enum(['public', 'private']).default('public'),
+  expires_at: z.string().optional().nullable(),
+});
+
+const DisclosureCreateBodySchema = z.object({
+  resources: z.array(DisclosureResourceSchema).min(1).max(50),
+  expires_at: z.string().optional().nullable(),
+});
 
 function normalizeHandle(input: string): string {
   const handle = input.trim().replace(/^@+/, '').toLowerCase();
@@ -824,9 +850,171 @@ function normalizeCards(
   }));
 }
 
-export function buildAgentIdentityProfileRoutes(deps: AgentIdentityProfileDeps): OpenAPIHono {
-  const app = new OpenAPIHono();
+function claimToWire(claim: AgentIdentityClaim): z.infer<typeof ClaimSchema> {
+  return {
+    id: claim.id,
+    issuer: claim.issuer,
+    subject_mint: claim.subjectMint,
+    type: claim.type,
+    value: claim.value,
+    evidence_url: claim.evidenceUrl,
+    signature: claim.signature,
+    visibility: claim.visibility,
+    expires_at: claim.expiresAt,
+    revoked_at: claim.revokedAt,
+    created_at: claim.createdAt,
+  };
+}
+
+async function assertSignedIdentityAgent(
+  deps: AgentIdentityProfileDeps,
+  mint: string,
+  signedMint: string,
+): Promise<void> {
+  if (mint !== signedMint) throw unauthorized('X-Leash-Agent must equal :mint path param');
+  const agent = await getPlatformAgent(deps.db, mint);
+  if (!agent) throw notFound('agent not found');
+}
+
+async function updateIdentityProfile(
+  deps: AgentIdentityProfileDeps,
+  mint: string,
+  body: z.infer<typeof IdentityProfileUpdateBodySchema>,
+) {
+  const agent = await getPlatformAgent(deps.db, mint);
+  if (!agent) throw notFound('agent not found');
+  try {
+    await upsertAgentIdentityProfile(deps.db, {
+      agentMint: mint,
+      network: agent.network,
+      ...(body.handle !== undefined
+        ? { handle: body.handle == null ? null : normalizeHandle(body.handle) }
+        : {}),
+      ...(body.visibility !== undefined ? { visibility: body.visibility } : {}),
+      ...(body.capability_cards !== undefined
+        ? { capabilityCards: normalizeCards(body.capability_cards) }
+        : {}),
+    });
+  } catch (err) {
+    if ((err as Error).message.toLowerCase().includes('unique')) {
+      throw conflict('handle is already claimed');
+    }
+    throw err;
+  }
+  return adminProfile(deps.db, mint);
+}
+
+async function verifyIdentityDomain(
+  deps: AgentIdentityProfileDeps,
+  mint: string,
+  rawDomain: string,
+): Promise<{ domain: string; status: 'verified' }> {
+  const agent = await getPlatformAgent(deps.db, mint);
+  if (!agent) throw notFound('agent not found');
+  const domain = normalizeDomain(rawDomain);
+  const result = await verifyDomainWellKnown({
+    fetchImpl: deps.fetchImpl ?? globalThis.fetch,
+    domain,
+    mint,
+    network: agent.network,
+  });
+  if (!result.ok) {
+    await upsertAgentIdentityDomain(deps.db, {
+      domain,
+      agentMint: mint,
+      network: agent.network,
+      status: 'failed',
+      lastError: result.error,
+    });
+    throw invalidRequest(result.error);
+  }
+  await upsertAgentIdentityDomain(deps.db, {
+    domain,
+    agentMint: mint,
+    network: agent.network,
+    status: 'verified',
+    verifiedAt: new Date().toISOString(),
+    lastError: null,
+  });
+  return { domain, status: 'verified' };
+}
+
+async function createIdentityClaim(
+  deps: AgentIdentityProfileDeps,
+  mint: string,
+  body: z.infer<typeof ClaimCreateBodySchema>,
+): Promise<z.infer<typeof ClaimSchema>> {
+  const agent = await getPlatformAgent(deps.db, mint);
+  if (!agent) throw notFound('agent not found');
+  const claim = await createAgentIdentityClaim(deps.db, {
+    agentMint: mint,
+    network: agent.network,
+    issuer: body.issuer,
+    subjectMint: body.subject_mint ?? mint,
+    type: body.type,
+    value: body.value,
+    evidenceUrl: body.evidence_url ?? null,
+    signature: body.signature,
+    visibility: body.visibility,
+    expiresAt: body.expires_at ?? null,
+  });
+  return claimToWire(claim);
+}
+
+async function revokeIdentityClaim(deps: AgentIdentityProfileDeps, mint: string, id: string) {
+  const claim = await getAgentIdentityClaim(deps.db, id);
+  if (!claim || claim.agentMint !== mint) throw notFound('claim not found');
+  await revokeAgentIdentityClaim(deps.db, id);
+  return { ok: true as const };
+}
+
+async function listIdentityDisclosureGrants(deps: AgentIdentityProfileDeps, mint: string) {
+  const agent = await getPlatformAgent(deps.db, mint);
+  if (!agent) throw notFound('agent not found');
+  const items = await listIdentityDisclosures(deps.db, mint);
+  return { items: items.map(grantToWire) };
+}
+
+async function createIdentityDisclosureGrant(
+  deps: AgentIdentityProfileDeps,
+  mint: string,
+  body: z.infer<typeof DisclosureCreateBodySchema>,
+) {
+  const agent = await getPlatformAgent(deps.db, mint);
+  if (!agent) throw notFound('agent not found');
+  const token = newDisclosureToken();
+  const grant = await createIdentityDisclosure(deps.db, {
+    agentMint: mint,
+    network: agent.network,
+    tokenHash: hashDisclosureToken(token),
+    resources: body.resources,
+    expiresAt: disclosureExpiry(body.expires_at),
+  });
+  return {
+    ...grantToWire(grant),
+    token,
+    url: `${deps.config.publicOrigin.replace(/\/+$/, '')}/v1/identity/disclosures/${token}`,
+  };
+}
+
+async function revokeIdentityDisclosureGrant(
+  deps: AgentIdentityProfileDeps,
+  mint: string,
+  id: string,
+) {
+  const grant = await getIdentityDisclosure(deps.db, id);
+  if (!grant || grant.agentMint !== mint) throw notFound('disclosure not found');
+  await revokeIdentityDisclosure(deps.db, id);
+  return { ok: true as const };
+}
+
+export function buildAgentIdentityProfileRoutes(
+  deps: AgentIdentityProfileDeps,
+): OpenAPIHono<{ Variables: OnChainAuthVariables }> {
+  const app = new OpenAPIHono<{ Variables: OnChainAuthVariables }>();
   app.use('/v1/platform/*', adminAuth(deps.config.adminSecret));
+  app.use('/v1/agents/:mint/identity', onChainAuth(deps));
+  app.use('/v1/agents/:mint/identity/*', onChainAuth(deps));
 
   app.openapi(
     createRoute({
@@ -985,6 +1173,264 @@ export function buildAgentIdentityProfileRoutes(deps: AgentIdentityProfileDeps):
       },
     }),
     async (c) => c.json(await readDisclosure(deps.db, c.req.valid('param').token), 200),
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/v1/agents/{mint}/identity',
+      tags: ['agents', 'identity'],
+      summary: 'Fetch the editable identity profile for the signing agent.',
+      request: { params: z.object({ mint: PubkeySchema }) },
+      responses: {
+        200: {
+          description: 'ok',
+          content: { 'application/json': { schema: PublicIdentityProfileSchema } },
+        },
+        401: {
+          description: 'On-chain auth failed.',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+        404: {
+          description: 'not found',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const { mint } = c.req.valid('param');
+      await assertSignedIdentityAgent(deps, mint, c.var.agent_mint);
+      return c.json(await adminProfile(deps.db, mint), 200);
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'put',
+      path: '/v1/agents/{mint}/identity',
+      tags: ['agents', 'identity'],
+      summary: 'Update handle, visibility, and capability cards for the signing agent.',
+      request: {
+        params: z.object({ mint: PubkeySchema }),
+        body: {
+          required: true,
+          content: { 'application/json': { schema: IdentityProfileUpdateBodySchema } },
+        },
+      },
+      responses: {
+        200: {
+          description: 'ok',
+          content: { 'application/json': { schema: PublicIdentityProfileSchema } },
+        },
+        401: {
+          description: 'On-chain auth failed.',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+        404: {
+          description: 'not found',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+        409: {
+          description: 'conflict',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const { mint } = c.req.valid('param');
+      await assertSignedIdentityAgent(deps, mint, c.var.agent_mint);
+      return c.json(await updateIdentityProfile(deps, mint, c.req.valid('json')), 200);
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/v1/agents/{mint}/identity/domains/verify',
+      tags: ['agents', 'identity'],
+      summary: 'Verify a domain for the signing agent via /.well-known/leash-agent.json.',
+      request: {
+        params: z.object({ mint: PubkeySchema }),
+        body: {
+          required: true,
+          content: { 'application/json': { schema: DomainVerifyBodySchema } },
+        },
+      },
+      responses: {
+        200: {
+          description: 'ok',
+          content: {
+            'application/json': {
+              schema: z.object({ domain: z.string(), status: z.literal('verified') }),
+            },
+          },
+        },
+        401: {
+          description: 'On-chain auth failed.',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+        422: {
+          description: 'invalid',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const { mint } = c.req.valid('param');
+      await assertSignedIdentityAgent(deps, mint, c.var.agent_mint);
+      const body = c.req.valid('json');
+      return c.json(await verifyIdentityDomain(deps, mint, body.domain), 200);
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/v1/agents/{mint}/identity/claims',
+      tags: ['agents', 'identity'],
+      summary: 'Attach a signed claim to the signing agent identity.',
+      request: {
+        params: z.object({ mint: PubkeySchema }),
+        body: {
+          required: true,
+          content: { 'application/json': { schema: ClaimCreateBodySchema } },
+        },
+      },
+      responses: {
+        200: { description: 'ok', content: { 'application/json': { schema: ClaimSchema } } },
+        401: {
+          description: 'On-chain auth failed.',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+        404: {
+          description: 'not found',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const { mint } = c.req.valid('param');
+      await assertSignedIdentityAgent(deps, mint, c.var.agent_mint);
+      return c.json(await createIdentityClaim(deps, mint, c.req.valid('json')), 200);
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: '/v1/agents/{mint}/identity/claims/{id}',
+      tags: ['agents', 'identity'],
+      summary: 'Revoke a claim attached to the signing agent identity.',
+      request: { params: z.object({ mint: PubkeySchema, id: z.string().min(1) }) },
+      responses: {
+        200: {
+          description: 'ok',
+          content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
+        },
+        401: {
+          description: 'On-chain auth failed.',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+        404: {
+          description: 'not found',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const { mint, id } = c.req.valid('param');
+      await assertSignedIdentityAgent(deps, mint, c.var.agent_mint);
+      return c.json(await revokeIdentityClaim(deps, mint, id), 200);
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'get',
+      path: '/v1/agents/{mint}/identity/disclosures',
+      tags: ['agents', 'identity'],
+      summary: 'List selective-disclosure grants for the signing agent identity.',
+      request: { params: z.object({ mint: PubkeySchema }) },
+      responses: {
+        200: {
+          description: 'ok',
+          content: {
+            'application/json': {
+              schema: z.object({ items: z.array(DisclosureGrantSchema) }),
+            },
+          },
+        },
+        401: {
+          description: 'On-chain auth failed.',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const { mint } = c.req.valid('param');
+      await assertSignedIdentityAgent(deps, mint, c.var.agent_mint);
+      return c.json(await listIdentityDisclosureGrants(deps, mint), 200);
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'post',
+      path: '/v1/agents/{mint}/identity/disclosures',
+      tags: ['agents', 'identity'],
+      summary: 'Create a shareable selective-disclosure grant for the signing agent.',
+      request: {
+        params: z.object({ mint: PubkeySchema }),
+        body: {
+          required: true,
+          content: { 'application/json': { schema: DisclosureCreateBodySchema } },
+        },
+      },
+      responses: {
+        200: {
+          description: 'ok',
+          content: { 'application/json': { schema: CreateDisclosureResponseSchema } },
+        },
+        401: {
+          description: 'On-chain auth failed.',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const { mint } = c.req.valid('param');
+      await assertSignedIdentityAgent(deps, mint, c.var.agent_mint);
+      return c.json(await createIdentityDisclosureGrant(deps, mint, c.req.valid('json')), 200);
+    },
+  );
+
+  app.openapi(
+    createRoute({
+      method: 'delete',
+      path: '/v1/agents/{mint}/identity/disclosures/{id}',
+      tags: ['agents', 'identity'],
+      summary: 'Revoke a selective-disclosure grant for the signing agent.',
+      request: { params: z.object({ mint: PubkeySchema, id: z.string().min(1) }) },
+      responses: {
+        200: {
+          description: 'ok',
+          content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
+        },
+        401: {
+          description: 'On-chain auth failed.',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+        404: {
+          description: 'not found',
+          content: { 'application/json': { schema: ApiErrorSchema } },
+        },
+      },
+    }),
+    async (c) => {
+      const { mint, id } = c.req.valid('param');
+      await assertSignedIdentityAgent(deps, mint, c.var.agent_mint);
+      return c.json(await revokeIdentityDisclosureGrant(deps, mint, id), 200);
+    },
   );
 
   app.openapi(

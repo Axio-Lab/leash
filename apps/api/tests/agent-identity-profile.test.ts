@@ -1,7 +1,12 @@
 import { beforeAll, describe, expect, it, afterEach } from 'vitest';
+import { generateSigner } from '@metaplex-foundation/umi';
+import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
+import { base58 } from '@metaplex-foundation/umi/serializers';
 
 import { createTestRig } from './helpers.js';
+import { buildSigningEnvelope } from '../src/auth/onchain.js';
 import { createPreparedEvent, markConfirmed } from '../src/storage/events.js';
+import { createPlatformAgent } from '../src/storage/platform-agents.js';
 
 const ADMIN_SECRET = 'a'.repeat(48);
 const ENC_KEY = 'a'.repeat(64);
@@ -14,6 +19,18 @@ const DELEGATE = 'B8A4PH5D7nPTDK1chrCHWRwszpxxi46HZ1sZ626iYWAw';
 const SOURCE_ATA = '8UYg8hiUkQUVQLzEnpxUktEowJrdGKYEwLZQCv5SpDpk';
 
 const realFetch = globalThis.fetch;
+const umi = createUmi('https://invalid');
+
+type TestSigner = {
+  pubkey: string;
+  secretKey: Uint8Array;
+};
+
+function freshSigner(): TestSigner {
+  const signer = generateSigner(umi);
+  const kp = umi.eddsa.createKeypairFromSecretKey(signer.secretKey);
+  return { pubkey: kp.publicKey.toString(), secretKey: kp.secretKey };
+}
 
 beforeAll(() => {
   process.env.ENCRYPTION_KEY = ENC_KEY;
@@ -59,7 +76,257 @@ async function createAgent() {
   return rig;
 }
 
+async function insertSignedAgent() {
+  const rig = await createTestRig({ adminSecret: ADMIN_SECRET });
+  const executive = freshSigner();
+  const mint = freshSigner().pubkey;
+  await createPlatformAgent(rig.db, {
+    mint,
+    ownerPrivyId: `privy:${mint.slice(0, 8)}`,
+    ownerWallet: executive.pubkey,
+    name: 'Signed Identity Demo',
+    description: null,
+    imageUrl: null,
+    services: [],
+    network: 'solana-devnet',
+    model: 'test',
+    systemPrompt: 'test',
+    capabilities: [],
+    budget: { perAction: '0.01', perTask: '0.10', perDay: '1.00' },
+    treasury: freshSigner().pubkey,
+    serviceKeyId: freshSigner().pubkey,
+    encryptedLlmKey: 'test',
+    llmProvider: 'platform',
+  });
+  return { rig, executive, mint };
+}
+
+async function signedFetch(args: {
+  rig: Awaited<ReturnType<typeof createTestRig>>;
+  mint: string;
+  executive: TestSigner;
+  path: string;
+  method?: string;
+  body?: unknown;
+}): Promise<Response> {
+  const method = args.method ?? 'GET';
+  const body = args.body === undefined ? undefined : JSON.stringify(args.body);
+  const timestamp = new Date().toISOString();
+  const envelope = buildSigningEnvelope({
+    method,
+    pathWithQuery: args.path,
+    timestamp,
+    body,
+    agentMint: args.mint,
+  });
+  const keypair = umi.eddsa.createKeypairFromSecretKey(args.executive.secretKey);
+  const sig = umi.eddsa.sign(envelope, keypair);
+  return args.rig.app.fetch(
+    new Request(`http://test.local${args.path}`, {
+      method,
+      headers: {
+        'content-type': 'application/json',
+        'x-leash-agent': args.mint,
+        'x-leash-timestamp': timestamp,
+        'x-leash-sig': base58.deserialize(sig)[0],
+      },
+      body,
+    }),
+  );
+}
+
 describe('agent identity profile endpoints', () => {
+  it('lets a signed agent manage its editable identity profile', async () => {
+    const { rig, executive, mint } = await insertSignedAgent();
+    const otherMint = freshSigner().pubkey;
+
+    const mismatch = await signedFetch({
+      rig,
+      mint,
+      executive,
+      path: `/v1/agents/${otherMint}/identity`,
+    });
+    expect(mismatch.status).toBe(401);
+
+    const update = await signedFetch({
+      rig,
+      mint,
+      executive,
+      path: `/v1/agents/${mint}/identity`,
+      method: 'PUT',
+      body: {
+        handle: '@signed-demo',
+        capability_cards: [
+          {
+            kind: 'custom',
+            title: 'Public calculator',
+            source: 'manual',
+            slug: 'signed/calculator',
+            protocols: ['x402'],
+            visibility: 'public',
+          },
+          {
+            kind: 'data_source',
+            title: 'Private CRM',
+            source: 'connection',
+            visibility: 'private',
+          },
+        ],
+      },
+    });
+    expect(update.status).toBe(200);
+    const updateBody = (await update.json()) as {
+      handle: string;
+      capability_cards: Array<{ id: string; title: string; visibility: string }>;
+    };
+    expect(updateBody.handle).toBe('signed-demo');
+    expect(updateBody.capability_cards).toHaveLength(2);
+    const privateCardId = updateBody.capability_cards.find(
+      (card) => card.visibility === 'private',
+    )!.id;
+
+    const editable = await signedFetch({
+      rig,
+      mint,
+      executive,
+      path: `/v1/agents/${mint}/identity`,
+    });
+    expect(editable.status).toBe(200);
+    const editableBody = (await editable.json()) as { capability_cards: unknown[] };
+    expect(editableBody.capability_cards).toHaveLength(2);
+
+    const publicResolve = await rig.app.fetch(
+      new Request('http://test.local/v1/identity/resolve?handle=signed-demo'),
+    );
+    expect(publicResolve.status).toBe(200);
+    const publicBody = (await publicResolve.json()) as {
+      mint: string;
+      capability_cards: Array<{ title: string }>;
+    };
+    expect(publicBody.mint).toBe(mint);
+    expect(publicBody.capability_cards.map((card) => card.title)).toEqual(['Public calculator']);
+
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      expect(url).toBe('https://signed.example/.well-known/leash-agent.json');
+      return new Response(JSON.stringify({ mint, network: 'solana-devnet' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as typeof globalThis.fetch;
+
+    const domain = await signedFetch({
+      rig,
+      mint,
+      executive,
+      path: `/v1/agents/${mint}/identity/domains/verify`,
+      method: 'POST',
+      body: { domain: 'signed.example' },
+    });
+    expect(domain.status).toBe(200);
+
+    const publicClaim = await signedFetch({
+      rig,
+      mint,
+      executive,
+      path: `/v1/agents/${mint}/identity/claims`,
+      method: 'POST',
+      body: {
+        issuer: 'Signed Issuer',
+        type: 'verified_builder',
+        value: 'true',
+        signature: 'sig_1234567890123456',
+      },
+    });
+    expect(publicClaim.status).toBe(200);
+    const publicClaimBody = (await publicClaim.json()) as { id: string };
+
+    const privateClaim = await signedFetch({
+      rig,
+      mint,
+      executive,
+      path: `/v1/agents/${mint}/identity/claims`,
+      method: 'POST',
+      body: {
+        issuer: 'Internal',
+        type: 'private_note',
+        value: 'hidden',
+        visibility: 'private',
+        signature: 'sig_1234567890123456',
+      },
+    });
+    expect(privateClaim.status).toBe(200);
+    const privateClaimBody = (await privateClaim.json()) as { id: string };
+
+    const disclosure = await signedFetch({
+      rig,
+      mint,
+      executive,
+      path: `/v1/agents/${mint}/identity/disclosures`,
+      method: 'POST',
+      body: {
+        resources: [
+          { kind: 'capability_card', id: privateCardId },
+          { kind: 'claim', id: privateClaimBody.id },
+        ],
+      },
+    });
+    expect(disclosure.status).toBe(200);
+    const disclosureBody = (await disclosure.json()) as { id: string; token: string; url: string };
+    expect(disclosureBody.url).toContain(`/v1/identity/disclosures/${disclosureBody.token}`);
+
+    const disclosureList = await signedFetch({
+      rig,
+      mint,
+      executive,
+      path: `/v1/agents/${mint}/identity/disclosures`,
+    });
+    expect(disclosureList.status).toBe(200);
+    const disclosureListBody = (await disclosureList.json()) as { items: unknown[] };
+    expect(disclosureListBody.items).toHaveLength(1);
+
+    const readDisclosure = await rig.app.fetch(
+      new Request(`http://test.local/v1/identity/disclosures/${disclosureBody.token}`),
+    );
+    expect(readDisclosure.status).toBe(200);
+    const readDisclosureBody = (await readDisclosure.json()) as {
+      resources: { capability_cards: unknown[]; claims: unknown[] };
+    };
+    expect(readDisclosureBody.resources.capability_cards).toHaveLength(1);
+    expect(readDisclosureBody.resources.claims).toHaveLength(1);
+
+    const revokeClaim = await signedFetch({
+      rig,
+      mint,
+      executive,
+      path: `/v1/agents/${mint}/identity/claims/${publicClaimBody.id}`,
+      method: 'DELETE',
+    });
+    expect(revokeClaim.status).toBe(200);
+
+    const afterClaimRevoke = await rig.app.fetch(
+      new Request(`http://test.local/v1/identity/${mint}`),
+    );
+    const afterClaimRevokeBody = (await afterClaimRevoke.json()) as {
+      claims: Array<{ id: string }>;
+    };
+    expect(afterClaimRevokeBody.claims).toEqual([]);
+
+    const revokeDisclosure = await signedFetch({
+      rig,
+      mint,
+      executive,
+      path: `/v1/agents/${mint}/identity/disclosures/${disclosureBody.id}`,
+      method: 'DELETE',
+    });
+    expect(revokeDisclosure.status).toBe(200);
+
+    const afterDisclosureRevoke = await rig.app.fetch(
+      new Request(`http://test.local/v1/identity/disclosures/${disclosureBody.token}`),
+    );
+    expect(afterDisclosureRevoke.status).toBe(404);
+  });
+
   it('resolves handles and hides private capability cards from public profiles', async () => {
     const rig = await createAgent();
     const update = await rig.app.fetch(
