@@ -97,6 +97,8 @@ export default async function AgentPage({ params }: Props) {
     crossNetwork = await probeAgentOnOtherNetwork(network, mint);
   }
 
+  const identity = identityRes.ok ? identityRes.data : null;
+
   return (
     <div className="space-y-8">
       {crossNetwork?.foundOnOther ? (
@@ -114,6 +116,16 @@ export default async function AgentPage({ params }: Props) {
             Agent identity · {networkToSlug(network)}
           </span>
         </div>
+        {identity ? (
+          <div className="space-y-1">
+            <p className="text-lg font-semibold tracking-tight text-[--color-fg]">
+              {identity.name}
+            </p>
+            {identity.handle ? (
+              <p className="font-mono text-sm text-[--color-brand-strong]">@{identity.handle}</p>
+            ) : null}
+          </div>
+        ) : null}
         <h1 className="break-all font-mono text-xl tracking-tight text-[--color-fg] sm:text-2xl">
           {mint}
         </h1>
@@ -155,7 +167,7 @@ export default async function AgentPage({ params }: Props) {
         ) : null}
       </header>
 
-      {identityRes.ok && identityRes.data ? <IdentityProfile data={identityRes.data} /> : null}
+      {identity ? <IdentityProfile data={identity} /> : null}
 
       <section className="space-y-3">
         <h2 className="inline-flex items-center gap-2 text-lg font-semibold tracking-tight">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveSearch, searchHitToHref } from '../lib/search.js';
+import { normalizeHandleSearch, resolveSearch, searchHitToHref } from '../lib/search.js';
 
 describe('resolveSearch', () => {
   it('routes a 64-char hex string to a receipt', () => {
@@ -31,6 +31,13 @@ describe('resolveSearch', () => {
     const hit = resolveSearch('hello world');
     expect(hit.kind).toBe('unknown');
     expect(searchHitToHref(hit)).toBe('/search?q=hello%20world');
+  });
+
+  it('normalizes handle-shaped search input for the server lookup', () => {
+    expect(normalizeHandleSearch('@Payce-Demo')).toBe('payce-demo');
+    expect(normalizeHandleSearch('agent_1')).toBe('agent_1');
+    expect(normalizeHandleSearch('hello world')).toBeNull();
+    expect(normalizeHandleSearch('ab')).toBeNull();
   });
 
   it('returns unknown for empty input', () => {

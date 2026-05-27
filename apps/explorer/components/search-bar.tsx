@@ -54,7 +54,7 @@ export function SearchBar({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
           name="q"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="Search address, tx signature, receipt hash, or event id"
+          placeholder="Search handle, address, tx signature, receipt hash, or event id"
           className={inputCls}
           autoComplete="off"
           spellCheck={false}

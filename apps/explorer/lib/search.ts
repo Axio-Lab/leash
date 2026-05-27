@@ -16,6 +16,7 @@ const BASE58_PUBKEY = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const BASE58_TX = /^[1-9A-HJ-NP-Za-km-z]{60,128}$/;
 const HEX_RECEIPT = /^[0-9a-f]{64}$/i;
 const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
+const HANDLE = /^[a-z0-9][a-z0-9_-]*$/;
 
 export type SearchHit =
   | { kind: 'agent'; value: string }
@@ -32,6 +33,13 @@ export function resolveSearch(raw: string): SearchHit {
   if (BASE58_PUBKEY.test(v) && v.length <= 44) return { kind: 'agent', value: v };
   if (BASE58_TX.test(v)) return { kind: 'tx', value: v };
   return { kind: 'unknown', value: v };
+}
+
+export function normalizeHandleSearch(raw: string): string | null {
+  const handle = raw.trim().replace(/^@+/, '').toLowerCase();
+  if (handle.length < 3 || handle.length > 32) return null;
+  if (!HANDLE.test(handle)) return null;
+  return handle;
 }
 
 export function searchHitToHref(hit: SearchHit): string {

@@ -325,6 +325,29 @@ export async function getPublicIdentityProfile(
   });
 }
 
+export async function resolveAgentMintByHandle(
+  network: Network,
+  handle: string,
+): Promise<string | null> {
+  const slug = networkToSlug(network);
+  return withDb(async (db) => {
+    const res = await db.execute({
+      sql: `SELECT a.mint
+              FROM agent_identity_profiles p
+              JOIN agents a
+                ON a.mint = p.agent_mint
+               AND a.network = p.network
+             WHERE p.handle = ?
+               AND p.network = ?
+               AND a.status = 'active'
+             LIMIT 1`,
+      args: [handle, slug],
+    });
+    const row = res.rows[0] as Record<string, unknown> | undefined;
+    return row?.mint == null ? null : String(row.mint);
+  });
+}
+
 export async function getIdentityDisclosureByToken(
   token: string,
 ): Promise<IdentityDisclosureRead | null> {
