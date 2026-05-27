@@ -60,6 +60,30 @@ const echoHost: LeashHost = {
   async verifyIdentity(args) {
     return jsonResult({ kind: 'echo:verify_identity', args });
   },
+  async getIdentityProfile(args) {
+    return jsonResult({ kind: 'echo:get_identity_profile', args });
+  },
+  async updateIdentityProfile(args) {
+    return jsonResult({ kind: 'echo:update_identity_profile', args });
+  },
+  async verifyIdentityDomain(args) {
+    return jsonResult({ kind: 'echo:verify_identity_domain', args });
+  },
+  async createIdentityClaim(args) {
+    return jsonResult({ kind: 'echo:create_identity_claim', args });
+  },
+  async revokeIdentityClaim(args) {
+    return jsonResult({ kind: 'echo:revoke_identity_claim', args });
+  },
+  async listIdentityDisclosures(args) {
+    return jsonResult({ kind: 'echo:list_identity_disclosures', args });
+  },
+  async createIdentityDisclosure(args) {
+    return jsonResult({ kind: 'echo:create_identity_disclosure', args });
+  },
+  async revokeIdentityDisclosure(args) {
+    return jsonResult({ kind: 'echo:revoke_identity_disclosure', args });
+  },
   async paySkillsProvider(args) {
     return jsonResult({ kind: 'echo:pay_skills_provider', args });
   },
@@ -85,13 +109,17 @@ describe('LEASH_TOOLS', () => {
     expect(LEASH_TOOLS.map((t) => t.name)).toEqual([
       'leash_check_treasury_balance',
       'leash_create_agent_api_key',
+      'leash_create_identity_claim',
+      'leash_create_identity_disclosure',
       'leash_create_payment_link',
       'leash_daily_transactions',
       'leash_discover',
       'leash_get_identity',
+      'leash_get_identity_profile',
       'leash_get_receipt',
       'leash_get_spend_limit',
       'leash_list_agent_api_keys',
+      'leash_list_identity_disclosures',
       'leash_pay_payment_link',
       'leash_pay_skills_endpoints',
       'leash_receipts',
@@ -99,9 +127,13 @@ describe('LEASH_TOOLS', () => {
       'leash_reputation',
       'leash_resolve_identity',
       'leash_revoke_agent_api_key',
+      'leash_revoke_identity_claim',
+      'leash_revoke_identity_disclosure',
       'leash_set_spend_limit',
       'leash_transaction_history',
+      'leash_update_identity_profile',
       'leash_verify_identity',
+      'leash_verify_identity_domain',
       'leash_withdraw_treasury',
     ]);
   });
@@ -155,6 +187,53 @@ describe('LEASH_TOOLS', () => {
     expect(JSON.parse(revokeResult.content[0]!.text)).toEqual({
       kind: 'echo:revoke_agent_api_key',
       args: { id: 'key_123' },
+    });
+  });
+
+  it('identity profile tools route to the host implementation', async () => {
+    const update = LEASH_TOOLS.find((t) => t.name === 'leash_update_identity_profile')!;
+    const claim = LEASH_TOOLS.find((t) => t.name === 'leash_create_identity_claim')!;
+    const disclosure = LEASH_TOOLS.find((t) => t.name === 'leash_create_identity_disclosure')!;
+
+    const updateResult = await update.handler(
+      {
+        handle: 'demo',
+        capability_cards: [
+          {
+            kind: 'custom',
+            title: 'Demo API',
+            source: 'manual',
+            visibility: 'public',
+          },
+        ],
+      },
+      echoHost,
+    );
+    const claimResult = await claim.handler(
+      {
+        issuer: 'demo',
+        type: 'verified_builder',
+        value: 'true',
+        signature: 'sig_1234567890123456',
+      },
+      echoHost,
+    );
+    const disclosureResult = await disclosure.handler(
+      { resources: [{ kind: 'claim', id: 'claim_1' }] },
+      echoHost,
+    );
+
+    expect(JSON.parse(updateResult.content[0]!.text)).toMatchObject({
+      kind: 'echo:update_identity_profile',
+      args: { handle: 'demo' },
+    });
+    expect(JSON.parse(claimResult.content[0]!.text)).toMatchObject({
+      kind: 'echo:create_identity_claim',
+      args: { type: 'verified_builder' },
+    });
+    expect(JSON.parse(disclosureResult.content[0]!.text)).toMatchObject({
+      kind: 'echo:create_identity_disclosure',
+      args: { resources: [{ kind: 'claim', id: 'claim_1' }] },
     });
   });
 

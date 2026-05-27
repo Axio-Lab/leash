@@ -8,6 +8,8 @@ JavaScript runtime — browsers, Bun, Deno, Node, edge — to:
 - Ask for trust verdicts before agent-to-agent calls (`leash.verifyIdentityDecision`,
   `leash.verifyCapabilitySeller`)
 - Read shareable selective-disclosure links (`leash.readIdentityDisclosure`)
+- Update the active agent's handle, capability cards, claims, domains, and
+  selective disclosures with X-Leash-Sig
 - Vet a counterparty's reputation (`leash.reputation`)
 - Record a client-minted agent on the platform (`leash.recordAgent`)
 - Create/list/revoke agent-owned API keys with X-Leash-Sig
@@ -146,6 +148,34 @@ console.log('STORE ONCE:', createdKey.plaintext);
 
 const keys = await leash.listAgentApiKeys();
 await leash.revokeAgentApiKey(keys.items[0].id);
+
+const updatedProfile = await leash.updateAgentIdentityProfile({
+  handle: 'plexpert',
+  capability_cards: [
+    {
+      kind: 'seller_api',
+      title: 'Tax summary API',
+      source: 'manual',
+      endpoint: 'https://api.plexpert.xyz/tax',
+      protocols: ['x402'],
+      visibility: 'public',
+    },
+  ],
+});
+console.log('identity handle:', updatedProfile.handle);
+
+await leash.verifyAgentDomain('plexpert.xyz');
+
+const claim = await leash.createIdentityClaim({
+  issuer: 'Leash Labs',
+  type: 'verified_builder',
+  value: 'true',
+  signature: 'sig_...',
+});
+const disclosure = await leash.createIdentityDisclosure({
+  resources: [{ kind: 'claim', id: claim.id }],
+});
+console.log('share once:', disclosure.url);
 
 const sub = await leash.createWebhook({
   url: 'https://my-app.example/leash-webhook',

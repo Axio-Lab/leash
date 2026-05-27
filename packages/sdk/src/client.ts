@@ -30,8 +30,14 @@ import type {
   DailyTransactionsResponse,
   DailyTxBucket,
   DiscoverResponse,
+  IdentityClaim,
+  IdentityClaimCreate,
+  IdentityDisclosureCreate,
+  IdentityDisclosureCreateResponse,
+  IdentityDisclosureGrant,
   IdentityCapabilityRequirement,
   IdentityDisclosureRead,
+  IdentityProfileUpdate,
   IdentityVerificationDecision,
   IdentityVerificationDecisionRequest,
   IdentityVerificationThresholds,
@@ -211,6 +217,75 @@ export class LeashClient {
     return this.requestJson<IdentityDisclosureRead>(
       'GET',
       `/v1/identity/disclosures/${encodeURIComponent(token)}`,
+    );
+  }
+
+  // ── active-agent identity profile (X-Leash-Sig auth) ────────────────
+
+  async getAgentIdentityProfile(): Promise<PublicIdentityProfile> {
+    this.requireAgentAuth();
+    return this.requestJson<PublicIdentityProfile>('GET', `/v1/agents/${this.agentMint!}/identity`);
+  }
+
+  async updateAgentIdentityProfile(input: IdentityProfileUpdate): Promise<PublicIdentityProfile> {
+    this.requireAgentAuth();
+    return this.requestJson<PublicIdentityProfile>(
+      'PUT',
+      `/v1/agents/${this.agentMint!}/identity`,
+      input,
+    );
+  }
+
+  async verifyAgentDomain(domain: string): Promise<{ domain: string; status: 'verified' }> {
+    this.requireAgentAuth();
+    return this.requestJson<{ domain: string; status: 'verified' }>(
+      'POST',
+      `/v1/agents/${this.agentMint!}/identity/domains/verify`,
+      { domain },
+    );
+  }
+
+  async createIdentityClaim(input: IdentityClaimCreate): Promise<IdentityClaim> {
+    this.requireAgentAuth();
+    return this.requestJson<IdentityClaim>(
+      'POST',
+      `/v1/agents/${this.agentMint!}/identity/claims`,
+      input,
+    );
+  }
+
+  async revokeIdentityClaim(id: string): Promise<{ ok: true }> {
+    this.requireAgentAuth();
+    return this.requestJson<{ ok: true }>(
+      'DELETE',
+      `/v1/agents/${this.agentMint!}/identity/claims/${encodeURIComponent(id)}`,
+    );
+  }
+
+  async listIdentityDisclosures(): Promise<{ items: IdentityDisclosureGrant[] }> {
+    this.requireAgentAuth();
+    return this.requestJson<{ items: IdentityDisclosureGrant[] }>(
+      'GET',
+      `/v1/agents/${this.agentMint!}/identity/disclosures`,
+    );
+  }
+
+  async createIdentityDisclosure(
+    input: IdentityDisclosureCreate,
+  ): Promise<IdentityDisclosureCreateResponse> {
+    this.requireAgentAuth();
+    return this.requestJson<IdentityDisclosureCreateResponse>(
+      'POST',
+      `/v1/agents/${this.agentMint!}/identity/disclosures`,
+      input,
+    );
+  }
+
+  async revokeIdentityDisclosure(id: string): Promise<{ ok: true }> {
+    this.requireAgentAuth();
+    return this.requestJson<{ ok: true }>(
+      'DELETE',
+      `/v1/agents/${this.agentMint!}/identity/disclosures/${encodeURIComponent(id)}`,
     );
   }
 

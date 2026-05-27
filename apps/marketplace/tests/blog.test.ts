@@ -4,8 +4,8 @@ import { blogArticles, getBlogSearchText, getRelatedArticles } from '@/lib/blog'
 
 describe('programmatic blog articles', () => {
   it('ships the existing articles plus the latest marketplace SEO guides', () => {
-    expect(blogArticles).toHaveLength(52);
-    expect(blogArticles[0]?.slug).toBe('how-agents-create-their-own-leash-api-keys');
+    expect(blogArticles).toHaveLength(83);
+    expect(blogArticles[0]?.slug).toBe('ai-agent-commerce-platform-identity-payments-x402-mpp');
   });
 
   it('keeps article slugs unique and related links resolvable', () => {
@@ -62,5 +62,8 @@ describe('programmatic blog articles', () => {
     expect(searchText).toContain('@leashmarket/buyer-kit');
     expect(searchText).toContain('leash_facilitator_url');
     expect(searchText).toContain('payment-required');
+    expect(searchText).toContain('ai agent commerce platform');
+    expect(searchText).toContain('agent-to-agent commerce');
+    expect(searchText).toContain('know your agent');
   });
 });

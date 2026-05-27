@@ -56,6 +56,25 @@ export const IdentityCapabilityCardSchema = IdentityCapabilityCardInputSchema.ex
 });
 export type IdentityCapabilityCard = z.infer<typeof IdentityCapabilityCardSchema>;
 
+export const IdentityProfileUpdateSchema = z.object({
+  handle: z.string().nullable().optional(),
+  visibility: z.record(z.unknown()).optional(),
+  capability_cards: z.array(IdentityCapabilityCardInputSchema).optional(),
+});
+export type IdentityProfileUpdate = z.input<typeof IdentityProfileUpdateSchema>;
+
+export const IdentityClaimCreateSchema = z.object({
+  issuer: z.string().min(1).max(200),
+  subject_mint: z.string().min(1).optional(),
+  type: z.string().min(1).max(120),
+  value: z.string().min(1).max(2000),
+  evidence_url: z.string().url().max(800).optional().nullable(),
+  signature: z.string().min(16).max(5000),
+  visibility: IdentityVisibilitySchema.default('public'),
+  expires_at: z.string().optional().nullable(),
+});
+export type IdentityClaimCreate = z.input<typeof IdentityClaimCreateSchema>;
+
 export const IdentityClaimSchema = z.object({
   id: z.string(),
   issuer: z.string(),
@@ -213,6 +232,12 @@ export const IdentityDisclosureResourceSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 export type IdentityDisclosureResource = z.infer<typeof IdentityDisclosureResourceSchema>;
+
+export const IdentityDisclosureCreateSchema = z.object({
+  resources: z.array(IdentityDisclosureResourceSchema).min(1).max(50),
+  expires_at: z.string().optional().nullable(),
+});
+export type IdentityDisclosureCreate = z.input<typeof IdentityDisclosureCreateSchema>;
 
 export const IdentityDisclosureGrantSchema = z.object({
   id: z.string(),

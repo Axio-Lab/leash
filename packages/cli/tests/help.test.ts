@@ -53,6 +53,10 @@ describe('leash CLI', () => {
     expect(stdout).toContain('api-key create');
     expect(stdout).toContain('treasury balance');
     expect(stdout).toContain('discover');
+    expect(stdout).toContain('identity profile');
+    expect(stdout).toContain('identity update');
+    expect(stdout).toContain('identity claim add');
+    expect(stdout).toContain('identity disclosure create');
     expect(stdout).toContain('reputation');
     expect(stdout).toContain('sell create-link');
     expect(stdout).toContain('pay <link-url>');
@@ -75,6 +79,18 @@ describe('leash CLI', () => {
     const { code, stderr } = runCli(['api-key', 'create']);
     expect(code).toBe(2);
     expect(stderr).toContain('usage: leash api-key create');
+  });
+
+  it('identity update without fields prints usage with code 2', () => {
+    const { code, stderr } = runCli(['identity', 'update']);
+    expect(code).toBe(2);
+    expect(stderr).toContain('usage: leash identity update');
+  });
+
+  it('identity claim add requires a JSON file', () => {
+    const { code, stderr } = runCli(['identity', 'claim', 'add']);
+    expect(code).toBe(2);
+    expect(stderr).toContain('usage: leash identity claim add');
   });
 
   it('rejects unknown commands with code 2', () => {

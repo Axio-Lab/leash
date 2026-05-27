@@ -337,6 +337,133 @@ describe('LeashClient (X-Leash-Sig auth)', () => {
     expect(calls[1]!.headers['x-leash-agent']).toBe(mint);
   });
 
+  it('identity profile methods target signed agent identity routes', async () => {
+    const exec = freshExecutive();
+    const mint = fakeMint();
+    const profile = {
+      mint,
+      network: 'solana-devnet',
+      handle: 'sdk-demo',
+      name: 'SDK Demo',
+      description: null,
+      image_url: null,
+      treasury: fakeMint(),
+      services: [],
+      verified_domains: [],
+      capability_cards: [],
+      claims: [],
+      operator_history: [],
+      reputation: { settled_calls: 0, denied_calls: 0, rating: 0 },
+    };
+    const claim = {
+      id: 'claim_1',
+      issuer: 'sdk',
+      subject_mint: mint,
+      type: 'verified_builder',
+      value: 'true',
+      evidence_url: null,
+      signature: 'sig_1234567890123456',
+      visibility: 'public',
+      expires_at: null,
+      revoked_at: null,
+      created_at: '2026-05-27T00:00:00.000Z',
+    };
+    const disclosure = {
+      id: 'disc_1',
+      agent_mint: mint,
+      network: 'solana-devnet',
+      resources: [{ kind: 'claim' as const, id: claim.id }],
+      expires_at: '2026-06-03T00:00:00.000Z',
+      revoked_at: null,
+      created_at: '2026-05-27T00:00:00.000Z',
+      token: 'tok_123',
+      url: 'https://api.test/v1/identity/disclosures/tok_123',
+    };
+    const { fetch, calls } = makeFetch((req) => {
+      if (req.url.endsWith('/identity') && req.method === 'GET') {
+        return { status: 200, body: profile };
+      }
+      if (req.url.endsWith('/identity') && req.method === 'PUT') {
+        return {
+          status: 200,
+          body: { ...profile, handle: JSON.parse(req.body!).handle },
+        };
+      }
+      if (req.url.endsWith('/domains/verify')) {
+        return { status: 200, body: { domain: JSON.parse(req.body!).domain, status: 'verified' } };
+      }
+      if (req.url.endsWith('/claims') && req.method === 'POST') {
+        return { status: 200, body: claim };
+      }
+      if (req.url.includes('/claims/') && req.method === 'DELETE') {
+        return { status: 200, body: { ok: true } };
+      }
+      if (req.url.endsWith('/disclosures') && req.method === 'GET') {
+        return { status: 200, body: { items: [] } };
+      }
+      if (req.url.endsWith('/disclosures') && req.method === 'POST') {
+        return { status: 200, body: disclosure };
+      }
+      if (req.url.includes('/disclosures/') && req.method === 'DELETE') {
+        return { status: 200, body: { ok: true } };
+      }
+      return { status: 404, body: { message: 'nope' } };
+    });
+
+    const client = new LeashClient({
+      baseUrl: 'https://api.test',
+      agentMint: mint,
+      executiveSecretBase58: exec.secretBase58,
+      fetchImpl: fetch,
+    });
+
+    await client.getAgentIdentityProfile();
+    await client.updateAgentIdentityProfile({
+      handle: 'sdk-demo',
+      capability_cards: [
+        {
+          kind: 'custom',
+          title: 'SDK demo tool',
+          source: 'manual',
+          visibility: 'public',
+        },
+      ],
+    });
+    await client.verifyAgentDomain('sdk.example');
+    const createdClaim = await client.createIdentityClaim({
+      issuer: 'sdk',
+      type: 'verified_builder',
+      value: 'true',
+      signature: 'sig_1234567890123456',
+    });
+    await client.revokeIdentityClaim(createdClaim.id);
+    await client.listIdentityDisclosures();
+    const createdDisclosure = await client.createIdentityDisclosure({
+      resources: [{ kind: 'claim', id: createdClaim.id }],
+    });
+    await client.revokeIdentityDisclosure(createdDisclosure.id);
+
+    expect(calls.map((call) => [call.method, call.url])).toEqual([
+      ['GET', `https://api.test/v1/agents/${mint}/identity`],
+      ['PUT', `https://api.test/v1/agents/${mint}/identity`],
+      ['POST', `https://api.test/v1/agents/${mint}/identity/domains/verify`],
+      ['POST', `https://api.test/v1/agents/${mint}/identity/claims`],
+      ['DELETE', `https://api.test/v1/agents/${mint}/identity/claims/claim_1`],
+      ['GET', `https://api.test/v1/agents/${mint}/identity/disclosures`],
+      ['POST', `https://api.test/v1/agents/${mint}/identity/disclosures`],
+      ['DELETE', `https://api.test/v1/agents/${mint}/identity/disclosures/disc_1`],
+    ]);
+    for (const call of calls) {
+      expect(call.headers['x-leash-agent']).toBe(mint);
+      expect(call.headers.authorization).toBeUndefined();
+    }
+    expect(JSON.parse(calls[1]!.body!)).toMatchObject({
+      handle: 'sdk-demo',
+      capability_cards: [{ title: 'SDK demo tool' }],
+    });
+    expect(JSON.parse(calls[2]!.body!)).toEqual({ domain: 'sdk.example' });
+  });
+
   it('createWebhook() stamps a fresh signature whose envelope matches', async () => {
     const exec = freshExecutive();
     const mint = fakeMint();

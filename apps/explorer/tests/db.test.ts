@@ -20,7 +20,9 @@ const {
   listReceiptsMock,
   getReceiptByHashMock,
   getIndexerStatusMock,
+  listOperatorHistoryMock,
   runMigrationsMock,
+  dbExecuteMock,
 } = vi.hoisted(() => ({
   listEventsMock: vi.fn(),
   getEventByIdMock: vi.fn(),
@@ -28,7 +30,9 @@ const {
   listReceiptsMock: vi.fn(),
   getReceiptByHashMock: vi.fn(),
   getIndexerStatusMock: vi.fn(),
+  listOperatorHistoryMock: vi.fn(),
   runMigrationsMock: vi.fn().mockResolvedValue(undefined),
+  dbExecuteMock: vi.fn(),
 }));
 
 vi.mock('@leashmarket/api', () => ({
@@ -38,6 +42,7 @@ vi.mock('@leashmarket/api', () => ({
   listReceipts: listReceiptsMock,
   getReceiptByHash: getReceiptByHashMock,
   getIndexerStatus: getIndexerStatusMock,
+  listOperatorHistory: listOperatorHistoryMock,
   runMigrations: runMigrationsMock,
 }));
 
@@ -45,7 +50,7 @@ vi.mock('@leashmarket/api', () => ({
 // stub it so the tests don't actually touch a SQLite file or libsql
 // server.
 vi.mock('@libsql/client', () => ({
-  createClient: vi.fn(() => ({ execute: vi.fn() })),
+  createClient: vi.fn(() => ({ execute: dbExecuteMock })),
 }));
 
 async function importDb() {
@@ -203,6 +208,35 @@ describe('getReceiptByHash', () => {
     const { getReceiptByHash } = await importDb();
     const r = await getReceiptByHash('devnet', 'h');
     expect(r).toEqual(inner);
+  });
+});
+
+describe('resolveAgentMintByHandle', () => {
+  beforeEach(() => {
+    process.env.LEASH_DB_URL = 'file::memory:';
+    dbExecuteMock.mockReset();
+    runMigrationsMock.mockReset();
+    runMigrationsMock.mockResolvedValue(undefined);
+  });
+
+  it('looks up an active agent mint by normalized handle on the active network', async () => {
+    dbExecuteMock.mockResolvedValueOnce({ rows: [{ mint: 'AgentMint111' }] });
+    const { resolveAgentMintByHandle } = await importDb();
+
+    const mint = await resolveAgentMintByHandle('devnet', 'payce-demo');
+
+    expect(mint).toBe('AgentMint111');
+    expect(dbExecuteMock).toHaveBeenCalledWith({
+      sql: expect.stringContaining('agent_identity_profiles'),
+      args: ['payce-demo', 'solana-devnet'],
+    });
+  });
+
+  it('returns null when the handle has no active profile on that network', async () => {
+    dbExecuteMock.mockResolvedValueOnce({ rows: [] });
+    const { resolveAgentMintByHandle } = await importDb();
+
+    await expect(resolveAgentMintByHandle('mainnet', 'payce-demo')).resolves.toBeNull();
   });
 });
 

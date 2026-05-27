@@ -3,7 +3,7 @@
     "access": "public"
   },
   "name": "@leashmarket/mcp-core",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "private": false,
   "type": "module",
   "main": "./dist/index.js",
