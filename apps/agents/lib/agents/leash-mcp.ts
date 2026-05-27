@@ -37,18 +37,26 @@ import {
   probePaymentLink,
   type CheckTreasuryBalanceArgs,
   type CreateAgentApiKeyArgs,
+  type CreateIdentityClaimArgs,
+  type CreateIdentityDisclosureArgs,
   type CreatePaymentLinkArgs,
   type DiscoverArgs,
+  type GetIdentityProfileArgs,
   type IdentitySelectorArgs,
   type IdentityVerifyArgs,
   type LeashHost,
   type LeashTool,
   type LeashToolResult,
+  type ListIdentityDisclosuresArgs,
   type ListAgentApiKeysArgs,
   type PayArgs,
   type PaySkillsProviderArgs,
   type ReputationArgs,
   type RevokeAgentApiKeyArgs,
+  type RevokeIdentityClaimArgs,
+  type RevokeIdentityDisclosureArgs,
+  type UpdateIdentityProfileArgs,
+  type VerifyIdentityDomainArgs,
   type WithdrawArgs,
 } from '@leashmarket/mcp-core';
 import { listPlatformKeys } from '@leashmarket/platform-auth';
@@ -425,6 +433,78 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
       return fetchIdentityVerify({
         apiBaseUrl: env.leashApiUrl,
         query: args,
+      });
+    },
+
+    async getIdentityProfile(_args: GetIdentityProfileArgs): Promise<LeashToolResult> {
+      return jsonResult({
+        kind: 'identity_profile',
+        status: 'manual',
+        message:
+          'The chat UI edits identity profiles through the Profile → Agent page. Use the standalone CLI/MCP/SDK for signed programmatic profile reads.',
+      });
+    },
+
+    async updateIdentityProfile(_args: UpdateIdentityProfileArgs): Promise<LeashToolResult> {
+      return jsonResult({
+        kind: 'identity_profile',
+        status: 'manual',
+        message:
+          'The chat UI does not expose the local executive secret needed for signed identity profile updates. Use Profile → Agent in the UI, or the standalone CLI/MCP/SDK from the agent runtime.',
+      });
+    },
+
+    async verifyIdentityDomain(_args: VerifyIdentityDomainArgs): Promise<LeashToolResult> {
+      return jsonResult({
+        kind: 'identity_domain',
+        status: 'manual',
+        message:
+          'Domain verification is available from Profile → Agent in the UI. Use the standalone CLI/MCP/SDK for signed programmatic domain verification.',
+      });
+    },
+
+    async createIdentityClaim(_args: CreateIdentityClaimArgs): Promise<LeashToolResult> {
+      return jsonResult({
+        kind: 'identity_claim',
+        status: 'manual',
+        message:
+          'Creating signed identity claims requires the local executive secret. Use the standalone CLI/MCP/SDK from the agent runtime.',
+      });
+    },
+
+    async revokeIdentityClaim(_args: RevokeIdentityClaimArgs): Promise<LeashToolResult> {
+      return jsonResult({
+        kind: 'identity_claim',
+        status: 'manual',
+        message:
+          'Revoking signed identity claims requires the local executive secret. Use the standalone CLI/MCP/SDK from the agent runtime.',
+      });
+    },
+
+    async listIdentityDisclosures(_args: ListIdentityDisclosuresArgs): Promise<LeashToolResult> {
+      return jsonResult({
+        kind: 'identity_disclosures',
+        status: 'manual',
+        message:
+          'Selective disclosure management requires signed agent identity access. Use the standalone CLI/MCP/SDK from the agent runtime.',
+      });
+    },
+
+    async createIdentityDisclosure(_args: CreateIdentityDisclosureArgs): Promise<LeashToolResult> {
+      return jsonResult({
+        kind: 'identity_disclosure',
+        status: 'manual',
+        message:
+          'Creating selective disclosure grants requires the local executive secret. Use the standalone CLI/MCP/SDK from the agent runtime.',
+      });
+    },
+
+    async revokeIdentityDisclosure(_args: RevokeIdentityDisclosureArgs): Promise<LeashToolResult> {
+      return jsonResult({
+        kind: 'identity_disclosure',
+        status: 'manual',
+        message:
+          'Revoking selective disclosure grants requires the local executive secret. Use the standalone CLI/MCP/SDK from the agent runtime.',
       });
     },
 
