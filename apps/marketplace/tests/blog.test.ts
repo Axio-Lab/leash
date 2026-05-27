@@ -4,7 +4,7 @@ import { blogArticles, getBlogSearchText, getRelatedArticles } from '@/lib/blog'
 
 describe('programmatic blog articles', () => {
   it('ships the existing articles plus the latest marketplace SEO guides', () => {
-    expect(blogArticles).toHaveLength(70);
+    expect(blogArticles).toHaveLength(82);
     expect(blogArticles[0]?.slug).toBe('know-your-agent-ai-agent-identity');
   });
 
