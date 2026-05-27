@@ -48,10 +48,12 @@
  * return) for piping into `jq`, scripts, etc.
  */
 
-import { HostRef, buildServerFromEnv } from '@leashmarket/mcp';
+import { readFileSync } from 'node:fs';
+
+import { buildServerFromEnv } from '@leashmarket/mcp';
 import type { LeashHost, LeashToolResult } from '@leashmarket/mcp-core';
 
-const VERSION = '0.2.6';
+const VERSION = readPackageVersion();
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -1018,6 +1020,19 @@ function numArg(args: string[], flag: string): number | undefined {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readPackageVersion(): string {
+  try {
+    const raw = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
+    const parsed = JSON.parse(raw) as { version?: unknown };
+    if (typeof parsed.version === 'string' && parsed.version.length > 0) {
+      return parsed.version;
+    }
+  } catch {
+    // Keep `leash -v` useful even in unusual local/dev execution layouts.
+  }
+  return 'unknown';
 }
 
 /**
