@@ -5,7 +5,7 @@ const publishedAt = '2026-05-27';
 export const articlesGenerated20260527: BlogArticle[] = [
   {
     slug: 'why-leash-fits-agentic-wallets-and-agent-to-agent-settlement',
-    title: 'Leash is Know Your Agent infrastructure for paid AI agents',
+    title: 'Why Leash fits agentic wallets and agent-to-agent settlement',
     seoTitle: 'Know Your Agent infrastructure for AI agents: identity, payments, and reputation',
     seoDescription:
       'Learn how Leash helps AI agents prove identity, verify counterparties, hold treasuries, sell services, pay with x402/MPP, and build receipt-backed reputation.',
