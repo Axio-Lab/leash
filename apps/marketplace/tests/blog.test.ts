@@ -4,8 +4,10 @@ import { blogArticles, getBlogSearchText, getRelatedArticles } from '@/lib/blog'
 
 describe('programmatic blog articles', () => {
   it('ships the existing articles plus the latest marketplace SEO guides', () => {
-    expect(blogArticles).toHaveLength(50);
-    expect(blogArticles[0]?.slug).toBe('how-request-bodies-work-for-leash-paywalls');
+    expect(blogArticles).toHaveLength(51);
+    expect(blogArticles[0]?.slug).toBe(
+      'why-leash-fits-agentic-wallets-and-agent-to-agent-settlement',
+    );
   });
 
   it('keeps article slugs unique and related links resolvable', () => {
@@ -38,6 +40,7 @@ describe('programmatic blog articles', () => {
     expect(categories).toEqual(
       new Set([
         'API',
+        'Agent infrastructure',
         'Agents app',
         'Facilitator',
         'Identity layer',
