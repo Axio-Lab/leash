@@ -51,7 +51,7 @@
 import { HostRef, buildServerFromEnv } from '@leashmarket/mcp';
 import type { LeashHost, LeashToolResult } from '@leashmarket/mcp-core';
 
-const VERSION = '0.2.3';
+const VERSION = '0.2.6';
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
