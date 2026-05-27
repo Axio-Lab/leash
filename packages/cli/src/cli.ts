@@ -23,6 +23,9 @@
  *   leash agent show                Print active agent identity.
  *   leash agent export [--out P]    Export agent.json (alias for `leash-mcp export`).
  *   leash agent import <path>       Install agent.json (alias for `leash-mcp import`).
+ *   leash api-key create --label N  Create an agent-scoped API key via X-Leash-Sig.
+ *   leash api-key list              List agent-scoped API keys.
+ *   leash api-key revoke <id>       Revoke an agent-scoped API key.
  *   leash treasury balance          List SOL + USDC/USDG/USDT balances.
  *   leash treasury withdraw …       Owner-driven on-chain withdrawal.
  *   leash discover [-q QUERY] …     Search Leash + pay-skills (public).
@@ -70,6 +73,11 @@ async function main(): Promise<void> {
 
     case 'agent':
       await runAgent(argv.slice(1));
+      return;
+
+    case 'api-key':
+    case 'api-keys':
+      await runApiKey(argv.slice(1));
       return;
 
     case 'treasury':
@@ -246,6 +254,120 @@ async function runAgentShow(args: string[]): Promise<void> {
       `executive_pubkey: ${payload.executive_pubkey}`,
       `treasury:         ${payload.treasury_address}`,
       `network:          ${payload.network}`,
+    ].join('\n');
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// api-key
+// ────────────────────────────────────────────────────────────────────────────
+
+async function runApiKey(args: string[]): Promise<void> {
+  const sub = args[0];
+  switch (sub) {
+    case 'create':
+      await runApiKeyCreate(args.slice(1));
+      return;
+    case 'list':
+      await runApiKeyList(args.slice(1));
+      return;
+    case 'revoke':
+    case 'disable':
+      await runApiKeyRevoke(args.slice(1));
+      return;
+    default:
+      process.stderr.write(
+        'usage: leash api-key {create|list|revoke}\n' +
+          '       leash api-key create --label <name> [--network solana-devnet|solana-mainnet] [--json]\n' +
+          '       leash api-key list [--include-disabled] [--limit N] [--json]\n' +
+          '       leash api-key revoke <id> [--json]\n',
+      );
+      process.exit(2);
+  }
+}
+
+async function runApiKeyCreate(args: string[]): Promise<void> {
+  const { hostRef } = buildServerFromEnv();
+  const json = wantJson(args);
+  const label = optArg(args, '--label') ?? optArg(args, '-l');
+  const network = optArg(args, '--network') as
+    | 'solana-devnet'
+    | 'solana-mainnet'
+    | 'devnet'
+    | 'mainnet'
+    | undefined;
+  if (!label) {
+    process.stderr.write(
+      'usage: leash api-key create --label <name> [--network solana-devnet|solana-mainnet] [--json]\n',
+    );
+    process.exit(2);
+  }
+  if (network) {
+    const normalized =
+      network === 'devnet' ? 'solana-devnet' : network === 'mainnet' ? 'solana-mainnet' : network;
+    if (normalized !== hostRef.network) {
+      process.stderr.write(
+        `configured agent is on ${hostRef.network}; cannot create a ${normalized} key for this agent\n`,
+      );
+      process.exit(2);
+    }
+  }
+
+  const result = await hostRef.createAgentApiKey({ label });
+  printResult(result, json, (payload) => {
+    if (payload.status !== 'ok') return formatStatusError(payload);
+    return [
+      `agent API key created`,
+      `  id:           ${payload.key.id}`,
+      `  label:        ${payload.key.label}`,
+      `  network:      ${payload.key.network}`,
+      `  owner_wallet: ${payload.key.owner_wallet}`,
+      `  agent_mint:   ${payload.key.agent_mint}`,
+      `  scope:        ${payload.key.scopes?.join(',') ?? 'agent'}`,
+      `  plaintext:    ${payload.plaintext}`,
+      ``,
+      `Store plaintext now. It is returned only once.`,
+    ].join('\n');
+  });
+}
+
+async function runApiKeyList(args: string[]): Promise<void> {
+  const { hostRef } = buildServerFromEnv();
+  const json = wantJson(args);
+  const limit = numArg(args, '--limit');
+  const result = await hostRef.listAgentApiKeys({
+    ...(args.includes('--include-disabled') ? { include_disabled: true } : {}),
+    ...(limit !== undefined ? { limit } : {}),
+  });
+  printResult(result, json, (payload) => {
+    if (payload.status !== 'ok') return formatStatusError(payload);
+    if (!payload.items?.length) return 'no agent API keys found';
+    const lines = [`${payload.count} agent API key(s):`];
+    for (const key of payload.items) {
+      lines.push(
+        `  ${key.id}  ${key.label}  ${key.prefix}…${key.last4}  ${key.network}  ${key.disabled_at ? 'disabled' : 'active'}`,
+      );
+    }
+    return lines.join('\n');
+  });
+}
+
+async function runApiKeyRevoke(args: string[]): Promise<void> {
+  const { hostRef } = buildServerFromEnv();
+  const json = wantJson(args);
+  const id = args.find((a) => !a.startsWith('-'));
+  if (!id) {
+    process.stderr.write('usage: leash api-key revoke <id> [--json]\n');
+    process.exit(2);
+  }
+  const result = await hostRef.revokeAgentApiKey({ id });
+  printResult(result, json, (payload) => {
+    if (payload.status !== 'revoked') return formatStatusError(payload);
+    return [
+      `agent API key revoked`,
+      `  id:        ${payload.key.id}`,
+      `  label:     ${payload.key.label}`,
+      `  disabled:  ${payload.key.disabled_at ?? 'yes'}`,
     ].join('\n');
   });
 }
@@ -1002,6 +1124,15 @@ function printHelp(): void {
       '  agent show                         print active agent identity',
       '  agent export [--out PATH]          export agent.json (alias for `leash-mcp export`)',
       '  agent import <PATH>                install an agent.json',
+      '',
+      'api key commands:',
+      '  api-key create --label NAME [--network solana-devnet|solana-mainnet]',
+      '                                     create an agent-scoped API key by signing',
+      "                                     with the configured agent's executive key.",
+      '                                     Plaintext is printed once; store it securely.',
+      '  api-key list [--include-disabled] [--limit N]',
+      '                                     list this agent’s API keys (no plaintext)',
+      '  api-key revoke <id>                disable one of this agent’s API keys',
       '',
       'treasury commands:',
       '  treasury balance                   list SOL + token balances',
