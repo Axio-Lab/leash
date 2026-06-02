@@ -19,6 +19,7 @@ function testDeps() {
     KORA_DAILY_PAYOUT_LIMIT: '500000',
   });
   const calls: string[] = [];
+  const virtualAccountInputs: unknown[] = [];
   const kora = {
     async getBalances() {
       calls.push('getBalances');
@@ -50,6 +51,7 @@ function testDeps() {
     },
     async createVirtualAccount(input: unknown) {
       calls.push('createVirtualAccount');
+      virtualAccountInputs.push(input);
       return { status: true, data: input };
     },
   } as unknown as KoraClient;
@@ -66,12 +68,18 @@ function testDeps() {
     store,
     receipts,
   });
-  return { app, calls, receipts, store, config };
+  return { app, calls, receipts, store, config, virtualAccountInputs };
 }
 
 describe('Kora Agent Rail app', () => {
   it('exposes discovery without leaking Kora credentials', async () => {
     const { app } = testDeps();
+    const ui = await app.request('http://localhost/');
+    const uiText = await ui.text();
+    expect(ui.status).toBe(200);
+    expect(uiText).toContain('Kora Agent Rail');
+    expect(uiText).not.toContain('sk_test_unit');
+
     const openapi = await app.request('http://localhost/openapi.json');
     const openapiText = await openapi.text();
     expect(openapi.status).toBe(200);
@@ -189,5 +197,42 @@ describe('Kora Agent Rail app', () => {
     expect(res.status).toBe(200);
     expect(body.status).toBe('updated');
     expect(executions[0]!.status).toBe('webhook_updated');
+  });
+
+  it('forwards Kora-required virtual account fields', async () => {
+    const { app, virtualAccountInputs } = testDeps();
+    const res = await app.request('http://localhost/tools/kora_create_virtual_account', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-leash-agent': 'agent-mint',
+      },
+      body: JSON.stringify({
+        account_name: 'Leash Demo Customer',
+        account_reference: 'leash-demo-va-001',
+        permanent: true,
+        bank_code: '000',
+        currency: 'NGN',
+        customer: { name: 'Leash Demo Customer', email: 'demo@leash.market' },
+        kyc: { bvn: '22222222222' },
+      }),
+    });
+    const body = (await res.json()) as {
+      status: string;
+      receipt: { kora_reference: string };
+    };
+
+    expect(res.status).toBe(200);
+    expect(body.status).toBe('ok');
+    expect(body.receipt.kora_reference).toBe('leash-demo-va-001');
+    expect(virtualAccountInputs[0]).toMatchObject({
+      account_name: 'Leash Demo Customer',
+      account_reference: 'leash-demo-va-001',
+      permanent: true,
+      bank_code: '000',
+      currency: 'NGN',
+      customer: { name: 'Leash Demo Customer', email: 'demo@leash.market' },
+      kyc: { bvn: '22222222222' },
+    });
   });
 });

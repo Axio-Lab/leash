@@ -16,6 +16,7 @@ import type {
   KoraToolName,
   KoraToolResult,
 } from './types.js';
+import { renderDemoUi } from './ui.js';
 
 export type KoraAgentRailDeps = {
   config: AppConfig;
@@ -75,7 +76,9 @@ const CheckoutSchema = AgentIdSchema.extend({
 });
 const VirtualAccountSchema = AgentIdSchema.extend({
   account_name: z.string().min(1).optional(),
+  account_reference: z.string().min(5).optional(),
   customer: z.record(z.unknown()).optional(),
+  kyc: z.record(z.unknown()).optional(),
   permanent: z.boolean().optional(),
   bank_code: z.string().optional(),
   currency: z.string().min(3).max(3).default('NGN'),
@@ -143,6 +146,17 @@ export function createKoraAgentRailApp(deps: KoraAgentRailDeps): Hono {
       default_agent_id: defaultAgentId,
       leash_required: deps.config.leash.requireLeash,
     }),
+  );
+
+  app.get('/', (c) =>
+    c.html(
+      renderDemoUi({
+        defaultAgentId,
+        publicBaseUrl: deps.config.publicBaseUrl,
+        leashRequired: deps.config.leash.requireLeash,
+        signatureRequired: deps.config.leash.requireSignature,
+      }),
+    ),
   );
 
   app.get('/llms.txt', (c) =>
@@ -505,7 +519,9 @@ async function callKora(
     case 'kora_create_virtual_account':
       return kora.createVirtualAccount({
         account_name: input.account_name,
+        account_reference: input.account_reference ?? input.reference,
         customer: input.customer,
+        kyc: input.kyc,
         permanent: input.permanent,
         bank_code: input.bank_code,
         currency: input.currency,
@@ -629,13 +645,20 @@ function redactToolInput(input: unknown): unknown {
 }
 
 function referenceFromInput(input: Record<string, unknown>): string | null {
-  return typeof input.reference === 'string' ? input.reference : null;
+  if (typeof input.reference === 'string') return input.reference;
+  if (typeof input.account_reference === 'string') return input.account_reference;
+  return null;
 }
 
 function referenceFromResponse(data: unknown): string | null {
   if (!data || typeof data !== 'object') return null;
   const record = data as Record<string, unknown>;
-  for (const key of ['reference', 'transaction_reference', 'transactionReference']) {
+  for (const key of [
+    'reference',
+    'transaction_reference',
+    'transactionReference',
+    'account_reference',
+  ]) {
     if (typeof record[key] === 'string') return record[key] as string;
   }
   const nested = record.data;
@@ -748,7 +771,9 @@ function inputSchemaForTool(tool: KoraToolName) {
         properties: {
           agent_id: agentId,
           account_name: { type: 'string' },
+          account_reference: { type: 'string' },
           customer: { type: 'object' },
+          kyc: { type: 'object' },
           permanent: { type: 'boolean' },
           bank_code: { type: 'string' },
           currency: { type: 'string', default: 'NGN' },
