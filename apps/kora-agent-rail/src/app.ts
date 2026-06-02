@@ -85,6 +85,16 @@ const VirtualAccountSchema = AgentIdSchema.extend({
   reference: z.string().min(5).optional(),
   metadata: z.record(z.unknown()).optional(),
 });
+const SandboxVirtualAccountCreditSchema = AgentIdSchema.extend({
+  account_number: z.string().min(1),
+  amount: AmountSchema,
+  currency: z
+    .string()
+    .min(3)
+    .max(3)
+    .default('NGN')
+    .transform((value) => value.toUpperCase()),
+});
 
 const ToolNameSchema = z.enum([
   'kora_get_agent_capabilities',
@@ -96,6 +106,7 @@ const ToolNameSchema = z.enum([
   'kora_list_payouts',
   'kora_create_checkout',
   'kora_create_virtual_account',
+  'kora_credit_sandbox_virtual_account',
 ]);
 
 const PolicySchema = z.object({
@@ -470,6 +481,8 @@ function schemaForTool(tool: KoraToolName): z.ZodTypeAny {
       return CheckoutSchema;
     case 'kora_create_virtual_account':
       return VirtualAccountSchema;
+    case 'kora_credit_sandbox_virtual_account':
+      return SandboxVirtualAccountCreditSchema;
   }
 }
 
@@ -528,6 +541,12 @@ async function callKora(
         reference: input.reference,
         metadata: input.metadata,
       });
+    case 'kora_credit_sandbox_virtual_account':
+      return kora.creditSandboxVirtualAccount({
+        account_number: input.account_number,
+        amount: input.amount,
+        currency: input.currency,
+      });
   }
 }
 
@@ -562,7 +581,9 @@ function readAgentId(input: unknown): string | null {
 }
 
 function toolAmount(tool: KoraToolName, input: Record<string, unknown>): number | null {
-  return tool === 'kora_create_payout' || tool === 'kora_create_checkout'
+  return tool === 'kora_create_payout' ||
+    tool === 'kora_create_checkout' ||
+    tool === 'kora_credit_sandbox_virtual_account'
     ? typeof input.amount === 'number'
       ? input.amount
       : null
@@ -570,7 +591,9 @@ function toolAmount(tool: KoraToolName, input: Record<string, unknown>): number 
 }
 
 function toolCurrency(tool: KoraToolName, input: Record<string, unknown>): string | null {
-  return tool === 'kora_create_payout' || tool === 'kora_create_checkout'
+  return tool === 'kora_create_payout' ||
+    tool === 'kora_create_checkout' ||
+    tool === 'kora_credit_sandbox_virtual_account'
     ? typeof input.currency === 'string'
       ? input.currency
       : null
@@ -647,6 +670,7 @@ function redactToolInput(input: unknown): unknown {
 function referenceFromInput(input: Record<string, unknown>): string | null {
   if (typeof input.reference === 'string') return input.reference;
   if (typeof input.account_reference === 'string') return input.account_reference;
+  if (typeof input.account_number === 'string') return input.account_number;
   return null;
 }
 
@@ -658,6 +682,7 @@ function referenceFromResponse(data: unknown): string | null {
     'transaction_reference',
     'transactionReference',
     'account_reference',
+    'account_number',
   ]) {
     if (typeof record[key] === 'string') return record[key] as string;
   }
@@ -686,6 +711,7 @@ function toolNames(): KoraToolName[] {
     'kora_list_payouts',
     'kora_create_checkout',
     'kora_create_virtual_account',
+    'kora_credit_sandbox_virtual_account',
   ];
 }
 
@@ -779,6 +805,17 @@ function inputSchemaForTool(tool: KoraToolName) {
           currency: { type: 'string', default: 'NGN' },
           reference: { type: 'string' },
           metadata: { type: 'object' },
+        },
+      };
+    case 'kora_credit_sandbox_virtual_account':
+      return {
+        type: 'object',
+        required: ['account_number', 'amount'],
+        properties: {
+          agent_id: agentId,
+          account_number: { type: 'string' },
+          amount: { oneOf: [{ type: 'number' }, { type: 'string' }] },
+          currency: { type: 'string', default: 'NGN' },
         },
       };
   }

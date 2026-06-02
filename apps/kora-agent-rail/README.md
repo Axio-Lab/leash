@@ -64,17 +64,18 @@ Leash powers:
 
 The app exposes these agent-callable tools:
 
-| Tool                          | Purpose                                      | Kora API coverage                             | Money movement |
-| ----------------------------- | -------------------------------------------- | --------------------------------------------- | -------------- |
-| `kora_get_agent_capabilities` | Return services exposed by a merchant agent. | Local rail metadata                           | No             |
-| `kora_get_balance`            | Read Kora balances.                          | `GET /merchant/api/v1/balances`               | No             |
-| `kora_list_banks`             | List supported banks by country.             | `GET /merchant/api/v1/misc/banks`             | No             |
-| `kora_resolve_bank_account`   | Resolve a payout recipient bank account.     | `POST /merchant/api/v1/misc/banks/resolve`    | No             |
-| `kora_create_payout`          | Create a local-currency payout.              | `POST /merchant/api/v1/transactions/disburse` | Yes            |
-| `kora_get_payout_status`      | Read payout status by transaction reference. | `GET /merchant/api/v1/transactions/:ref`      | No             |
-| `kora_list_payouts`           | List recent payouts.                         | `GET /merchant/api/v1/payouts`                | No             |
-| `kora_create_checkout`        | Create a checkout/payment collection.        | `POST /merchant/api/v1/charges/initialize`    | Yes            |
-| `kora_create_virtual_account` | Create a virtual bank account.               | `POST /merchant/api/v1/virtual-bank-account`  | No             |
+| Tool                                  | Purpose                                            | Kora API coverage                                           | Money movement |
+| ------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------- | -------------- |
+| `kora_get_agent_capabilities`         | Return services exposed by a merchant agent.       | Local rail metadata                                         | No             |
+| `kora_get_balance`                    | Read Kora balances.                                | `GET /merchant/api/v1/balances`                             | No             |
+| `kora_list_banks`                     | List supported banks by country.                   | `GET /merchant/api/v1/misc/banks`                           | No             |
+| `kora_resolve_bank_account`           | Resolve a payout recipient bank account.           | `POST /merchant/api/v1/misc/banks/resolve`                  | No             |
+| `kora_create_payout`                  | Create a local-currency payout.                    | `POST /merchant/api/v1/transactions/disburse`               | Yes            |
+| `kora_get_payout_status`              | Read payout status by transaction reference.       | `GET /merchant/api/v1/transactions/:ref`                    | No             |
+| `kora_list_payouts`                   | List recent payouts.                               | `GET /merchant/api/v1/payouts`                              | No             |
+| `kora_create_checkout`                | Create a checkout/payment collection.              | `POST /merchant/api/v1/charges/initialize`                  | Yes            |
+| `kora_create_virtual_account`         | Create a virtual bank account.                     | `POST /merchant/api/v1/virtual-bank-account`                | No             |
+| `kora_credit_sandbox_virtual_account` | Simulate a sandbox payment into a virtual account. | `POST /merchant/api/v1/virtual-bank-account/sandbox/credit` | Yes            |
 
 The first production demo should focus on:
 
@@ -84,6 +85,8 @@ The first production demo should focus on:
 - local-currency payout
 - payout status
 - payout webhook update
+- virtual account creation
+- sandbox virtual-account payment simulation
 - policy denial and approval-required states
 
 ## Agent-Facing Surfaces
@@ -114,6 +117,7 @@ Direct HTTP tools:
 - `POST /tools/kora_list_payouts`
 - `POST /tools/kora_create_checkout`
 - `POST /tools/kora_create_virtual_account`
+- `POST /tools/kora_credit_sandbox_virtual_account`
 
 Merchant/admin demo routes:
 
@@ -129,6 +133,23 @@ Merchant/admin demo routes:
 Webhook route:
 
 - `POST /kora/webhooks/payout`
+
+## Demo UI Flow
+
+The root route, `GET /`, renders a small merchant/demo console. It is not a
+production dashboard; it is a fast way to show how Kora becomes consumable by AI
+agents:
+
+1. Create or select a merchant Kora Agent.
+2. Publish its discovery surfaces: `llms.txt`, OpenAPI, and MCP manifest.
+3. Ask the rail for capabilities, Kora balances, and supported banks.
+4. Create a Kora virtual account for a customer.
+5. Credit that virtual account through Kora sandbox to simulate a local-currency
+   payment.
+6. Inspect the execution table and receipt data created by the rail.
+
+The browser never receives `KORA_SECRET_KEY`. The UI calls the same agent-facing
+tool endpoints an external AI agent would call.
 
 ## Authentication Model
 

@@ -7,7 +7,8 @@ export type KoraToolName =
   | 'kora_get_payout_status'
   | 'kora_list_payouts'
   | 'kora_create_checkout'
-  | 'kora_create_virtual_account';
+  | 'kora_create_virtual_account'
+  | 'kora_credit_sandbox_virtual_account';
 
 export type KoraAgentCapability = {
   name: KoraToolName;

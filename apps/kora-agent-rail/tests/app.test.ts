@@ -20,6 +20,7 @@ function testDeps() {
   });
   const calls: string[] = [];
   const virtualAccountInputs: unknown[] = [];
+  const sandboxCreditInputs: unknown[] = [];
   const kora = {
     async getBalances() {
       calls.push('getBalances');
@@ -54,6 +55,11 @@ function testDeps() {
       virtualAccountInputs.push(input);
       return { status: true, data: input };
     },
+    async creditSandboxVirtualAccount(input: unknown) {
+      calls.push('creditSandboxVirtualAccount');
+      sandboxCreditInputs.push(input);
+      return { status: true, message: 'Virtual bank account credited successfully', data: input };
+    },
   } as unknown as KoraClient;
   const receipts = new MemoryReceiptSink();
   const store = new InMemoryKoraAgentStore({
@@ -68,7 +74,7 @@ function testDeps() {
     store,
     receipts,
   });
-  return { app, calls, receipts, store, config, virtualAccountInputs };
+  return { app, calls, receipts, store, config, virtualAccountInputs, sandboxCreditInputs };
 }
 
 describe('Kora Agent Rail app', () => {
@@ -78,6 +84,9 @@ describe('Kora Agent Rail app', () => {
     const uiText = await ui.text();
     expect(ui.status).toBe(200);
     expect(uiText).toContain('Kora Agent Rail');
+    expect(uiText).toContain('Create Kora Agent');
+    expect(uiText).toContain('List Banks');
+    expect(uiText).toContain('Sandbox Payment');
     expect(uiText).not.toContain('sk_test_unit');
 
     const openapi = await app.request('http://localhost/openapi.json');
@@ -233,6 +242,37 @@ describe('Kora Agent Rail app', () => {
       currency: 'NGN',
       customer: { name: 'Leash Demo Customer', email: 'demo@leash.market' },
       kyc: { bvn: '22222222222' },
+    });
+  });
+
+  it('credits a sandbox virtual account and records the account number reference', async () => {
+    const { app, sandboxCreditInputs } = testDeps();
+    const res = await app.request('http://localhost/tools/kora_credit_sandbox_virtual_account', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-leash-agent': 'agent-mint',
+      },
+      body: JSON.stringify({
+        account_number: '1110033387',
+        amount: '1000',
+        currency: 'NGN',
+      }),
+    });
+    const body = (await res.json()) as {
+      status: string;
+      receipt: { kora_reference: string; amount: number; currency: string };
+    };
+
+    expect(res.status).toBe(200);
+    expect(body.status).toBe('ok');
+    expect(body.receipt.kora_reference).toBe('1110033387');
+    expect(body.receipt.amount).toBe(1000);
+    expect(body.receipt.currency).toBe('NGN');
+    expect(sandboxCreditInputs[0]).toMatchObject({
+      account_number: '1110033387',
+      amount: 1000,
+      currency: 'NGN',
     });
   });
 });

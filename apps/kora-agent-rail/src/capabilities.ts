@@ -81,6 +81,13 @@ export function buildCapabilities(publicBaseUrl: string): KoraAgentCapability[] 
       true,
       false,
     ),
+    tool(
+      'kora_credit_sandbox_virtual_account',
+      'Credit sandbox virtual account',
+      'Simulate a local-currency sandbox payment into a Kora virtual account.',
+      true,
+      true,
+    ),
   ];
 }
 

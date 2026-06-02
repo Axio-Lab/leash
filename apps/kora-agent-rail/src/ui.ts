@@ -115,12 +115,20 @@ export function renderDemoUi(input: {
       input,
       select {
         width: 100%;
+        min-height: 40px;
         border: 1px solid var(--line);
         border-radius: 6px;
         background: #fff;
         color: var(--ink);
         font: inherit;
         padding: 9px 10px;
+      }
+      input:focus-visible,
+      select:focus-visible,
+      button:focus-visible,
+      a:focus-visible {
+        outline: 2px solid var(--blue);
+        outline-offset: 2px;
       }
       .row {
         display: grid;
@@ -133,6 +141,7 @@ export function renderDemoUi(input: {
         gap: 8px;
       }
       button {
+        min-height: 40px;
         border: 1px solid var(--blue);
         border-radius: 6px;
         background: var(--blue);
@@ -166,6 +175,10 @@ export function renderDemoUi(input: {
       .warn {
         background: #fff7e6;
         color: var(--amber);
+      }
+      .subtle {
+        color: var(--muted);
+        font-size: 12px;
       }
       pre {
         min-height: 430px;
@@ -223,7 +236,7 @@ export function renderDemoUi(input: {
           <p>Local-currency Kora services exposed as agent-callable tools.</p>
         </div>
         <div class="badge-row">
-          <span class="badge">Agent <code>${escapeHtml(input.defaultAgentId)}</code></span>
+          <span class="badge">Default agent <code>${escapeHtml(input.defaultAgentId)}</code></span>
           <span class="badge">Leash ${input.leashRequired ? 'on' : 'demo mode'}</span>
           <span class="badge">Signature ${input.signatureRequired ? 'required' : 'off'}</span>
         </div>
@@ -231,32 +244,70 @@ export function renderDemoUi(input: {
       <div class="grid">
         <div>
           <section>
+            <h2>Merchant Kora Agent</h2>
+            <label>
+              Agent id
+              <input id="agentId" autocomplete="off" spellcheck="false" />
+            </label>
+            <label>
+              Agent name
+              <input id="agentName" autocomplete="organization" value="Acme Finance Agent" />
+            </label>
+            <label>
+              Description
+              <input
+                id="agentDescription"
+                autocomplete="off"
+                value="A Kora merchant agent that exposes approved local-currency services to AI agents."
+              />
+            </label>
+            <div class="actions">
+              <button class="secondary" data-action="useAgent">Use agent</button>
+              <button data-action="createAgent">Create Kora Agent</button>
+              <button class="secondary" data-action="publishAgent">Publish</button>
+            </div>
+            <div id="notice" class="status warn">Ready</div>
+          </section>
+
+          <section>
             <h2>Discovery</h2>
+            <div class="row">
+              <label>
+                Country code
+                <input id="countryCode" autocomplete="off" value="NG" maxlength="2" />
+              </label>
+              <label>
+                Current agent
+                <input id="currentAgent" readonly />
+              </label>
+            </div>
             <div class="actions">
               <button class="secondary" data-action="capabilities">Capabilities</button>
               <button class="secondary" data-action="balance">Balance</button>
+              <button class="secondary" data-action="banks">List Banks</button>
               <button class="secondary" data-action="executions">Executions</button>
             </div>
             <p>
-              <a href="/llms.txt">llms.txt</a> ·
-              <a href="/openapi.json">OpenAPI</a> ·
+              <a href="/llms.txt">llms.txt</a> -
+              <a href="/openapi.json">OpenAPI</a> -
               <a href="/.well-known/leash-mcp.json">MCP manifest</a>
             </p>
           </section>
+
           <section>
             <h2>Create Virtual Account</h2>
             <label>
               Account reference
-              <input id="accountReference" />
+              <input id="accountReference" autocomplete="off" spellcheck="false" />
             </label>
             <label>
               Account name
-              <input id="accountName" value="Leash Demo Customer" />
+              <input id="accountName" autocomplete="name" value="Leash Demo Customer" />
             </label>
             <div class="row">
               <label>
                 Bank code
-                <input id="bankCode" value="000" />
+                <input id="bankCode" autocomplete="off" value="000" />
               </label>
               <label>
                 Currency
@@ -267,18 +318,41 @@ export function renderDemoUi(input: {
             </div>
             <label>
               Customer name
-              <input id="customerName" value="Leash Demo Customer" />
+              <input id="customerName" autocomplete="name" value="Leash Demo Customer" />
             </label>
             <label>
               Customer email
-              <input id="customerEmail" value="demo@leash.market" />
+              <input id="customerEmail" type="email" autocomplete="email" value="demo@leash.market" />
             </label>
             <label>
               BVN
-              <input id="bvn" value="22222222222" />
+              <input id="bvn" autocomplete="off" inputmode="numeric" value="22222222222" />
             </label>
             <button data-action="virtualAccount">Create virtual account</button>
-            <div id="notice" class="status warn">Ready</div>
+          </section>
+
+          <section>
+            <h2>Sandbox Payment</h2>
+            <label>
+              Virtual account number
+              <input id="sandboxAccountNumber" autocomplete="off" inputmode="numeric" />
+            </label>
+            <div class="row">
+              <label>
+                Amount
+                <input id="sandboxAmount" autocomplete="off" inputmode="decimal" value="1000" />
+              </label>
+              <label>
+                Currency
+                <select id="sandboxCurrency">
+                  <option>NGN</option>
+                </select>
+              </label>
+            </div>
+            <button data-action="sandboxCredit">Credit sandbox virtual account</button>
+            <p class="subtle">
+              This simulates a local-currency payment into the test virtual account.
+            </p>
           </section>
         </div>
         <div>
@@ -293,6 +367,7 @@ export function renderDemoUi(input: {
                 <tr>
                   <th>Tool</th>
                   <th>Status</th>
+                  <th>Amount</th>
                   <th>Reference</th>
                   <th>Receipt</th>
                 </tr>
@@ -305,56 +380,160 @@ export function renderDemoUi(input: {
     </main>
     <script>
       const state = ${JSON.stringify(state)};
+      state.currentAgentId = state.defaultAgentId;
+
       const result = document.querySelector('#result');
       const notice = document.querySelector('#notice');
       const executions = document.querySelector('#executions');
       const accountReference = document.querySelector('#accountReference');
+      const agentIdInput = document.querySelector('#agentId');
+      const currentAgent = document.querySelector('#currentAgent');
+      const sandboxAccountNumber = document.querySelector('#sandboxAccountNumber');
 
       accountReference.value = 'leash-demo-va-' + Date.now();
+      agentIdInput.value = state.defaultAgentId;
+      updateCurrentAgent();
+
+      function currentAgentId() {
+        return agentIdInput.value.trim() || state.defaultAgentId;
+      }
+
+      function updateCurrentAgent() {
+        state.currentAgentId = currentAgentId();
+        currentAgent.value = state.currentAgentId;
+      }
+
+      function escapeValue(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;',
+        }[char]));
+      }
+
+      function findValue(payload, keys) {
+        if (!payload || typeof payload !== 'object') return '';
+        for (const key of keys) {
+          if (typeof payload[key] === 'string') return payload[key];
+        }
+        for (const value of Object.values(payload)) {
+          const found = findValue(value, keys);
+          if (found) return found;
+        }
+        return '';
+      }
+
+      function setNotice(message, tone = 'ok') {
+        notice.className = 'status ' + tone;
+        notice.textContent = message;
+      }
 
       function show(payload, tone = 'ok') {
         result.textContent = JSON.stringify(payload, null, 2);
-        notice.className = 'status ' + tone;
-        notice.textContent = payload.status || payload.message || tone;
+        setNotice(payload.status || payload.message || tone, tone);
       }
 
-      async function post(path, body = {}) {
-        const res = await fetch(path, {
+      async function requestJson(path, options = {}) {
+        const res = await fetch(path, options);
+        const text = await res.text();
+        const payload = text ? JSON.parse(text) : {};
+        if (!res.ok) {
+          show(payload, 'error');
+        }
+        return { res, payload };
+      }
+
+      async function postTool(tool, body = {}) {
+        updateCurrentAgent();
+        const { res, payload } = await requestJson('/tools/' + tool, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ agent_id: state.currentAgentId, ...body }),
         });
-        const payload = await res.json();
         show(payload, res.ok && payload.status !== 'error' ? 'ok' : 'error');
         await loadExecutions();
         return payload;
       }
 
       async function loadExecutions() {
-        const res = await fetch('/kora-agents/' + state.defaultAgentId + '/executions');
-        const payload = await res.json();
+        updateCurrentAgent();
+        const { payload } = await requestJson(
+          '/kora-agents/' + encodeURIComponent(state.currentAgentId) + '/executions',
+        );
         executions.innerHTML = (payload.items || []).slice(0, 8).map((item) => {
           const hash = item.receiptHash ? item.receiptHash.slice(0, 12) + '...' : '';
-          return '<tr><td><code>' + item.tool + '</code></td><td>' + item.status + '</td><td><code>' + (item.koraReference || '') + '</code></td><td><code>' + hash + '</code></td></tr>';
+          const amount = item.amount == null ? '' : item.amount + ' ' + (item.currency || '');
+          return '<tr><td><code>' + escapeValue(item.tool) + '</code></td><td>' +
+            escapeValue(item.status) + '</td><td>' + escapeValue(amount) +
+            '</td><td><code>' + escapeValue(item.koraReference) +
+            '</code></td><td><code>' + escapeValue(hash) + '</code></td></tr>';
         }).join('');
+      }
+
+      async function createAgent() {
+        updateCurrentAgent();
+        const name = document.querySelector('#agentName').value.trim() || state.currentAgentId;
+        const description = document.querySelector('#agentDescription').value.trim();
+        const { res, payload } = await requestJson('/kora-agents', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            id: state.currentAgentId,
+            name,
+            description,
+          }),
+        });
+        if (payload.id) {
+          agentIdInput.value = payload.id;
+          updateCurrentAgent();
+        }
+        show(payload, res.ok ? 'ok' : 'error');
+        await loadExecutions();
+      }
+
+      async function publishAgent() {
+        updateCurrentAgent();
+        const { res, payload } = await requestJson(
+          '/kora-agents/' + encodeURIComponent(state.currentAgentId) + '/publish',
+          { method: 'POST' },
+        );
+        show(payload, res.ok ? 'ok' : 'error');
       }
 
       document.querySelectorAll('[data-action]').forEach((button) => {
         button.addEventListener('click', async () => {
           button.disabled = true;
           try {
+            if (button.dataset.action === 'useAgent') {
+              updateCurrentAgent();
+              show({ status: 'ok', agent_id: state.currentAgentId, message: 'agent selected' });
+              await loadExecutions();
+            }
+            if (button.dataset.action === 'createAgent') {
+              await createAgent();
+            }
+            if (button.dataset.action === 'publishAgent') {
+              await publishAgent();
+            }
             if (button.dataset.action === 'capabilities') {
-              await post('/tools/kora_get_agent_capabilities');
+              await postTool('kora_get_agent_capabilities');
             }
             if (button.dataset.action === 'balance') {
-              await post('/tools/kora_get_balance');
+              await postTool('kora_get_balance');
+            }
+            if (button.dataset.action === 'banks') {
+              await postTool('kora_list_banks', {
+                country_code: document.querySelector('#countryCode').value.trim().toUpperCase() || 'NG',
+              });
             }
             if (button.dataset.action === 'executions') {
               await loadExecutions();
-              show({ status: 'ok', message: 'executions loaded' });
+              show({ status: 'ok', agent_id: state.currentAgentId, message: 'executions loaded' });
             }
             if (button.dataset.action === 'virtualAccount') {
-              await post('/tools/kora_create_virtual_account', {
+              const payload = await postTool('kora_create_virtual_account', {
                 account_name: document.querySelector('#accountName').value,
                 account_reference: accountReference.value,
                 permanent: true,
@@ -366,7 +545,16 @@ export function renderDemoUi(input: {
                 },
                 kyc: { bvn: document.querySelector('#bvn').value },
               });
+              const accountNumber = findValue(payload, ['account_number', 'accountNumber']);
+              if (accountNumber) sandboxAccountNumber.value = accountNumber;
               accountReference.value = 'leash-demo-va-' + Date.now();
+            }
+            if (button.dataset.action === 'sandboxCredit') {
+              await postTool('kora_credit_sandbox_virtual_account', {
+                account_number: sandboxAccountNumber.value.trim(),
+                amount: document.querySelector('#sandboxAmount').value.trim(),
+                currency: document.querySelector('#sandboxCurrency').value,
+              });
             }
           } catch (err) {
             show({ status: 'error', message: err.message || 'request failed' }, 'error');
