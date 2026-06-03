@@ -140,6 +140,16 @@ export function renderDemoUi(input: {
         flex-wrap: wrap;
         gap: 8px;
       }
+      .segmented {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--soft);
+        margin-bottom: 14px;
+        padding: 4px;
+      }
       button {
         min-height: 40px;
         border: 1px solid var(--blue);
@@ -154,6 +164,16 @@ export function renderDemoUi(input: {
       button.secondary {
         background: #fff;
         color: var(--blue);
+      }
+      .segmented button {
+        border-color: transparent;
+        background: transparent;
+        color: var(--muted);
+      }
+      .segmented button[aria-pressed="true"] {
+        background: var(--panel);
+        border-color: var(--line);
+        color: var(--ink);
       }
       button:disabled {
         cursor: wait;
@@ -295,64 +315,74 @@ export function renderDemoUi(input: {
           </section>
 
           <section>
-            <h2>Create Virtual Account</h2>
-            <label>
-              Account reference
-              <input id="accountReference" autocomplete="off" spellcheck="false" />
-            </label>
-            <label>
-              Account name
-              <input id="accountName" autocomplete="name" value="Leash Demo Customer" />
-            </label>
-            <div class="row">
-              <label>
-                Bank code
-                <input id="bankCode" autocomplete="off" value="000" />
-              </label>
-              <label>
-                Currency
-                <select id="currency">
-                  <option>NGN</option>
-                </select>
-              </label>
+            <h2>Payment Flow</h2>
+            <div class="segmented" aria-label="Payment flow mode">
+              <button type="button" data-payment-mode="virtualAccount" aria-pressed="true">
+                Create Virtual Account
+              </button>
+              <button type="button" data-payment-mode="sandboxPayment" aria-pressed="false">
+                Sandbox Payment
+              </button>
             </div>
-            <label>
-              Customer name
-              <input id="customerName" autocomplete="name" value="Leash Demo Customer" />
-            </label>
-            <label>
-              Customer email
-              <input id="customerEmail" type="email" autocomplete="email" value="demo@leash.market" />
-            </label>
-            <label>
-              BVN
-              <input id="bvn" autocomplete="off" inputmode="numeric" value="22222222222" />
-            </label>
-            <button data-action="virtualAccount">Create virtual account</button>
-          </section>
 
-          <section>
-            <h2>Sandbox Payment</h2>
-            <label>
-              Virtual account number
-              <input id="sandboxAccountNumber" autocomplete="off" inputmode="numeric" />
-            </label>
-            <div class="row">
+            <div id="virtualAccountPanel">
               <label>
-                Amount
-                <input id="sandboxAmount" autocomplete="off" inputmode="decimal" value="1000" />
+                Account reference
+                <input id="accountReference" autocomplete="off" spellcheck="false" />
               </label>
               <label>
-                Currency
-                <select id="sandboxCurrency">
-                  <option>NGN</option>
-                </select>
+                Account name
+                <input id="accountName" autocomplete="name" value="Leash Demo Customer" />
               </label>
+              <div class="row">
+                <label>
+                  Bank code
+                  <input id="bankCode" autocomplete="off" value="000" />
+                </label>
+                <label>
+                  Currency
+                  <select id="currency">
+                    <option>NGN</option>
+                  </select>
+                </label>
+              </div>
+              <label>
+                Customer name
+                <input id="customerName" autocomplete="name" value="Leash Demo Customer" />
+              </label>
+              <label>
+                Customer email
+                <input id="customerEmail" type="email" autocomplete="email" value="demo@leash.market" />
+              </label>
+              <label>
+                BVN
+                <input id="bvn" autocomplete="off" inputmode="numeric" value="22222222222" />
+              </label>
+              <button data-action="virtualAccount">Create virtual account</button>
             </div>
-            <button data-action="sandboxCredit">Credit sandbox virtual account</button>
-            <p class="subtle">
-              This simulates a local-currency payment into the test virtual account.
-            </p>
+
+            <div id="sandboxPaymentPanel" hidden>
+              <label>
+                Virtual account number
+                <input id="sandboxAccountNumber" autocomplete="off" inputmode="numeric" />
+              </label>
+              <div class="row">
+                <label>
+                  Amount
+                  <input id="sandboxAmount" autocomplete="off" inputmode="decimal" value="1000" />
+                </label>
+                <label>
+                  Currency
+                  <select id="sandboxCurrency">
+                    <option>NGN</option>
+                  </select>
+                </label>
+              </div>
+              <button data-action="sandboxCredit">Credit sandbox virtual account</button>
+              <p class="subtle">
+                This simulates a local-currency payment into the test virtual account.
+              </p>
+            </div>
           </section>
         </div>
         <div>
@@ -389,10 +419,14 @@ export function renderDemoUi(input: {
       const agentIdInput = document.querySelector('#agentId');
       const currentAgent = document.querySelector('#currentAgent');
       const sandboxAccountNumber = document.querySelector('#sandboxAccountNumber');
+      const paymentModeButtons = document.querySelectorAll('[data-payment-mode]');
+      const virtualAccountPanel = document.querySelector('#virtualAccountPanel');
+      const sandboxPaymentPanel = document.querySelector('#sandboxPaymentPanel');
 
       accountReference.value = 'leash-demo-va-' + Date.now();
       agentIdInput.value = state.defaultAgentId;
       updateCurrentAgent();
+      setPaymentMode('virtualAccount');
 
       function currentAgentId() {
         return agentIdInput.value.trim() || state.defaultAgentId;
@@ -401,6 +435,15 @@ export function renderDemoUi(input: {
       function updateCurrentAgent() {
         state.currentAgentId = currentAgentId();
         currentAgent.value = state.currentAgentId;
+      }
+
+      function setPaymentMode(mode) {
+        const sandbox = mode === 'sandboxPayment';
+        virtualAccountPanel.hidden = sandbox;
+        sandboxPaymentPanel.hidden = !sandbox;
+        paymentModeButtons.forEach((button) => {
+          button.setAttribute('aria-pressed', String(button.dataset.paymentMode === mode));
+        });
       }
 
       function escapeValue(value) {
@@ -546,7 +589,10 @@ export function renderDemoUi(input: {
                 kyc: { bvn: document.querySelector('#bvn').value },
               });
               const accountNumber = findValue(payload, ['account_number', 'accountNumber']);
-              if (accountNumber) sandboxAccountNumber.value = accountNumber;
+              if (accountNumber) {
+                sandboxAccountNumber.value = accountNumber;
+                setPaymentMode('sandboxPayment');
+              }
               accountReference.value = 'leash-demo-va-' + Date.now();
             }
             if (button.dataset.action === 'sandboxCredit') {
@@ -562,6 +608,10 @@ export function renderDemoUi(input: {
             button.disabled = false;
           }
         });
+      });
+
+      paymentModeButtons.forEach((button) => {
+        button.addEventListener('click', () => setPaymentMode(button.dataset.paymentMode));
       });
 
       loadExecutions();

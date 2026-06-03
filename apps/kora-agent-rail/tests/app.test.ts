@@ -87,6 +87,8 @@ describe('Kora Agent Rail app', () => {
     expect(uiText).toContain('Create Kora Agent');
     expect(uiText).toContain('List Banks');
     expect(uiText).toContain('Sandbox Payment');
+    expect(uiText).toContain('data-payment-mode="virtualAccount"');
+    expect(uiText).toContain('data-payment-mode="sandboxPayment"');
     expect(uiText).not.toContain('sk_test_unit');
 
     const openapi = await app.request('http://localhost/openapi.json');

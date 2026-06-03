@@ -143,9 +143,10 @@ agents:
 1. Create or select a merchant Kora Agent.
 2. Publish its discovery surfaces: `llms.txt`, OpenAPI, and MCP manifest.
 3. Ask the rail for capabilities, Kora balances, and supported banks.
-4. Create a Kora virtual account for a customer.
-5. Credit that virtual account through Kora sandbox to simulate a local-currency
-   payment.
+4. Use the payment-flow toggle to create a Kora virtual account for a customer.
+5. Switch to sandbox payment, or let the UI switch automatically after account
+   creation, then credit that virtual account through Kora sandbox to simulate a
+   local-currency payment.
 6. Inspect the execution table and receipt data created by the rail.
 
 The browser never receives `KORA_SECRET_KEY`. The UI calls the same agent-facing
