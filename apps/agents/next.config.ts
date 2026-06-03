@@ -15,6 +15,10 @@ const nextConfig: NextConfig = {
     '@metaplex-foundation/mpl-core',
     '@privy-io/server-auth',
     '@libsql/client',
+    '@solana/kit',
+    '@solana-program/system',
+    '@solana-program/token',
+    '@solana/subscriptions',
   ],
 };
 

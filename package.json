@@ -5,6 +5,12 @@
   "engines": {
     "node": ">=20"
   },
+  "pnpm": {
+    "overrides": {
+      "@solana/kit": "6.9.0",
+      "@solana-program/system@0.12.2>@solana/kit": "6.9.0"
+    }
+  },
   "scripts": {
     "ci": "pnpm format:check && pnpm typecheck && pnpm lint && pnpm build && pnpm test",
     "build": "turbo run build",
