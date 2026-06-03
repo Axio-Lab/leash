@@ -12,7 +12,10 @@
  * while the delegatee / merchant / puller signs transfer/collect calls.
  */
 
-import { findAssociatedTokenPda } from '@metaplex-foundation/mpl-toolbox';
+import {
+  createIdempotentAssociatedToken,
+  findAssociatedTokenPda,
+} from '@metaplex-foundation/mpl-toolbox';
 import {
   publicKey,
   transactionBuilder,
@@ -368,6 +371,25 @@ async function userAta(
   return ata;
 }
 
+function createAtaBuilder(
+  umi: Umi,
+  args: {
+    mint: AddressLike;
+    owner: AddressLike;
+    ata: AddressLike;
+    tokenProgram?: AddressLike;
+    payer?: Signer;
+  },
+): TransactionBuilder {
+  return createIdempotentAssociatedToken(umi, {
+    mint: toPk(args.mint),
+    owner: toPk(args.owner),
+    ata: toPk(args.ata),
+    tokenProgram: tokenProgram(args),
+    ...(args.payer ? { payer: args.payer } : {}),
+  });
+}
+
 async function receiverAta(
   umi: Umi,
   args: {
@@ -518,8 +540,15 @@ export async function prepareInitNativeSubscriptionAuthority(
     userAta: toAddress(ownerAta),
     programAddress: programAddress(args),
   });
+  const createAta = createAtaBuilder(umi, {
+    mint,
+    owner: owner.publicKey,
+    ata: ownerAta,
+    tokenProgram: tokenProgramPk,
+    payer,
+  });
   return {
-    builder: oneIxBuilder(ix, [owner, payer]),
+    builder: createAta.add(oneIxBuilder(ix, [owner, payer])),
     authority: String(authority),
     owner: String(owner.publicKey),
     mint: String(mint),
@@ -681,8 +710,19 @@ export async function prepareTransferNativeFixedAllowance(
     tokenProgram: tokenProgramAddress(args),
     programAddress: programAddress(args),
   });
+  let builder = oneIxBuilder(ix, [caller]);
+  if (args.receiver && !args.receiverTokenAccount) {
+    const createAta = createAtaBuilder(umi, {
+      mint: args.mint,
+      owner: args.receiver,
+      ata: rxAta,
+      tokenProgram: args.tokenProgram,
+      payer: caller,
+    });
+    builder = createAta.add(builder);
+  }
   return {
-    builder: oneIxBuilder(ix, [caller]),
+    builder,
     allowance: String(allowance),
     delegator: String(toPk(args.delegator)),
     caller: String(caller.publicKey),
@@ -808,8 +848,19 @@ export async function prepareTransferNativeRecurringAllowance(
     tokenProgram: tokenProgramAddress(args),
     programAddress: programAddress(args),
   });
+  let builder = oneIxBuilder(ix, [caller]);
+  if (args.receiver && !args.receiverTokenAccount) {
+    const createAta = createAtaBuilder(umi, {
+      mint: args.mint,
+      owner: args.receiver,
+      ata: rxAta,
+      tokenProgram: args.tokenProgram,
+      payer: caller,
+    });
+    builder = createAta.add(builder);
+  }
   return {
-    builder: oneIxBuilder(ix, [caller]),
+    builder,
     allowance: String(allowance),
     delegator: String(toPk(args.delegator)),
     caller: String(caller.publicKey),
@@ -877,7 +928,11 @@ export async function prepareCreateNativeSubscriptionPlan(
   args: PrepareCreateNativePlanArgs,
 ): Promise<PrepareNativePlanResult> {
   const owner = args.owner ?? umi.identity;
-  const plan = await planPda({ owner: owner.publicKey, planId: args.planId });
+  const plan = await planPda({
+    owner: owner.publicKey,
+    planId: args.planId,
+    programAddress: args.programAddress,
+  });
   const ix = await getCreatePlanOverlayInstructionAsync({
     owner: kitSigner(owner),
     planId: args.planId,
@@ -977,6 +1032,11 @@ export async function prepareSubscribeNativeSubscriptionPlan(
   if (!authority.exists || authority.initId == null) {
     throw new Error('SubscriptionAuthority is not initialized for this subscriber and token mint.');
   }
+  const subscriberAta = await userAta(umi, {
+    mint: args.mint,
+    owner: subscriber.publicKey,
+    tokenProgram: args.tokenProgram,
+  });
   const subscription = await subscriptionPda({
     plan: planStatus.plan,
     subscriber: subscriber.publicKey,
@@ -994,8 +1054,15 @@ export async function prepareSubscribeNativeSubscriptionPlan(
     expectedSubscriptionAuthorityInitId: authority.initId,
     programAddress: programAddress(args),
   });
+  const createAta = createAtaBuilder(umi, {
+    mint: args.mint,
+    owner: subscriber.publicKey,
+    ata: subscriberAta,
+    tokenProgram: args.tokenProgram,
+    payer,
+  });
   return {
-    builder: oneIxBuilder(ix, [subscriber, payer]),
+    builder: createAta.add(oneIxBuilder(ix, [subscriber, payer])),
     plan: planStatus.plan,
     subscription: String(subscription),
     subscriber: String(subscriber.publicKey),
@@ -1128,8 +1195,19 @@ export async function prepareCollectNativeSubscription(
     tokenProgram: tokenProgramAddress(args),
     programAddress: programAddress(args),
   });
+  let builder = oneIxBuilder(ix, [caller]);
+  if (args.receiver && !args.receiverTokenAccount) {
+    const createAta = createAtaBuilder(umi, {
+      mint: args.mint,
+      owner: args.receiver,
+      ata: rxAta,
+      tokenProgram: args.tokenProgram,
+      payer: caller,
+    });
+    builder = createAta.add(builder);
+  }
   return {
-    builder: oneIxBuilder(ix, [caller]),
+    builder,
     plan: String(toPk(args.plan)),
     subscription: String(toPk(args.subscription)),
     caller: String(caller.publicKey),

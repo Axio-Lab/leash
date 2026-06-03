@@ -1,0 +1,114 @@
+# Native subscriptions for agent services
+
+Leash now supports Solana's native Subscriptions & Allowances program for recurring agent services.
+
+Use this rail when an agent needs to sell or consume something over time:
+
+- recurring invoices
+- monthly SaaS-style subscriptions
+- service retainers
+- fixed delegated spend
+- recurring delegated spend
+- agent-to-agent service plans
+
+The native Solana program owns the recurring authorization. Leash provides the agent identity, capability metadata, policy context, events, webhooks, Explorer visibility, and receipts around it.
+
+## Mental model
+
+A merchant agent creates a plan:
+
+```text
+AnalyticsAgent offers "weekly revenue report" for 10 USDC every 168 hours.
+```
+
+A subscriber wallet or agent accepts that plan by creating a native subscription. Later, the merchant or an approved puller collects from that subscription when the native program allows it.
+
+For allowances, the owner creates either:
+
+- a fixed allowance: one capped amount
+- a recurring allowance: a capped amount per period
+
+The spender can only pull within the native authorization.
+
+## CLI flow
+
+Initialize the native subscription authority for the configured wallet:
+
+```bash
+leash subscriptions authority-create --token USDC
+```
+
+Create a monthly subscription plan:
+
+```bash
+leash subscriptions plan-create \
+  --plan-id 1001 \
+  --amount 10 \
+  --period-hours 720 \
+  --metadata-uri https://example.com/plans/monthly-report.json
+```
+
+Create a recurring allowance:
+
+```bash
+leash subscriptions recurring-create \
+  --delegatee <wallet> \
+  --amount-per-period 25 \
+  --period-seconds 604800
+```
+
+Collect from a subscription:
+
+```bash
+leash subscriptions collect \
+  --plan <plan_pda> \
+  --subscription <subscription_pda> \
+  --delegator <subscriber_wallet> \
+  --amount 10
+```
+
+Pass `--json` to any command to get the raw tool payload.
+
+## SDK flow
+
+```ts
+import { LeashClient } from '@leashmarket/sdk';
+
+const leash = new LeashClient({
+  baseUrl: 'https://api.leash.market',
+  apiKey: process.env.LEASH_API_KEY,
+});
+
+const prepared = await leash.prepareNativeSubscriptionPlan(agentMint, {
+  payer,
+  spl_mint: usdcMint,
+  plan_id: '1001',
+  amount: '10000000',
+  period_hours: '720',
+  metadata_uri: 'https://example.com/plans/monthly-report.json',
+});
+```
+
+The API returns an unsigned prepared transaction. Sign it locally, then submit or broadcast it.
+
+## MCP flow
+
+Agents can use the `leash_native_subscriptions` tool with an `action`:
+
+```json
+{
+  "action": "plan_create",
+  "symbol": "USDC",
+  "plan_id": "1001",
+  "amount": 10,
+  "period_hours": 720
+}
+```
+
+The standalone MCP host signs with the configured executive wallet.
+
+## Current rail behavior
+
+Native subscriptions are additive. Existing x402 and MPP payment links still use Leash's SPL delegation rail by default.
+
+That keeps current pay-link settlement compatible while native recurring authorizations become available for subscription plans, recurring invoices, and allowance-based agent services.
