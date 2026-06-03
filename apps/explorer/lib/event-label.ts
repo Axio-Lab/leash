@@ -13,6 +13,7 @@ export type EventDescriptor = {
     | 'delegation'
     | 'treasury'
     | 'token'
+    | 'native-subscription'
     | 'submit'
     | 'receipt'
     | 'payment-link'
@@ -69,6 +70,96 @@ const TABLE: Record<string, EventDescriptor> = {
     shortLabel: 'revoke',
     variant: 'delegation',
     description: () => 'Spend delegation cleared back to zero.',
+  },
+  'native.subscription_authority.init': {
+    label: 'Native authority initialized',
+    shortLabel: 'native auth',
+    variant: 'native-subscription',
+    description: () => 'A native Solana subscription authority was initialized for future pulls.',
+  },
+  'native.subscription_authority.close': {
+    label: 'Native authority closed',
+    shortLabel: 'close auth',
+    variant: 'native-subscription',
+    description: () => 'A native Solana subscription authority was closed.',
+  },
+  'native.allowance.fixed.create': {
+    label: 'Fixed allowance created',
+    shortLabel: 'fixed',
+    variant: 'native-subscription',
+    description: () => 'A native fixed spending allowance was created.',
+  },
+  'native.allowance.fixed.transfer': {
+    label: 'Fixed allowance transfer',
+    shortLabel: 'fixed pay',
+    variant: 'native-subscription',
+    description: () => 'Funds were pulled through a native fixed allowance.',
+  },
+  'native.allowance.fixed.revoke': {
+    label: 'Fixed allowance revoked',
+    shortLabel: 'fixed revoke',
+    variant: 'native-subscription',
+    description: () => 'A native fixed allowance was revoked.',
+  },
+  'native.allowance.recurring.create': {
+    label: 'Recurring allowance created',
+    shortLabel: 'recurring',
+    variant: 'native-subscription',
+    description: () => 'A native recurring spending allowance was created.',
+  },
+  'native.allowance.recurring.transfer': {
+    label: 'Recurring allowance transfer',
+    shortLabel: 'recurring pay',
+    variant: 'native-subscription',
+    description: () => 'Funds were pulled through a native recurring allowance.',
+  },
+  'native.allowance.recurring.revoke': {
+    label: 'Recurring allowance revoked',
+    shortLabel: 'recurring revoke',
+    variant: 'native-subscription',
+    description: () => 'A native recurring allowance was revoked.',
+  },
+  'native.subscription_plan.create': {
+    label: 'Subscription plan created',
+    shortLabel: 'plan',
+    variant: 'native-subscription',
+    description: () => 'A merchant agent created a native recurring subscription plan.',
+  },
+  'native.subscription_plan.update': {
+    label: 'Subscription plan updated',
+    shortLabel: 'plan update',
+    variant: 'native-subscription',
+    description: () => 'A native subscription plan was updated.',
+  },
+  'native.subscription.subscribe': {
+    label: 'Subscribed',
+    shortLabel: 'subscribe',
+    variant: 'native-subscription',
+    description: () => 'A wallet accepted a native subscription plan.',
+  },
+  'native.subscription.cancel': {
+    label: 'Subscription cancelled',
+    shortLabel: 'cancel',
+    variant: 'native-subscription',
+    description: () => 'A native subscription was cancelled.',
+  },
+  'native.subscription.resume': {
+    label: 'Subscription resumed',
+    shortLabel: 'resume',
+    variant: 'native-subscription',
+    description: () => 'A native subscription was resumed.',
+  },
+  'native.subscription.revoke': {
+    label: 'Subscription revoked',
+    shortLabel: 'revoke sub',
+    variant: 'native-subscription',
+    description: () => 'A native subscription PDA was revoked.',
+  },
+  'native.subscription.collect': {
+    label: 'Subscription collected',
+    shortLabel: 'collect',
+    variant: 'native-subscription',
+    description: () => 'A merchant or approved puller collected a native subscription payment.',
   },
   'agent.treasury.provision': {
     label: 'Treasury provisioned',

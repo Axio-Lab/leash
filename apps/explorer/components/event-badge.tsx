@@ -16,6 +16,8 @@ const VARIANT_CLS: Record<EventDescriptor['variant'], string> = {
     'bg-[oklch(0.32_0.12_220/0.5)] text-[oklch(0.85_0.13_220)] ring-1 ring-inset ring-[oklch(0.5_0.18_220/0.3)]',
   delegation:
     'bg-[oklch(0.32_0.13_180/0.5)] text-[oklch(0.85_0.13_180)] ring-1 ring-inset ring-[oklch(0.5_0.18_180/0.3)]',
+  'native-subscription':
+    'bg-[oklch(0.31_0.13_205/0.5)] text-[oklch(0.86_0.15_205)] ring-1 ring-inset ring-[oklch(0.5_0.18_205/0.3)]',
   treasury:
     'bg-[oklch(0.32_0.14_120/0.5)] text-[oklch(0.85_0.16_140)] ring-1 ring-inset ring-[oklch(0.5_0.18_140/0.3)]',
   token:
