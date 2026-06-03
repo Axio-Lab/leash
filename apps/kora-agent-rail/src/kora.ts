@@ -82,6 +82,10 @@ export class KoraClient {
     return this.request('POST', '/merchant/api/v1/virtual-bank-account', input);
   }
 
+  async creditSandboxVirtualAccount(input: unknown): Promise<unknown> {
+    return this.request('POST', '/merchant/api/v1/virtual-bank-account/sandbox/credit', input);
+  }
+
   private async request(
     method: string,
     path: string,

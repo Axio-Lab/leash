@@ -49,6 +49,7 @@ const DEFAULT_TOOLS: KoraToolName[] = [
   'kora_list_payouts',
   'kora_create_checkout',
   'kora_create_virtual_account',
+  'kora_credit_sandbox_virtual_account',
 ];
 
 function numberFromEnv(value: string | undefined, fallback: number): number {
