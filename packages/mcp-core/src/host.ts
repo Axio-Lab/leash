@@ -254,6 +254,70 @@ export type GetSpendLimitArgs = {
   symbol?: StableSymbol;
 };
 
+export type NativeSubscriptionsArgs = {
+  action:
+    | 'authority_status'
+    | 'authority_create'
+    | 'authority_close'
+    | 'fixed_create'
+    | 'fixed_transfer'
+    | 'fixed_revoke'
+    | 'recurring_create'
+    | 'recurring_transfer'
+    | 'recurring_revoke'
+    | 'plan_create'
+    | 'plan_update'
+    | 'subscribe'
+    | 'cancel'
+    | 'resume'
+    | 'revoke_subscription'
+    | 'collect';
+  /** Stable mint to use. Defaults to USDC. */
+  symbol?: StableSymbol;
+  /** Counterparty/delegatee wallet for fixed/recurring allowances. */
+  delegatee?: string;
+  /** Delegator/subscriber wallet when transferring or collecting. */
+  delegator?: string;
+  /** Native allowance PDA. Required for revoke; optional for transfer when nonce/delegatee can derive it. */
+  allowance?: string;
+  /** Native subscription PDA for cancel/resume/revoke/collect. */
+  subscription?: string;
+  /** Native subscription plan PDA for update/cancel/resume/revoke/collect. */
+  plan?: string;
+  /** Merchant wallet that owns the plan. */
+  merchant?: string;
+  /** Receiver wallet; host derives its token account. */
+  receiver?: string;
+  /** Receiver token account override. */
+  receiver_token_account?: string;
+  /** Decimal token amount for create/transfer/collect. */
+  amount?: number;
+  /** Decimal amount per period for recurring allowances. */
+  amount_per_period?: number;
+  /** Period length in seconds for recurring allowances. */
+  period_length_seconds?: number;
+  /** Period length in hours for subscription plans. */
+  period_hours?: number;
+  /** Native program nonce. Defaults to 0. */
+  nonce?: string;
+  /** Subscription plan id. */
+  plan_id?: string;
+  /** Unix timestamp seconds. */
+  start_ts?: string;
+  /** Unix timestamp seconds. `0` means no expiry/end. */
+  expiry_ts?: string;
+  /** Plan end timestamp seconds. */
+  end_ts?: string;
+  /** Plan status for updates. */
+  status?: 'active' | 'sunset';
+  /** Plan destinations list. */
+  destinations?: string[];
+  /** Plan pullers list. */
+  pullers?: string[];
+  /** Plan metadata URI. */
+  metadata_uri?: string;
+};
+
 /**
  * Inputs for `leash_get_receipt`. Looks up one ReceiptV1 by its
  * deterministic `receipt_hash` (the same hash the explorer URL
@@ -452,6 +516,15 @@ export interface LeashHost {
    * balance.
    */
   getSpendLimit(args: GetSpendLimitArgs): Promise<LeashToolResult>;
+
+  /**
+   * Native Solana Subscriptions & Allowances actions. Standalone MCP
+   * signs directly with the local executive wallet. The authority belongs
+   * to that wallet's token account; agent treasury/x402 settlement remains
+   * on the existing SPL delegation rail until native facilitator support
+   * is added.
+   */
+  nativeSubscriptions(args: NativeSubscriptionsArgs): Promise<LeashToolResult>;
 
   /**
    * Look up a single receipt by its `receipt_hash`. Returns the full

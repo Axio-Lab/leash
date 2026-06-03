@@ -328,6 +328,124 @@ export type RecordAgentResponse = {
   receipts_service: string;
 };
 
+// ── native Solana subscriptions / allowances ─────────────────────
+
+export type TokenProgramFlavor = 'spl' | 'token-2022';
+
+export type PreparedTransaction = {
+  base64: string;
+  message_base64: string;
+  recent_blockhash: string;
+  last_valid_block_height?: number;
+  fee_payer: string;
+  signers: string[];
+};
+
+export type PreparedEnvelope<TEcho = Record<string, unknown>> = {
+  event_id: string;
+  network: SvmNetwork;
+  transaction: PreparedTransaction;
+  echo: TEcho;
+};
+
+export type NativeSignerInput = {
+  payer: string;
+  owner?: string;
+  client_reference?: string;
+};
+
+export type NativeMintInput = {
+  spl_mint: string;
+  token_program?: TokenProgramFlavor;
+  program_address?: string;
+};
+
+export type NativeAuthorityPrepareInput = NativeSignerInput & NativeMintInput;
+
+export type NativeAuthorityStatus = {
+  kind: 'native_subscription_authority';
+  status: 'ok';
+  agent_mint: string;
+  network: SvmNetwork;
+  exists: boolean;
+  authority: string;
+  owner: string;
+  mint: string;
+  tokenProgram: string;
+  init_id: string | null;
+  data: Record<string, unknown> | null;
+};
+
+export type NativeFixedAllowanceCreateInput = NativeAuthorityPrepareInput & {
+  delegatee: string;
+  amount: string;
+  nonce?: string;
+  expiry_ts?: string;
+};
+
+export type NativeRecurringAllowanceCreateInput = NativeAuthorityPrepareInput & {
+  delegatee: string;
+  amount_per_period: string;
+  period_length_seconds: string;
+  start_ts?: string;
+  expiry_ts?: string;
+  nonce?: string;
+};
+
+export type NativeAllowanceTransferInput = NativeAuthorityPrepareInput & {
+  delegator: string;
+  delegatee?: string;
+  allowance?: string;
+  nonce?: string;
+  receiver?: string;
+  receiver_token_account?: string;
+  amount: string;
+};
+
+export type NativeAllowanceRevokeInput = NativeSignerInput & {
+  allowance: string;
+  receiver?: string;
+  program_address?: string;
+};
+
+export type NativePlanCreateInput = NativeAuthorityPrepareInput & {
+  plan_id: string;
+  amount: string;
+  period_hours: string;
+  end_ts?: string;
+  destinations?: string[];
+  pullers?: string[];
+  metadata_uri?: string;
+};
+
+export type NativePlanUpdateInput = NativeSignerInput & {
+  status: 'active' | 'sunset';
+  end_ts?: string;
+  pullers?: string[];
+  metadata_uri?: string;
+  program_address?: string;
+};
+
+export type NativeSubscribeInput = NativeAuthorityPrepareInput & {
+  merchant: string;
+  plan_id: string;
+};
+
+export type NativeSubscriptionLifecycleInput = NativeSignerInput & {
+  plan: string;
+  subscriber?: string;
+  receiver?: string;
+  program_address?: string;
+};
+
+export type NativeSubscriptionCollectInput = NativeAuthorityPrepareInput & {
+  plan: string;
+  delegator: string;
+  receiver?: string;
+  receiver_token_account?: string;
+  amount: string;
+};
+
 // ── payment links ────────────────────────────────────────────────
 //
 // Mirrors `apps/api/src/routes/payment-links.ts`. A payment link is

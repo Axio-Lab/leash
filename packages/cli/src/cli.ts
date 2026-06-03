@@ -91,6 +91,11 @@ async function main(): Promise<void> {
       await runTreasury(argv.slice(1));
       return;
 
+    case 'subscriptions':
+    case 'subscription':
+      await runSubscriptions(argv.slice(1));
+      return;
+
     case 'discover':
       await runDiscover(argv.slice(1));
       return;
@@ -520,6 +525,111 @@ async function runTreasurySetLimit(args: string[]): Promise<void> {
       `  tx_signature:    ${payload.tx_signature}`,
       `  explorer:        ${payload.explorer_url}`,
     ].join('\n');
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// subscriptions
+// ────────────────────────────────────────────────────────────────────────────
+
+async function runSubscriptions(args: string[]): Promise<void> {
+  const sub = args[0];
+  if (!sub) {
+    process.stderr.write(
+      'usage: leash subscriptions <authority-status|authority-create|authority-close|fixed-create|fixed-transfer|fixed-revoke|recurring-create|recurring-transfer|recurring-revoke|plan-create|plan-update|subscribe|cancel|resume|revoke-subscription|collect> [flags]\n',
+    );
+    process.exit(2);
+  }
+  const action = sub.replaceAll('-', '_');
+  const allowed = new Set([
+    'authority_status',
+    'authority_create',
+    'authority_close',
+    'fixed_create',
+    'fixed_transfer',
+    'fixed_revoke',
+    'recurring_create',
+    'recurring_transfer',
+    'recurring_revoke',
+    'plan_create',
+    'plan_update',
+    'subscribe',
+    'cancel',
+    'resume',
+    'revoke_subscription',
+    'collect',
+  ]);
+  if (!allowed.has(action)) {
+    process.stderr.write(`unknown subscriptions action: ${sub}\n`);
+    process.exit(2);
+  }
+
+  const { hostRef } = buildServerFromEnv();
+  const json = wantJson(args);
+  const symbol = (optArg(args, '--token') ?? optArg(args, '--symbol') ?? 'USDC').toUpperCase() as
+    | 'USDC'
+    | 'USDG'
+    | 'USDT';
+  const amount = numArg(args, '--amount');
+  const amountPerPeriod = numArg(args, '--amount-per-period');
+  const periodLengthSeconds = numArg(args, '--period-seconds');
+  const periodHours = numArg(args, '--period-hours');
+  const status = optArg(args, '--status') as 'active' | 'sunset' | undefined;
+  const actionArg = action as Parameters<LeashHost['nativeSubscriptions']>[0]['action'];
+
+  const callArgs: Parameters<LeashHost['nativeSubscriptions']>[0] = {
+    action: actionArg,
+    symbol,
+    ...(optArg(args, '--delegatee') ? { delegatee: optArg(args, '--delegatee') } : {}),
+    ...(optArg(args, '--delegator') ? { delegator: optArg(args, '--delegator') } : {}),
+    ...(optArg(args, '--allowance') ? { allowance: optArg(args, '--allowance') } : {}),
+    ...(optArg(args, '--subscription') ? { subscription: optArg(args, '--subscription') } : {}),
+    ...(optArg(args, '--plan') ? { plan: optArg(args, '--plan') } : {}),
+    ...(optArg(args, '--merchant') ? { merchant: optArg(args, '--merchant') } : {}),
+    ...(optArg(args, '--receiver') ? { receiver: optArg(args, '--receiver') } : {}),
+    ...(optArg(args, '--receiver-token-account')
+      ? { receiver_token_account: optArg(args, '--receiver-token-account') }
+      : {}),
+    ...(amount !== undefined ? { amount } : {}),
+    ...(amountPerPeriod !== undefined ? { amount_per_period: amountPerPeriod } : {}),
+    ...(periodLengthSeconds !== undefined ? { period_length_seconds: periodLengthSeconds } : {}),
+    ...(periodHours !== undefined ? { period_hours: periodHours } : {}),
+    ...(optArg(args, '--nonce') ? { nonce: optArg(args, '--nonce') } : {}),
+    ...(optArg(args, '--plan-id') ? { plan_id: optArg(args, '--plan-id') } : {}),
+    ...(optArg(args, '--start-ts') ? { start_ts: optArg(args, '--start-ts') } : {}),
+    ...(optArg(args, '--expiry-ts') ? { expiry_ts: optArg(args, '--expiry-ts') } : {}),
+    ...(optArg(args, '--end-ts') ? { end_ts: optArg(args, '--end-ts') } : {}),
+    ...(status ? { status } : {}),
+    ...(allOptArgs(args, '--destination').length > 0
+      ? { destinations: allOptArgs(args, '--destination') }
+      : {}),
+    ...(allOptArgs(args, '--puller').length > 0 ? { pullers: allOptArgs(args, '--puller') } : {}),
+    ...(optArg(args, '--metadata-uri') ? { metadata_uri: optArg(args, '--metadata-uri') } : {}),
+  };
+
+  const result = await hostRef.nativeSubscriptions(callArgs);
+  printResult(result, json, (payload) => {
+    if (payload.status !== 'ok') return formatStatusError(payload);
+    const lines = [`native subscriptions ${payload.action} ok (${payload.symbol ?? symbol})`];
+    for (const key of [
+      'authority',
+      'allowance',
+      'plan',
+      'subscription',
+      'subscriber',
+      'delegatee',
+      'delegator',
+      'receiver_token_account',
+      'amount',
+      'amount_per_period',
+      'period_hours',
+      'tx_signature',
+      'explorer_url',
+    ]) {
+      const value = asAny(payload)[key];
+      if (value !== undefined && value !== null && value !== '') lines.push(`  ${key}: ${value}`);
+    }
+    return lines.join('\n');
   });
 }
 
@@ -1337,6 +1447,18 @@ function printHelp(): void {
       '                                     `--unlimited` (default) writes u64::MAX,',
       '                                     `--revoke` zeros it, `--amount N` caps at N',
       '                                     human units (e.g. --amount 100 = $100 USDC).',
+      '',
+      'native subscription commands:',
+      '  subscriptions authority-status [--token USDC|USDG|USDT]',
+      '  subscriptions authority-create [--token USDC|USDG|USDT]',
+      '  subscriptions fixed-create --delegatee W --amount N [--nonce I]',
+      '  subscriptions recurring-create --delegatee W --amount-per-period N --period-seconds S',
+      '  subscriptions plan-create --plan-id I --amount N --period-hours H',
+      '  subscriptions subscribe --merchant W --plan-id I',
+      '  subscriptions collect --plan P --subscription S --delegator W --amount N',
+      '                                     Solana native Subscriptions & Allowances. Uses',
+      '                                     the configured executive wallet token account;',
+      '                                     x402 payment links still use treasury delegation.',
       '',
       'marketplace + reputation:',
       '  discover [-q QUERY] [--max-price N] [--pricing-type T] [--source leash|pay-skills|all] [--limit N]',

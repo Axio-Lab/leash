@@ -59,6 +59,7 @@ import {
   type LeashToolResult,
   type ListIdentityDisclosuresArgs,
   type ListAgentApiKeysArgs,
+  type NativeSubscriptionsArgs,
   type PayArgs,
   type PaySkillsProviderArgs,
   type ReceiptsArgs,
@@ -78,9 +79,24 @@ import {
 import {
   SPL_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID as UMI_TOKEN_2022_PROGRAM_ID,
+  cancelNativeSubscription,
+  closeNativeSubscriptionAuthority,
+  collectNativeSubscription,
+  createNativeFixedAllowance,
+  createNativeRecurringAllowance,
+  createNativeSubscriptionPlan,
   getSpendDelegation,
+  getNativeSubscriptionAuthority,
+  initNativeSubscriptionAuthority,
   revokeSpendDelegation,
+  revokeNativeAllowance,
+  revokeNativeSubscription,
+  resumeNativeSubscription,
   setSpendDelegation,
+  subscribeNativeSubscriptionPlan,
+  transferNativeFixedAllowance,
+  transferNativeRecurringAllowance,
+  updateNativeSubscriptionPlan,
   withdrawTreasury,
   withdrawTreasurySol,
 } from '@leashmarket/registry-utils';
@@ -1363,6 +1379,327 @@ class StdioHost implements LeashHost {
     }
   }
 
+  async nativeSubscriptions(args: NativeSubscriptionsArgs): Promise<LeashToolResult> {
+    if (!this.agentMint) return noAgentResult('native_subscriptions');
+    const symbol = (args.symbol ?? 'USDC') as StableSymbol;
+    const meta = lookupTokenBySymbolSafe(symbol, tokenNetwork(this.network));
+    if (!meta) {
+      return jsonResult({
+        kind: 'native_subscriptions',
+        status: 'error',
+        message: `${symbol} is not configured for ${this.network}.`,
+      });
+    }
+    const umi = this.signer.getUmi(this.rpcUrl);
+    const tokenProgram =
+      meta.program === 'spl-token-2022' ? UMI_TOKEN_2022_PROGRAM_ID : SPL_TOKEN_PROGRAM_ID;
+    const mint = meta.mint;
+    const amount = (label = 'amount'): bigint => {
+      const value = label === 'amount_per_period' ? args.amount_per_period : args.amount;
+      const atomic = decimalToAtomic(value ?? 0, meta.decimals);
+      if (atomic <= 0n) throw new Error(`${label} is required and must be positive`);
+      return atomic;
+    };
+    const nonce = () => BigInt(args.nonce ?? '0');
+    const expiryTs = () => BigInt(args.expiry_ts ?? '0');
+    const common = {
+      kind: 'native_subscriptions',
+      action: args.action,
+      agent_mint: this.agentMint,
+      owner_wallet: this.ownerWallet,
+      network: this.network,
+      symbol,
+      mint,
+    };
+    try {
+      switch (args.action) {
+        case 'authority_status': {
+          const status = await getNativeSubscriptionAuthority(umi, {
+            owner: this.ownerWallet ?? undefined,
+            mint,
+            tokenProgram,
+          });
+          return jsonResult({
+            ...common,
+            status: 'ok',
+            authority: status.authority,
+            exists: status.exists,
+            init_id: status.initId?.toString() ?? null,
+            token_program: status.tokenProgram,
+          });
+        }
+        case 'authority_create': {
+          const result = await initNativeSubscriptionAuthority(umi, { mint, tokenProgram });
+          return jsonResult({
+            ...common,
+            status: 'ok',
+            authority: result.authority,
+            user_token_account: result.userTokenAccount,
+            tx_signature: result.signature,
+            explorer_url: explorerTxUrl(result.signature, this.network),
+          });
+        }
+        case 'authority_close': {
+          const result = await closeNativeSubscriptionAuthority(umi, {
+            mint,
+            tokenProgram,
+            ...(args.receiver ? { receiver: args.receiver } : {}),
+          });
+          return jsonResult({
+            ...common,
+            status: 'ok',
+            authority: result.authority,
+            tx_signature: result.signature,
+            explorer_url: explorerTxUrl(result.signature, this.network),
+          });
+        }
+        case 'fixed_create': {
+          if (!args.delegatee) throw new Error('delegatee is required');
+          const result = await createNativeFixedAllowance(umi, {
+            mint,
+            tokenProgram,
+            delegatee: args.delegatee,
+            amount: amount(),
+            nonce: nonce(),
+            expiryTs: expiryTs(),
+          });
+          return jsonResult({
+            ...common,
+            status: 'ok',
+            allowance_type: 'fixed',
+            allowance: result.allowance,
+            authority: result.authority,
+            delegatee: result.delegatee,
+            amount_atomic: amount().toString(),
+            amount: atomicToDecimal(amount(), meta.decimals),
+            tx_signature: result.signature,
+            explorer_url: explorerTxUrl(result.signature, this.network),
+          });
+        }
+        case 'fixed_transfer': {
+          if (!args.delegator) throw new Error('delegator is required');
+          const result = await transferNativeFixedAllowance(umi, {
+            mint,
+            tokenProgram,
+            delegator: args.delegator,
+            ...(args.delegatee ? { delegatee: args.delegatee } : {}),
+            ...(args.allowance ? { allowance: args.allowance } : {}),
+            nonce: nonce(),
+            ...(args.receiver ? { receiver: args.receiver } : {}),
+            ...(args.receiver_token_account
+              ? { receiverTokenAccount: args.receiver_token_account }
+              : {}),
+            amount: amount(),
+          });
+          return nativeTransferResult(common, result, meta.decimals, this.network);
+        }
+        case 'fixed_revoke': {
+          if (!args.allowance) throw new Error('allowance is required');
+          const result = await revokeNativeAllowance(umi, {
+            allowance: args.allowance,
+            ...(args.receiver ? { receiver: args.receiver } : {}),
+          });
+          return jsonResult({
+            ...common,
+            status: 'ok',
+            allowance: result.allowance,
+            tx_signature: result.signature,
+            explorer_url: explorerTxUrl(result.signature, this.network),
+          });
+        }
+        case 'recurring_create': {
+          if (!args.delegatee) throw new Error('delegatee is required');
+          if (!args.period_length_seconds) throw new Error('period_length_seconds is required');
+          const result = await createNativeRecurringAllowance(umi, {
+            mint,
+            tokenProgram,
+            delegatee: args.delegatee,
+            amountPerPeriod: amount('amount_per_period'),
+            periodLengthSeconds: BigInt(args.period_length_seconds),
+            nonce: nonce(),
+            ...(args.start_ts ? { startTs: BigInt(args.start_ts) } : {}),
+            expiryTs: expiryTs(),
+          });
+          return jsonResult({
+            ...common,
+            status: 'ok',
+            allowance_type: 'recurring',
+            allowance: result.allowance,
+            authority: result.authority,
+            delegatee: result.delegatee,
+            amount_per_period_atomic: amount('amount_per_period').toString(),
+            amount_per_period: atomicToDecimal(amount('amount_per_period'), meta.decimals),
+            period_length_seconds: args.period_length_seconds,
+            tx_signature: result.signature,
+            explorer_url: explorerTxUrl(result.signature, this.network),
+          });
+        }
+        case 'recurring_transfer': {
+          if (!args.delegator) throw new Error('delegator is required');
+          const result = await transferNativeRecurringAllowance(umi, {
+            mint,
+            tokenProgram,
+            delegator: args.delegator,
+            ...(args.delegatee ? { delegatee: args.delegatee } : {}),
+            ...(args.allowance ? { allowance: args.allowance } : {}),
+            nonce: nonce(),
+            ...(args.receiver ? { receiver: args.receiver } : {}),
+            ...(args.receiver_token_account
+              ? { receiverTokenAccount: args.receiver_token_account }
+              : {}),
+            amount: amount(),
+          });
+          return nativeTransferResult(common, result, meta.decimals, this.network);
+        }
+        case 'recurring_revoke': {
+          if (!args.allowance) throw new Error('allowance is required');
+          const result = await revokeNativeAllowance(umi, {
+            allowance: args.allowance,
+            ...(args.receiver ? { receiver: args.receiver } : {}),
+          });
+          return jsonResult({
+            ...common,
+            status: 'ok',
+            allowance: result.allowance,
+            tx_signature: result.signature,
+            explorer_url: explorerTxUrl(result.signature, this.network),
+          });
+        }
+        case 'plan_create': {
+          if (!args.plan_id) throw new Error('plan_id is required');
+          if (!args.period_hours) throw new Error('period_hours is required');
+          const result = await createNativeSubscriptionPlan(umi, {
+            mint,
+            tokenProgram,
+            planId: BigInt(args.plan_id),
+            amount: amount(),
+            periodHours: BigInt(args.period_hours),
+            endTs: BigInt(args.end_ts ?? '0'),
+            destinations: args.destinations,
+            pullers: args.pullers,
+            metadataUri: args.metadata_uri,
+          });
+          return jsonResult({
+            ...common,
+            status: 'ok',
+            plan: result.plan,
+            plan_id: result.planId.toString(),
+            amount_atomic: amount().toString(),
+            amount: atomicToDecimal(amount(), meta.decimals),
+            period_hours: args.period_hours,
+            tx_signature: result.signature,
+            explorer_url: explorerTxUrl(result.signature, this.network),
+          });
+        }
+        case 'plan_update': {
+          if (!args.plan) throw new Error('plan is required');
+          if (!args.status) throw new Error('status is required');
+          const result = await updateNativeSubscriptionPlan(umi, {
+            plan: args.plan,
+            status: args.status,
+            endTs: BigInt(args.end_ts ?? '0'),
+            pullers: args.pullers,
+            metadataUri: args.metadata_uri,
+          });
+          return jsonResult({
+            ...common,
+            status: 'ok',
+            plan: result.plan,
+            plan_status: args.status,
+            tx_signature: result.signature,
+            explorer_url: explorerTxUrl(result.signature, this.network),
+          });
+        }
+        case 'subscribe': {
+          if (!args.merchant) throw new Error('merchant is required');
+          if (!args.plan_id) throw new Error('plan_id is required');
+          const result = await subscribeNativeSubscriptionPlan(umi, {
+            mint,
+            tokenProgram,
+            merchant: args.merchant,
+            planId: BigInt(args.plan_id),
+          });
+          return jsonResult({
+            ...common,
+            status: 'ok',
+            plan: result.plan,
+            subscription: result.subscription,
+            subscriber: result.subscriber,
+            tx_signature: result.signature,
+            explorer_url: explorerTxUrl(result.signature, this.network),
+          });
+        }
+        case 'cancel': {
+          if (!args.plan) throw new Error('plan is required');
+          const result = await cancelNativeSubscription(umi, {
+            plan: args.plan,
+            ...(args.subscription ? { subscription: args.subscription } : {}),
+          });
+          return nativeSubscriptionLifecycleResult(common, result, this.network);
+        }
+        case 'resume': {
+          if (!args.plan) throw new Error('plan is required');
+          const result = await resumeNativeSubscription(umi, {
+            plan: args.plan,
+            ...(args.subscription ? { subscription: args.subscription } : {}),
+          });
+          return nativeSubscriptionLifecycleResult(common, result, this.network);
+        }
+        case 'revoke_subscription': {
+          if (!args.plan) throw new Error('plan is required');
+          if (!args.subscription) throw new Error('subscription is required');
+          const result = await revokeNativeSubscription(umi, {
+            plan: args.plan,
+            subscription: args.subscription,
+            ...(args.receiver ? { receiver: args.receiver } : {}),
+          });
+          return nativeSubscriptionLifecycleResult(common, result, this.network);
+        }
+        case 'collect': {
+          if (!args.plan) throw new Error('plan is required');
+          if (!args.subscription) throw new Error('subscription is required');
+          if (!args.delegator) throw new Error('delegator is required');
+          const result = await collectNativeSubscription(umi, {
+            mint,
+            tokenProgram,
+            plan: args.plan,
+            subscription: args.subscription,
+            delegator: args.delegator,
+            ...(args.receiver ? { receiver: args.receiver } : {}),
+            ...(args.receiver_token_account
+              ? { receiverTokenAccount: args.receiver_token_account }
+              : {}),
+            amount: amount(),
+          });
+          return jsonResult({
+            ...common,
+            status: 'ok',
+            plan: result.plan,
+            subscription: result.subscription,
+            caller: result.caller,
+            delegator: result.delegator,
+            receiver_token_account: result.receiverTokenAccount,
+            amount_atomic: result.amount.toString(),
+            amount: atomicToDecimal(result.amount, meta.decimals),
+            tx_signature: result.signature,
+            explorer_url: explorerTxUrl(result.signature, this.network),
+          });
+        }
+      }
+      return jsonResult({
+        ...common,
+        status: 'error',
+        message: `unsupported native subscriptions action: ${String(args.action)}`,
+      });
+    } catch (err) {
+      return jsonResult({
+        ...common,
+        status: 'error',
+        message: err instanceof Error ? err.message : 'unknown error',
+      });
+    }
+  }
+
   private async signedAgentApiFetch(
     pathWithQuery: string,
     init: { method: 'GET' | 'POST' | 'PUT' | 'DELETE'; body?: string },
@@ -1465,6 +1802,54 @@ function explorerAccountUrl(pubkey: string, network: SvmNetwork): string {
 function explorerTxUrl(signature: string, network: SvmNetwork): string {
   const cluster = network === 'solana-mainnet' ? '' : '?cluster=devnet';
   return `https://solscan.io/tx/${signature}${cluster}`;
+}
+
+function nativeTransferResult(
+  common: Record<string, unknown>,
+  result: {
+    allowance: string;
+    delegator: string;
+    caller: string;
+    receiverTokenAccount: string;
+    amount: bigint;
+    signature: string;
+  },
+  decimals: number,
+  network: SvmNetwork,
+): LeashToolResult {
+  return jsonResult({
+    ...common,
+    status: 'ok',
+    allowance: result.allowance,
+    delegator: result.delegator,
+    caller: result.caller,
+    receiver_token_account: result.receiverTokenAccount,
+    amount_atomic: result.amount.toString(),
+    amount: atomicToDecimal(result.amount, decimals),
+    tx_signature: result.signature,
+    explorer_url: explorerTxUrl(result.signature, network),
+  });
+}
+
+function nativeSubscriptionLifecycleResult(
+  common: Record<string, unknown>,
+  result: {
+    plan: string;
+    subscription: string;
+    subscriber: string;
+    signature: string;
+  },
+  network: SvmNetwork,
+): LeashToolResult {
+  return jsonResult({
+    ...common,
+    status: 'ok',
+    plan: result.plan,
+    subscription: result.subscription,
+    subscriber: result.subscriber,
+    tx_signature: result.signature,
+    explorer_url: explorerTxUrl(result.signature, network),
+  });
 }
 
 /** Clamp an integer into `[min, max]`, falling back to `min` on NaN. */
