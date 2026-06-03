@@ -22,6 +22,7 @@ import { getReceiptTool } from './get-receipt.js';
 import { getSpendLimitTool } from './get-spend-limit.js';
 import { listAgentApiKeysTool } from './list-agent-api-keys.js';
 import { listIdentityDisclosuresTool } from './list-identity-disclosures.js';
+import { nativeSubscriptionsTool } from './native-subscriptions.js';
 import { payPaymentLinkTool } from './pay-payment-link.js';
 import { paySkillsEndpointsTool } from './pay-skills-endpoints.js';
 import { receiptsTool } from './receipts.js';
@@ -52,6 +53,7 @@ export {
   getSpendLimitTool,
   listAgentApiKeysTool,
   listIdentityDisclosuresTool,
+  nativeSubscriptionsTool,
   payPaymentLinkTool,
   paySkillsEndpointsTool,
   receiptsTool,
@@ -84,6 +86,7 @@ export const LEASH_TOOLS: ReadonlyArray<LeashTool> = [
   getSpendLimitTool,
   listAgentApiKeysTool,
   listIdentityDisclosuresTool,
+  nativeSubscriptionsTool,
   payPaymentLinkTool,
   paySkillsEndpointsTool,
   receiptsTool,

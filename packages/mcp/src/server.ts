@@ -64,6 +64,7 @@ import {
   type LeashToolResult,
   type ListIdentityDisclosuresArgs,
   type ListAgentApiKeysArgs,
+  type NativeSubscriptionsArgs,
   type PayArgs,
   type PaySkillsProviderArgs,
   type ReceiptsArgs,
@@ -344,6 +345,9 @@ export class HostRef implements LeashHost {
   }
   getSpendLimit(args: GetSpendLimitArgs): Promise<LeashToolResult> {
     return this.inner.getSpendLimit(args);
+  }
+  nativeSubscriptions(args: NativeSubscriptionsArgs): Promise<LeashToolResult> {
+    return this.inner.nativeSubscriptions(args);
   }
   getReceipt(args: GetReceiptArgs): Promise<LeashToolResult> {
     return this.inner.getReceipt(args);
@@ -705,6 +709,9 @@ function makePlaceholderHost(defaults: LeashHostDefaults): LeashHost {
     },
     async getSpendLimit() {
       return noAgent('spend_limit');
+    },
+    async nativeSubscriptions() {
+      return noAgent('native_subscriptions');
     },
     async getReceipt() {
       return noAgent('receipt');

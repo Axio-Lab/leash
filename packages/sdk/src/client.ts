@@ -42,11 +42,23 @@ import type {
   IdentityVerificationDecisionRequest,
   IdentityVerificationThresholds,
   IdentityVerifyResponse,
+  NativeAllowanceRevokeInput,
+  NativeAllowanceTransferInput,
+  NativeAuthorityPrepareInput,
+  NativeAuthorityStatus,
+  NativeFixedAllowanceCreateInput,
+  NativePlanCreateInput,
+  NativePlanUpdateInput,
+  NativeRecurringAllowanceCreateInput,
+  NativeSubscribeInput,
+  NativeSubscriptionCollectInput,
+  NativeSubscriptionLifecycleInput,
   PaymentLink,
   PaymentLinkCreateInput,
   PaymentLinkPatchInput,
   PaymentLinksListResponse,
   PaySkillsProvider,
+  PreparedEnvelope,
   PublicIdentityProfile,
   Receipt,
   RecordAgentInput,
@@ -298,6 +310,214 @@ export class LeashClient {
 
   async recordAgent(input: RecordAgentInput): Promise<RecordAgentResponse> {
     return this.requestJson<RecordAgentResponse>('POST', '/v1/agents/record', input);
+  }
+
+  // ── native Solana subscriptions / allowances (API-key auth) ──────
+
+  async getNativeSubscriptionAuthority(args: {
+    agentMint: string;
+    owner: string;
+    spl_mint: string;
+    token_program?: 'spl' | 'token-2022';
+    program_address?: string;
+  }): Promise<NativeAuthorityStatus> {
+    this.requireApiKey('getNativeSubscriptionAuthority');
+    const params = new URLSearchParams();
+    params.set('owner', args.owner);
+    params.set('spl_mint', args.spl_mint);
+    if (args.token_program) params.set('token_program', args.token_program);
+    if (args.program_address) params.set('program_address', args.program_address);
+    return this.requestJson<NativeAuthorityStatus>(
+      'GET',
+      `/v1/agents/${encodeURIComponent(args.agentMint)}/subscriptions/authority?${params}`,
+      undefined,
+      { auth: 'apiKey' },
+    );
+  }
+
+  async prepareNativeSubscriptionAuthority(
+    agentMint: string,
+    input: NativeAuthorityPrepareInput,
+  ): Promise<PreparedEnvelope> {
+    return this.prepareNative(
+      agentMint,
+      '/subscriptions/authority/prepare',
+      input,
+      'prepareNativeSubscriptionAuthority',
+    );
+  }
+
+  async prepareCloseNativeSubscriptionAuthority(
+    agentMint: string,
+    input: NativeAuthorityPrepareInput & { receiver?: string },
+  ): Promise<PreparedEnvelope> {
+    return this.prepareNative(
+      agentMint,
+      '/subscriptions/authority/close/prepare',
+      input,
+      'prepareCloseNativeSubscriptionAuthority',
+    );
+  }
+
+  async prepareNativeFixedAllowance(
+    agentMint: string,
+    input: NativeFixedAllowanceCreateInput,
+  ): Promise<PreparedEnvelope> {
+    return this.prepareNative(
+      agentMint,
+      '/allowances/fixed/prepare',
+      input,
+      'prepareNativeFixedAllowance',
+    );
+  }
+
+  async prepareTransferNativeFixedAllowance(
+    agentMint: string,
+    input: NativeAllowanceTransferInput,
+  ): Promise<PreparedEnvelope> {
+    return this.prepareNative(
+      agentMint,
+      '/allowances/fixed/transfer/prepare',
+      input,
+      'prepareTransferNativeFixedAllowance',
+    );
+  }
+
+  async prepareRevokeNativeFixedAllowance(
+    agentMint: string,
+    input: NativeAllowanceRevokeInput,
+  ): Promise<PreparedEnvelope> {
+    return this.prepareNative(
+      agentMint,
+      '/allowances/fixed/revoke/prepare',
+      input,
+      'prepareRevokeNativeFixedAllowance',
+    );
+  }
+
+  async prepareNativeRecurringAllowance(
+    agentMint: string,
+    input: NativeRecurringAllowanceCreateInput,
+  ): Promise<PreparedEnvelope> {
+    return this.prepareNative(
+      agentMint,
+      '/allowances/recurring/prepare',
+      input,
+      'prepareNativeRecurringAllowance',
+    );
+  }
+
+  async prepareTransferNativeRecurringAllowance(
+    agentMint: string,
+    input: NativeAllowanceTransferInput,
+  ): Promise<PreparedEnvelope> {
+    return this.prepareNative(
+      agentMint,
+      '/allowances/recurring/transfer/prepare',
+      input,
+      'prepareTransferNativeRecurringAllowance',
+    );
+  }
+
+  async prepareRevokeNativeRecurringAllowance(
+    agentMint: string,
+    input: NativeAllowanceRevokeInput,
+  ): Promise<PreparedEnvelope> {
+    return this.prepareNative(
+      agentMint,
+      '/allowances/recurring/revoke/prepare',
+      input,
+      'prepareRevokeNativeRecurringAllowance',
+    );
+  }
+
+  async prepareNativeSubscriptionPlan(
+    agentMint: string,
+    input: NativePlanCreateInput,
+  ): Promise<PreparedEnvelope> {
+    return this.prepareNative(
+      agentMint,
+      '/subscription-plans/prepare',
+      input,
+      'prepareNativeSubscriptionPlan',
+    );
+  }
+
+  async prepareUpdateNativeSubscriptionPlan(
+    agentMint: string,
+    plan: string,
+    input: NativePlanUpdateInput,
+  ): Promise<PreparedEnvelope> {
+    return this.prepareNative(
+      agentMint,
+      `/subscription-plans/${encodeURIComponent(plan)}/prepare`,
+      input,
+      'prepareUpdateNativeSubscriptionPlan',
+    );
+  }
+
+  async prepareSubscribeNativeSubscriptionPlan(
+    agentMint: string,
+    input: NativeSubscribeInput,
+  ): Promise<PreparedEnvelope> {
+    return this.prepareNative(
+      agentMint,
+      '/subscriptions/subscribe/prepare',
+      input,
+      'prepareSubscribeNativeSubscriptionPlan',
+    );
+  }
+
+  async prepareCancelNativeSubscription(
+    agentMint: string,
+    subscription: string,
+    input: NativeSubscriptionLifecycleInput,
+  ): Promise<PreparedEnvelope> {
+    return this.prepareNative(
+      agentMint,
+      `/subscriptions/${encodeURIComponent(subscription)}/cancel/prepare`,
+      input,
+      'prepareCancelNativeSubscription',
+    );
+  }
+
+  async prepareResumeNativeSubscription(
+    agentMint: string,
+    subscription: string,
+    input: NativeSubscriptionLifecycleInput,
+  ): Promise<PreparedEnvelope> {
+    return this.prepareNative(
+      agentMint,
+      `/subscriptions/${encodeURIComponent(subscription)}/resume/prepare`,
+      input,
+      'prepareResumeNativeSubscription',
+    );
+  }
+
+  async prepareRevokeNativeSubscription(
+    agentMint: string,
+    subscription: string,
+    input: NativeSubscriptionLifecycleInput,
+  ): Promise<PreparedEnvelope> {
+    return this.prepareNative(
+      agentMint,
+      `/subscriptions/${encodeURIComponent(subscription)}/revoke/prepare`,
+      input,
+      'prepareRevokeNativeSubscription',
+    );
+  }
+
+  async prepareCollectNativeSubscription(
+    agentMint: string,
+    subscription: string,
+    input: NativeSubscriptionCollectInput,
+  ): Promise<PreparedEnvelope> {
+    return this.prepareNative(
+      agentMint,
+      `/subscriptions/${encodeURIComponent(subscription)}/collect/prepare`,
+      input,
+      'prepareCollectNativeSubscription',
+    );
   }
 
   // ── receipts (legacy API-key auth for now) ───────────────────────
@@ -653,13 +873,33 @@ export class LeashClient {
     }
   }
 
+  private async prepareNative<TInput extends Record<string, unknown>>(
+    agentMint: string,
+    suffix: string,
+    input: TInput,
+    methodName: string,
+  ): Promise<PreparedEnvelope> {
+    this.requireApiKey(methodName);
+    return this.requestJson<PreparedEnvelope>(
+      'POST',
+      `/v1/agents/${encodeURIComponent(agentMint)}${suffix}`,
+      input,
+      { auth: 'apiKey' },
+    );
+  }
+
   /**
    * Fire one HTTP request, signing it with X-Leash-Sig when the
    * caller provided an agent identity AND the path is one of the
    * agent-scoped endpoints. Public/legacy paths skip signing and
    * fall back to the API-key bearer if available.
    */
-  private async requestJson<T>(method: string, pathWithQuery: string, body?: unknown): Promise<T> {
+  private async requestJson<T>(
+    method: string,
+    pathWithQuery: string,
+    body?: unknown,
+    opts: { auth?: 'auto' | 'apiKey' | 'agent' } = {},
+  ): Promise<T> {
     const url = `${this.baseUrl}${pathWithQuery}`;
     const bodyText = body == null ? undefined : JSON.stringify(body);
 
@@ -672,7 +912,8 @@ export class LeashClient {
       this.agentMint &&
       this.executiveSecretBase58 &&
       pathWithQuery.startsWith(`/v1/agents/${this.agentMint}`);
-    if (isAgentScoped) {
+    const auth = opts.auth ?? 'auto';
+    if (auth !== 'apiKey' && isAgentScoped) {
       const sig = await signRequest({
         method,
         pathWithQuery,
@@ -683,6 +924,8 @@ export class LeashClient {
       Object.assign(headers, sig);
     } else if (this.apiKey) {
       headers['authorization'] = `Bearer ${this.apiKey}`;
+    } else if (auth === 'apiKey') {
+      this.requireApiKey('requestJson');
     }
 
     const res = await this.fetchImpl(url, {

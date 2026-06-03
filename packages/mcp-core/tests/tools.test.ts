@@ -93,6 +93,9 @@ const echoHost: LeashHost = {
   async getSpendLimit(args) {
     return jsonResult({ kind: 'echo:get_spend_limit', args });
   },
+  async nativeSubscriptions(args) {
+    return jsonResult({ kind: 'echo:native_subscriptions', args });
+  },
   async getReceipt(args) {
     return jsonResult({ kind: 'echo:get_receipt', args });
   },
@@ -120,6 +123,7 @@ describe('LEASH_TOOLS', () => {
       'leash_get_spend_limit',
       'leash_list_agent_api_keys',
       'leash_list_identity_disclosures',
+      'leash_native_subscriptions',
       'leash_pay_payment_link',
       'leash_pay_skills_endpoints',
       'leash_receipts',

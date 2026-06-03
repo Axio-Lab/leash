@@ -33,6 +33,7 @@
     "@metaplex-foundation/umi": "^1.5.1",
     "@noble/curves": "^1.8.0",
     "@noble/hashes": "^1.7.0",
+    "@solana/kit": "^6.9.0",
     "@solana/subscriptions": "^0.3.0",
     "bs58": "^6.0.0"
   },

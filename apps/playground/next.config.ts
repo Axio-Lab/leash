@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
   serverExternalPackages: [
     '@metaplex-foundation/umi-bundle-defaults',
     '@metaplex-foundation/mpl-core',
+    '@solana/kit',
+    '@solana-program/system',
+    '@solana-program/token',
+    '@solana/subscriptions',
   ],
 };
 

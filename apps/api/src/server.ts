@@ -25,6 +25,7 @@ import { buildStatsRoutes } from './routes/stats.js';
 import { buildIdentityRoutes } from './routes/identity.js';
 import { buildExecutiveRoutes } from './routes/executive.js';
 import { buildDelegationRoutes } from './routes/delegation.js';
+import { buildNativeSubscriptionRoutes } from './routes/native-subscriptions.js';
 import { buildTreasuryRoutes } from './routes/treasury.js';
 import { buildTokenRoutes } from './routes/token.js';
 import { buildAgentRoutes } from './routes/agents.js';
@@ -217,6 +218,7 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   authed.route('/', buildIdentityRoutes(deps));
   authed.route('/', buildExecutiveRoutes(deps));
   authed.route('/', buildDelegationRoutes(deps));
+  authed.route('/', buildNativeSubscriptionRoutes(deps));
   authed.route('/', buildTreasuryRoutes(deps));
   authed.route('/', buildTokenRoutes(deps));
   authed.route('/', buildSubmitRoutes(deps));

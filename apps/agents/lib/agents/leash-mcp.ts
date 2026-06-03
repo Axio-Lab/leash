@@ -49,6 +49,7 @@ import {
   type LeashToolResult,
   type ListIdentityDisclosuresArgs,
   type ListAgentApiKeysArgs,
+  type NativeSubscriptionsArgs,
   type PayArgs,
   type PaySkillsProviderArgs,
   type ReputationArgs,
@@ -538,6 +539,18 @@ function createChatHost(ctx: LeashMcpContext): LeashHost {
         status: 'manual',
         message:
           'Open Profile → Agent in the chat UI to inspect the active spend limit and treasury balance.',
+      });
+    },
+
+    async nativeSubscriptions(args: NativeSubscriptionsArgs): Promise<LeashToolResult> {
+      return jsonResult({
+        kind: 'native_subscriptions',
+        status: 'manual',
+        action: args.action,
+        agent_mint: ctx.agentMint,
+        network: SOLANA_NETWORK,
+        message:
+          'Native Solana subscription actions require wallet signing. Use Profile → Spend in the chat UI for browser-signed plan setup, or use the standalone CLI/MCP from the agent runtime for automated execution.',
       });
     },
 

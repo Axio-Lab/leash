@@ -4,6 +4,7 @@ import * as React from 'react';
 import useSWR from 'swr';
 import {
   ChevronRightIcon,
+  CalendarClockIcon,
   InfinityIcon,
   KeyIcon,
   RefreshCwIcon,
@@ -11,7 +12,14 @@ import {
   WalletIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { KNOWN_STABLES, getSpendDelegation, setSpendDelegation } from '@leashmarket/registry-utils';
+import {
+  KNOWN_STABLES,
+  createNativeSubscriptionPlan,
+  getNativeSubscriptionAuthority,
+  getSpendDelegation,
+  initNativeSubscriptionAuthority,
+  setSpendDelegation,
+} from '@leashmarket/registry-utils';
 import type { Umi } from '@metaplex-foundation/umi';
 import { usePrivy } from '@privy-io/react-auth';
 
@@ -210,6 +218,8 @@ export default function ProfileSpendPage() {
         agentMint={agent.mint}
         suggestedAmount={unlimited ? UNLIMITED : form.per_day}
       />
+
+      <NativeSubscriptionPanel agentMint={agent.mint} />
     </div>
   );
 }
@@ -542,6 +552,258 @@ function formatAtomic(atomic: bigint, decimals: number): string {
   if (frac === 0n) return wholeStr;
   const fracStr = frac.toString().padStart(decimals, '0').replace(/0+$/, '');
   return fracStr.length > 0 ? `${wholeStr}.${fracStr}` : wholeStr;
+}
+
+function NativeSubscriptionPanel({ agentMint }: { agentMint: string }) {
+  const { umi, wallet, ready } = usePrivyUmi();
+  const network = SOLANA_NETWORK === 'solana-mainnet' ? 'solana-mainnet' : 'solana-devnet';
+  const usdc = React.useMemo(
+    () => KNOWN_STABLES[network].find((s) => s.symbol === 'USDC'),
+    [network],
+  );
+  const [authority, setAuthority] = React.useState<{
+    exists: boolean;
+    authority: string;
+    initId: string | null;
+  } | null>(null);
+  const [checking, setChecking] = React.useState(false);
+  const [creatingAuthority, setCreatingAuthority] = React.useState(false);
+  const [creatingPlan, setCreatingPlan] = React.useState(false);
+  const [planForm, setPlanForm] = React.useState({
+    planId: String(Math.floor(Date.now() / 1000)),
+    amount: '10',
+    periodHours: '720',
+    metadataUri: '',
+  });
+  const [lastPlan, setLastPlan] = React.useState<{ plan: string; signature: string } | null>(null);
+
+  const refreshAuthority = React.useCallback(async () => {
+    if (!umi || !wallet || !usdc) return;
+    setChecking(true);
+    try {
+      const status = await getNativeSubscriptionAuthority(umi, {
+        owner: wallet.address,
+        mint: usdc.mint,
+        tokenProgram: usdc.tokenProgram,
+      });
+      setAuthority({
+        exists: status.exists,
+        authority: status.authority,
+        initId: status.initId?.toString() ?? null,
+      });
+    } catch (e) {
+      toast.error('Could not read native authority', {
+        description: formatChainError(e),
+      });
+    } finally {
+      setChecking(false);
+    }
+  }, [umi, wallet, usdc]);
+
+  React.useEffect(() => {
+    void refreshAuthority();
+  }, [refreshAuthority]);
+
+  async function initializeAuthority() {
+    if (!umi || !wallet || !usdc || !ready) {
+      toast.error('Wallet not ready');
+      return;
+    }
+    setCreatingAuthority(true);
+    try {
+      const result = await initNativeSubscriptionAuthority(umi, {
+        mint: usdc.mint,
+        tokenProgram: usdc.tokenProgram,
+      });
+      toast.success('Native subscription authority created');
+      setAuthority({
+        exists: true,
+        authority: result.authority,
+        initId: null,
+      });
+      await refreshAuthority();
+    } catch (e) {
+      toast.error('Could not initialize native authority', {
+        description: formatChainError(e),
+      });
+    } finally {
+      setCreatingAuthority(false);
+    }
+  }
+
+  async function createPlan() {
+    if (!umi || !wallet || !usdc || !ready) {
+      toast.error('Wallet not ready');
+      return;
+    }
+    const amount = Number.parseFloat(planForm.amount);
+    const periodHours = Number.parseInt(planForm.periodHours, 10);
+    const planId = BigInt(planForm.planId || '0');
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      !Number.isFinite(periodHours) ||
+      periodHours <= 0
+    ) {
+      toast.error('Invalid subscription plan');
+      return;
+    }
+    setCreatingPlan(true);
+    try {
+      const result = await createNativeSubscriptionPlan(umi, {
+        mint: usdc.mint,
+        tokenProgram: usdc.tokenProgram,
+        planId,
+        amount: BigInt(Math.floor(amount * 1_000_000)),
+        periodHours: BigInt(periodHours),
+        destinations: [wallet.address],
+        pullers: [wallet.address],
+        metadataUri: planForm.metadataUri.trim(),
+      });
+      setLastPlan({ plan: result.plan, signature: result.signature });
+      toast.success('Native subscription plan created');
+    } catch (e) {
+      toast.error('Could not create subscription plan', {
+        description: formatChainError(e),
+      });
+    } finally {
+      setCreatingPlan(false);
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-border bg-bg-elev/60 p-5 space-y-4">
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand/15 text-brand-strong">
+          <CalendarClockIcon className="size-4.5" />
+        </span>
+        <div className="space-y-1 text-sm text-fg-muted flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-fg font-medium text-base">Native recurring services</h2>
+            <button
+              type="button"
+              onClick={() => void refreshAuthority()}
+              disabled={!umi || checking}
+              className="inline-flex items-center justify-center rounded-md border border-border p-1 text-fg-muted hover:border-border-strong hover:text-fg disabled:opacity-50"
+              title="Refresh native authority"
+              aria-label="Refresh native authority"
+            >
+              <RefreshCwIcon className={`size-3.5 ${checking ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          <p>
+            Create a wallet-owned native Solana subscription plan that other wallets or agents can
+            subscribe to for recurring service payments.
+          </p>
+          <p className="text-xs text-fg-subtle">
+            Agent:{' '}
+            <span className="font-mono text-fg">
+              {agentMint.slice(0, 4)}…{agentMint.slice(-4)}
+            </span>
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border/60 bg-bg/40 p-3 text-sm">
+        <div className="text-[11px] uppercase tracking-widest text-fg-subtle">Authority</div>
+        <div className="mt-1 font-mono text-xs text-fg-muted break-all">
+          {authority?.authority ?? 'not checked'}
+        </div>
+        <div className="mt-1 text-xs text-fg-subtle">
+          {authority?.exists
+            ? `initialized${authority.initId ? ` · init ${authority.initId}` : ''}`
+            : 'not initialized'}
+        </div>
+        <div className="mt-3">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={initializeAuthority}
+            disabled={creatingAuthority || !ready || authority?.exists === true}
+          >
+            {creatingAuthority ? <Spinner size="xs" /> : <KeyIcon className="size-4" />}
+            Initialize authority
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <NativeInput
+          label="Plan ID"
+          value={planForm.planId}
+          onChange={(v) => setPlanForm((f) => ({ ...f, planId: v }))}
+        />
+        <NativeInput
+          label="Amount"
+          value={planForm.amount}
+          onChange={(v) => setPlanForm((f) => ({ ...f, amount: v }))}
+          suffix="USDC"
+        />
+        <NativeInput
+          label="Period hours"
+          value={planForm.periodHours}
+          onChange={(v) => setPlanForm((f) => ({ ...f, periodHours: v }))}
+          suffix="hours"
+        />
+      </div>
+
+      <label className="space-y-1 block">
+        <span className="text-[11px] uppercase tracking-widest text-fg-subtle">Metadata URI</span>
+        <input
+          type="url"
+          value={planForm.metadataUri}
+          onChange={(e) => setPlanForm((f) => ({ ...f, metadataUri: e.target.value }))}
+          placeholder="https://example.com/subscription-plan.json"
+          className="w-full rounded-lg border border-border bg-bg/60 px-3 py-2 text-sm outline-none"
+        />
+      </label>
+
+      {lastPlan ? (
+        <div className="rounded-lg border border-border/60 bg-bg/40 p-3 text-xs">
+          <div className="text-[11px] uppercase tracking-widest text-fg-subtle">Last plan</div>
+          <div className="mt-1 font-mono break-all">{lastPlan.plan}</div>
+          <div className="mt-1 font-mono text-fg-muted break-all">{lastPlan.signature}</div>
+        </div>
+      ) : null}
+
+      <div className="flex justify-end">
+        <Button type="button" onClick={createPlan} disabled={creatingPlan || !ready}>
+          {creatingPlan ? <Spinner size="xs" /> : <CalendarClockIcon className="size-4" />}
+          Create subscription plan
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function NativeInput({
+  label,
+  value,
+  onChange,
+  suffix,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  suffix?: string;
+}) {
+  return (
+    <label className="space-y-1">
+      <span className="text-[11px] uppercase tracking-widest text-fg-subtle">{label}</span>
+      <div className="flex items-center gap-2 rounded-lg border border-border bg-bg/60 px-3 py-2">
+        <input
+          type="number"
+          min="0"
+          step="1"
+          inputMode="numeric"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full bg-transparent font-mono text-sm outline-none"
+        />
+        {suffix ? <span className="text-xs text-fg-subtle">{suffix}</span> : null}
+      </div>
+    </label>
+  );
 }
 
 function ReadRow({ label, value }: { label: string; value: string }) {
