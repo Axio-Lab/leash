@@ -276,7 +276,7 @@ export type NativeSubscriptionsArgs = {
   symbol?: StableSymbol;
   /** Counterparty/delegatee wallet for fixed/recurring allowances. */
   delegatee?: string;
-  /** Delegator/subscriber wallet when transferring or collecting. */
+  /** Executive / authorization wallet (allowance transfers). Collect resolves debit owner when omitted. */
   delegator?: string;
   /** Native allowance PDA. Required for revoke; optional for transfer when nonce/delegatee can derive it. */
   allowance?: string;
@@ -324,6 +324,11 @@ export type NativeSubscriptionsArgs = {
   terms_url?: string;
   /** Support URL for hosted plan metadata. */
   support_url?: string;
+  /**
+   * `wallet` — debit the executive/subscriber wallet USDC ATA.
+   * `treasury` — debit the agent treasury PDA; executive still signs (default for MCP).
+   */
+  funding_source?: 'wallet' | 'treasury';
 };
 
 /**

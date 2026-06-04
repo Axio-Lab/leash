@@ -82,9 +82,11 @@ import {
   cancelNativeSubscription,
   closeNativeSubscriptionAuthority,
   collectNativeSubscription,
+  DEFAULT_AGENT_NATIVE_FUNDING_SOURCE,
   createNativeFixedAllowance,
   createNativeRecurringAllowance,
   createNativeSubscriptionPlan,
+  deriveAgentTreasury,
   getSpendDelegation,
   getNativeSubscriptionAuthority,
   getNativeSubscriptionPlan,
@@ -1380,6 +1382,20 @@ class StdioHost implements LeashHost {
     }
   }
 
+  private nativeFundingArgs(args: NativeSubscriptionsArgs): {
+    fundingSource: 'wallet' | 'treasury';
+    agentAsset?: string;
+  } {
+    const fundingSource = args.funding_source ?? DEFAULT_AGENT_NATIVE_FUNDING_SOURCE;
+    if (fundingSource === 'wallet') {
+      return { fundingSource: 'wallet' };
+    }
+    if (!this.agentMint) {
+      throw new Error('agent mint is required for treasury-funded native subscriptions');
+    }
+    return { fundingSource: 'treasury', agentAsset: this.agentMint };
+  }
+
   async nativeSubscriptions(args: NativeSubscriptionsArgs): Promise<LeashToolResult> {
     if (!this.agentMint) return noAgentResult('native_subscriptions');
     const symbol = (args.symbol ?? 'USDC') as StableSymbol;
@@ -1415,14 +1431,24 @@ class StdioHost implements LeashHost {
     try {
       switch (args.action) {
         case 'authority_status': {
+          const funding = this.nativeFundingArgs(args);
+          const owner =
+            funding.fundingSource === 'treasury' && funding.agentAsset
+              ? deriveAgentTreasury(umi, funding.agentAsset)
+              : (this.ownerWallet ?? undefined);
           const status = await getNativeSubscriptionAuthority(umi, {
-            owner: this.ownerWallet ?? undefined,
+            owner,
             mint,
             tokenProgram,
           });
           return jsonResult({
             ...common,
             status: 'ok',
+            funding_source: funding.fundingSource,
+            treasury:
+              funding.fundingSource === 'treasury'
+                ? String(deriveAgentTreasury(umi, funding.agentAsset!))
+                : null,
             authority: status.authority,
             exists: status.exists,
             init_id: status.initId?.toString() ?? null,
@@ -1430,10 +1456,17 @@ class StdioHost implements LeashHost {
           });
         }
         case 'authority_create': {
-          const result = await initNativeSubscriptionAuthority(umi, { mint, tokenProgram });
+          const funding = this.nativeFundingArgs(args);
+          const result = await initNativeSubscriptionAuthority(umi, {
+            mint,
+            tokenProgram,
+            ...funding,
+          });
           return jsonResult({
             ...common,
             status: 'ok',
+            funding_source: result.fundingSource ?? funding.fundingSource,
+            treasury: result.treasury ?? null,
             authority: result.authority,
             user_token_account: result.userTokenAccount,
             tx_signature: result.signature,
@@ -1671,11 +1704,13 @@ class StdioHost implements LeashHost {
         case 'subscribe': {
           if (!args.merchant) throw new Error('merchant is required');
           if (!args.plan_id) throw new Error('plan_id is required');
+          const funding = this.nativeFundingArgs(args);
           const result = await subscribeNativeSubscriptionPlan(umi, {
             mint,
             tokenProgram,
             merchant: args.merchant,
             planId: BigInt(args.plan_id),
+            ...funding,
           });
           const leashEvent = await this.publishNativeSubscriptionEvent({
             kind: 'native.subscription.subscribe',
@@ -1691,6 +1726,8 @@ class StdioHost implements LeashHost {
           return jsonResult({
             ...common,
             status: 'ok',
+            funding_source: result.fundingSource ?? funding.fundingSource,
+            treasury: result.treasury ?? null,
             plan: result.plan,
             subscription: result.subscription,
             subscriber: result.subscriber,
@@ -1701,8 +1738,10 @@ class StdioHost implements LeashHost {
         }
         case 'cancel': {
           if (!args.plan) throw new Error('plan is required');
+          const funding = this.nativeFundingArgs(args);
           const result = await cancelNativeSubscription(umi, {
             plan: args.plan,
+            ...funding,
             ...(args.subscription ? { subscription: args.subscription } : {}),
           });
           const leashEvent = await this.publishNativeSubscriptionEvent({
@@ -1716,8 +1755,10 @@ class StdioHost implements LeashHost {
         }
         case 'resume': {
           if (!args.plan) throw new Error('plan is required');
+          const funding = this.nativeFundingArgs(args);
           const result = await resumeNativeSubscription(umi, {
             plan: args.plan,
+            ...funding,
             ...(args.subscription ? { subscription: args.subscription } : {}),
           });
           const leashEvent = await this.publishNativeSubscriptionEvent({
@@ -1732,9 +1773,11 @@ class StdioHost implements LeashHost {
         case 'revoke_subscription': {
           if (!args.plan) throw new Error('plan is required');
           if (!args.subscription) throw new Error('subscription is required');
+          const funding = this.nativeFundingArgs(args);
           const result = await revokeNativeSubscription(umi, {
             plan: args.plan,
             subscription: args.subscription,
+            ...funding,
             ...(args.receiver ? { receiver: args.receiver } : {}),
           });
           const leashEvent = await this.publishNativeSubscriptionEvent({
@@ -1749,25 +1792,36 @@ class StdioHost implements LeashHost {
         case 'collect': {
           if (!args.plan) throw new Error('plan is required');
           if (!args.subscription) throw new Error('subscription is required');
-          if (!args.delegator) throw new Error('delegator is required');
+          if (!this.ownerWallet) throw new Error('executive wallet is not configured');
+          const funding = this.nativeFundingArgs(args);
+          const debitCandidates = [this.ownerWallet];
+          if (funding.agentAsset) {
+            debitCandidates.push(String(deriveAgentTreasury(umi, funding.agentAsset)));
+          }
           const result = await collectNativeSubscription(umi, {
             mint,
             tokenProgram,
             plan: args.plan,
             subscription: args.subscription,
-            delegator: args.delegator,
+            ...(args.delegator
+              ? { delegator: args.delegator }
+              : { debitOwnerCandidates: debitCandidates }),
             ...(args.receiver ? { receiver: args.receiver } : {}),
             ...(args.receiver_token_account
               ? { receiverTokenAccount: args.receiver_token_account }
               : {}),
             amount: amount(),
           });
+          const treasuryPda =
+            funding.agentAsset != null
+              ? String(deriveAgentTreasury(umi, funding.agentAsset))
+              : null;
           const leashEvent = await this.publishNativeSubscriptionEvent({
             kind: 'native.subscription.collect',
             signature: result.signature,
             plan: result.plan,
             subscription: result.subscription,
-            subscriber_wallet: result.delegator,
+            subscriber_wallet: this.ownerWallet,
             spl_mint: result.mint,
             symbol,
             amount_atomic: result.amount.toString(),
@@ -1779,7 +1833,10 @@ class StdioHost implements LeashHost {
             plan: result.plan,
             subscription: result.subscription,
             caller: result.caller,
-            delegator: result.delegator,
+            delegator: this.ownerWallet,
+            debit_account: result.debitOwner,
+            funding_source:
+              treasuryPda && result.debitOwner === treasuryPda ? 'treasury' : 'wallet',
             receiver_token_account: result.receiverTokenAccount,
             amount_atomic: result.amount.toString(),
             amount: atomicToDecimal(result.amount, meta.decimals),

@@ -67,5 +67,7 @@ describe('programmatic blog articles', () => {
     expect(searchText).toContain('know your agent');
     expect(searchText).toContain('native solana subscriptions');
     expect(searchText).toContain('recurring payments for ai agents');
+    expect(searchText).toContain('treasury funded native subscriptions');
+    expect(searchText).toContain('hosted subscription plan metadata');
   });
 });
