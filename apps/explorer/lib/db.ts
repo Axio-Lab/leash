@@ -29,7 +29,10 @@ import { createHash } from 'node:crypto';
 import {
   getEventById as apiGetEventById,
   getIndexerStatus as apiGetIndexerStatus,
+  getNativeSubscription as apiGetNativeSubscription,
+  getNativeSubscriptionPlan as apiGetNativeSubscriptionPlan,
   getReceiptByHash as apiGetReceiptByHash,
+  listNativeSubscriptionEvents as apiListNativeSubscriptionEvents,
   listRecentReceipts as apiListRecentReceipts,
   listEvents as apiListEvents,
   listEventsForSignature as apiListEventsForSignature,
@@ -48,6 +51,8 @@ import type {
   IdentityDisclosureRead,
   EventRow,
   IndexerStatus,
+  NativeSubscription,
+  NativeSubscriptionPlan,
   PublicIdentityProfile,
   ReceiptPage,
   ReceiptRow,
@@ -132,6 +137,50 @@ function receiptToRow(row: ApiReceiptRow): ReceiptRow {
   // Wrapper row carries ingested_at + receipt_hash for cursoring; views render
   // the typed receipt in `raw` (v0.1 or v0.2 dual-protocol).
   return row.raw;
+}
+
+function nativePlanToRow(
+  row: NonNullable<Awaited<ReturnType<typeof apiGetNativeSubscriptionPlan>>>,
+): NativeSubscriptionPlan {
+  return {
+    network: row.network,
+    plan: row.plan,
+    agent_mint: row.agentMint,
+    merchant_wallet: row.merchantWallet,
+    plan_id: row.planId,
+    mint: row.mint,
+    token_program: row.tokenProgram,
+    symbol: row.symbol,
+    amount_atomic: row.amountAtomic,
+    period_hours: row.periodHours,
+    status: row.status,
+    metadata_uri: row.metadataUri,
+    metadata: row.metadata,
+    create_tx_sig: row.createTxSig,
+    update_tx_sig: row.updateTxSig,
+    last_event_id: row.lastEventId,
+    created_at: row.createdAt,
+    updated_at: row.updatedAt,
+  };
+}
+
+function nativeSubscriptionToRow(
+  row: NonNullable<Awaited<ReturnType<typeof apiGetNativeSubscription>>>,
+): NativeSubscription {
+  return {
+    network: row.network,
+    subscription: row.subscription,
+    plan: row.plan,
+    agent_mint: row.agentMint,
+    subscriber_wallet: row.subscriberWallet,
+    mint: row.mint,
+    status: row.status,
+    subscribe_tx_sig: row.subscribeTxSig,
+    last_tx_sig: row.lastTxSig,
+    last_event_id: row.lastEventId,
+    created_at: row.createdAt,
+    updated_at: row.updatedAt,
+  };
 }
 
 function parseJsonArray<T>(value: unknown): T[] {
@@ -463,6 +512,41 @@ export async function listEventsForSignature(
 ): Promise<EventRow[]> {
   const rows = await withDb((db) =>
     apiListEventsForSignature(db, networkToSlug(network), signature),
+  );
+  return rows.map(eventToRow);
+}
+
+export async function getNativeSubscriptionPlan(
+  network: Network,
+  plan: string,
+): Promise<NativeSubscriptionPlan | null> {
+  const row = await withDb((db) => apiGetNativeSubscriptionPlan(db, networkToSlug(network), plan));
+  return row ? nativePlanToRow(row) : null;
+}
+
+export async function getNativeSubscription(
+  network: Network,
+  subscription: string,
+): Promise<NativeSubscription | null> {
+  const row = await withDb((db) =>
+    apiGetNativeSubscription(db, networkToSlug(network), subscription),
+  );
+  return row ? nativeSubscriptionToRow(row) : null;
+}
+
+export async function listNativeSubscriptionEvents(opts: {
+  network: Network;
+  plan?: string;
+  subscription?: string;
+  limit?: number;
+}): Promise<EventRow[]> {
+  const rows = await withDb((db) =>
+    apiListNativeSubscriptionEvents(db, {
+      network: networkToSlug(opts.network),
+      ...(opts.plan ? { plan: opts.plan } : {}),
+      ...(opts.subscription ? { subscription: opts.subscription } : {}),
+      ...(opts.limit ? { limit: opts.limit } : {}),
+    }),
   );
   return rows.map(eventToRow);
 }

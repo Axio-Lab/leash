@@ -340,5 +340,18 @@ function printHelp(): void {
 }
 
 function printVersion(): void {
-  process.stdout.write('@leashmarket/mcp 0.1.0\n');
+  process.stdout.write(`@leashmarket/mcp ${readPackageVersion()}\n`);
+}
+
+function readPackageVersion(): string {
+  try {
+    const raw = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
+    const parsed = JSON.parse(raw) as { version?: unknown };
+    if (typeof parsed.version === 'string' && parsed.version.length > 0) {
+      return parsed.version;
+    }
+  } catch {
+    // Keep `leash-mcp --version` useful even in unusual local/dev layouts.
+  }
+  return 'unknown';
 }

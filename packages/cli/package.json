@@ -3,7 +3,7 @@
     "access": "public"
   },
   "name": "@leashmarket/cli",
-  "version": "0.3.0",
+  "version": "0.3.3",
   "description": "Human-driven Leash CLI. Mint agents, check balances, pay paywalls, discover services, and inspect reputation from your terminal.",
   "private": false,
   "type": "module",

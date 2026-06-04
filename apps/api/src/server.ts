@@ -26,6 +26,7 @@ import { buildIdentityRoutes } from './routes/identity.js';
 import { buildExecutiveRoutes } from './routes/executive.js';
 import { buildDelegationRoutes } from './routes/delegation.js';
 import { buildNativeSubscriptionRoutes } from './routes/native-subscriptions.js';
+import { buildNativeSubscriptionRecordRoutes } from './routes/native-subscription-records.js';
 import { buildTreasuryRoutes } from './routes/treasury.js';
 import { buildTokenRoutes } from './routes/token.js';
 import { buildAgentRoutes } from './routes/agents.js';
@@ -202,6 +203,7 @@ export function createLeashApiApp(deps: CreateLeashApiArgs): OpenAPIHono {
   // not the platform API key — standalone-MCP / CLI agents don't have
   // an API key. The route module installs `onChainAuth` itself.
   app.route('/', buildAgentWebhookRoutes({ config: deps.config, db: deps.db }));
+  app.route('/', buildNativeSubscriptionRecordRoutes({ config: deps.config, db: deps.db }));
   app.route('/', buildUploadRoutes({ config: deps.config, db: deps.db }));
   app.route('/', buildPublicUploadRoutes({ config: deps.config, db: deps.db }));
 

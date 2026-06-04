@@ -87,6 +87,7 @@ import {
   createNativeSubscriptionPlan,
   getSpendDelegation,
   getNativeSubscriptionAuthority,
+  getNativeSubscriptionPlan,
   initNativeSubscriptionAuthority,
   revokeSpendDelegation,
   revokeNativeAllowance,
@@ -1568,27 +1569,76 @@ class StdioHost implements LeashHost {
         case 'plan_create': {
           if (!args.plan_id) throw new Error('plan_id is required');
           if (!args.period_hours) throw new Error('period_hours is required');
+          const planId = BigInt(args.plan_id);
+          const planPreview = await getNativeSubscriptionPlan(umi, {
+            owner: this.ownerWallet!,
+            planId,
+          });
+          const amountAtomic = amount();
+          const metadataUri =
+            args.metadata_uri ??
+            nativePlanMetadataUri({
+              apiBaseUrl: this.apiBaseUrl,
+              network: this.network,
+              plan: planPreview.plan,
+            });
+          const metadata = buildHostedNativePlanMetadata({
+            name: args.name,
+            description: args.description,
+            amount: atomicToDecimal(amountAtomic, meta.decimals),
+            amountAtomic: amountAtomic.toString(),
+            currency: symbol,
+            mint,
+            periodHours: args.period_hours,
+            merchantAgent: this.agentMint,
+            merchantWallet: this.ownerWallet,
+            plan: planPreview.plan,
+            planId: args.plan_id,
+            network: this.network,
+            termsUrl: args.terms_url,
+            supportUrl: args.support_url,
+            explorerBaseUrl: this.explorerBaseUrl,
+          });
           const result = await createNativeSubscriptionPlan(umi, {
             mint,
             tokenProgram,
-            planId: BigInt(args.plan_id),
-            amount: amount(),
+            planId,
+            amount: amountAtomic,
             periodHours: BigInt(args.period_hours),
             endTs: BigInt(args.end_ts ?? '0'),
             destinations: args.destinations,
             pullers: args.pullers,
-            metadataUri: args.metadata_uri,
+            metadataUri,
+          });
+          const leashEvent = await this.publishNativeSubscriptionEvent({
+            kind: 'native.subscription_plan.create',
+            signature: result.signature,
+            plan: result.plan,
+            merchant_wallet: result.owner,
+            plan_id: result.planId.toString(),
+            spl_mint: result.mint,
+            token_program: result.tokenProgram,
+            symbol,
+            amount_atomic: amountAtomic.toString(),
+            amount: atomicToDecimal(amountAtomic, meta.decimals),
+            period_hours: String(args.period_hours),
+            status: 'active',
+            metadata_uri: metadataUri,
+            metadata,
           });
           return jsonResult({
             ...common,
             status: 'ok',
             plan: result.plan,
             plan_id: result.planId.toString(),
-            amount_atomic: amount().toString(),
-            amount: atomicToDecimal(amount(), meta.decimals),
+            amount_atomic: amountAtomic.toString(),
+            amount: atomicToDecimal(amountAtomic, meta.decimals),
             period_hours: args.period_hours,
+            metadata_uri: metadataUri,
+            metadata,
             tx_signature: result.signature,
             explorer_url: explorerTxUrl(result.signature, this.network),
+            leash_event: leashEvent,
           });
         }
         case 'plan_update': {
@@ -1601,6 +1651,13 @@ class StdioHost implements LeashHost {
             pullers: args.pullers,
             metadataUri: args.metadata_uri,
           });
+          const leashEvent = await this.publishNativeSubscriptionEvent({
+            kind: 'native.subscription_plan.update',
+            signature: result.signature,
+            plan: result.plan,
+            status: args.status,
+            ...(args.metadata_uri ? { metadata_uri: args.metadata_uri } : {}),
+          });
           return jsonResult({
             ...common,
             status: 'ok',
@@ -1608,6 +1665,7 @@ class StdioHost implements LeashHost {
             plan_status: args.status,
             tx_signature: result.signature,
             explorer_url: explorerTxUrl(result.signature, this.network),
+            leash_event: leashEvent,
           });
         }
         case 'subscribe': {
@@ -1619,6 +1677,17 @@ class StdioHost implements LeashHost {
             merchant: args.merchant,
             planId: BigInt(args.plan_id),
           });
+          const leashEvent = await this.publishNativeSubscriptionEvent({
+            kind: 'native.subscription.subscribe',
+            signature: result.signature,
+            plan: result.plan,
+            subscription: result.subscription,
+            merchant_wallet: args.merchant,
+            subscriber_wallet: result.subscriber,
+            plan_id: args.plan_id,
+            spl_mint: result.mint,
+            symbol,
+          });
           return jsonResult({
             ...common,
             status: 'ok',
@@ -1627,6 +1696,7 @@ class StdioHost implements LeashHost {
             subscriber: result.subscriber,
             tx_signature: result.signature,
             explorer_url: explorerTxUrl(result.signature, this.network),
+            leash_event: leashEvent,
           });
         }
         case 'cancel': {
@@ -1635,7 +1705,14 @@ class StdioHost implements LeashHost {
             plan: args.plan,
             ...(args.subscription ? { subscription: args.subscription } : {}),
           });
-          return nativeSubscriptionLifecycleResult(common, result, this.network);
+          const leashEvent = await this.publishNativeSubscriptionEvent({
+            kind: 'native.subscription.cancel',
+            signature: result.signature,
+            plan: result.plan,
+            subscription: result.subscription,
+            subscriber_wallet: result.subscriber,
+          });
+          return nativeSubscriptionLifecycleResult(common, result, this.network, leashEvent);
         }
         case 'resume': {
           if (!args.plan) throw new Error('plan is required');
@@ -1643,7 +1720,14 @@ class StdioHost implements LeashHost {
             plan: args.plan,
             ...(args.subscription ? { subscription: args.subscription } : {}),
           });
-          return nativeSubscriptionLifecycleResult(common, result, this.network);
+          const leashEvent = await this.publishNativeSubscriptionEvent({
+            kind: 'native.subscription.resume',
+            signature: result.signature,
+            plan: result.plan,
+            subscription: result.subscription,
+            subscriber_wallet: result.subscriber,
+          });
+          return nativeSubscriptionLifecycleResult(common, result, this.network, leashEvent);
         }
         case 'revoke_subscription': {
           if (!args.plan) throw new Error('plan is required');
@@ -1653,7 +1737,14 @@ class StdioHost implements LeashHost {
             subscription: args.subscription,
             ...(args.receiver ? { receiver: args.receiver } : {}),
           });
-          return nativeSubscriptionLifecycleResult(common, result, this.network);
+          const leashEvent = await this.publishNativeSubscriptionEvent({
+            kind: 'native.subscription.revoke',
+            signature: result.signature,
+            plan: result.plan,
+            subscription: result.subscription,
+            subscriber_wallet: result.subscriber,
+          });
+          return nativeSubscriptionLifecycleResult(common, result, this.network, leashEvent);
         }
         case 'collect': {
           if (!args.plan) throw new Error('plan is required');
@@ -1671,6 +1762,17 @@ class StdioHost implements LeashHost {
               : {}),
             amount: amount(),
           });
+          const leashEvent = await this.publishNativeSubscriptionEvent({
+            kind: 'native.subscription.collect',
+            signature: result.signature,
+            plan: result.plan,
+            subscription: result.subscription,
+            subscriber_wallet: result.delegator,
+            spl_mint: result.mint,
+            symbol,
+            amount_atomic: result.amount.toString(),
+            amount: atomicToDecimal(result.amount, meta.decimals),
+          });
           return jsonResult({
             ...common,
             status: 'ok',
@@ -1683,6 +1785,7 @@ class StdioHost implements LeashHost {
             amount: atomicToDecimal(result.amount, meta.decimals),
             tx_signature: result.signature,
             explorer_url: explorerTxUrl(result.signature, this.network),
+            leash_event: leashEvent,
           });
         }
       }
@@ -1697,6 +1800,41 @@ class StdioHost implements LeashHost {
         status: 'error',
         message: err instanceof Error ? err.message : 'unknown error',
       });
+    }
+  }
+
+  private async publishNativeSubscriptionEvent(
+    body: Record<string, unknown>,
+  ): Promise<Record<string, unknown> | null> {
+    if (!this.agentMint) return null;
+    try {
+      const payload = JSON.stringify(body);
+      const res = await this.signedAgentApiFetch(
+        `/v1/agents/${this.agentMint}/native-subscriptions/events`,
+        { method: 'POST', body: payload },
+      );
+      const text = await res.text();
+      let parsed: unknown = null;
+      try {
+        parsed = text.length > 0 ? JSON.parse(text) : null;
+      } catch {
+        parsed = text;
+      }
+      if (!res.ok) {
+        return {
+          status: 'error',
+          message:
+            parsed && typeof parsed === 'object' && 'message' in parsed
+              ? String((parsed as Record<string, unknown>).message)
+              : `HTTP ${res.status}`,
+        };
+      }
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+    } catch (err) {
+      return {
+        status: 'error',
+        message: err instanceof Error ? err.message : 'unknown error',
+      };
     }
   }
 
@@ -1804,6 +1942,77 @@ function explorerTxUrl(signature: string, network: SvmNetwork): string {
   return `https://solscan.io/tx/${signature}${cluster}`;
 }
 
+function nativePlanMetadataUri(args: {
+  apiBaseUrl: string;
+  network: SvmNetwork;
+  plan: string;
+}): string {
+  return `${args.apiBaseUrl.replace(/\/+$/, '')}/v1/subscription-plans/${encodeURIComponent(
+    args.plan,
+  )}/metadata?network=${encodeURIComponent(args.network)}`;
+}
+
+function nativePlanExplorerUrl(args: {
+  explorerBaseUrl: string;
+  network: SvmNetwork;
+  plan: string;
+}): string {
+  const cluster = args.network === 'solana-mainnet' ? 'mainnet' : 'devnet';
+  return `${args.explorerBaseUrl.replace(/\/+$/, '')}/subscription-plan/${encodeURIComponent(
+    args.plan,
+  )}?network=${cluster}`;
+}
+
+function buildHostedNativePlanMetadata(args: {
+  name?: string;
+  description?: string;
+  amount: string;
+  amountAtomic: string;
+  currency: string;
+  mint: string;
+  periodHours: number;
+  merchantAgent: string | null;
+  merchantWallet: string | null;
+  plan: string;
+  planId: string;
+  network: SvmNetwork;
+  termsUrl?: string;
+  supportUrl?: string;
+  explorerBaseUrl: string;
+}): Record<string, unknown> {
+  const wholeDays = args.periodHours % 24 === 0 ? args.periodHours / 24 : null;
+  const periodLabel =
+    wholeDays != null
+      ? `${wholeDays} ${wholeDays === 1 ? 'day' : 'days'}`
+      : `${args.periodHours} hours`;
+  return {
+    type: 'leash.native_subscription_plan',
+    version: '1.0',
+    name: args.name?.trim() || `Native subscription plan ${args.planId}`,
+    ...(args.description?.trim() ? { description: args.description.trim() } : {}),
+    price: {
+      amount: args.amount,
+      amount_atomic: args.amountAtomic,
+      currency: args.currency,
+      mint: args.mint,
+      period_hours: args.periodHours,
+      period_label: periodLabel,
+    },
+    merchant_agent: args.merchantAgent,
+    merchant_wallet: args.merchantWallet,
+    plan: args.plan,
+    plan_id: args.planId,
+    network: args.network,
+    ...(args.termsUrl?.trim() ? { terms_url: args.termsUrl.trim() } : {}),
+    ...(args.supportUrl?.trim() ? { support_url: args.supportUrl.trim() } : {}),
+    explorer_url: nativePlanExplorerUrl({
+      explorerBaseUrl: args.explorerBaseUrl,
+      network: args.network,
+      plan: args.plan,
+    }),
+  };
+}
+
 function nativeTransferResult(
   common: Record<string, unknown>,
   result: {
@@ -1840,6 +2049,7 @@ function nativeSubscriptionLifecycleResult(
     signature: string;
   },
   network: SvmNetwork,
+  leashEvent?: Record<string, unknown> | null,
 ): LeashToolResult {
   return jsonResult({
     ...common,
@@ -1849,6 +2059,7 @@ function nativeSubscriptionLifecycleResult(
     subscriber: result.subscriber,
     tx_signature: result.signature,
     explorer_url: explorerTxUrl(result.signature, network),
+    ...(leashEvent ? { leash_event: leashEvent } : {}),
   });
 }
 

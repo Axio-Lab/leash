@@ -1032,11 +1032,6 @@ export async function prepareSubscribeNativeSubscriptionPlan(
   if (!authority.exists || authority.initId == null) {
     throw new Error('SubscriptionAuthority is not initialized for this subscriber and token mint.');
   }
-  const subscriberAta = await userAta(umi, {
-    mint: args.mint,
-    owner: subscriber.publicKey,
-    tokenProgram: args.tokenProgram,
-  });
   const subscription = await subscriptionPda({
     plan: planStatus.plan,
     subscriber: subscriber.publicKey,
@@ -1054,15 +1049,8 @@ export async function prepareSubscribeNativeSubscriptionPlan(
     expectedSubscriptionAuthorityInitId: authority.initId,
     programAddress: programAddress(args),
   });
-  const createAta = createAtaBuilder(umi, {
-    mint: args.mint,
-    owner: subscriber.publicKey,
-    ata: subscriberAta,
-    tokenProgram: args.tokenProgram,
-    payer,
-  });
   return {
-    builder: createAta.add(oneIxBuilder(ix, [subscriber, payer])),
+    builder: oneIxBuilder(ix, [subscriber, payer]),
     plan: planStatus.plan,
     subscription: String(subscription),
     subscriber: String(subscriber.publicKey),

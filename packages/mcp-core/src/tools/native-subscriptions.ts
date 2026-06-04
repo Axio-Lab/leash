@@ -50,6 +50,10 @@ const inputSchema = z.object({
   destinations: z.array(z.string()).max(4).optional(),
   pullers: z.array(z.string()).max(4).optional(),
   metadata_uri: z.string().max(256).optional(),
+  name: z.string().min(1).max(120).optional(),
+  description: z.string().max(500).optional(),
+  terms_url: z.string().url().optional(),
+  support_url: z.string().url().optional(),
 });
 
 export const nativeSubscriptionsTool = defineTool({

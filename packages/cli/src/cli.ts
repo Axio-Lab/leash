@@ -605,6 +605,10 @@ async function runSubscriptions(args: string[]): Promise<void> {
       : {}),
     ...(allOptArgs(args, '--puller').length > 0 ? { pullers: allOptArgs(args, '--puller') } : {}),
     ...(optArg(args, '--metadata-uri') ? { metadata_uri: optArg(args, '--metadata-uri') } : {}),
+    ...(optArg(args, '--name') ? { name: optArg(args, '--name') } : {}),
+    ...(optArg(args, '--description') ? { description: optArg(args, '--description') } : {}),
+    ...(optArg(args, '--terms-url') ? { terms_url: optArg(args, '--terms-url') } : {}),
+    ...(optArg(args, '--support-url') ? { support_url: optArg(args, '--support-url') } : {}),
   };
 
   const result = await hostRef.nativeSubscriptions(callArgs);
@@ -1453,7 +1457,7 @@ function printHelp(): void {
       '  subscriptions authority-create [--token USDC|USDG|USDT]',
       '  subscriptions fixed-create --delegatee W --amount N [--nonce I]',
       '  subscriptions recurring-create --delegatee W --amount-per-period N --period-seconds S',
-      '  subscriptions plan-create --plan-id I --amount N --period-hours H',
+      '  subscriptions plan-create --plan-id I --amount N --period-hours H [--name TEXT]',
       '  subscriptions subscribe --merchant W --plan-id I',
       '  subscriptions collect --plan P --subscription S --delegator W --amount N',
       '                                     Solana native Subscriptions & Allowances. Uses',

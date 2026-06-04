@@ -14,6 +14,7 @@ import {
   SPL_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
   getNativeSubscriptionAuthority,
+  getNativeSubscriptionPlan as readNativeSubscriptionPlan,
   prepareCancelNativeSubscription,
   prepareCloseNativeSubscriptionAuthority,
   prepareCollectNativeSubscription,
@@ -29,6 +30,7 @@ import {
   prepareTransferNativeRecurringAllowance,
   prepareUpdateNativeSubscriptionPlan,
 } from '@leashmarket/registry-utils';
+import { lookupToken } from '@leashmarket/core';
 import { publicKey } from '@metaplex-foundation/umi';
 import type { TransactionBuilder } from '@metaplex-foundation/umi';
 
@@ -37,6 +39,14 @@ import type { LeashApiConfig } from '../config.js';
 import { PubkeySchema, TokenProgramFlavorSchema } from '../openapi/common.js';
 import type { EventKind } from '../storage/events.js';
 import type { DbClient } from '../storage/turso.js';
+import {
+  buildNativePlanMetadata,
+  nativePlanExplorerUrl,
+  nativePlanMetadataUri,
+  updateNativeSubscriptionPlanRecord,
+  upsertNativeSubscription,
+  upsertNativeSubscriptionPlan,
+} from '../storage/native-subscriptions.js';
 import { wrapPrepared } from '../util/prepare.js';
 import { umiForRequest, umiReadOnly } from '../util/umi.js';
 
@@ -102,6 +112,10 @@ const PlanCreateBody = SignerBody.merge(MintBody)
     destinations: z.array(PubkeySchema).max(4).optional(),
     pullers: z.array(PubkeySchema).max(4).optional(),
     metadata_uri: z.string().max(256).optional(),
+    name: z.string().min(1).max(120).optional(),
+    description: z.string().max(500).optional(),
+    terms_url: z.string().url().optional(),
+    support_url: z.string().url().optional(),
   });
 
 const PlanUpdateBody = SignerBody.merge(ProgramBody).extend({
@@ -514,10 +528,45 @@ export function buildNativeSubscriptionRoutes(deps: {
   app.post('/v1/agents/:mint/subscription-plans/prepare', async (c) => {
     const agentMint = c.req.param('mint');
     const body = PlanCreateBody.parse(await c.req.json());
+    const owner = ownerOrPayer(body);
     const umi = umiForRequest(deps.config, {
       network: c.var.network,
       payer: body.payer,
-      authority: ownerOrPayer(body),
+      authority: owner,
+    });
+    const planPreview = await readNativeSubscriptionPlan(umi, {
+      owner,
+      planId: BigInt(body.plan_id),
+      programAddress: programAddress(body),
+    });
+    const metadataUri =
+      body.metadata_uri ??
+      nativePlanMetadataUri({
+        apiOrigin: deps.config.publicOrigin,
+        network: c.var.network,
+        plan: planPreview.plan,
+      });
+    const tokenMeta = tokenMetaFromMint(body.spl_mint, c.var.network);
+    const metadata = buildNativePlanMetadata({
+      name: body.name ?? null,
+      description: body.description ?? null,
+      amount: tokenMeta ? atomicStringToDecimal(body.amount, tokenMeta.decimals) : body.amount,
+      amountAtomic: body.amount,
+      currency: tokenMeta?.symbol ?? 'TOKEN',
+      mint: body.spl_mint,
+      periodHours: body.period_hours,
+      merchantAgent: agentMint,
+      merchantWallet: owner,
+      plan: planPreview.plan,
+      planId: body.plan_id,
+      network: c.var.network,
+      termsUrl: body.terms_url ?? null,
+      supportUrl: body.support_url ?? null,
+      explorerUrl: nativePlanExplorerUrl({
+        explorerOrigin: deps.config.explorerPublicOrigin,
+        plan: planPreview.plan,
+        network: c.var.network,
+      }),
     });
     const preparedTx = await prepareCreateNativeSubscriptionPlan(umi, {
       mint: publicKey(body.spl_mint),
@@ -529,7 +578,7 @@ export function buildNativeSubscriptionRoutes(deps: {
       endTs: bi(body.end_ts),
       destinations: body.destinations,
       pullers: body.pullers,
-      metadataUri: body.metadata_uri,
+      metadataUri,
     });
     const result = await prepared({
       deps,
@@ -546,7 +595,7 @@ export function buildNativeSubscriptionRoutes(deps: {
         owner: preparedTx.owner,
         plan_id: body.plan_id,
         period_hours: body.period_hours,
-        metadata_uri: body.metadata_uri ?? '',
+        metadata_uri: metadataUri,
       },
       builder: preparedTx.builder,
       echo: {
@@ -556,7 +605,24 @@ export function buildNativeSubscriptionRoutes(deps: {
         spl_mint: preparedTx.mint,
         amount: body.amount,
         period_hours: body.period_hours,
+        metadata_uri: metadataUri,
       },
+    });
+    await upsertNativeSubscriptionPlan(deps.db, {
+      network: c.var.network,
+      plan: preparedTx.plan,
+      agentMint,
+      merchantWallet: preparedTx.owner,
+      planId: preparedTx.planId.toString(),
+      mint: preparedTx.mint,
+      tokenProgram: preparedTx.tokenProgram,
+      symbol: tokenMetaFromMint(preparedTx.mint, c.var.network)?.symbol,
+      amountAtomic: body.amount,
+      periodHours: body.period_hours,
+      status: 'active',
+      metadataUri,
+      metadata,
+      lastEventId: result.event_id,
     });
     return c.json(result, 200);
   });
@@ -589,9 +655,17 @@ export function buildNativeSubscriptionRoutes(deps: {
         rail: 'native_subscription',
         plan,
         status: body.status,
+        ...(body.metadata_uri ? { metadata_uri: body.metadata_uri } : {}),
       },
       builder: preparedTx.builder,
       echo: { plan, status: body.status },
+    });
+    await updateNativeSubscriptionPlanRecord(deps.db, {
+      network: c.var.network,
+      plan,
+      status: body.status,
+      metadataUri: body.metadata_uri ?? null,
+      lastEventId: result.event_id,
     });
     return c.json(result, 200);
   });
@@ -633,6 +707,16 @@ export function buildNativeSubscriptionRoutes(deps: {
         subscriber: preparedTx.subscriber,
         spl_mint: preparedTx.mint,
       },
+    });
+    await upsertNativeSubscription(deps.db, {
+      network: c.var.network,
+      subscription: preparedTx.subscription,
+      plan: preparedTx.plan,
+      agentMint,
+      subscriberWallet: preparedTx.subscriber,
+      mint: preparedTx.mint,
+      status: 'active',
+      lastEventId: result.event_id,
     });
     return c.json(result, 200);
   });
@@ -700,6 +784,48 @@ export function buildNativeSubscriptionRoutes(deps: {
   });
 
   return app;
+}
+
+function tokenMetaFromMint(
+  mint: string,
+  network: 'solana-devnet' | 'solana-mainnet',
+): { symbol: 'USDC' | 'USDT' | 'USDG'; decimals: number } | null {
+  const hit = lookupToken(mint, network === 'solana-mainnet' ? 'mainnet' : 'devnet');
+  if (hit && isSupportedStable(hit.symbol)) {
+    return { symbol: hit.symbol, decimals: hit.decimals };
+  }
+  if (
+    mint === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' ||
+    mint === 'Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr' ||
+    mint === '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'
+  ) {
+    return { symbol: 'USDC', decimals: 6 };
+  }
+  if (
+    mint === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB' ||
+    mint === 'EcFc2cMyZxaKBkFK1XooxiyDyCPneLXiMwSJiVY6eTad'
+  ) {
+    return { symbol: 'USDT', decimals: 6 };
+  }
+  if (
+    mint === '2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH' ||
+    mint === '4F6PM96JJxngmHnZLBh9n58RH4aTVNWvDs2nuwrT5BP7'
+  ) {
+    return { symbol: 'USDG', decimals: 6 };
+  }
+  return null;
+}
+
+function isSupportedStable(symbol: string): symbol is 'USDC' | 'USDT' | 'USDG' {
+  return symbol === 'USDC' || symbol === 'USDT' || symbol === 'USDG';
+}
+
+function atomicStringToDecimal(amount: string, decimals: number): string {
+  if (decimals === 0) return amount;
+  const s = amount.padStart(decimals + 1, '0');
+  const whole = s.slice(0, s.length - decimals);
+  const frac = s.slice(s.length - decimals).replace(/0+$/, '');
+  return frac.length > 0 ? `${whole}.${frac}` : whole;
 }
 
 async function revokeAllowance(
