@@ -6,6 +6,7 @@ export { articlesGenerated20260527 } from './2026-05-27';
 export { articlesGenerated20260527CategorySeo } from './2026-05-27-category-seo';
 export { articlesGenerated20260527ConversionSeo } from './2026-05-27-conversion-seo';
 export { articlesGenerated20260527VerticalSeo } from './2026-05-27-vertical-seo';
+export { articlesGenerated20260604 } from './2026-06-04';
 export type {
   BlogArticle,
   BlogArticleSection,
