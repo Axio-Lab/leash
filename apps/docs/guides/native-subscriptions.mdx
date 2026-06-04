@@ -1,15 +1,21 @@
 # Native subscriptions for agent services
 
-Leash now supports Solana's native Subscriptions & Allowances program for recurring agent services.
+Leash supports Solana's native Subscriptions & Allowances program for recurring agent services.
+The canonical native program address on devnet and mainnet is:
+
+```text
+De1egAFMkMWZSN5rYXRj9CAdheBamobVNubTsi9avR44
+```
 
 Use this rail when an agent needs to sell or consume something over time:
 
-- recurring invoices
-- monthly SaaS-style subscriptions
-- service retainers
+- recurring invoices for agent work
+- monthly SaaS-style agent subscriptions
+- monitoring, analytics, and research retainers
 - fixed delegated spend
 - recurring delegated spend
 - agent-to-agent service plans
+- usage allowances for a specialist tool or data feed
 
 The native Solana program owns the recurring authorization. Leash provides the agent identity, capability metadata, policy context, events, webhooks, Explorer visibility, and receipts around it.
 
@@ -29,6 +35,30 @@ For allowances, the owner creates either:
 - a recurring allowance: a capped amount per period
 
 The spender can only pull within the native authorization.
+
+## What Leash adds
+
+The native program gives Solana the on-chain subscription and allowance primitive. Leash makes that primitive useful for AI agents:
+
+- agent identity and handle context
+- public capability cards that can advertise recurring services
+- API prepare routes for wallet, HSM, KMS, or browser signing
+- SDK methods with typed inputs
+- CLI commands for operators
+- MCP tools for autonomous runtimes
+- events, webhooks, and Explorer labels
+- a Profile Spend UI for quick browser-signed demos
+
+## Current rail boundaries
+
+Native subscriptions are additive. Existing x402 and MPP payment links still use Leash's SPL delegation rail by default.
+
+Use the rails this way:
+
+- x402 / MPP: one-off paid HTTP calls, paid API endpoints, agent-to-agent service calls
+- native subscriptions: recurring plans, invoices, retainers, allowances, periodic collection
+
+In this release, the native authority belongs to the signing wallet's token account. The standalone CLI and MCP host sign with the configured executive wallet. Browser flows sign through the connected wallet in the agents UI. Agent treasury settlement for existing x402 / MPP payment links remains on the existing SPL delegation rail.
 
 ## CLI flow
 
@@ -69,6 +99,29 @@ leash subscriptions collect \
 
 Pass `--json` to any command to get the raw tool payload.
 
+### CLI actions
+
+The `subscriptions` command supports:
+
+```text
+authority-status
+authority-create
+authority-close
+fixed-create
+fixed-transfer
+fixed-revoke
+recurring-create
+recurring-transfer
+recurring-revoke
+plan-create
+plan-update
+subscribe
+cancel
+resume
+revoke-subscription
+collect
+```
+
 ## SDK flow
 
 ```ts
@@ -91,6 +144,25 @@ const prepared = await leash.prepareNativeSubscriptionPlan(agentMint, {
 
 The API returns an unsigned prepared transaction. Sign it locally, then submit or broadcast it.
 
+Useful SDK methods include:
+
+- `getNativeSubscriptionAuthority`
+- `prepareNativeSubscriptionAuthority`
+- `prepareCloseNativeSubscriptionAuthority`
+- `prepareNativeFixedAllowance`
+- `prepareTransferNativeFixedAllowance`
+- `prepareRevokeNativeFixedAllowance`
+- `prepareNativeRecurringAllowance`
+- `prepareTransferNativeRecurringAllowance`
+- `prepareRevokeNativeRecurringAllowance`
+- `prepareNativeSubscriptionPlan`
+- `prepareUpdateNativeSubscriptionPlan`
+- `prepareSubscribeNativeSubscriptionPlan`
+- `prepareCancelNativeSubscription`
+- `prepareResumeNativeSubscription`
+- `prepareRevokeNativeSubscription`
+- `prepareCollectNativeSubscription`
+
 ## MCP flow
 
 Agents can use the `leash_native_subscriptions` tool with an `action`:
@@ -107,8 +179,70 @@ Agents can use the `leash_native_subscriptions` tool with an `action`:
 
 The standalone MCP host signs with the configured executive wallet.
 
-## Current rail behavior
+Supported MCP actions:
 
-Native subscriptions are additive. Existing x402 and MPP payment links still use Leash's SPL delegation rail by default.
+```text
+authority_status
+authority_create
+authority_close
+fixed_create
+fixed_transfer
+fixed_revoke
+recurring_create
+recurring_transfer
+recurring_revoke
+plan_create
+plan_update
+subscribe
+cancel
+resume
+revoke_subscription
+collect
+```
 
-That keeps current pay-link settlement compatible while native recurring authorizations become available for subscription plans, recurring invoices, and allowance-based agent services.
+## API prepare routes
+
+The API exposes signed-app prepare routes under the agent:
+
+```text
+GET  /v1/agents/{mint}/subscriptions/authority
+POST /v1/agents/{mint}/subscriptions/authority/prepare
+POST /v1/agents/{mint}/subscriptions/authority/close/prepare
+POST /v1/agents/{mint}/allowances/fixed/prepare
+POST /v1/agents/{mint}/allowances/fixed/transfer/prepare
+POST /v1/agents/{mint}/allowances/fixed/revoke/prepare
+POST /v1/agents/{mint}/allowances/recurring/prepare
+POST /v1/agents/{mint}/allowances/recurring/transfer/prepare
+POST /v1/agents/{mint}/allowances/recurring/revoke/prepare
+POST /v1/agents/{mint}/subscription-plans/prepare
+POST /v1/agents/{mint}/subscription-plans/{plan}/prepare
+POST /v1/agents/{mint}/subscriptions/subscribe/prepare
+POST /v1/agents/{mint}/subscriptions/{subscription}/cancel/prepare
+POST /v1/agents/{mint}/subscriptions/{subscription}/resume/prepare
+POST /v1/agents/{mint}/subscriptions/{subscription}/revoke/prepare
+POST /v1/agents/{mint}/subscriptions/{subscription}/collect/prepare
+```
+
+Each prepare route returns an unsigned transaction envelope. Your app signs locally, submits, and then uses the Leash event and Explorer surfaces to track the action.
+
+## Use cases
+
+Native subscriptions are useful anywhere the agent relationship has duration:
+
+- a research agent bills weekly for market reports
+- a monitoring agent bills monthly for uptime and incident summaries
+- a compliance agent bills per month for vendor or identity checks
+- a data agent grants recurring allowance for refreshed enrichment
+- a support agent sells monthly automation for a help desk
+- a marketplace ranks services that support recurring plans
+- a buyer agent grants a recurring allowance to a trusted specialist
+
+## Devnet smoke test
+
+The repo includes a real devnet smoke script:
+
+```bash
+pnpm e2e:native-subscriptions:devnet
+```
+
+It uses the local Leash agent config or `LEASH_TEST_PAYER_SECRET_KEY`, initializes or reads the authority, creates a plan, creates a fixed allowance, and revokes the allowance.

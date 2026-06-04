@@ -4,8 +4,8 @@ import { blogArticles, getBlogSearchText, getRelatedArticles } from '@/lib/blog'
 
 describe('programmatic blog articles', () => {
   it('ships the existing articles plus the latest marketplace SEO guides', () => {
-    expect(blogArticles).toHaveLength(83);
-    expect(blogArticles[0]?.slug).toBe('ai-agent-commerce-platform-identity-payments-x402-mpp');
+    expect(blogArticles).toHaveLength(84);
+    expect(blogArticles[0]?.slug).toBe('native-solana-subscriptions-for-ai-agent-services');
   });
 
   it('keeps article slugs unique and related links resolvable', () => {
@@ -65,5 +65,7 @@ describe('programmatic blog articles', () => {
     expect(searchText).toContain('ai agent commerce platform');
     expect(searchText).toContain('agent-to-agent commerce');
     expect(searchText).toContain('know your agent');
+    expect(searchText).toContain('native solana subscriptions');
+    expect(searchText).toContain('recurring payments for ai agents');
   });
 });
