@@ -12,6 +12,7 @@
  * while the delegatee / merchant / puller signs transfer/collect calls.
  */
 
+import { execute, findAssetSignerPda } from '@metaplex-foundation/mpl-core';
 import {
   createIdempotentAssociatedToken,
   findAssociatedTokenPda,
@@ -69,7 +70,37 @@ export const NATIVE_SUBSCRIPTIONS_PROGRAM_ID = publicKey(NATIVE_SUBSCRIPTIONS_PR
 
 export type NativeSubscriptionPlanStatus = 'active' | 'sunset';
 
+/**
+ * Which USDC token account is debited for native subscription flows.
+ *
+ * Product model (Leash agents):
+ * - **Delegator** — always the executive wallet (signs MCP/API/CLI prepares).
+ * - **Debit account** — executive wallet USDC ATA (`wallet`) or agent treasury
+ *   Asset Signer PDA ATA (`treasury`), selected by `fundingSource`.
+ *
+ * On-chain naming differs: the program calls the debit-owner pubkey `delegator`
+ * in transfer/collect and `subscriber` in subscribe/cancel PDA seeds. Those
+ * accounts are the debit owner, not a separate “treasury delegator” role.
+ *
+ * - `wallet` — debit the executive wallet's USDC ATA.
+ * - `treasury` — debit the agent Asset Signer PDA USDC ATA; executive signs via
+ *   `mpl-core::Execute`. This is not the SPL x402 delegate.
+ */
+export type NativeSubscriptionFundingSource = 'wallet' | 'treasury';
+
+/** Default when `agentAsset` is set and `fundingSource` is omitted (MCP/CLI/agent API). */
+export const DEFAULT_AGENT_NATIVE_FUNDING_SOURCE: NativeSubscriptionFundingSource = 'treasury';
+
 type AddressLike = string | PublicKey;
+
+/** Shared funding selector for init/subscribe/lifecycle native subscription flows. */
+export type NativeFundingArgs = {
+  fundingSource?: NativeSubscriptionFundingSource;
+  /** MPL Core asset mint. Required when `fundingSource` is `treasury`. */
+  agentAsset?: AddressLike;
+  /** Asset owner that signs `Execute` for treasury flows. Defaults to `umi.identity`. */
+  authority?: Signer;
+};
 
 type BaseNativeArgs = {
   /** SPL mint controlled by this authority/allowance/subscription. */
@@ -141,6 +172,8 @@ export type PrepareNativeAuthorityResult = {
   mint: string;
   tokenProgram: string;
   userTokenAccount: string;
+  fundingSource?: NativeSubscriptionFundingSource;
+  treasury?: string;
 };
 
 export type NativeSendResult = {
@@ -183,6 +216,8 @@ export type PrepareNativeSubscriptionResult = {
   subscription: string;
   subscriber: string;
   mint: string;
+  fundingSource?: NativeSubscriptionFundingSource;
+  treasury?: string;
 };
 
 export type PrepareNativeSubscriptionCollectResult = {
@@ -190,6 +225,11 @@ export type PrepareNativeSubscriptionCollectResult = {
   plan: string;
   subscription: string;
   caller: string;
+  /** Pubkey that owns the debited USDC ATA (native program `delegator` account). */
+  debitOwner: string;
+  /**
+   * @deprecated Use `debitOwner`. Kept for callers that still read this field name.
+   */
   delegator: string;
   receiverTokenAccount: string;
   mint: string;
@@ -197,7 +237,10 @@ export type PrepareNativeSubscriptionCollectResult = {
   amount: bigint;
 };
 
-export type PrepareInitNativeSubscriptionAuthorityArgs = BaseNativeArgs & PayerArgs & OwnerArgs;
+export type PrepareInitNativeSubscriptionAuthorityArgs = BaseNativeArgs &
+  PayerArgs &
+  OwnerArgs &
+  NativeFundingArgs;
 
 export type PrepareCloseNativeSubscriptionAuthorityArgs = BaseNativeArgs &
   OwnerArgs & {
@@ -265,24 +308,33 @@ export type PrepareUpdateNativePlanArgs = OwnerArgs & {
 
 export type PrepareSubscribeNativePlanArgs = BaseNativeArgs &
   PayerArgs &
-  OwnerArgs & {
+  OwnerArgs &
+  NativeFundingArgs & {
     merchant: AddressLike;
     planId: bigint;
   };
 
-export type PrepareSubscriptionLifecycleArgs = OwnerArgs & {
-  plan: AddressLike;
-  subscription?: AddressLike;
-  subscriber?: AddressLike;
-  receiver?: AddressLike;
-  programAddress?: AddressLike;
-};
+export type PrepareSubscriptionLifecycleArgs = OwnerArgs &
+  PayerArgs &
+  NativeFundingArgs & {
+    plan: AddressLike;
+    subscription?: AddressLike;
+    subscriber?: AddressLike;
+    receiver?: AddressLike;
+    programAddress?: AddressLike;
+  };
 
 export type PrepareCollectNativeSubscriptionArgs = BaseNativeArgs &
   CallerArgs & {
     plan: AddressLike;
     subscription: AddressLike;
-    delegator: AddressLike;
+    /**
+     * Pubkey whose USDC ATA is debited (native program `delegator` account).
+     * When omitted, resolved from `debitOwnerCandidates` against the subscription PDA.
+     */
+    delegator?: AddressLike;
+    /** Candidate debit owners (e.g. executive wallet + agent treasury PDA). */
+    debitOwnerCandidates?: AddressLike[];
     receiver?: AddressLike;
     receiverTokenAccount?: AddressLike;
     amount: bigint;
@@ -326,6 +378,55 @@ function uniqueSigners(signers: Signer[]): Signer[] {
     out.push(signer);
   }
   return out;
+}
+
+/** Asset Signer PDA (agent treasury) for an MPL Core agent asset. */
+export function deriveAgentTreasury(umi: Umi, agentAsset: AddressLike): PublicKey {
+  const [treasury] = findAssetSignerPda(umi, { asset: toPk(agentAsset) });
+  return treasury;
+}
+
+function resolveFundingSource(args: NativeFundingArgs): NativeSubscriptionFundingSource {
+  if (args.fundingSource) return args.fundingSource;
+  return args.agentAsset ? DEFAULT_AGENT_NATIVE_FUNDING_SOURCE : 'wallet';
+}
+
+function requireAgentAssetForTreasury(
+  funding: NativeSubscriptionFundingSource,
+  agentAsset?: AddressLike,
+): AddressLike {
+  if (funding !== 'treasury') return agentAsset as AddressLike;
+  if (!agentAsset) {
+    throw new Error('agentAsset is required when fundingSource is treasury');
+  }
+  return agentAsset;
+}
+
+function pdaTransactionSigner(pubkey: PublicKey): TransactionSigner {
+  return { address: String(pubkey) as Address } as TransactionSigner;
+}
+
+function kitInstructionToUmi(ix: KitInstruction): UmiInstruction {
+  return convertKitInstruction(ix, []).instruction;
+}
+
+function buildAgentTreasuryExecute(
+  umi: Umi,
+  args: {
+    agentAsset: AddressLike;
+    kitIx: KitInstruction;
+    authority?: Signer;
+    payer?: Signer;
+  },
+): TransactionBuilder {
+  const authority = args.authority ?? umi.identity;
+  const payer = args.payer ?? umi.payer;
+  return execute(umi, {
+    asset: { publicKey: toPk(args.agentAsset) },
+    instructions: [kitInstructionToUmi(args.kitIx)],
+    payer,
+    authority,
+  });
 }
 
 function convertKitInstruction(ix: KitInstruction, signers: Signer[]): WrappedInstruction {
@@ -388,6 +489,30 @@ function createAtaBuilder(
     tokenProgram: tokenProgram(args),
     ...(args.payer ? { payer: args.payer } : {}),
   });
+}
+
+/** Prepend idempotent ATA create only when the account is missing (agent treasuries are usually pre-provisioned). */
+async function maybePrependCreateAta(
+  umi: Umi,
+  args: {
+    mint: AddressLike;
+    owner: AddressLike;
+    ata: AddressLike;
+    tokenProgram?: AddressLike;
+    payer?: Signer;
+    builder: TransactionBuilder;
+  },
+): Promise<TransactionBuilder> {
+  const ata = toPk(args.ata);
+  const account = await umi.rpc.getAccount(ata);
+  if (account.exists) return args.builder;
+  return createAtaBuilder(umi, {
+    mint: args.mint,
+    owner: args.owner,
+    ata,
+    tokenProgram: args.tokenProgram,
+    payer: args.payer,
+  }).add(args.builder);
 }
 
 async function receiverAta(
@@ -482,6 +607,34 @@ async function subscriptionPda(args: {
   return subscription;
 }
 
+/**
+ * Resolve which pubkey owns the USDC ATA debited for a native subscription.
+ * The subscription PDA seeds are `(plan, subscriber)` where `subscriber` is
+ * the debit-owner pubkey (executive wallet or agent treasury PDA).
+ */
+export async function resolveNativeSubscriptionDebitOwner(
+  umi: Umi,
+  args: {
+    plan: AddressLike;
+    subscription: AddressLike;
+    candidates: AddressLike[];
+    programAddress?: AddressLike;
+  },
+): Promise<PublicKey> {
+  const expected = toPk(args.subscription);
+  for (const candidate of args.candidates) {
+    const pda = await subscriptionPda({
+      plan: args.plan,
+      subscriber: candidate,
+      programAddress: args.programAddress,
+    });
+    if (String(toPk(pda)) === String(expected)) return toPk(candidate);
+  }
+  throw new Error(
+    'Could not resolve the subscription debit owner from the plan and subscription PDAs. Pass delegator explicitly.',
+  );
+}
+
 async function decodedAccount<T>(
   umi: Umi,
   address: AddressLike,
@@ -518,10 +671,59 @@ export async function prepareInitNativeSubscriptionAuthority(
   umi: Umi,
   args: PrepareInitNativeSubscriptionAuthorityArgs,
 ): Promise<PrepareNativeAuthorityResult> {
-  const owner = args.owner ?? umi.identity;
+  const funding = resolveFundingSource(args);
   const payer = args.payer ?? umi.payer;
+  const authoritySigner = args.authority ?? umi.identity;
   const mint = toPk(args.mint);
   const tokenProgramPk = tokenProgram(args);
+
+  if (funding === 'treasury') {
+    const agentAsset = requireAgentAssetForTreasury(funding, args.agentAsset);
+    const treasury = deriveAgentTreasury(umi, agentAsset);
+    const ownerAta = await userAta(umi, {
+      mint,
+      owner: treasury,
+      tokenProgram: tokenProgramPk,
+    });
+    const authority = await subscriptionAuthorityPda({
+      owner: treasury,
+      mint,
+      programAddress: args.programAddress,
+    });
+    const ix = await getInitSubscriptionAuthorityOverlayInstructionAsync({
+      owner: pdaTransactionSigner(treasury),
+      payer: kitSigner(payer),
+      tokenMint: toAddress(mint),
+      tokenProgram: toAddress(tokenProgramPk),
+      userAta: toAddress(ownerAta),
+      programAddress: programAddress(args),
+    });
+    const core = buildAgentTreasuryExecute(umi, {
+      agentAsset,
+      kitIx: ix,
+      authority: authoritySigner,
+      payer,
+    });
+    return {
+      builder: await maybePrependCreateAta(umi, {
+        mint,
+        owner: treasury,
+        ata: ownerAta,
+        tokenProgram: tokenProgramPk,
+        payer,
+        builder: core,
+      }),
+      authority: String(authority),
+      owner: String(treasury),
+      mint: String(mint),
+      tokenProgram: String(tokenProgramPk),
+      userTokenAccount: String(ownerAta),
+      fundingSource: 'treasury',
+      treasury: String(treasury),
+    };
+  }
+
+  const owner = args.owner ?? umi.identity;
   const ownerAta = await userAta(umi, {
     mint,
     owner: owner.publicKey,
@@ -554,6 +756,7 @@ export async function prepareInitNativeSubscriptionAuthority(
     mint: String(mint),
     tokenProgram: String(tokenProgramPk),
     userTokenAccount: String(ownerAta),
+    fundingSource: 'wallet',
   };
 }
 
@@ -1013,8 +1216,9 @@ export async function prepareSubscribeNativeSubscriptionPlan(
   umi: Umi,
   args: PrepareSubscribeNativePlanArgs,
 ): Promise<PrepareNativeSubscriptionResult> {
-  const subscriber = args.owner ?? umi.identity;
+  const funding = resolveFundingSource(args);
   const payer = args.payer ?? umi.payer;
+  const authoritySigner = args.authority ?? umi.identity;
   const planStatus = await getNativeSubscriptionPlan(umi, {
     owner: args.merchant,
     planId: args.planId,
@@ -1023,6 +1227,71 @@ export async function prepareSubscribeNativeSubscriptionPlan(
   if (!planStatus.exists || !planStatus.data) {
     throw new Error('Subscription plan does not exist.');
   }
+
+  const mint = toPk(args.mint);
+  const tokenProgramPk = tokenProgram(args);
+
+  if (funding === 'treasury') {
+    const agentAsset = requireAgentAssetForTreasury(funding, args.agentAsset);
+    const treasury = deriveAgentTreasury(umi, agentAsset);
+    const authority = await getNativeSubscriptionAuthority(umi, {
+      owner: treasury,
+      mint: args.mint,
+      tokenProgram: args.tokenProgram,
+      programAddress: args.programAddress,
+    });
+    if (!authority.exists || authority.initId == null) {
+      throw new Error(
+        'SubscriptionAuthority is not initialized for this agent treasury and token mint.',
+      );
+    }
+    const subscription = await subscriptionPda({
+      plan: planStatus.plan,
+      subscriber: treasury,
+      programAddress: args.programAddress,
+    });
+    const subscriberAta = await userAta(umi, {
+      mint,
+      owner: treasury,
+      tokenProgram: tokenProgramPk,
+    });
+    const ix = await getSubscribeOverlayInstructionAsync({
+      subscriber: pdaTransactionSigner(treasury),
+      payer: kitSigner(payer),
+      merchant: toAddress(args.merchant),
+      planId: args.planId,
+      tokenMint: toAddress(mint),
+      expectedAmount: planStatus.data.data.terms.amount,
+      expectedPeriodHours: planStatus.data.data.terms.periodHours,
+      expectedCreatedAt: planStatus.data.data.terms.createdAt,
+      expectedSubscriptionAuthorityInitId: authority.initId,
+      programAddress: programAddress(args),
+    });
+    const core = buildAgentTreasuryExecute(umi, {
+      agentAsset,
+      kitIx: ix,
+      authority: authoritySigner,
+      payer,
+    });
+    return {
+      builder: await maybePrependCreateAta(umi, {
+        mint,
+        owner: treasury,
+        ata: subscriberAta,
+        tokenProgram: tokenProgramPk,
+        payer,
+        builder: core,
+      }),
+      plan: planStatus.plan,
+      subscription: String(subscription),
+      subscriber: String(treasury),
+      mint: String(mint),
+      fundingSource: 'treasury',
+      treasury: String(treasury),
+    };
+  }
+
+  const subscriber = args.owner ?? umi.identity;
   const authority = await getNativeSubscriptionAuthority(umi, {
     owner: subscriber.publicKey,
     mint: args.mint,
@@ -1037,24 +1306,38 @@ export async function prepareSubscribeNativeSubscriptionPlan(
     subscriber: subscriber.publicKey,
     programAddress: args.programAddress,
   });
+  const subscriberAta = await userAta(umi, {
+    mint,
+    owner: subscriber.publicKey,
+    tokenProgram: tokenProgramPk,
+  });
   const ix = await getSubscribeOverlayInstructionAsync({
     subscriber: kitSigner(subscriber),
     payer: kitSigner(payer),
     merchant: toAddress(args.merchant),
     planId: args.planId,
-    tokenMint: toAddress(args.mint),
+    tokenMint: toAddress(mint),
     expectedAmount: planStatus.data.data.terms.amount,
     expectedPeriodHours: planStatus.data.data.terms.periodHours,
     expectedCreatedAt: planStatus.data.data.terms.createdAt,
     expectedSubscriptionAuthorityInitId: authority.initId,
     programAddress: programAddress(args),
   });
+  const core = oneIxBuilder(ix, [subscriber, payer]);
   return {
-    builder: oneIxBuilder(ix, [subscriber, payer]),
+    builder: await maybePrependCreateAta(umi, {
+      mint,
+      owner: subscriber.publicKey,
+      ata: subscriberAta,
+      tokenProgram: tokenProgramPk,
+      payer,
+      builder: core,
+    }),
     plan: planStatus.plan,
     subscription: String(subscription),
     subscriber: String(subscriber.publicKey),
-    mint: String(toPk(args.mint)),
+    mint: String(mint),
+    fundingSource: 'wallet',
   };
 }
 
@@ -1070,6 +1353,42 @@ export async function prepareCancelNativeSubscription(
   umi: Umi,
   args: PrepareSubscriptionLifecycleArgs,
 ): Promise<PrepareNativeSubscriptionResult> {
+  const funding = resolveFundingSource(args);
+  const payer = args.payer ?? umi.payer;
+  const authoritySigner = args.authority ?? umi.identity;
+
+  if (funding === 'treasury') {
+    const agentAsset = requireAgentAssetForTreasury(funding, args.agentAsset);
+    const treasury = deriveAgentTreasury(umi, agentAsset);
+    const subscription =
+      args.subscription ??
+      (await subscriptionPda({
+        plan: args.plan,
+        subscriber: args.subscriber ?? treasury,
+        programAddress: args.programAddress,
+      }));
+    const ix = await getCancelSubscriptionOverlayInstructionAsync({
+      subscriber: pdaTransactionSigner(treasury),
+      planPda: toAddress(args.plan),
+      subscriptionPda: toAddress(subscription),
+      programAddress: programAddress(args),
+    });
+    return {
+      builder: buildAgentTreasuryExecute(umi, {
+        agentAsset,
+        kitIx: ix,
+        authority: authoritySigner,
+        payer,
+      }),
+      plan: String(toPk(args.plan)),
+      subscription: String(toPk(subscription)),
+      subscriber: String(treasury),
+      mint: '',
+      fundingSource: 'treasury',
+      treasury: String(treasury),
+    };
+  }
+
   const subscriber = args.owner ?? umi.identity;
   const subscription =
     args.subscription ??
@@ -1090,6 +1409,7 @@ export async function prepareCancelNativeSubscription(
     subscription: String(toPk(subscription)),
     subscriber: String(subscriber.publicKey),
     mint: '',
+    fundingSource: 'wallet',
   };
 }
 
@@ -1105,6 +1425,42 @@ export async function prepareResumeNativeSubscription(
   umi: Umi,
   args: PrepareSubscriptionLifecycleArgs,
 ): Promise<PrepareNativeSubscriptionResult> {
+  const funding = resolveFundingSource(args);
+  const payer = args.payer ?? umi.payer;
+  const authoritySigner = args.authority ?? umi.identity;
+
+  if (funding === 'treasury') {
+    const agentAsset = requireAgentAssetForTreasury(funding, args.agentAsset);
+    const treasury = deriveAgentTreasury(umi, agentAsset);
+    const subscription =
+      args.subscription ??
+      (await subscriptionPda({
+        plan: args.plan,
+        subscriber: args.subscriber ?? treasury,
+        programAddress: args.programAddress,
+      }));
+    const ix = await getResumeSubscriptionOverlayInstructionAsync({
+      subscriber: pdaTransactionSigner(treasury),
+      planPda: toAddress(args.plan),
+      subscriptionPda: toAddress(subscription),
+      programAddress: programAddress(args),
+    });
+    return {
+      builder: buildAgentTreasuryExecute(umi, {
+        agentAsset,
+        kitIx: ix,
+        authority: authoritySigner,
+        payer,
+      }),
+      plan: String(toPk(args.plan)),
+      subscription: String(toPk(subscription)),
+      subscriber: String(treasury),
+      mint: '',
+      fundingSource: 'treasury',
+      treasury: String(treasury),
+    };
+  }
+
   const subscriber = args.owner ?? umi.identity;
   const subscription =
     args.subscription ??
@@ -1125,6 +1481,7 @@ export async function prepareResumeNativeSubscription(
     subscription: String(toPk(subscription)),
     subscriber: String(subscriber.publicKey),
     mint: '',
+    fundingSource: 'wallet',
   };
 }
 
@@ -1136,12 +1493,50 @@ export async function resumeNativeSubscription(
   return { ...prepared, ...(await sendBuilder(umi, prepared.builder)) };
 }
 
-export function prepareRevokeNativeSubscription(
+export async function prepareRevokeNativeSubscription(
   umi: Umi,
   args: PrepareSubscriptionLifecycleArgs,
-): PrepareNativeSubscriptionResult {
-  const authority = args.owner ?? umi.identity;
+): Promise<PrepareNativeSubscriptionResult> {
+  const funding = resolveFundingSource(args);
+  const payer = args.payer ?? umi.payer;
+  const authoritySigner = args.authority ?? umi.identity;
+
+  if (funding === 'treasury') {
+    const agentAsset = requireAgentAssetForTreasury(funding, args.agentAsset);
+    const treasury = deriveAgentTreasury(umi, agentAsset);
+    const subscription =
+      args.subscription ??
+      (await subscriptionPda({
+        plan: args.plan,
+        subscriber: args.subscriber ?? treasury,
+        programAddress: args.programAddress,
+      }));
+    const ix = getRevokeSubscriptionOverlayInstruction({
+      authority: pdaTransactionSigner(treasury),
+      planPda: toAddress(args.plan),
+      subscriptionPda: toAddress(subscription),
+      ...(args.receiver ? { receiver: toAddress(args.receiver) } : {}),
+      programAddress: programAddress(args),
+    });
+    return {
+      builder: buildAgentTreasuryExecute(umi, {
+        agentAsset,
+        kitIx: ix,
+        authority: authoritySigner,
+        payer,
+      }),
+      plan: String(toPk(args.plan)),
+      subscription: String(toPk(subscription)),
+      subscriber: String(treasury),
+      mint: '',
+      fundingSource: 'treasury',
+      treasury: String(treasury),
+    };
+  }
+
   if (!args.subscription) throw new Error('subscription is required');
+
+  const authority = args.owner ?? umi.identity;
   const ix = getRevokeSubscriptionOverlayInstruction({
     authority: kitSigner(authority),
     planPda: toAddress(args.plan),
@@ -1155,6 +1550,7 @@ export function prepareRevokeNativeSubscription(
     subscription: String(toPk(args.subscription)),
     subscriber: String(authority.publicKey),
     mint: '',
+    fundingSource: 'wallet',
   };
 }
 
@@ -1162,7 +1558,7 @@ export async function revokeNativeSubscription(
   umi: Umi,
   args: PrepareSubscriptionLifecycleArgs,
 ): Promise<PrepareNativeSubscriptionResult & NativeSendResult> {
-  const prepared = prepareRevokeNativeSubscription(umi, args);
+  const prepared = await prepareRevokeNativeSubscription(umi, args);
   return { ...prepared, ...(await sendBuilder(umi, prepared.builder)) };
 }
 
@@ -1171,10 +1567,21 @@ export async function prepareCollectNativeSubscription(
   args: PrepareCollectNativeSubscriptionArgs,
 ): Promise<PrepareNativeSubscriptionCollectResult> {
   const caller = args.caller ?? umi.identity;
+  if (!args.delegator && (args.debitOwnerCandidates?.length ?? 0) === 0) {
+    throw new Error('delegator or debitOwnerCandidates is required');
+  }
+  const delegatorPk = args.delegator
+    ? toPk(args.delegator)
+    : await resolveNativeSubscriptionDebitOwner(umi, {
+        plan: args.plan,
+        subscription: args.subscription,
+        candidates: args.debitOwnerCandidates ?? [],
+        programAddress: args.programAddress,
+      });
   const rxAta = await receiverAta(umi, args);
   const ix = await getTransferSubscriptionOverlayInstructionAsync({
     caller: kitSigner(caller),
-    delegator: toAddress(args.delegator),
+    delegator: toAddress(delegatorPk),
     planPda: toAddress(args.plan),
     subscriptionPda: toAddress(args.subscription),
     receiverAta: toAddress(rxAta),
@@ -1194,12 +1601,14 @@ export async function prepareCollectNativeSubscription(
     });
     builder = createAta.add(builder);
   }
+  const debitOwner = String(delegatorPk);
   return {
     builder,
     plan: String(toPk(args.plan)),
     subscription: String(toPk(args.subscription)),
     caller: String(caller.publicKey),
-    delegator: String(toPk(args.delegator)),
+    debitOwner,
+    delegator: debitOwner,
     receiverTokenAccount: String(rxAta),
     mint: String(toPk(args.mint)),
     tokenProgram: String(tokenProgram(args)),

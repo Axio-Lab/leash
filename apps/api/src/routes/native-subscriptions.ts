@@ -29,6 +29,9 @@ import {
   prepareTransferNativeFixedAllowance,
   prepareTransferNativeRecurringAllowance,
   prepareUpdateNativeSubscriptionPlan,
+  DEFAULT_AGENT_NATIVE_FUNDING_SOURCE,
+  deriveAgentTreasury,
+  type NativeSubscriptionFundingSource,
 } from '@leashmarket/registry-utils';
 import { lookupToken } from '@leashmarket/core';
 import { publicKey } from '@metaplex-foundation/umi';
@@ -69,7 +72,11 @@ const ProgramBody = z.object({
 
 const AmountString = z.string().regex(/^\d+$/);
 
-const AuthorityBody = SignerBody.merge(MintBody).merge(ProgramBody);
+const FundingBody = z.object({
+  funding_source: z.enum(['wallet', 'treasury']).optional(),
+});
+
+const AuthorityBody = SignerBody.merge(MintBody).merge(ProgramBody).merge(FundingBody);
 
 const FixedCreateBody = AuthorityBody.extend({
   delegatee: PubkeySchema,
@@ -125,12 +132,12 @@ const PlanUpdateBody = SignerBody.merge(ProgramBody).extend({
   metadata_uri: z.string().max(256).optional(),
 });
 
-const SubscribeBody = SignerBody.merge(MintBody).merge(ProgramBody).extend({
+const SubscribeBody = SignerBody.merge(MintBody).merge(ProgramBody).merge(FundingBody).extend({
   merchant: PubkeySchema,
   plan_id: AmountString,
 });
 
-const SubscriptionLifecycleBody = SignerBody.merge(ProgramBody).extend({
+const SubscriptionLifecycleBody = SignerBody.merge(ProgramBody).merge(FundingBody).extend({
   plan: PubkeySchema,
   subscriber: PubkeySchema.optional(),
   receiver: PubkeySchema.optional(),
@@ -138,7 +145,9 @@ const SubscriptionLifecycleBody = SignerBody.merge(ProgramBody).extend({
 
 const CollectBody = SignerBody.merge(MintBody).merge(ProgramBody).extend({
   plan: PubkeySchema,
-  delegator: PubkeySchema,
+  /** USDC ATA owner to debit. Prefer `debit_owner`; `delegator` is a legacy alias. */
+  debit_owner: PubkeySchema.optional(),
+  delegator: PubkeySchema.optional(),
   receiver: PubkeySchema.optional(),
   receiver_token_account: PubkeySchema.optional(),
   amount: AmountString,
@@ -150,6 +159,18 @@ function tokenProgramFromFlavor(flavor?: 'spl' | 'token-2022') {
 
 function ownerOrPayer(body: { owner?: string; payer: string }): string {
   return body.owner ?? body.payer;
+}
+
+/** Agent-scoped prepare routes default to treasury debits unless callers opt into wallet. */
+function fundingFromBody(
+  agentMint: string,
+  body: { funding_source?: NativeSubscriptionFundingSource },
+): { fundingSource: NativeSubscriptionFundingSource; agentAsset?: string } {
+  const fundingSource = body.funding_source ?? DEFAULT_AGENT_NATIVE_FUNDING_SOURCE;
+  if (fundingSource === 'wallet') {
+    return { fundingSource: 'wallet' };
+  }
+  return { fundingSource: 'treasury', agentAsset: agentMint };
 }
 
 function bi(value: string | undefined, fallback = 0n): bigint {
@@ -249,6 +270,7 @@ export function buildNativeSubscriptionRoutes(deps: {
       mint: publicKey(body.spl_mint),
       tokenProgram: tokenProgramFromFlavor(body.token_program),
       programAddress: programAddress(body),
+      ...fundingFromBody(agentMint, body),
     });
     const result = await prepared({
       deps,
@@ -678,12 +700,14 @@ export function buildNativeSubscriptionRoutes(deps: {
       payer: body.payer,
       authority: ownerOrPayer(body),
     });
+    const funding = fundingFromBody(agentMint, body);
     const preparedTx = await prepareSubscribeNativeSubscriptionPlan(umi, {
       mint: publicKey(body.spl_mint),
       tokenProgram: tokenProgramFromFlavor(body.token_program),
       programAddress: programAddress(body),
       merchant: body.merchant,
       planId: BigInt(body.plan_id),
+      ...funding,
     });
     const result = await prepared({
       deps,
@@ -706,6 +730,8 @@ export function buildNativeSubscriptionRoutes(deps: {
         subscription: preparedTx.subscription,
         subscriber: preparedTx.subscriber,
         spl_mint: preparedTx.mint,
+        funding_source: preparedTx.fundingSource ?? funding.fundingSource,
+        treasury: preparedTx.treasury ?? null,
       },
     });
     await upsertNativeSubscription(deps.db, {
@@ -742,13 +768,16 @@ export function buildNativeSubscriptionRoutes(deps: {
       payer: body.payer,
       authority: ownerOrPayer(body),
     });
+    const executive = ownerOrPayer(body);
+    const treasury = String(deriveAgentTreasury(umi, agentMint));
+    const debitOwner = body.debit_owner ?? body.delegator;
     const preparedTx = await prepareCollectNativeSubscription(umi, {
       mint: publicKey(body.spl_mint),
       tokenProgram: tokenProgramFromFlavor(body.token_program),
       programAddress: programAddress(body),
       plan: body.plan,
       subscription,
-      delegator: body.delegator,
+      ...(debitOwner ? { delegator: debitOwner } : { debitOwnerCandidates: [executive, treasury] }),
       ...(body.receiver ? { receiver: body.receiver } : {}),
       ...(body.receiver_token_account ? { receiverTokenAccount: body.receiver_token_account } : {}),
       amount: BigInt(body.amount),
@@ -767,7 +796,8 @@ export function buildNativeSubscriptionRoutes(deps: {
         plan: preparedTx.plan,
         subscription: preparedTx.subscription,
         caller: preparedTx.caller,
-        delegator: preparedTx.delegator,
+        delegator: executive,
+        debit_account: preparedTx.debitOwner,
         receiver_token_account: preparedTx.receiverTokenAccount,
       },
       builder: preparedTx.builder,
@@ -775,7 +805,10 @@ export function buildNativeSubscriptionRoutes(deps: {
         plan: preparedTx.plan,
         subscription: preparedTx.subscription,
         caller: preparedTx.caller,
-        delegator: preparedTx.delegator,
+        delegator: executive,
+        debit_account: preparedTx.debitOwner,
+        funding_source:
+          preparedTx.debitOwner === treasury ? ('treasury' as const) : ('wallet' as const),
         receiver_token_account: preparedTx.receiverTokenAccount,
         amount: preparedTx.amount.toString(),
       },
@@ -891,6 +924,7 @@ async function subscriptionLifecycle(
   const agentMint = c.req.param('mint') ?? '';
   const subscription = c.req.param('subscription') ?? '';
   const body = SubscriptionLifecycleBody.parse(await c.req.json());
+  const funding = fundingFromBody(agentMint, body);
   const umi = umiForRequest(deps.config, {
     network: c.var.network,
     payer: body.payer,
@@ -899,6 +933,7 @@ async function subscriptionLifecycle(
   const preparedTx = await prepareFn(umi, {
     plan: body.plan,
     subscription,
+    ...funding,
     ...(body.subscriber ? { subscriber: body.subscriber } : {}),
     ...(body.receiver ? { receiver: body.receiver } : {}),
     programAddress: programAddress(body),
@@ -921,6 +956,11 @@ async function subscriptionLifecycle(
       plan: preparedTx.plan,
       subscription: preparedTx.subscription,
       subscriber: preparedTx.subscriber,
+      funding_source: funding.fundingSource,
+      treasury:
+        funding.fundingSource === 'treasury' && funding.agentAsset
+          ? String(deriveAgentTreasury(umi, funding.agentAsset))
+          : null,
     },
   });
   return c.json(result, 200);

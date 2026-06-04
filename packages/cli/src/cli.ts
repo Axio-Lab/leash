@@ -609,6 +609,11 @@ async function runSubscriptions(args: string[]): Promise<void> {
     ...(optArg(args, '--description') ? { description: optArg(args, '--description') } : {}),
     ...(optArg(args, '--terms-url') ? { terms_url: optArg(args, '--terms-url') } : {}),
     ...(optArg(args, '--support-url') ? { support_url: optArg(args, '--support-url') } : {}),
+    ...(optArg(args, '--funding-source')
+      ? {
+          funding_source: optArg(args, '--funding-source') as 'wallet' | 'treasury',
+        }
+      : {}),
   };
 
   const result = await hostRef.nativeSubscriptions(callArgs);
@@ -1459,10 +1464,11 @@ function printHelp(): void {
       '  subscriptions recurring-create --delegatee W --amount-per-period N --period-seconds S',
       '  subscriptions plan-create --plan-id I --amount N --period-hours H [--name TEXT]',
       '  subscriptions subscribe --merchant W --plan-id I',
-      '  subscriptions collect --plan P --subscription S --delegator W --amount N',
-      '                                     Solana native Subscriptions & Allowances. Uses',
-      '                                     the configured executive wallet token account;',
-      '                                     x402 payment links still use treasury delegation.',
+      '  subscriptions collect --plan P --subscription S [--delegator W] --amount N',
+      '  [--funding-source wallet|treasury]   native Subscriptions & Allowances for the',
+      '                                     configured agent. Defaults to treasury debits',
+      '                                     (agent Asset Signer PDA); pass --funding-source',
+      '                                     wallet to debit the executive ATA instead.',
       '',
       'marketplace + reputation:',
       '  discover [-q QUERY] [--max-price N] [--pricing-type T] [--source leash|pay-skills|all] [--limit N]',

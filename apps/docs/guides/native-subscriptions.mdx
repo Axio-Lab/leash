@@ -58,7 +58,30 @@ Use the rails this way:
 - x402 / MPP: one-off paid HTTP calls, paid API endpoints, agent-to-agent service calls
 - native subscriptions: recurring plans, invoices, retainers, allowances, periodic collection
 
-In this release, the native authority belongs to the signing wallet's token account. The standalone CLI and MCP host sign with the configured executive wallet. Browser flows sign through the connected wallet in the agents UI. Agent treasury settlement for existing x402 / MPP payment links remains on the existing SPL delegation rail.
+Leash supports two **funding** modes for native subscriptions. `funding_source` selects **which USDC token account is debited**, not who authorizes the agent:
+
+| Mode       | Debited USDC account              | Who signs                                              | Typical surface                                         |
+| ---------- | --------------------------------- | ------------------------------------------------------ | ------------------------------------------------------- |
+| `wallet`   | Subscriber / executive wallet ATA | That wallet (or delegated signer)                      | SDK with `owner`/`payer`, browser wallet                |
+| `treasury` | Agent Asset Signer PDA ATA        | Executive (asset owner), often via `mpl-core::Execute` | MCP, `POST /v1/agents/{mint}/subscriptions/.../prepare` |
+
+For Leash agents, the **delegator is always the executive wallet** — the keypair that signs MCP and API prepare flows. Treasury mode only changes the **debit account** to the agent treasury PDA; it does not make the treasury the delegator in product terms.
+
+### Defaults by surface
+
+| Surface                                              | Default `funding_source`            | Override                     |
+| ---------------------------------------------------- | ----------------------------------- | ---------------------------- |
+| **MCP** (`leash_native_subscriptions`)               | `treasury`                          | `"funding_source": "wallet"` |
+| **CLI** (`leash subscriptions …`)                    | `treasury` (via MCP host)           | `--funding-source wallet`    |
+| **SDK** (`prepare*Native*` on `/v1/agents/{mint}/…`) | `treasury` when field omitted       | `funding_source: 'wallet'`   |
+| **API** (agent prepare routes)                       | `treasury` when field omitted       | `"funding_source": "wallet"` |
+| **registry-utils** (direct Umi helpers)              | `treasury` when `agentAsset` is set | `fundingSource: 'wallet'`    |
+
+All agent surfaces debit the **treasury USDC ATA** unless the caller opts into `wallet`. The executive wallet still signs and remains the delegator.
+
+On-chain, the native program still keys subscription PDAs and collection by the pubkey that owns the debited ATA (executive wallet or treasury PDA). Leash resolves that automatically on `collect` when you omit an explicit debit owner.
+
+x402 / MPP one-off payments remain on the separate SPL delegation rail (executive spends from treasury under `Approve`).
 
 ## CLI flow
 
@@ -107,9 +130,11 @@ Collect from a subscription:
 leash subscriptions collect \
   --plan <plan_pda> \
   --subscription <subscription_pda> \
-  --delegator <subscriber_wallet> \
+  --delegator <debit_owner_pubkey> \
   --amount 10
 ```
+
+`--delegator` is the pubkey that owns the debited USDC ATA (subscriber wallet or agent treasury PDA). For agent MCP collects, omit it — the host resolves the debit account from the subscription PDA while the executive remains the signing delegator.
 
 Pass `--json` to any command to get the raw tool payload.
 
@@ -192,6 +217,39 @@ Agents can use the `leash_native_subscriptions` tool with an `action`:
   "name": "Oath membership",
   "description": "Weekly membership billed through a Leash-native subscription."
 }
+```
+
+Subscribe as an agent (debit agent treasury; executive signs):
+
+```json
+{
+  "action": "authority_create",
+  "symbol": "USDC"
+}
+```
+
+`funding_source` is optional; MCP defaults to `treasury`.
+
+```json
+{
+  "action": "subscribe",
+  "symbol": "USDC",
+  "merchant": "<merchant_wallet>",
+  "plan_id": "1001"
+}
+```
+
+SDK prepare (override to wallet-funded debit):
+
+```ts
+await leash.prepareSubscribeNativeSubscriptionPlan(agentMint, {
+  payer: walletPubkey,
+  owner: walletPubkey,
+  spl_mint: usdcMint,
+  merchant: merchantWallet,
+  plan_id: '1001',
+  funding_source: 'wallet',
+});
 ```
 
 The standalone MCP host signs with the configured executive wallet. After a
@@ -280,3 +338,17 @@ pnpm e2e:native-subscriptions:devnet
 ```
 
 It uses the local Leash agent config or `LEASH_TEST_PAYER_SECRET_KEY`, initializes or reads the authority, creates a plan, creates a fixed allowance, and revokes the allowance.
+
+For the full agent lifecycle, run:
+
+```bash
+pnpm e2e:native-subscriptions:lifecycle:devnet
+```
+
+That script creates a plan, subscribes with treasury funding, collects, cancels,
+resumes/reactivates the subscription, cancels again for the revoke precondition,
+and then verifies the native revoke guard. A fresh cancellation cannot be fully
+revoked until the native program's cancel grace expires, so immediate revoke is
+expected to return the grace-period error on a new plan. The script defaults to
+`~/.config/leash/agent.json` and accepts `LEASH_TEST_AGENT_MINT`,
+`LEASH_TEST_PLAN_USDC`, `LEASH_TEST_USDC_MINT`, and `LEASH_TEST_RPC` overrides.

@@ -360,7 +360,18 @@ export type NativeMintInput = {
   program_address?: string;
 };
 
-export type NativeAuthorityPrepareInput = NativeSignerInput & NativeMintInput;
+/** `treasury` debits the agent Asset Signer PDA (default on agent routes). `wallet` debits payer/owner ATA. Executive remains the delegator. */
+export type NativeSubscriptionFundingSource = 'wallet' | 'treasury';
+
+/** Default for agent-scoped SDK/API/MCP/CLI native subscription prepares when `funding_source` is omitted. */
+export const DEFAULT_AGENT_NATIVE_FUNDING_SOURCE: NativeSubscriptionFundingSource = 'treasury';
+
+export type NativeFundingInput = {
+  /** Omit to debit the agent treasury (`treasury`). Pass `wallet` to debit payer/owner ATA. */
+  funding_source?: NativeSubscriptionFundingSource;
+};
+
+export type NativeAuthorityPrepareInput = NativeSignerInput & NativeMintInput & NativeFundingInput;
 
 export type NativeAuthorityStatus = {
   kind: 'native_subscription_authority';
@@ -444,7 +455,10 @@ export type NativeSubscriptionLifecycleInput = NativeSignerInput & {
 
 export type NativeSubscriptionCollectInput = NativeAuthorityPrepareInput & {
   plan: string;
-  delegator: string;
+  /** USDC ATA owner to debit. Prefer `debit_owner`; `delegator` is a legacy alias. */
+  debit_owner?: string;
+  /** @deprecated Prefer `debit_owner`. */
+  delegator?: string;
   receiver?: string;
   receiver_token_account?: string;
   amount: string;
