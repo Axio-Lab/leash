@@ -39,6 +39,14 @@ function referenceFor(row: EventRow, network: Network): Ref | null {
   if (typeof rh === 'string' && rh.length > 0) {
     return { label: 'receipt', value: rh, href: `/receipt/${rh}` };
   }
+  const subscription = md['subscription'];
+  if (typeof subscription === 'string' && subscription.length > 0) {
+    return { label: 'subscription', value: subscription, href: `/subscription/${subscription}` };
+  }
+  const plan = md['plan'];
+  if (typeof plan === 'string' && plan.length > 0) {
+    return { label: 'plan', value: plan, href: `/subscription-plan/${plan}` };
+  }
 
   switch (row.kind) {
     case 'agent.treasury.withdraw':

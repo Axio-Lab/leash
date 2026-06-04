@@ -11,4 +11,4 @@
 export { buildServerFromEnv, HostRef } from '@leashmarket/mcp';
 export type { LeashHost, LeashToolResult } from '@leashmarket/mcp-core';
 
-export const LEASH_CLI_VERSION = '0.1.0';
+export const LEASH_CLI_VERSION = '0.3.3';

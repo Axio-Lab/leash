@@ -40,11 +40,25 @@ export {
   listEvents,
   getEventById,
   listEventsForSignature,
+  rowToEvent,
   type EventKind,
   type EventPhase,
   type EventRow,
   type ListEventsArgs,
 } from './storage/events.js';
+export {
+  buildNativePlanMetadata,
+  getNativeSubscription,
+  getNativeSubscriptionPlan,
+  listNativeSubscriptionEvents,
+  nativePlanExplorerUrl,
+  nativePlanMetadataUri,
+  upsertNativeSubscription,
+  upsertNativeSubscriptionPlan,
+  type NativeSubscriptionPlanMetadata,
+  type NativeSubscriptionPlanRow,
+  type NativeSubscriptionRow,
+} from './storage/native-subscriptions.js';
 export {
   listReceipts,
   getReceiptByHash,

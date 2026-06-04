@@ -316,6 +316,14 @@ export type NativeSubscriptionsArgs = {
   pullers?: string[];
   /** Plan metadata URI. */
   metadata_uri?: string;
+  /** Human-readable plan name for hosted metadata. */
+  name?: string;
+  /** Human-readable plan description for hosted metadata. */
+  description?: string;
+  /** Terms URL for hosted plan metadata. */
+  terms_url?: string;
+  /** Support URL for hosted plan metadata. */
+  support_url?: string;
 };
 
 /**

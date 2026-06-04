@@ -212,6 +212,7 @@ export type IngestChainEventInput = {
   mint?: string | null;
   amountAtomic?: string | null;
   metadata?: Record<string, unknown>;
+  source?: string | null;
   blockTime?: number | null;
   failed?: boolean;
 };
@@ -256,7 +257,7 @@ export async function ingestChainEvent(
   const metadata = {
     ...(input.metadata ?? {}),
     ...(input.blockTime != null ? { block_time: input.blockTime } : {}),
-    source: 'indexer',
+    source: input.source ?? 'indexer',
   };
   await execute(
     db,
@@ -327,7 +328,7 @@ export async function listEvents(db: DbClient, args: ListEventsArgs): Promise<Ev
   return res.rows.map(rowToEvent);
 }
 
-function rowToEvent(row: Record<string, unknown>): EventRow {
+export function rowToEvent(row: Record<string, unknown>): EventRow {
   const network = String(row.network);
   const phase = String(row.phase);
   if (network !== 'solana-devnet' && network !== 'solana-mainnet') {

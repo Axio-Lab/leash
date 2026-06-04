@@ -19,7 +19,7 @@ import type { LeashApiConfig } from '../config.js';
 
 export type DbClient = Client;
 
-const SCHEMA_VERSION = 20;
+const SCHEMA_VERSION = 21;
 
 /**
  * SQLite expression that produces a real ISO-8601 UTC timestamp
@@ -420,6 +420,48 @@ const SCHEMA_SQL: readonly string[] = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_agent_identity_disclosures_agent ON agent_identity_disclosures(agent_mint, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_agent_identity_disclosures_token ON agent_identity_disclosures(token_hash)`,
+
+  `CREATE TABLE IF NOT EXISTS native_subscription_plans (
+    network        TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    plan           TEXT NOT NULL,
+    agent_mint     TEXT NOT NULL,
+    merchant_wallet TEXT NOT NULL,
+    plan_id        TEXT NOT NULL,
+    mint           TEXT NOT NULL,
+    token_program  TEXT NOT NULL,
+    symbol         TEXT,
+    amount_atomic  TEXT NOT NULL,
+    period_hours   TEXT NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','sunset')),
+    metadata_uri   TEXT NOT NULL,
+    metadata_json  TEXT NOT NULL DEFAULT '{}',
+    create_tx_sig  TEXT,
+    update_tx_sig  TEXT,
+    last_event_id  TEXT,
+    created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    PRIMARY KEY (network, plan)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_native_subscription_plans_agent ON native_subscription_plans(agent_mint, updated_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_native_subscription_plans_merchant ON native_subscription_plans(network, merchant_wallet, plan_id)`,
+
+  `CREATE TABLE IF NOT EXISTS native_subscriptions (
+    network           TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    subscription      TEXT NOT NULL,
+    plan              TEXT NOT NULL,
+    agent_mint        TEXT NOT NULL,
+    subscriber_wallet TEXT NOT NULL,
+    mint              TEXT,
+    status            TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','cancelled','revoked')),
+    subscribe_tx_sig  TEXT,
+    last_tx_sig       TEXT,
+    last_event_id     TEXT,
+    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    PRIMARY KEY (network, subscription)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_native_subscriptions_plan ON native_subscriptions(network, plan, updated_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_native_subscriptions_agent ON native_subscriptions(agent_mint, updated_at DESC)`,
 
   // ─────────────────────────────────────────────────────────────────────
   // Tasks (v8) — one row per "do this" the agent is given. The
@@ -843,6 +885,13 @@ export async function runMigrations(db: Client): Promise<void> {
     await migrateApiKeysAgentMint(db);
   }
 
+  // v21: hosted metadata and Explorer read models for Solana native
+  // subscription plans/subscriptions. New DBs get the tables from
+  // SCHEMA_SQL; existing DBs assert them here during the ratchet.
+  if (currentVersion < 21) {
+    await migrateNativeSubscriptions(db);
+  }
+
   // Always-on index assertions. These run after every boot — they're
   // cheap (`IF NOT EXISTS`) and idempotent, and they cover the case
   // where a brand-new DB takes the latest `SCHEMA_SQL` directly and
@@ -858,6 +907,18 @@ export async function runMigrations(db: Client): Promise<void> {
   );
   await db.execute(
     `CREATE INDEX IF NOT EXISTS idx_api_keys_agent_mint ON api_keys(agent_mint) WHERE agent_mint IS NOT NULL`,
+  );
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_native_subscription_plans_agent ON native_subscription_plans(agent_mint, updated_at DESC)`,
+  );
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_native_subscription_plans_merchant ON native_subscription_plans(network, merchant_wallet, plan_id)`,
+  );
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_native_subscriptions_plan ON native_subscriptions(network, plan, updated_at DESC)`,
+  );
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_native_subscriptions_agent ON native_subscriptions(agent_mint, updated_at DESC)`,
   );
 
   if (currentVersion < SCHEMA_VERSION) {
@@ -1067,6 +1128,45 @@ async function migrateListingsSellerAgentMint(db: Client): Promise<void> {
   if (!names.has('seller_agent_mint')) {
     await db.execute(`ALTER TABLE listings ADD COLUMN seller_agent_mint TEXT`);
   }
+}
+
+async function migrateNativeSubscriptions(db: Client): Promise<void> {
+  await db.execute(`CREATE TABLE IF NOT EXISTS native_subscription_plans (
+    network        TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    plan           TEXT NOT NULL,
+    agent_mint     TEXT NOT NULL,
+    merchant_wallet TEXT NOT NULL,
+    plan_id        TEXT NOT NULL,
+    mint           TEXT NOT NULL,
+    token_program  TEXT NOT NULL,
+    symbol         TEXT,
+    amount_atomic  TEXT NOT NULL,
+    period_hours   TEXT NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','sunset')),
+    metadata_uri   TEXT NOT NULL,
+    metadata_json  TEXT NOT NULL DEFAULT '{}',
+    create_tx_sig  TEXT,
+    update_tx_sig  TEXT,
+    last_event_id  TEXT,
+    created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    PRIMARY KEY (network, plan)
+  )`);
+  await db.execute(`CREATE TABLE IF NOT EXISTS native_subscriptions (
+    network           TEXT NOT NULL CHECK (network IN ('solana-devnet','solana-mainnet')),
+    subscription      TEXT NOT NULL,
+    plan              TEXT NOT NULL,
+    agent_mint        TEXT NOT NULL,
+    subscriber_wallet TEXT NOT NULL,
+    mint              TEXT,
+    status            TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','cancelled','revoked')),
+    subscribe_tx_sig  TEXT,
+    last_tx_sig       TEXT,
+    last_event_id     TEXT,
+    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    PRIMARY KEY (network, subscription)
+  )`);
 }
 
 async function migrateWatchlistKindCheck(db: Client): Promise<void> {

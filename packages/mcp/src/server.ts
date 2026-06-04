@@ -39,6 +39,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { readFileSync } from 'node:fs';
 import {
   LEASH_TOOLS,
   fetchDiscover,
@@ -103,7 +104,7 @@ import {
 } from './mint-local.js';
 
 const SERVER_NAME = 'leash';
-const SERVER_VERSION = '0.2.0';
+const SERVER_VERSION = readPackageVersion();
 
 /**
  * Build the MCP server bound to the given host. Each `LeashTool`
@@ -123,6 +124,19 @@ export function createLeashMcpServer(host: LeashHost): McpServer {
   }
 
   return server;
+}
+
+function readPackageVersion(): string {
+  try {
+    const raw = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
+    const parsed = JSON.parse(raw) as { version?: unknown };
+    if (typeof parsed.version === 'string' && parsed.version.length > 0) {
+      return parsed.version;
+    }
+  } catch {
+    // MCP metadata should still be usable in unusual local/dev layouts.
+  }
+  return 'unknown';
 }
 
 /**

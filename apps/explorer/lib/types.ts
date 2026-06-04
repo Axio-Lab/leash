@@ -76,3 +76,39 @@ export type IndexerStatus = {
   cursors: { total: number; last_run_at: string | null };
   events_last_hour: Record<string, number>;
 };
+
+export type NativeSubscriptionPlan = {
+  network: 'solana-devnet' | 'solana-mainnet';
+  plan: string;
+  agent_mint: string;
+  merchant_wallet: string;
+  plan_id: string;
+  mint: string;
+  token_program: string;
+  symbol: string | null;
+  amount_atomic: string;
+  period_hours: string;
+  status: 'active' | 'sunset';
+  metadata_uri: string;
+  metadata: Record<string, unknown>;
+  create_tx_sig: string | null;
+  update_tx_sig: string | null;
+  last_event_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NativeSubscription = {
+  network: 'solana-devnet' | 'solana-mainnet';
+  subscription: string;
+  plan: string;
+  agent_mint: string;
+  subscriber_wallet: string;
+  mint: string | null;
+  status: 'active' | 'cancelled' | 'revoked';
+  subscribe_tx_sig: string | null;
+  last_tx_sig: string | null;
+  last_event_id: string | null;
+  created_at: string;
+  updated_at: string;
+};

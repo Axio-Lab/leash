@@ -68,15 +68,29 @@ Initialize the native subscription authority for the configured wallet:
 leash subscriptions authority-create --token USDC
 ```
 
-Create a monthly subscription plan:
+Create a weekly subscription plan:
 
 ```bash
 leash subscriptions plan-create \
   --plan-id 1001 \
-  --amount 10 \
-  --period-hours 720 \
-  --metadata-uri https://example.com/plans/monthly-report.json
+  --amount 19.99 \
+  --period-hours 168 \
+  --name "Oath membership" \
+  --description "Weekly membership billed through a Leash-native subscription."
 ```
+
+When `--metadata-uri` is omitted, Leash generates and hosts the plan metadata
+at:
+
+```text
+https://api.leash.market/v1/subscription-plans/{plan_pda}/metadata?network={network}
+```
+
+That JSON includes the plan name, description, amount, currency, period,
+merchant agent, merchant wallet, plan PDA, and Explorer URL. Low-level callers
+can still pass `--metadata-uri` to use their own hosted JSON, but Leash-created
+membership products should normally use the generated metadata so agents and
+humans never land on a placeholder URL.
 
 Create a recurring allowance:
 
@@ -136,9 +150,10 @@ const prepared = await leash.prepareNativeSubscriptionPlan(agentMint, {
   payer,
   spl_mint: usdcMint,
   plan_id: '1001',
-  amount: '10000000',
-  period_hours: '720',
-  metadata_uri: 'https://example.com/plans/monthly-report.json',
+  amount: '19990000',
+  period_hours: '168',
+  name: 'Oath membership',
+  description: 'Weekly membership billed through a Leash-native subscription.',
 });
 ```
 
@@ -172,12 +187,16 @@ Agents can use the `leash_native_subscriptions` tool with an `action`:
   "action": "plan_create",
   "symbol": "USDC",
   "plan_id": "1001",
-  "amount": 10,
-  "period_hours": 720
+  "amount": 19.99,
+  "period_hours": 168,
+  "name": "Oath membership",
+  "description": "Weekly membership billed through a Leash-native subscription."
 }
 ```
 
-The standalone MCP host signs with the configured executive wallet.
+The standalone MCP host signs with the configured executive wallet. After a
+successful direct native transaction, it also sends an `X-Leash-Sig` authenticated
+event back to Leash so the plan/subscription appears in Explorer and webhooks.
 
 Supported MCP actions:
 
@@ -224,6 +243,21 @@ POST /v1/agents/{mint}/subscriptions/{subscription}/collect/prepare
 ```
 
 Each prepare route returns an unsigned transaction envelope. Your app signs locally, submits, and then uses the Leash event and Explorer surfaces to track the action.
+
+Public read routes:
+
+```text
+GET /v1/subscription-plans/{plan}
+GET /v1/subscription-plans/{plan}/metadata?network=solana-devnet
+GET /v1/subscriptions/{subscription}
+```
+
+Explorer routes:
+
+```text
+https://explorer.leash.market/subscription-plan/{plan}
+https://explorer.leash.market/subscription/{subscription}
+```
 
 ## Use cases
 

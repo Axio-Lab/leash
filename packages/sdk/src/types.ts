@@ -416,6 +416,10 @@ export type NativePlanCreateInput = NativeAuthorityPrepareInput & {
   destinations?: string[];
   pullers?: string[];
   metadata_uri?: string;
+  name?: string;
+  description?: string;
+  terms_url?: string;
+  support_url?: string;
 };
 
 export type NativePlanUpdateInput = NativeSignerInput & {

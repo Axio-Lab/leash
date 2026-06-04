@@ -1,9 +1,11 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { settlementTxSig } from '@leashmarket/schemas';
 import { BadgeCheck, Bot, Coins, IdCard, Receipt as ReceiptIcon, ShieldCheck } from 'lucide-react';
 import {
   DbUnavailableError,
   getCounterpartiesForTxs,
+  getNativeSubscription,
+  getNativeSubscriptionPlan,
   getPublicIdentityProfile,
   listEvents,
   listReceipts,
@@ -91,6 +93,19 @@ export default async function AgentPage({ params }: Props) {
     (receiptsRes.ok && receiptsRes.data.items.length > 0) ||
     (summaryRes.ok && summaryRes.data.has_identity) ||
     (balancesRes.ok && hasAnyBalance(balancesRes.data));
+
+  if (!hasLocalActivity) {
+    try {
+      const [nativePlan, nativeSubscription] = await Promise.all([
+        getNativeSubscriptionPlan(network, mint),
+        getNativeSubscription(network, mint),
+      ]);
+      if (nativePlan) redirect(`/subscription-plan/${encodeURIComponent(mint)}`);
+      if (nativeSubscription) redirect(`/subscription/${encodeURIComponent(mint)}`);
+    } catch (err) {
+      if (!(err instanceof DbUnavailableError)) throw err;
+    }
+  }
 
   let crossNetwork: Awaited<ReturnType<typeof probeAgentOnOtherNetwork>> | null = null;
   if (!hasLocalActivity) {
